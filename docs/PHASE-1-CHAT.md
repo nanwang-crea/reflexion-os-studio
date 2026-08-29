@@ -37,7 +37,14 @@ Phase 1 采用 Chat-first，拆为 **1A-0 Bootstrap**、**1A-1 Chat Core**、**1
 
 ## UI 原则
 
-不做常驻 Run Inspector。MVP 主界面只常驻 Project/Session Sidebar、Chat Transcript、Composer 和 Runtime/Provider 状态。启动页状态：`starting`、`runtime-ready`、`system-degraded`、`provider-required`、`ready`、`error`。Plan、Tool Trace、Approval、Artifact 和 Git 内容在对应阶段按需加入。
+不做常驻 Run Inspector。MVP 主界面只常驻 Project/Session Sidebar、Chat Transcript、Composer 和 Runtime/Provider 状态，整体采用 Codex 式深色布局：左侧栏分"项目"与"对话"两个分区，主区为居中消息流和圆角 Composer。
+
+会话分两类，入口都是直接在 Composer 输入：
+
+- **独立对话**：不关联项目；侧栏"新建对话"或未选项目时在落地页输入即创建。
+- **项目对话**：项目与本地文件夹一一对应（`tauri-plugin-dialog` 让用户选择文件夹，三平台原生对话框）；选中项目后在落地页输入即在项目内创建会话，项目节点展开显示其下会话。
+
+启动页状态：`starting`、`runtime-ready`、`system-degraded`、`provider-required`、`ready`、`error`。Plan、Tool Trace、Approval、Artifact 和 Git 内容在对应阶段按需加入。
 
 ## MVP Done Definition
 

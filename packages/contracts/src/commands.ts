@@ -39,20 +39,27 @@ export const CommandSchemaRegistry = {
     result: z.object({ projects: z.array(ProjectSchema) }),
   },
   'project.create': {
-    params: z.object({ requestId: RequestIdSchema, name: z.string().min(1) }),
+    params: z.object({
+      requestId: RequestIdSchema,
+      // 项目必须绑定一个本地文件夹（由宿主文件夹选择器提供）。
+      folderPath: z.string().min(1),
+      name: z.string().min(1).optional(),
+    }),
     result: z.object({ project: ProjectSchema }),
   },
   'session.list': {
     params: z.object({
       requestId: RequestIdSchema,
-      projectId: z.string().min(1),
+      // 省略 → 全部会话；null → 独立会话；具体 id → 该项目下的会话。
+      projectId: z.union([z.string().min(1), z.null()]).optional(),
     }),
     result: z.object({ sessions: z.array(SessionSchema) }),
   },
   'session.create': {
     params: z.object({
       requestId: RequestIdSchema,
-      projectId: z.string().min(1),
+      // null / 省略 → 独立会话（不关联项目）。
+      projectId: z.union([z.string().min(1), z.null()]).optional(),
       title: z.string().min(1).optional(),
     }),
     result: z.object({ session: SessionSchema }),

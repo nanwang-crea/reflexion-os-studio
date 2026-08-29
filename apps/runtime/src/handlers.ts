@@ -1,3 +1,4 @@
+import { basename } from 'node:path'
 import type { ChatCommand } from '@reflexion-os-studio/contracts'
 import type { ChatAgent } from './agent.js'
 import { CommandError } from './agent.js'
@@ -37,18 +38,52 @@ export function dispatchCommand(
     'project.list': (_params, { store }) => ({
       projects: store.listProjects(),
     }),
-    'project.create': (p, { store }) => ({
-      project: store.createProject(requireString(p, 'name')),
-    }),
+    'project.create': (p, { store }) => {
+      // 去掉结尾分隔符再查重/落盘，避免同一文件夹因尾部斜杠重复建项。
+      const folderPath = requireString(p, 'folderPath').replace(/[\\/]+$/, '')
+      if (folderPath === '') {
+        throw new CommandError('invalid_request', 'folderPath 不能为空')
+      }
+      const existing = store.findProjectByFolderPath(folderPath)
+      if (existing) {
+        throw new CommandError(
+          'invalid_request',
+          `该文件夹已关联项目：${existing.name}`,
+        )
+      }
+      const name =
+        typeof p.name === 'string' && p.name.trim() !== ''
+          ? p.name.trim()
+          : basename(folderPath) || folderPath
+      return { project: store.createProject({ name, folderPath }) }
+    },
     'session.list': (p, { store }) => ({
-      sessions: store.listSessions(requireString(p, 'projectId')),
-    }),
-    'session.create': (p, { store }) => ({
-      session: store.createSession(
-        requireString(p, 'projectId'),
-        typeof p.title === 'string' && p.title !== '' ? p.title : undefined,
+      sessions: store.listSessions(
+        p.projectId === undefined
+          ? undefined
+          : p.projectId === null
+            ? null
+            : requireString(p, 'projectId'),
       ),
     }),
+    'session.create': (p, { store }) => {
+      const projectId =
+        p.projectId === undefined || p.projectId === null
+          ? null
+          : requireString(p, 'projectId')
+      if (projectId !== null && !store.getProject(projectId)) {
+        throw new CommandError(
+          'invalid_request',
+          `project not found: ${projectId}`,
+        )
+      }
+      return {
+        session: store.createSession(
+          projectId,
+          typeof p.title === 'string' && p.title !== '' ? p.title : undefined,
+        ),
+      }
+    },
     'session.get': (p, { store }) => {
       const sessionId = requireString(p, 'sessionId')
       return {

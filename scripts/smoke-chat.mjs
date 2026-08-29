@@ -201,14 +201,47 @@ try {
   })
   console.log('PASS provider.configure')
 
+  const projectDir = join(dataDir, 'smoke-project')
   const { project } = await request(2, 'project.create', {
     requestId: randomUUID(),
-    name: '冒烟项目',
+    folderPath: projectDir,
   })
+  check(
+    'project name defaults to folder basename',
+    project.name === 'smoke-project' && project.folderPath === projectDir,
+  )
   const { session } = await request(3, 'session.create', {
     requestId: randomUUID(),
     projectId: project.id,
   })
+  const { session: standalone } = await request(8, 'session.create', {
+    requestId: randomUUID(),
+    projectId: null,
+  })
+  check('standalone session has null projectId', standalone.projectId === null)
+  const [projectSessionList, standaloneSessionList] = await Promise.all([
+    request(9, 'session.list', {
+      requestId: randomUUID(),
+      projectId: project.id,
+    }),
+    request(10, 'session.list', {
+      requestId: randomUUID(),
+      projectId: null,
+    }),
+  ])
+  check(
+    'session.list splits project vs standalone',
+    projectSessionList.sessions.some((item) => item.id === session.id) &&
+      standaloneSessionList.sessions.some(
+        (item) => item.id === standalone.id,
+      ) &&
+      !standaloneSessionList.sessions.some((item) => item.id === session.id),
+  )
+  const duplicateProject = await request(11, 'project.create', {
+    requestId: randomUUID(),
+    folderPath: `${projectDir}/`,
+  }).catch(() => null)
+  check('duplicate project folder rejected', duplicateProject === null)
   console.log('PASS project/session created')
 
   const send = await request(4, 'message.send', {
@@ -243,6 +276,11 @@ try {
   )
   const run = detail.runs.find((item) => item.id === send.runId)
   check('run terminal state completed', run?.status === 'completed')
+  check(
+    'session title derived from first message',
+    detail.session?.title === '打个招呼',
+    `title=${JSON.stringify(detail.session?.title)}`,
+  )
   check(
     'usage captured in message.completed',
     events.some(

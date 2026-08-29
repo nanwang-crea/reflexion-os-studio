@@ -11,7 +11,7 @@ import {
   type ChatContextMessage,
 } from './provider.js'
 import { loadSecret } from './secrets.js'
-import type { Store } from './store.js'
+import { DEFAULT_SESSION_TITLE, type Store } from './store.js'
 
 export class CommandError extends Error {
   readonly code: string
@@ -25,6 +25,16 @@ export class CommandError extends Error {
 
 const SYSTEM_PROMPT =
   '你是 ReflexionOS Studio 的 Primary Agent，一个乐于助人的中文助手。'
+
+const TITLE_MAX_LENGTH = 24
+
+/** 用首条用户消息派生会话标题；无有效内容时返回 null（保留默认标题）。 */
+function deriveSessionTitle(content: string): string | null {
+  const collapsed = content.trim().replace(/\s+/g, ' ')
+  if (collapsed === '') return null
+  if (collapsed.length <= TITLE_MAX_LENGTH) return collapsed
+  return `${collapsed.slice(0, TITLE_MAX_LENGTH)}…`
+}
 
 interface RunningStream {
   controller: AbortController
@@ -93,7 +103,7 @@ export class ChatAgent {
 
   /** 同步创建 user/assistant 消息与 Run 并返回，流式在后台继续。 */
   startSend(params: ChatCommand): { messageId: string; runId: string } {
-    this.requireSession(params.sessionId)
+    const session = this.requireSession(params.sessionId)
     const { profile, apiKey } = this.requireEnabledProfile()
     this.requireIdleSession(params.sessionId)
 
@@ -109,6 +119,11 @@ export class ChatAgent {
       content: params.content,
       status: 'completed',
     })
+    if (session.title === DEFAULT_SESSION_TITLE) {
+      const title = deriveSessionTitle(params.content)
+      if (title) this.store.updateSessionTitle(params.sessionId, title)
+    }
+    this.store.touchSession(params.sessionId)
     const assistantMessage = this.store.createMessage({
       sessionId: params.sessionId,
       runId: run.id,
@@ -166,6 +181,7 @@ export class ChatAgent {
       model: profile.model,
       retryOfRunId: original.id,
     })
+    this.store.touchSession(original.sessionId)
     const assistantMessage = this.store.createMessage({
       sessionId: original.sessionId,
       runId: run.id,

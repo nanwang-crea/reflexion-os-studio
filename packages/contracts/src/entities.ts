@@ -6,6 +6,8 @@ export type IsoDateTime = z.infer<typeof IsoDateTimeSchema>
 export const ProjectSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
+  // 项目对应的本地文件夹绝对路径；历史数据允许为空字符串。
+  folderPath: z.string(),
   createdAt: IsoDateTimeSchema,
   updatedAt: IsoDateTimeSchema,
 })
@@ -16,7 +18,8 @@ export type SessionStatus = z.infer<typeof SessionStatusSchema>
 
 export const SessionSchema = z.object({
   id: z.string().min(1),
-  projectId: z.string().min(1),
+  // null 表示不关联任何项目的独立会话。
+  projectId: z.string().min(1).nullable(),
   title: z.string().min(1),
   status: SessionStatusSchema,
   createdAt: IsoDateTimeSchema,

@@ -376,6 +376,7 @@ pub fn run() {
     let state_for_window = state.clone();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(state)
         .invoke_handler(tauri::generate_handler![
             bootstrap_get_state,

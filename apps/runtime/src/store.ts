@@ -20,16 +20,20 @@ export function resolveDataDir(): string {
   )
 }
 
+/** 新会话默认标题；Agent 用它判断是否需要根据首条消息自动命名。 */
+export const DEFAULT_SESSION_TITLE = '新对话'
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  folder_path TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   status TEXT NOT NULL,
   created_at TEXT NOT NULL,
@@ -71,6 +75,28 @@ function nowIso(): string {
   return new Date().toISOString()
 }
 
+/** 当前 schema 版本；递增时必须在 migrate() 中补充对应升级路径。 */
+const LATEST_SCHEMA_VERSION = 1
+
+const SESSIONS_TABLE_V1 = `
+CREATE TABLE sessions (
+  id TEXT PRIMARY KEY,
+  project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+)`
+
+const PROJECTS_TABLE_V1 = `
+CREATE TABLE projects (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  folder_path TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+)`
+
 export class Store {
   private readonly db: DatabaseSync
 
@@ -80,7 +106,45 @@ export class Store {
     this.db.exec('PRAGMA foreign_keys = ON')
     this.db.exec('PRAGMA journal_mode = WAL')
     this.db.exec(SCHEMA)
+    this.migrate()
     this.recoverInterrupted()
+  }
+
+  /**
+   * v0 → v1：sessions.project_id 改为可空（独立会话），projects 增加 folder_path。
+   * SQLite 无法直接改列约束，需在关闭外键 + legacy_alter_table 下重建两张表。
+   */
+  private migrate(): void {
+    const row = this.db.prepare('PRAGMA user_version').get() as
+      { user_version: number | bigint } | undefined
+    if (Number(row?.user_version ?? 0) >= LATEST_SCHEMA_VERSION) return
+    this.db.exec('PRAGMA foreign_keys = OFF')
+    this.db.exec('PRAGMA legacy_alter_table = ON')
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      this.db.exec('ALTER TABLE sessions RENAME TO sessions_v0')
+      this.db.exec(SESSIONS_TABLE_V1)
+      this.db.exec(
+        `INSERT INTO sessions (id, project_id, title, status, created_at, updated_at)
+         SELECT id, project_id, title, status, created_at, updated_at FROM sessions_v0`,
+      )
+      this.db.exec('DROP TABLE sessions_v0')
+      this.db.exec('ALTER TABLE projects RENAME TO projects_v0')
+      this.db.exec(PROJECTS_TABLE_V1)
+      this.db.exec(
+        `INSERT INTO projects (id, name, folder_path, created_at, updated_at)
+         SELECT id, name, '', created_at, updated_at FROM projects_v0`,
+      )
+      this.db.exec('DROP TABLE projects_v0')
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    } finally {
+      this.db.exec('PRAGMA legacy_alter_table = OFF')
+      this.db.exec('PRAGMA foreign_keys = ON')
+    }
+    this.db.exec(`PRAGMA user_version = ${LATEST_SCHEMA_VERSION}`)
   }
 
   transaction<T>(fn: () => T): T {
@@ -118,35 +182,71 @@ export class Store {
       .map((row) => this.toProject(row))
   }
 
-  createProject(name: string): Project {
+  findProjectByFolderPath(folderPath: string): Project | null {
+    const row = this.db
+      .prepare('SELECT * FROM projects WHERE folder_path = ?')
+      .get(folderPath)
+    return row ? this.toProject(row) : null
+  }
+
+  getProject(id: string): Project | null {
+    const row = this.db.prepare('SELECT * FROM projects WHERE id = ?').get(id)
+    return row ? this.toProject(row) : null
+  }
+
+  createProject(input: { name: string; folderPath: string }): Project {
     const project: Project = {
       id: randomUUID(),
-      name,
+      name: input.name,
+      folderPath: input.folderPath,
       createdAt: nowIso(),
       updatedAt: nowIso(),
     }
     this.db
       .prepare(
-        'INSERT INTO projects (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)',
+        'INSERT INTO projects (id, name, folder_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
       )
-      .run(project.id, project.name, project.createdAt, project.updatedAt)
+      .run(
+        project.id,
+        project.name,
+        project.folderPath,
+        project.createdAt,
+        project.updatedAt,
+      )
     return project
   }
 
-  listSessions(projectId: string): Session[] {
+  /**
+   * projectId 语义：string → 该项目下的会话；null → 独立会话；undefined → 全部会话。
+   */
+  listSessions(projectId?: string | null): Session[] {
+    if (projectId === null) {
+      return this.db
+        .prepare(
+          'SELECT * FROM sessions WHERE project_id IS NULL ORDER BY updated_at DESC',
+        )
+        .all()
+        .map((row) => this.toSession(row))
+    }
+    if (projectId !== undefined) {
+      return this.db
+        .prepare(
+          'SELECT * FROM sessions WHERE project_id = ? ORDER BY updated_at DESC',
+        )
+        .all(projectId)
+        .map((row) => this.toSession(row))
+    }
     return this.db
-      .prepare(
-        'SELECT * FROM sessions WHERE project_id = ? ORDER BY created_at DESC',
-      )
-      .all(projectId)
+      .prepare('SELECT * FROM sessions ORDER BY updated_at DESC')
+      .all()
       .map((row) => this.toSession(row))
   }
 
-  createSession(projectId: string, title?: string): Session {
+  createSession(projectId: string | null, title?: string): Session {
     const session: Session = {
       id: randomUUID(),
       projectId,
-      title: title ?? '新会话',
+      title: title ?? DEFAULT_SESSION_TITLE,
       status: 'active',
       createdAt: nowIso(),
       updatedAt: nowIso(),
@@ -164,6 +264,18 @@ export class Store {
         session.updatedAt,
       )
     return session
+  }
+
+  updateSessionTitle(id: string, title: string): void {
+    this.db
+      .prepare('UPDATE sessions SET title = ?, updated_at = ? WHERE id = ?')
+      .run(title, nowIso(), id)
+  }
+
+  touchSession(id: string): void {
+    this.db
+      .prepare('UPDATE sessions SET updated_at = ? WHERE id = ?')
+      .run(nowIso(), id)
   }
 
   getSession(id: string): Session | null {
@@ -352,6 +464,7 @@ export class Store {
     return {
       id: String(row.id),
       name: String(row.name),
+      folderPath: String(row.folder_path ?? ''),
       createdAt: String(row.created_at),
       updatedAt: String(row.updated_at),
     }
@@ -360,7 +473,7 @@ export class Store {
   private toSession(row: Record<string, unknown>): Session {
     return {
       id: String(row.id),
-      projectId: String(row.project_id),
+      projectId: row.project_id == null ? null : String(row.project_id),
       title: String(row.title),
       status: row.status === 'archived' ? 'archived' : 'active',
       createdAt: String(row.created_at),
