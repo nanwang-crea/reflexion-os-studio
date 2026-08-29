@@ -2,12 +2,12 @@
 
 ## Canonical tables
 
-MVP 采用 SQLite 单 Runtime 写入，不实现 outbox。核心表：
+MVP 采用 SQLite 单 Runtime 写入，不实现 outbox；实现使用 Node 内置 `node:sqlite`（无原生依赖）。数据目录为 `REFLEXION_DATA_DIR` 环境变量或 `~/.reflexion-os-studio`。核心表：
 
 - `projects(id, name, created_at, updated_at)`
 - `sessions(id, project_id, title, status, created_at, updated_at)`
 - `messages(id, session_id, run_id, role, content, status, created_at, completed_at)`
-- `runs(id, session_id, status, provider_id, model, started_at, completed_at, error_code)`
+- `runs(id, session_id, status, provider_id, model, started_at, completed_at, error_code, retry_of_run_id)`
 - `provider_profiles(id, name, base_url, model, secret_ref, enabled, updated_at)`
 
 所有 ID 使用稳定字符串；外键约束开启；Session 删除策略明确为级联其消息和 Run，Provider secret 只保存引用。

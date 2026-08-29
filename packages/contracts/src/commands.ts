@@ -1,0 +1,125 @@
+import { z } from 'zod'
+import {
+  MessageSchema,
+  ProviderProfileSchema,
+  ProjectSchema,
+  RunSchema,
+  SessionSchema,
+} from './entities.js'
+import { RuntimeStatusSchema } from './handshake.js'
+
+export const RequestIdSchema = z.string().min(1)
+export type RequestId = z.infer<typeof RequestIdSchema>
+
+export const MessageSendParamsSchema = z.object({
+  requestId: RequestIdSchema,
+  sessionId: z.string().min(1),
+  content: z.string().min(1),
+})
+export type ChatCommand = z.infer<typeof MessageSendParamsSchema>
+
+export const RunCancelParamsSchema = z.object({
+  requestId: RequestIdSchema,
+  runId: z.string().min(1),
+})
+export type CancelCommand = z.infer<typeof RunCancelParamsSchema>
+
+export const RunRetryParamsSchema = z.object({
+  requestId: RequestIdSchema,
+  runId: z.string().min(1),
+})
+
+export const CommandSchemaRegistry = {
+  'runtime.get_status': {
+    params: z.object({ requestId: RequestIdSchema }),
+    result: RuntimeStatusSchema,
+  },
+  'project.list': {
+    params: z.object({ requestId: RequestIdSchema }),
+    result: z.object({ projects: z.array(ProjectSchema) }),
+  },
+  'project.create': {
+    params: z.object({ requestId: RequestIdSchema, name: z.string().min(1) }),
+    result: z.object({ project: ProjectSchema }),
+  },
+  'session.list': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+    }),
+    result: z.object({ sessions: z.array(SessionSchema) }),
+  },
+  'session.create': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+      title: z.string().min(1).optional(),
+    }),
+    result: z.object({ session: SessionSchema }),
+  },
+  'session.get': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      sessionId: z.string().min(1),
+    }),
+    result: z.object({
+      session: SessionSchema.nullable(),
+      messages: z.array(MessageSchema),
+      runs: z.array(RunSchema),
+    }),
+  },
+  'message.send': {
+    params: MessageSendParamsSchema,
+    result: z.object({
+      messageId: z.string().min(1),
+      runId: z.string().min(1),
+    }),
+  },
+  'run.cancel': {
+    params: RunCancelParamsSchema,
+    result: z.object({ accepted: z.boolean() }),
+  },
+  'run.retry': {
+    params: RunRetryParamsSchema,
+    result: z.object({
+      messageId: z.string().min(1),
+      runId: z.string().min(1),
+      retryOfRunId: z.string().min(1),
+    }),
+  },
+  'provider.list': {
+    params: z.object({ requestId: RequestIdSchema }),
+    result: z.object({ profiles: z.array(ProviderProfileSchema) }),
+  },
+  'provider.configure': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      id: z.string().min(1).optional(),
+      name: z.string().min(1),
+      baseUrl: z.url(),
+      model: z.string().min(1),
+      // 只写字段：明文 Key 仅在请求中出现一次，runtime 落入本地 secret 存储，
+      // profile 只返回 secretRef。任何响应/事件/日志不得包含 secret。
+      secret: z.string().min(1).optional(),
+      secretRef: z.string().min(1).optional(),
+      enabled: z.boolean().optional(),
+    }),
+    result: z.object({ profile: ProviderProfileSchema }),
+  },
+} satisfies Record<string, { params: z.ZodType; result: z.ZodType }>
+
+export type CommandName = keyof typeof CommandSchemaRegistry
+
+export type CommandSchemaEntry = {
+  params: z.ZodType
+  result: z.ZodType
+}
+
+export function lookupCommandSchema(
+  method: string,
+): CommandSchemaEntry | undefined {
+  const entry = (CommandSchemaRegistry as Record<string, CommandSchemaEntry>)[
+    method
+  ]
+  return entry
+}

@@ -37,6 +37,7 @@ React Renderer（未来） → Tauri Host → TypeScript Runtime → Rust System
 5. Chat 不因 Rust 未 ready 阻塞：`system-degraded` 是降级不是 `error`；`runtime.ready` 才代表 Chat 可用。
 6. Tauri Host 与 `crates/system-runtime` 职责分离：前者是窗口 + supervisor，后者是未来系统工具边界，不得合并。
 7. 激活/登录属后续阶段（见 `docs/AUTH-AND-LICENSING.md`）：当前不实现任何授权门禁；`license.*` 命令、`licensing` capability、`activation-required` 状态为保留命名，不得挪用；激活失败是门禁状态，不是 `error`，不得影响 sidecar 健康语义。
+8. **全平台优先**：项目整体必须跨 macOS / Windows / Linux。设计或实现任何新功能时必须回答"三个平台分别如何工作"，禁止只针对单一平台实现后"再补移植"；平台差异必须显式分支或抽象，不允许隐含 POSIX 或 Windows 假设（详见第 8 节）。
 
 ## 4. 代码风格
 
@@ -45,6 +46,10 @@ React Renderer（未来） → Tauri Host → TypeScript Runtime → Rust System
 - **Rust**：rustfmt 默认风格（`cargo fmt`），协议数据用 `serde_json::Value`/`json!`。
 - **Shell**：`#!/usr/bin/env bash` + `set -euo pipefail`；脚本基于自身位置定位仓库根，不假设 cwd。
 - 状态枚举与协议类型复用 `packages/contracts` 与 `apps/desktop` 既有定义，不要在各处重复手写近似类型。
+- 契约统一用 zod 定义（`packages/contracts/src/`），TS 类型用 `z.infer` 派生、JSON Schema 用 `z.toJSONSchema` 导出；禁止在 schema 之外手写平行的接口类型或校验逻辑。
+- **存储**：MVP 用 Node 内置 `node:sqlite`（无原生依赖），数据目录 `REFLEXION_DATA_DIR` ?? `~/.reflexion-os-studio`；外键开启；Run/Message 终态写入用单事务；启动时把未完成 Run/Message 恢复为 `interrupted`。
+- **Secret 纪律**：API Key 等机密只经 `provider.configure` 的只写 `secret` 参数出现一次，落入数据目录 `secrets.json`（0600），其余任何地方只出现 `secretRef`；secret 不得进入响应、事件、日志或错误详情。
+- **前端访问 Runtime 的唯一通道**：`runtime-client` 的 `RuntimeTransport`（Tauri 白名单 command `runtime_request` + `bootstrap:message` 事件按 id 关联）；新增业务命令需同步更新 Rust 侧白名单数组。
 - Prettier 不支持的语言（如 shell）不做机械格式化，保持手写整洁即可。
 
 ## 5. 生成物纪律（曾真实踩坑）
@@ -90,12 +95,18 @@ pnpm build:desktop         # release 宿主二进制（不打包安装器）
 
 - **宿主 sidecar 监管**：后台启动 `apps/desktop/src-tauri/target/release/reflexion-desktop`，数秒后用 `pgrep -fl` 确认 `node …/apps/runtime/dist/index.js` 与 `reflexion-system-runtime` 两个子进程存在；TERM 宿主后再次 pgrep 确认无孤儿进程。
 
-## 8. 跨平台注意
+## 8. 跨平台纪律（红线第 8 条的落地清单）
 
-- 主开发平台 macOS（ARM）；Tauri 本身跨 macOS/Windows/Linux。
-- Windows 下 Cargo 产物带 `.exe` 后缀——sidecar 查找逻辑（`src-tauri/src/lib.rs`）已同时尝试带/不带后缀，修改查找逻辑时保持该行为。
-- Linux 运行时需要 `webkit2gtk` 系统依赖。
-- 安装包签名/公证/sidecar 资源打包属 Phase 6；当前 `bundle.active = false`，`tauri build` 只产出宿主二进制。
+原则：**主开发平台是 macOS（ARM），但交付目标是 macOS / Windows / Linux 三平台**。新功能的设计评审、实现和测试都要过一遍下面清单；发现平台相关假设时当场显式处理，而不是留待"以后移植"。
+
+- **路径**：一律用 `PathBuf`/`Path::join`、`node:path`，禁止手拼 `/` 或 `\`；数据目录等用户路径不硬编码分隔符。
+- **可执行文件**：查找外部二进制时同时尝试带/不带 `.exe` 后缀（sidecar 查找已内置该行为，改动时保持）。
+- **进程生命周期**：`SIGTERM` 在 Windows 上不存在，`kill()` 等价于 TerminateProcess；优雅关闭必须依赖协议 shutdown（如 `runtime.shutdown`）而非信号，信号只作兜底。
+- **权限与密钥落盘**：POSIX 的 0600 权限在 Windows（NTFS ACL）上语义不同——密钥存储代码要把平台差异收敛在 `secrets` 模块内，不散落调用点。
+- **编码与换行**：文件与协议统一 UTF-8 无 BOM；协议换行固定 `\n`（newline-delimited JSON），读取侧不要依赖 CRLF/LF 平台默认。
+- **系统依赖**：Linux 运行需要 `webkit2gtk`，Windows 依赖 WebView2（Win10/11 多数自带）；新增系统依赖时在文档记录三平台差异。
+- **脚本**：bash 脚本仅用于开发编排；产品逻辑不得写成 bash-only。跨平台工具逻辑进 Node/Rust。
+- **分发**：安装包（.app/.dmg、.msi、.deb/AppImage）在对应平台分别构建（CI 矩阵），Tauri 不支持交叉打包；签名/公证属 Phase 6，当前 `bundle.active = false`，`tauri build` 只产出宿主二进制。
 
 ## 9. 变更纪律
 

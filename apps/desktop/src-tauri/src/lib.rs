@@ -292,6 +292,43 @@ fn bootstrap_ping(state: tauri::State<'_, Arc<SupervisorState>>) -> Result<bool,
         .map_err(|error| error.to_string())
 }
 
+/// 前端访问 Runtime 的唯一通道：白名单方法 + 分配 JSON-RPC id。
+/// 响应经 bootstrap:message 事件透传，由前端按 id 关联。
+#[tauri::command]
+fn runtime_request(
+    state: tauri::State<'_, Arc<SupervisorState>>,
+    method: String,
+    params: serde_json::Value,
+) -> Result<u64, String> {
+    const RUNTIME_METHODS: [&str; 11] = [
+        "runtime.get_status",
+        "project.list",
+        "project.create",
+        "session.list",
+        "session.create",
+        "session.get",
+        "message.send",
+        "run.cancel",
+        "run.retry",
+        "provider.list",
+        "provider.configure",
+    ];
+    if !RUNTIME_METHODS.contains(&method.as_str()) {
+        return Err(format!("method not allowed: {method}"));
+    }
+    let mut guard = state
+        .runtime
+        .lock()
+        .map_err(|_| "runtime process lock poisoned".to_string())?;
+    let Some(process) = guard.as_mut() else {
+        return Err("runtime not available".to_string());
+    };
+    let id = state.request_seq.fetch_add(1, Ordering::SeqCst) + 1;
+    let message = json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params });
+    writeln!(process.stdin, "{message}").map_err(|error| error.to_string())?;
+    Ok(id)
+}
+
 fn send_message(process: &mut SidecarProcess, id: u64, method: &str) {
     let message = json!({ "jsonrpc": "2.0", "id": id, "method": method });
     let _ = writeln!(process.stdin, "{message}");
@@ -342,7 +379,8 @@ pub fn run() {
         .manage(state)
         .invoke_handler(tauri::generate_handler![
             bootstrap_get_state,
-            bootstrap_ping
+            bootstrap_ping,
+            runtime_request
         ])
         .setup(move |app| {
             start_sidecars(app.handle(), state_for_setup.clone());
