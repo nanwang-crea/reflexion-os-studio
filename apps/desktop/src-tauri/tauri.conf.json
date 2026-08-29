@@ -1,0 +1,29 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ReflexionOS Studio",
+  "version": "0.1.0",
+  "identifier": "com.reflexionos.studio",
+  "build": {
+    "beforeDevCommand": "pnpm dev:frontend",
+    "beforeBuildCommand": "pnpm build:frontend",
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../dist-frontend"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "ReflexionOS Studio",
+        "width": 900,
+        "height": 600,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost"
+    }
+  },
+  "bundle": {
+    "active": false
+  }
+}

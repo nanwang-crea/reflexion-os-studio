@@ -1,0 +1,10 @@
+node_modules
+dist
+dist-frontend
+**/dist/**
+target
+src-tauri/gen
+**/src-tauri/gen/**
+**/target/**
+.zcode
+**/.zcode/**

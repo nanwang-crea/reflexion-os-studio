@@ -1,0 +1,24 @@
+{
+  "name": "@reflexion-os-studio/workspace",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "pnpm build:packages && pnpm --filter @reflexion-os-studio/desktop dev",
+    "dev:runtime": "bash scripts/dev-runtime.sh",
+    "build": "bash scripts/build-all.sh",
+    "build:desktop": "pnpm --filter @reflexion-os-studio/desktop build",
+    "dev:desktop": "pnpm --filter @reflexion-os-studio/desktop dev",
+    "build:packages": "bash scripts/build-ts.sh",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "bash scripts/test-all.sh",
+    "test:ts": "tsc --noEmit",
+    "clean": "rm -rf apps/*/dist apps/*/dist-frontend packages/*/dist"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.7.3"
+  }
+}
