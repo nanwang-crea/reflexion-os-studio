@@ -70,7 +70,7 @@ Prompt → Text-to-Image → Review → Image-to-Video → Export
 
 ## 7. 安全边界
 
-工具/节点必须声明权限。TypeScript Policy Gateway 负责意图/风险分类、审批交互和一次/Session/Project 授权范围，但不是安全边界；它生成与 request、workspace、operation 和 TTL 绑定的授权上下文。Rust Enforcement 使用 deny-by-default 的严格 schema 校验 capability/approval token、实际路径、命令、cwd、环境和进程限制；不接受任意 `authorized: true`，任何缺失、过期、范围不符或参数改变都拒绝。
+工具/节点必须声明权限。TypeScript Policy Gateway 负责意图/风险分类、审批交互和一次/Session/Project 授权范围，但不是安全边界；它生成与 request、workspace、operation 和 TTL 绑定的授权上下文。Rust Enforcement 使用 deny-by-default 的严格 schema 校验 capability/approval token、实际路径、命令、cwd、环境和进程限制；不接受任意 `authorized: true`，任何缺失、过期、范围不符或参数改变都拒绝。商业许可（激活码）与账号登录是独立的商业边界，不属于本 enforcement 体系，见 `docs/AUTH-AND-LICENSING.md`。
 
 ## 8. 存储边界
 
@@ -93,7 +93,7 @@ Prompt → Text-to-Image → Review → Image-to-Video → Export
 
 新项目按产品能力逐阶段实现，而不是一次性铺开所有抽象。Phase 1A 以 TypeScript Runtime + Rust System Runtime 交付可用 Chat Core；Phase 1B 再增加不阻塞 Chat 的 Workspace Surfaces。后续依次建设 Agent Platform、Multi-Agent Orchestration、Workflow Engine、Multimodal Workflow 和 Desktop Hardening。完整范围见 `docs/ROADMAP.md`。
 
-Provider/Secrets、流式取消恢复、测试和分发边界分别见 `docs/PROVIDER-AND-SECRETS.md`、`docs/RELIABILITY-AND-RECOVERY.md` 和 `docs/TESTING-AND-DISTRIBUTION.md`。
+Provider/Secrets、流式取消恢复、测试和分发边界分别见 `docs/PROVIDER-AND-SECRETS.md`、`docs/RELIABILITY-AND-RECOVERY.md` 和 `docs/TESTING-AND-DISTRIBUTION.md`。账号登录与商业许可（激活码）不在 MVP 范围，其阶段安排、验证位置和契约预留见 `docs/AUTH-AND-LICENSING.md`。
 
 Agent、Memory、Skill、Context 和 Delegation/Policy 是一等领域，分别见 `docs/AGENT-MODEL.md`、`docs/MEMORY-SYSTEM.md`、`docs/SKILL-SYSTEM.md`、`docs/CONTEXT-MANAGEMENT.md`、`docs/MULTI-AGENT.md` 和 `docs/DELEGATION-AND-POLICY.md`。
 

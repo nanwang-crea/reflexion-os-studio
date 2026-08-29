@@ -14,6 +14,7 @@ React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
 ## 目录
 
 - `ARCHITECTURE.md`：总架构和不可违反的边界
+- `AGENTS.md`：Agent 开发规范（代码风格、目录职责、验证流程）
 - `apps/`：桌面宿主、Runtime、CLI
 - `packages/`：跨应用协议和 SDK
 - `crates/`：未来 Rust 系统服务

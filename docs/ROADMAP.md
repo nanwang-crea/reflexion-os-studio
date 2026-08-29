@@ -40,11 +40,12 @@ Prompt → Text-to-Image → Review → Image-to-Video → Export，媒体 Asset
 
 ## Phase 6：Desktop Hardening
 
-平台级 Rust Sandbox、插件隔离、资源限制、签名、公证、自动更新、崩溃诊断、版本回滚和备份恢复。
+平台级 Rust Sandbox、插件隔离、资源限制、激活码许可（离线优先、设备绑定、宽限期与撤销）、签名、公证、自动更新、崩溃诊断、版本回滚和备份恢复。
 
 ## 跨阶段约束
 
 - Chat Core 不依赖 Rust ready；工具能力依赖 Rust；
+- 不做账号登录（仅云功能阶段引入）；激活码许可属 Phase 6，之前不实现任何授权门禁，`license.*`/`licensing`/`activation-required` 为保留命名；
 - Event Log 是审计/通知输入，MVP 以 canonical tables 为准；
 - 新阶段不得把后续能力反向塞入前一阶段；
 - 所有用户可见操作必须有错误、取消或恢复语义；
