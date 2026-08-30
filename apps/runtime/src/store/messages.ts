@@ -12,9 +12,11 @@ export class MessageStore {
   constructor(private readonly db: DatabaseSync) {}
 
   listBySession(sessionId: string): Message[] {
+    // 同毫秒创建的两条消息（user+assistant）created_at 相同，id 是随机 UUID
+    // 不可作次序依据；rowid 即插入顺序，保证稳定的会话内排序。
     return this.db
       .prepare(
-        'SELECT * FROM messages WHERE session_id = ? ORDER BY created_at ASC, id ASC',
+        'SELECT * FROM messages WHERE session_id = ? ORDER BY created_at ASC, rowid ASC',
       )
       .all(sessionId)
       .map((row) => this.toMessage(row as Row))
@@ -33,13 +35,14 @@ export class MessageStore {
       runId: input.runId,
       role: input.role,
       content: input.content,
+      reasoning: '',
       status: input.status,
       createdAt: nowIso(),
       completedAt: input.status === 'completed' ? nowIso() : null,
     }
     this.db
       .prepare(
-        'INSERT INTO messages (id, session_id, run_id, role, content, status, created_at, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO messages (id, session_id, run_id, role, content, reasoning, status, created_at, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .run(
         message.id,
@@ -47,6 +50,7 @@ export class MessageStore {
         message.runId,
         message.role,
         message.content,
+        message.reasoning,
         message.status,
         message.createdAt,
         message.completedAt,
@@ -54,12 +58,18 @@ export class MessageStore {
     return message
   }
 
-  finalize(id: string, content: string, status: MessageStatus): void {
+  /** 终态写入：正文与思考内容一并在单事务内落库（由门面保证事务）。 */
+  finalize(
+    id: string,
+    content: string,
+    status: MessageStatus,
+    reasoning: string,
+  ): void {
     this.db
       .prepare(
-        'UPDATE messages SET content = ?, status = ?, completed_at = ? WHERE id = ?',
+        'UPDATE messages SET content = ?, reasoning = ?, status = ?, completed_at = ? WHERE id = ?',
       )
-      .run(content, status, nowIso(), id)
+      .run(content, reasoning, status, nowIso(), id)
   }
 
   markStreaming(id: string): void {
@@ -85,6 +95,7 @@ export class MessageStore {
       runId: row.run_id == null ? null : String(row.run_id),
       role: String(row.role) as MessageRole,
       content: String(row.content),
+      reasoning: row.reasoning == null ? '' : String(row.reasoning),
       status: String(row.status) as MessageStatus,
       createdAt: String(row.created_at),
       completedAt: row.completed_at == null ? null : String(row.completed_at),

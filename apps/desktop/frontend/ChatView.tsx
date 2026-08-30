@@ -1,11 +1,13 @@
-import { useEffect, useRef } from 'react'
-import type { Message } from '@reflexion-os-studio/runtime-client'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Composer, type ComposerModelOption } from './Composer'
+import { ArrowDownIcon, SparkIcon } from './ui/icons'
+import { AssistantMessage } from './chat/AssistantMessage'
 import type { SessionData } from './api/sessions'
 
 interface ChatViewProps {
   sessionData: SessionData | null
   streaming: Record<string, string>
+  streamingReasoning: Record<string, string>
   hasEnabledProvider: boolean
   permissionValue: string
   onPermissionChange: (value: string) => void
@@ -18,26 +20,17 @@ interface ChatViewProps {
   onGoSettings: () => void
 }
 
-function messageText(
-  message: Message,
-  streaming: Record<string, string>,
-): string {
-  const partial = streaming[message.id]
-  if (partial !== undefined) return partial
-  return message.content
-}
-
-const MESSAGE_STATUS_LABELS: Record<string, string> = {
-  interrupted: '（已中断）',
-  failed: '（失败）',
-}
+/** 距底部小于该值视为“贴底”，流式期间继续跟随滚动。 */
+const PIN_THRESHOLD_PX = 80
 
 export function ChatView(props: ChatViewProps): React.JSX.Element {
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [pinned, setPinned] = useState(true)
+  const sessionId = props.sessionData?.session?.id ?? null
 
   const messages = props.sessionData?.messages ?? []
   const runs = props.sessionData?.runs ?? []
-  const activeRun = runs.find(
+  const runActive = runs.some(
     (run) => run.status === 'created' || run.status === 'running',
   )
   const lastRetryableRun = [...runs]
@@ -49,41 +42,77 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
         run.status === 'cancelled',
     )
 
+  const handleScroll = useCallback((): void => {
+    const el = scrollRef.current
+    if (!el) return
+    setPinned(
+      el.scrollHeight - el.scrollTop - el.clientHeight < PIN_THRESHOLD_PX,
+    )
+  }, [])
+
+  // 切换会话时回到贴底状态。
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages.length, props.streaming])
+    setPinned(true)
+    const el = scrollRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [sessionId])
+
+  // 流式期间仅在贴底时跟随，用户回看历史时不打断。
+  useEffect(() => {
+    if (!pinned) return
+    const el = scrollRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [messages.length, props.streaming, props.streamingReasoning, pinned])
+
+  const scrollToBottom = (): void => {
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+    setPinned(true)
+  }
 
   return (
     <div className="chat-view">
-      <div className="chat-scroll">
+      <div className="chat-scroll" ref={scrollRef} onScroll={handleScroll}>
         <div className="transcript">
           {messages.length === 0 && (
-            <div className="empty-hint">发送第一条消息开始对话。</div>
-          )}
-          {messages.map((message) => (
-            <div key={message.id} className={`bubble bubble-${message.role}`}>
-              <div className="bubble-content">
-                {messageText(message, props.streaming)}
+            <div className="chat-empty">
+              <div className="chat-empty-icon" aria-hidden="true">
+                <SparkIcon size={20} />
               </div>
-              {message.status !== 'completed' &&
-                message.role === 'assistant' && (
-                  <div className="bubble-status">
-                    {MESSAGE_STATUS_LABELS[message.status] ??
-                      `（${message.status}）`}
-                    {lastRetryableRun &&
-                      lastRetryableRun.id === message.runId && (
-                        <button
-                          className="link"
-                          onClick={() => void props.onRetry()}
-                        >
-                          重试
-                        </button>
-                      )}
-                  </div>
-                )}
+              发送第一条消息开始对话。
             </div>
-          ))}
-          <div ref={bottomRef} />
+          )}
+          {messages.map((message) => {
+            if (message.role === 'user') {
+              return (
+                <div key={message.id} className="msg-user">
+                  <div className="user-bubble">{message.content}</div>
+                </div>
+              )
+            }
+            if (message.role === 'assistant') {
+              return (
+                <AssistantMessage
+                  key={message.id}
+                  message={message}
+                  runActive={runActive}
+                  streamingText={props.streaming[message.id]}
+                  streamingReasoning={props.streamingReasoning[message.id]}
+                  canRetry={
+                    lastRetryableRun !== undefined &&
+                    lastRetryableRun.id === message.runId
+                  }
+                  onRetry={() => void props.onRetry()}
+                />
+              )
+            }
+            return (
+              <div key={message.id} className="msg-system">
+                {message.content}
+              </div>
+            )
+          })}
         </div>
       </div>
 
@@ -99,16 +128,26 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
       )}
 
       <div className="composer-wrap">
+        {!pinned && messages.length > 0 && (
+          <button
+            className="scroll-bottom"
+            aria-label="回到底部"
+            title="回到底部"
+            onClick={scrollToBottom}
+          >
+            <ArrowDownIcon />
+          </button>
+        )}
         <Composer
           placeholder={
-            activeRun
+            runActive
               ? '正在回复，可点击右侧停止…'
               : !props.hasEnabledProvider
                 ? '请先在设置中配置 API Key…'
                 : '输入消息，Enter 发送'
           }
           disabled={!props.hasEnabledProvider}
-          busy={activeRun !== undefined}
+          busy={runActive}
           permissionValue={props.permissionValue}
           onPermissionChange={props.onPermissionChange}
           modelOptions={props.modelOptions}

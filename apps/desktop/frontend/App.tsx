@@ -46,7 +46,7 @@ export default function App() {
 
   const { permissionMode, changePermissionMode } = usePermissionMode()
   const { modelOptions, selectedModelKey, setSelectedModelKey } =
-    useModelSelection(profiles)
+    useModelSelection(profiles, sessionData, activeSessionId)
 
   const refreshSessionData = useCallback(async (sessionId: string) => {
     const result = await getSessionData(sessionId)
@@ -98,7 +98,7 @@ export default function App() {
     ],
   )
 
-  const { bootstrap, streaming, resetStreaming } =
+  const { bootstrap, streaming, streamingReasoning, resetStreaming } =
     useAppBootstrap(bootstrapDeps)
 
   useEffect(() => {
@@ -263,6 +263,7 @@ export default function App() {
           <ChatView
             sessionData={sessionData}
             streaming={streaming}
+            streamingReasoning={streamingReasoning}
             hasEnabledProvider={hasEnabledProvider}
             permissionValue={permissionMode}
             onPermissionChange={changePermissionMode}

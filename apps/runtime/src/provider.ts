@@ -31,6 +31,7 @@ export interface StreamChatOptions {
 
 export interface StreamChatResult {
   content: string
+  reasoning: string
   finishReason: FinishReason
   usage?: Usage
 }
@@ -62,6 +63,7 @@ function isAbort(error: unknown): boolean {
 export async function streamChatCompletion(
   options: StreamChatOptions,
   onDelta: (delta: string) => void,
+  onReasoningDelta?: (delta: string) => void,
 ): Promise<StreamChatResult> {
   const timeout = AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
   const signal = AbortSignal.any([options.signal, timeout])
@@ -108,6 +110,7 @@ export async function streamChatCompletion(
   }
 
   let content = ''
+  let reasoning = ''
   let finishReason: FinishReason = 'stop'
   let usage: Usage | undefined
   const reader = response.body.getReader()
@@ -121,7 +124,13 @@ export async function streamChatCompletion(
     if (payload === '[DONE]') return
     let parsed: {
       choices?: {
-        delta?: { content?: string }
+        delta?: {
+          content?: string
+          // 推理模型的思考增量：DeepSeek/Qwen/GLM 用 reasoning_content，
+          // OpenRouter 等用 reasoning。
+          reasoning_content?: string
+          reasoning?: string
+        }
         finish_reason?: string | null
       }[]
       usage?: { prompt_tokens?: number; completion_tokens?: number }
@@ -131,10 +140,15 @@ export async function streamChatCompletion(
     } catch {
       return
     }
-    const delta = parsed.choices?.[0]?.delta?.content
-    if (delta) {
-      content += delta
-      onDelta(delta)
+    const delta = parsed.choices?.[0]?.delta
+    const reasoningDelta = delta?.reasoning_content ?? delta?.reasoning
+    if (reasoningDelta) {
+      reasoning += reasoningDelta
+      onReasoningDelta?.(reasoningDelta)
+    }
+    if (delta?.content) {
+      content += delta.content
+      onDelta(delta.content)
     }
     const mapped = mapFinishReason(parsed.choices?.[0]?.finish_reason)
     if (mapped) finishReason = mapped
@@ -167,5 +181,5 @@ export async function streamChatCompletion(
     )
   }
 
-  return { content, finishReason, usage }
+  return { content, reasoning, finishReason, usage }
 }

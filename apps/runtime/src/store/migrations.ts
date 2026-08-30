@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS messages (
   run_id TEXT,
   role TEXT NOT NULL,
   content TEXT NOT NULL,
+  reasoning TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL,
   created_at TEXT NOT NULL,
   completed_at TEXT
@@ -52,7 +53,7 @@ CREATE TABLE IF NOT EXISTS provider_profiles (
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 2
+export const LATEST_SCHEMA_VERSION = 3
 
 const SESSIONS_TABLE_V1 = `
 CREATE TABLE sessions (
@@ -99,6 +100,7 @@ function tableColumns(db: DatabaseSync, table: string): TableColumn[] {
  * 分版本迁移；SQLite 无法直接改列约束，重建表需在关闭外键 + legacy_alter_table 下进行。
  * v0 → v1：sessions.project_id 改为可空（独立会话），projects 增加 folder_path。
  * v1 → v2：provider_profiles 单 model 列改为 models JSON 数组（多模型）。
+ * v2 → v3：messages 增加 reasoning 列（推理模型思考内容）。
  * 各步骤带形状检测：SCHEMA 刚建好的新库不会空跑重建。
  */
 export function runMigrations(db: DatabaseSync): void {
@@ -173,6 +175,17 @@ export function runMigrations(db: DatabaseSync): void {
           )
         }
         db.exec('DROP TABLE provider_profiles_v1')
+      }
+    }
+    if (version < 3) {
+      const hasReasoning = tableColumns(db, 'messages').some(
+        (column) => column.name === 'reasoning',
+      )
+      if (!hasReasoning) {
+        // 加列可直接 ALTER TABLE，无需重建表。
+        db.exec(
+          "ALTER TABLE messages ADD COLUMN reasoning TEXT NOT NULL DEFAULT ''",
+        )
       }
     }
     db.exec('COMMIT')

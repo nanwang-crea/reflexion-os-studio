@@ -34,9 +34,20 @@ function startMockProvider() {
         return
       }
       response.writeHead(200, { 'content-type': 'text/event-stream' })
+      // 先流式吐 reasoning_content（推理模型思考），再吐正文，与真实
+      // DeepSeek/Qwen 等兼容端点行为一致。
+      const reasoningChunks = ['让我', '想想', '……']
       const chunks = ['你好', '，这里是 ', 'mock 回复。']
+      let reasoningIndex = 0
       let index = 0
       const timer = setInterval(() => {
+        if (reasoningIndex < reasoningChunks.length) {
+          response.write(
+            `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: reasoningChunks[reasoningIndex] } }] })}\n\n`,
+          )
+          reasoningIndex++
+          return
+        }
         if (index < chunks.length) {
           response.write(
             `data: ${JSON.stringify({ choices: [{ delta: { content: chunks[index] } }] })}\n\n`,
@@ -314,6 +325,13 @@ try {
   const delta = await waitForEvent('message.delta')
   check('message.delta carries chunkSeq', delta.chunkSeq === 0)
 
+  const reasoningDelta = await waitForEvent('message.reasoning_delta')
+  check(
+    'message.reasoning_delta streams before content',
+    reasoningDelta.chunkSeq === 0 && reasoningDelta.delta === '让我',
+    `delta=${JSON.stringify(reasoningDelta.delta)}`,
+  )
+
   await waitForEvent('run.completed')
   console.log('PASS run.completed')
 
@@ -328,6 +346,17 @@ try {
     'assistant message persisted with full content',
     assistant?.status === 'completed' && assistant.content === REPLY,
     `status=${assistant?.status} content=${JSON.stringify(assistant?.content)}`,
+  )
+  check(
+    'assistant reasoning persisted',
+    assistant?.reasoning === '让我想想……',
+    `reasoning=${JSON.stringify(assistant?.reasoning)}`,
+  )
+  check(
+    'messages ordered user before assistant',
+    detail.messages[0]?.role === 'user' &&
+      detail.messages[detail.messages.length - 1]?.role === 'assistant',
+    `roles=${detail.messages.map((message) => message.role).join(',')}`,
   )
   const userMessage = detail.messages.find((message) => message.role === 'user')
   check(

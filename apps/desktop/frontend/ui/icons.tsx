@@ -138,3 +138,74 @@ export function StopIcon(): React.JSX.Element {
     </svg>
   )
 }
+
+export function SparkIcon({ size = 14 }: IconProps): React.JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">
+      <path
+        d="M12 2.5c.7 4.6 2.4 6.9 7.5 8-5.1 1.1-6.8 3.4-7.5 8-.7-4.6-2.4-6.9-7.5-8 5.1-1.1 6.8-3.4 7.5-8z"
+        fill="currentColor"
+      />
+      <path
+        d="M18.5 15.5c.35 2 1.1 3 3 3.5-1.9.5-2.65 1.5-3 3.5-.35-2-1.1-3-3-3.5 1.9-.5 2.65-1.5 3-3.5z"
+        fill="currentColor"
+        opacity="0.7"
+      />
+    </svg>
+  )
+}
+
+export function CopyIcon({ size = 14 }: IconProps): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+    </svg>
+  )
+}
+
+export function CheckIcon({ size = 14 }: IconProps): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M5 13l4 4L19 7" />
+    </svg>
+  )
+}
+
+export function ArrowDownIcon({ size = 15 }: IconProps): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 5v14M5 12l7 7 7-7" />
+    </svg>
+  )
+}

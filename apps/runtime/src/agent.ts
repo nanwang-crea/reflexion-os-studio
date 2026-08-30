@@ -263,8 +263,15 @@ export class ChatAgent {
   }): Promise<void> {
     const { run, assistantMessage, controller, emitter } = input
     let accumulated = ''
+    let reasoningAccumulated = ''
     let chunkSeq = 0
+    let reasoningSeq = 0
     let streamingMarked = false
+    const markStreaming = (): void => {
+      if (streamingMarked) return
+      streamingMarked = true
+      this.store.messages.markStreaming(assistantMessage.id)
+    }
 
     try {
       const result = await streamChatCompletion(
@@ -277,14 +284,21 @@ export class ChatAgent {
         },
         (delta) => {
           accumulated += delta
-          if (!streamingMarked) {
-            streamingMarked = true
-            this.store.messages.markStreaming(assistantMessage.id)
-          }
+          markStreaming()
           emitter.next({
             type: 'message.delta',
             messageId: assistantMessage.id,
             chunkSeq: chunkSeq++,
+            delta,
+          })
+        },
+        (delta) => {
+          reasoningAccumulated += delta
+          markStreaming()
+          emitter.next({
+            type: 'message.reasoning_delta',
+            messageId: assistantMessage.id,
+            chunkSeq: reasoningSeq++,
             delta,
           })
         },
@@ -295,6 +309,7 @@ export class ChatAgent {
           assistantMessage.id,
           result.content,
           'completed',
+          result.reasoning,
         )
         this.store.runs.finalize(run.id, 'completed')
       })
@@ -307,7 +322,7 @@ export class ChatAgent {
       })
       emitter.next({ type: 'run.completed' })
     } catch (error) {
-      this.handleStreamFailure(input, accumulated, error)
+      this.handleStreamFailure(input, accumulated, reasoningAccumulated, error)
     } finally {
       this.streams.delete(run.id)
     }
@@ -320,6 +335,7 @@ export class ChatAgent {
       emitter: RunEventEmitter
     },
     accumulated: string,
+    reasoningAccumulated: string,
     error: unknown,
   ): void {
     const { run, assistantMessage, emitter } = input
@@ -330,6 +346,7 @@ export class ChatAgent {
           assistantMessage.id,
           accumulated,
           'interrupted',
+          reasoningAccumulated,
         )
         this.store.runs.finalize(run.id, 'cancelled')
       })
@@ -343,7 +360,12 @@ export class ChatAgent {
     // Provider/网络错误只经事件与 stderr 暴露，不进 stdout 协议通道。
     process.stderr.write(`[runtime] run failed (${code}): ${message}\n`)
     this.store.transaction(() => {
-      this.store.messages.finalize(assistantMessage.id, accumulated, 'failed')
+      this.store.messages.finalize(
+        assistantMessage.id,
+        accumulated,
+        'failed',
+        reasoningAccumulated,
+      )
       this.store.runs.finalize(run.id, 'failed', code)
     })
     emitter.next({ type: 'run.failed', error: { code, message } })

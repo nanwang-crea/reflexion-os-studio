@@ -8,9 +8,10 @@ export class RunStore {
   constructor(private readonly db: DatabaseSync) {}
 
   listBySession(sessionId: string): Run[] {
+    // 理由同 messages：同毫秒 Run 依赖随机 UUID 排序不稳定，rowid 即插入顺序。
     return this.db
       .prepare(
-        'SELECT * FROM runs WHERE session_id = ? ORDER BY started_at ASC, id ASC',
+        'SELECT * FROM runs WHERE session_id = ? ORDER BY started_at ASC, rowid ASC',
       )
       .all(sessionId)
       .map((row) => this.toRun(row as Row))
