@@ -17,6 +17,8 @@ interface SessionActionsDeps {
   activeProjectId: string | null
   selectedModelKey: string | null
   sessionData: SessionData | null
+  /** 工具权限 Profile（随 message.send 传给 Runtime）。 */
+  permissionMode: string
   // 与渲染同步的 refs
   activeSessionRef: RefObject<string | null>
   activeProjectRef: RefObject<string | null>
@@ -151,6 +153,8 @@ export function useSessionActions(deps: SessionActionsDeps): {
       modelKey && separator > 0 ? modelKey.slice(0, separator) : undefined
     const model =
       modelKey && separator > 0 ? modelKey.slice(separator + 2) : undefined
+    const permissionMode =
+      deps.permissionMode === 'read-only' ? 'read-only' : undefined
     try {
       let sessionId = deps.activeSessionId
       if (!sessionId) {
@@ -161,6 +165,7 @@ export function useSessionActions(deps: SessionActionsDeps): {
           content,
           providerId,
           model,
+          permissionMode,
         })
         sessionId = created.session.id
         deps.setActiveSessionId(sessionId)
@@ -170,6 +175,7 @@ export function useSessionActions(deps: SessionActionsDeps): {
           content,
           providerId,
           model,
+          permissionMode,
         })
       }
       await deps.refreshSessionData(sessionId)
@@ -184,7 +190,10 @@ export function useSessionActions(deps: SessionActionsDeps): {
 
   const stopRun = async (): Promise<void> => {
     const activeRun = deps.sessionData?.runs.find(
-      (run) => run.status === 'created' || run.status === 'running',
+      (run) =>
+        run.status === 'created' ||
+        run.status === 'running' ||
+        run.status === 'awaiting_approval',
     )
     if (!activeRun) return
     try {

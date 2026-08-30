@@ -191,6 +191,12 @@ textarea:focus-visible {
   color: var(--danger);
 }
 
+/* A2 Memory：非打断式写入提示角标。 */
+.badge-memory {
+  color: var(--ok);
+  border: 1px solid var(--border-subtle);
+}
+
 .notice {
   display: flex;
   align-items: center;

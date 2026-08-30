@@ -155,8 +155,88 @@ check(
 check('deleteProviderProfile removes row', storeV1.providers.delete('pp-old'))
 storeV1.close()
 
+// ---------- v3 → v4：messages parts 一次性回填、runs agent 字段、capabilities ----------
+const dirV3 = join(tmpdir(), `reflexion-migration-smoke-v3-${process.pid}`)
+rmSync(dirV3, { recursive: true, force: true })
+mkdirSync(dirV3, { recursive: true })
+const dbV3 = new DatabaseSync(join(dirV3, 'reflexion.db'))
+dbV3.exec('PRAGMA user_version = 3')
+dbV3.exec(`
+CREATE TABLE projects (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, folder_path TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE TABLE sessions (
+  id TEXT PRIMARY KEY, project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  title TEXT NOT NULL, status TEXT NOT NULL,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE TABLE messages (
+  id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  run_id TEXT, role TEXT NOT NULL, content TEXT NOT NULL,
+  reasoning TEXT NOT NULL DEFAULT '', status TEXT NOT NULL,
+  created_at TEXT NOT NULL, completed_at TEXT
+);
+CREATE TABLE runs (
+  id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  status TEXT NOT NULL, provider_id TEXT, model TEXT,
+  started_at TEXT, completed_at TEXT, error_code TEXT, retry_of_run_id TEXT
+);
+CREATE TABLE provider_profiles (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, base_url TEXT NOT NULL, models TEXT NOT NULL,
+  secret_ref TEXT NOT NULL, enabled INTEGER NOT NULL, updated_at TEXT NOT NULL
+);
+INSERT INTO projects (id, name, folder_path, created_at, updated_at)
+  VALUES ('p-old', '旧项目', '/tmp/old', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+INSERT INTO sessions (id, project_id, title, status, created_at, updated_at)
+  VALUES ('s-old', 'p-old', '旧会话', 'active', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+INSERT INTO messages (id, session_id, run_id, role, content, reasoning, status, created_at, completed_at)
+  VALUES ('m-old', 's-old', NULL, 'user', '旧消息内容', '', 'completed',
+          '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+INSERT INTO provider_profiles (id, name, base_url, models, secret_ref, enabled, updated_at)
+  VALUES ('pp-old', '旧供应商', 'https://example.com/v1', '["old-model"]', 'local:x', 1,
+          '2026-01-01T00:00:00.000Z');
+`)
+dbV3.close()
+
+const storeV3 = new Store(dirV3)
+const migratedMessage = storeV3.messages.listBySession('s-old')[0]
+check(
+  'v3 content backfilled to single text part',
+  migratedMessage.content === '旧消息内容' &&
+    JSON.stringify(migratedMessage.parts) ===
+      JSON.stringify([{ type: 'text', text: '旧消息内容' }]),
+  JSON.stringify(migratedMessage),
+)
+const v3Run = storeV3.runs.create({
+  sessionId: 's-old',
+  providerId: null,
+  model: null,
+  agentId: 'agent-1',
+})
+check(
+  'v4 runs accept agent delegation fields',
+  storeV3.runs.get(v3Run.id).agentId === 'agent-1',
+)
+check(
+  'v4 tool_calls table usable after migration',
+  storeV3.toolCalls.create({
+    runId: v3Run.id,
+    messageId: null,
+    toolName: 'file.list',
+    args: { path: '.' },
+  }).toolName === 'file.list',
+)
+check(
+  'v4 provider capabilities default to chat',
+  JSON.stringify(storeV3.providers.get('pp-old').capabilities) ===
+    JSON.stringify(['chat']),
+)
+storeV3.close()
+
 rmSync(dir, { recursive: true, force: true })
 rmSync(dirV1, { recursive: true, force: true })
+rmSync(dirV3, { recursive: true, force: true })
 
 if (failures > 0) {
   console.error(`smoke-store-migration: ${failures} failure(s)`)

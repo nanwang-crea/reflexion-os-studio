@@ -1,11 +1,17 @@
-import type { Message, Run, Session } from '@reflexion-os-studio/runtime-client'
+import type {
+  Message,
+  Run,
+  Session,
+  ToolCall,
+} from '@reflexion-os-studio/runtime-client'
 import { request, requestList } from './client'
 
-/** 当前打开会话的完整视图数据（会话 + 消息 + Run）。 */
+/** 当前打开会话的完整视图数据（会话 + 消息 + Run + 工具调用轨迹）。 */
 export interface SessionData {
   session: Session | null
   messages: Message[]
   runs: Run[]
+  toolCalls: ToolCall[]
 }
 
 /**

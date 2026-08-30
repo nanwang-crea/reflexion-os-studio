@@ -3,10 +3,13 @@ use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::{Emitter, Manager};
+
+#[cfg(unix)]
+static TERMINATED_RUNTIME_PID: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -25,7 +28,6 @@ struct SidecarProcess {
 struct SupervisorState {
     snapshot: Mutex<BootstrapSnapshot>,
     runtime: Mutex<Option<SidecarProcess>>,
-    system: Mutex<Option<SidecarProcess>>,
     stopping: AtomicBool,
     request_seq: AtomicU64,
 }
@@ -36,6 +38,18 @@ fn initial_snapshot() -> BootstrapSnapshot {
         runtime_ready: false,
         system_ready: false,
         detail: None,
+    }
+}
+
+/// 依据 runtime_ready / system_ready 重算状态标签。
+/// system_ready 由 TS 的 runtime.status 事件第一手上报，宿主只做投影。
+fn derive_state(runtime_ready: bool, system_ready: bool) -> &'static str {
+    if runtime_ready && system_ready {
+        "system-ready"
+    } else if runtime_ready {
+        "runtime-ready"
+    } else {
+        "starting"
     }
 }
 
@@ -61,27 +75,6 @@ fn update_state(
     let _ = app.emit("bootstrap:state", snapshot);
 }
 
-fn mark_ready(app: &tauri::AppHandle, state: &SupervisorState, name: &str) {
-    let next = {
-        let Ok(mut snapshot) = state.snapshot.lock() else {
-            return;
-        };
-        if name == "runtime" {
-            snapshot.runtime_ready = true;
-        } else {
-            snapshot.system_ready = true;
-        }
-        if snapshot.runtime_ready && snapshot.system_ready {
-            "system-ready"
-        } else if snapshot.runtime_ready {
-            "runtime-ready"
-        } else {
-            "starting"
-        }
-    };
-    update_state(app, state, next, None);
-}
-
 fn observe_stdout(
     app: tauri::AppHandle,
     state: Arc<SupervisorState>,
@@ -101,8 +94,35 @@ fn observe_stdout(
                 );
                 continue;
             };
-            if message.get("method").and_then(Value::as_str) == Some(ready_method.as_str()) {
-                mark_ready(&app, &state, name);
+            let method = message.get("method").and_then(Value::as_str);
+            if method == Some(ready_method.as_str()) {
+                let next = {
+                    let Ok(mut snapshot) = state.snapshot.lock() else {
+                        continue;
+                    };
+                    snapshot.runtime_ready = true;
+                    derive_state(snapshot.runtime_ready, snapshot.system_ready)
+                };
+                update_state(&app, &state, next, None);
+            }
+            if method == Some("runtime.status") {
+                // 方案 A：系统可用性由 TS 第一手上报（runtime.status 事件），
+                // 宿主只把它投影进 bootstrap 快照，不与 Rust 直接通信。
+                let system_available = message
+                    .get("params")
+                    .and_then(|params| params.get("status"))
+                    .and_then(|status| status.get("systemAvailable"))
+                    .and_then(Value::as_bool);
+                if let Some(system_available) = system_available {
+                    let next = {
+                        let Ok(mut snapshot) = state.snapshot.lock() else {
+                            continue;
+                        };
+                        snapshot.system_ready = system_available;
+                        derive_state(snapshot.runtime_ready, snapshot.system_ready)
+                    };
+                    update_state(&app, &state, next, None);
+                }
             }
             let _ = app.emit(
                 "bootstrap:message",
@@ -123,15 +143,12 @@ fn observe_stderr(name: &'static str, stderr: impl std::io::Read + Send + 'stati
     });
 }
 
-fn monitor_exit(app: tauri::AppHandle, state: Arc<SupervisorState>, name: &'static str) {
+fn monitor_exit(app: tauri::AppHandle, state: Arc<SupervisorState>) {
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_millis(300));
-        let lock = if name == "runtime" {
-            state.runtime.lock()
-        } else {
-            state.system.lock()
+        let Ok(mut guard) = state.runtime.lock() else {
+            return;
         };
-        let Ok(mut guard) = lock else { return };
         let Some(process) = guard.as_mut() else {
             return;
         };
@@ -144,7 +161,7 @@ fn monitor_exit(app: tauri::AppHandle, state: Arc<SupervisorState>, name: &'stat
                         &app,
                         &state,
                         "system-degraded",
-                        Some(format!("{name} exited ({status})")),
+                        Some(format!("runtime exited ({status})")),
                     );
                 }
                 return;
@@ -155,47 +172,51 @@ fn monitor_exit(app: tauri::AppHandle, state: Arc<SupervisorState>, name: &'stat
     });
 }
 
+/// POSIX：TS 进入独立进程组；Windows：交给关闭阶段的 taskkill 树杀。
 fn spawn_sidecar(
     app: &tauri::AppHandle,
     state: Arc<SupervisorState>,
-    name: &'static str,
     command: &Path,
     args: &[PathBuf],
     cwd: &Path,
-) -> Result<(), String> {
-    let mut child = Command::new(command)
+    envs: &[(&str, &str)],
+) -> Result<SidecarProcess, String> {
+    let mut command = Command::new(command);
+    command
         .args(args)
         .current_dir(cwd)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+    for (key, value) in envs {
+        command.env(key, value);
+    }
+    #[cfg(unix)]
+    {
+        // 独立进程组：宿主兜底收割时 kill(-pgid) 连 TS 的子进程（Rust）一起带走。
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+    let mut child = command
         .spawn()
-        .map_err(|error| format!("{name} spawn failed: {error}"))?;
-    let stdin = child
-        .stdin
-        .take()
-        .ok_or_else(|| format!("{name} stdin unavailable"))?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| format!("{name} stdout unavailable"))?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| format!("{name} stderr unavailable"))?;
-    observe_stdout(app.clone(), state.clone(), name, stdout);
-    observe_stderr(name, stderr);
-    monitor_exit(app.clone(), state.clone(), name);
-    let slot = if name == "runtime" {
-        &state.runtime
-    } else {
-        &state.system
+        .map_err(|error| format!("runtime spawn failed: {error}"))?;
+    // 管道获取失败时必须杀掉已 spawn 的子进程，否则泄漏一个无监管的 node。
+    let Some(stdin) = child.stdin.take() else {
+        let _ = child.kill();
+        return Err("runtime stdin unavailable".to_string());
     };
-    *slot
-        .lock()
-        .map_err(|_| format!("{name} process lock poisoned"))? =
-        Some(SidecarProcess { child, stdin });
-    Ok(())
+    let Some(stdout) = child.stdout.take() else {
+        let _ = child.kill();
+        return Err("runtime stdout unavailable".to_string());
+    };
+    let Some(stderr) = child.stderr.take() else {
+        let _ = child.kill();
+        return Err("runtime stderr unavailable".to_string());
+    };
+    observe_stdout(app.clone(), state.clone(), "runtime", stdout);
+    observe_stderr("runtime", stderr);
+    monitor_exit(app.clone(), state);
+    Ok(SidecarProcess { child, stdin })
 }
 
 fn repo_root() -> PathBuf {
@@ -203,6 +224,30 @@ fn repo_root() -> PathBuf {
         .join("..")
         .join("..")
         .join("..")
+}
+
+/// Rust System Runtime 二进制解析（宿主只负责找到路径并交给 TS，
+/// spawn/监管由 TS 承担）：env 覆盖优先，其次仓库相对路径（带 .exe 变体）。
+fn resolve_system_runtime(root: &Path) -> Option<PathBuf> {
+    std::env::var_os("REFLEXION_SYSTEM_RUNTIME")
+        .map(PathBuf::from)
+        .filter(|path| path.exists())
+        .or_else(|| {
+            [
+                "target/debug",
+                "crates/target/debug",
+                "target/release",
+                "crates/target/release",
+            ]
+            .into_iter()
+            .map(|dir| root.join(dir).join("reflexion-system-runtime"))
+            .flat_map(|path| {
+                let mut with_exe = path.clone().into_os_string();
+                with_exe.push(".exe");
+                [path, PathBuf::from(with_exe)]
+            })
+            .find(|path| path.exists())
+        })
 }
 
 fn start_sidecars(app: &tauri::AppHandle, state: Arc<SupervisorState>) {
@@ -225,48 +270,37 @@ fn start_sidecars(app: &tauri::AppHandle, state: Arc<SupervisorState>) {
         return;
     }
 
-    let node = PathBuf::from("node");
-    if let Err(error) = spawn_sidecar(
-        app,
-        state.clone(),
-        "runtime",
-        &node,
-        &[runtime_entry],
-        &root,
-    ) {
-        update_state(app, &state, "error", Some(error));
-    }
+    // Rust 二进制路径经环境变量交接给 TS；找不到也照常启动（TS 会按
+    // runtime.status 上报 degraded，工具不可用但不阻塞 Chat）。
+    let system_binary_env: Option<(String, String)> = resolve_system_runtime(&root).map(|path| {
+        (
+            "REFLEXION_SYSTEM_RUNTIME_BIN".to_string(),
+            path.display().to_string(),
+        )
+    });
+    let envs: Vec<(&str, &str)> = system_binary_env
+        .as_ref()
+        .map(|(key, value)| vec![(key.as_str(), value.as_str())])
+        .unwrap_or_default();
 
-    let system = std::env::var_os("REFLEXION_SYSTEM_RUNTIME")
-        .map(PathBuf::from)
-        .filter(|path| path.exists())
-        .or_else(|| {
-            [
-                "target/debug",
-                "crates/target/debug",
-                "target/release",
-                "crates/target/release",
-            ]
-            .into_iter()
-            .map(|dir| root.join(dir).join("reflexion-system-runtime"))
-            .flat_map(|path| {
-                let mut with_exe = path.clone().into_os_string();
-                with_exe.push(".exe");
-                [path, PathBuf::from(with_exe)]
-            })
-            .find(|path| path.exists())
-        });
-    let Some(system) = system else {
+    let node = PathBuf::from("node");
+    match spawn_sidecar(app, state.clone(), &node, &[runtime_entry], &root, &envs) {
+        Ok(process) => {
+            #[cfg(unix)]
+            TERMINATED_RUNTIME_PID.store(process.child.id() as usize, Ordering::SeqCst);
+            if let Ok(mut guard) = state.runtime.lock() {
+                *guard = Some(process);
+            }
+        }
+        Err(error) => update_state(app, &state, "error", Some(error)),
+    }
+    if system_binary_env.is_none() {
         update_state(
             app,
             &state,
             "system-degraded",
             Some("Rust System Runtime binary not found; tools unavailable".to_string()),
         );
-        return;
-    };
-    if let Err(error) = spawn_sidecar(app, state.clone(), "system", &system, &[], &root) {
-        update_state(app, &state, "error", Some(error));
     }
 }
 
@@ -281,22 +315,6 @@ fn bootstrap_get_state(
         .map_err(|_| "bootstrap state lock poisoned".to_string())
 }
 
-#[tauri::command]
-fn bootstrap_ping(state: tauri::State<'_, Arc<SupervisorState>>) -> Result<bool, String> {
-    let id = state.request_seq.fetch_add(1, Ordering::SeqCst) + 1;
-    let mut guard = state
-        .system
-        .lock()
-        .map_err(|_| "system process lock poisoned".to_string())?;
-    let Some(process) = guard.as_mut() else {
-        return Ok(false);
-    };
-    let message = json!({ "jsonrpc": "2.0", "id": id, "method": "system.ping" });
-    writeln!(process.stdin, "{message}")
-        .map(|_| true)
-        .map_err(|error| error.to_string())
-}
-
 /// 前端访问 Runtime 的唯一通道：白名单方法 + 分配 JSON-RPC id。
 /// 响应经 bootstrap:message 事件透传，由前端按 id 关联。
 #[tauri::command]
@@ -305,8 +323,9 @@ fn runtime_request(
     method: String,
     params: serde_json::Value,
 ) -> Result<u64, String> {
-    const RUNTIME_METHODS: [&str; 16] = [
+    const RUNTIME_METHODS: [&str; 21] = [
         "runtime.get_status",
+        "system.ping",
         "project.list",
         "project.create",
         "project.delete",
@@ -318,10 +337,14 @@ fn runtime_request(
         "message.send",
         "run.cancel",
         "run.retry",
+        "approval.resolve",
         "provider.list",
         "provider.configure",
         "provider.delete",
         "provider.test",
+        "memory.list",
+        "memory.update",
+        "memory.delete",
     ];
     if !RUNTIME_METHODS.contains(&method.as_str()) {
         return Err(format!("method not allowed: {method}"));
@@ -352,11 +375,6 @@ fn runtime_request(
     Ok(id)
 }
 
-fn send_message(process: &mut SidecarProcess, id: u64, method: &str) {
-    let message = json!({ "jsonrpc": "2.0", "id": id, "method": method });
-    let _ = writeln!(process.stdin, "{message}");
-}
-
 fn begin_shutdown(state: &SupervisorState) {
     if state.stopping.swap(true, Ordering::SeqCst) {
         return;
@@ -365,33 +383,76 @@ fn begin_shutdown(state: &SupervisorState) {
         snapshot.state = "stopping".to_string();
         snapshot.detail = None;
     }
+    // Rust 的协议关停由 TS 负责（runtime.shutdown → system.shutdown → 退出）；
+    // 宿主只等待，超时后 kill_runtime_tree 兜底收割整棵树。
     if let Ok(mut guard) = state.runtime.lock() {
         if let Some(process) = guard.as_mut() {
-            send_message(process, 1, "runtime.shutdown");
-        }
-    }
-    if let Ok(mut guard) = state.system.lock() {
-        if let Some(process) = guard.as_mut() {
-            send_message(process, 2, "system.shutdown");
+            let message = json!({ "jsonrpc": "2.0", "id": 1, "method": "runtime.shutdown" });
+            let _ = writeln!(process.stdin, "{message}");
         }
     }
 }
 
-fn kill_sidecars(state: &SupervisorState) {
-    for lock in [&state.runtime, &state.system] {
-        if let Ok(mut guard) = lock.lock() {
-            if let Some(process) = guard.as_mut() {
-                let _ = process.child.kill();
-            }
+/// 兜底收割：TS 及其整棵子进程树（含 TS spawn 的 Rust System Runtime）。
+fn kill_runtime_tree(state: &SupervisorState) {
+    let Ok(mut guard) = state.runtime.lock() else {
+        return;
+    };
+    let Some(process) = guard.as_mut() else {
+        return;
+    };
+    let pid = process.child.id();
+    #[cfg(unix)]
+    {
+        // TS 在独立进程组（pgid == 其 pid），负号 PGID 信号覆盖整棵组。
+        unsafe {
+            libc::kill(-(pid as i32), libc::SIGKILL);
         }
     }
+    #[cfg(windows)]
+    {
+        // taskkill /T 按父子关系终止整棵树，/F 强制。
+        let _ = Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+    let _ = process.child.kill();
 }
+
+#[cfg(unix)]
+extern "C" fn on_terminate_signal(_signal: libc::c_int) {
+    // async-signal-safe：只做 kill(-pgid) 与 _exit，不触碰锁/堆。
+    // 宿主被 TERM/INT 时 Tauri 不经过窗口关闭路径，必须在此收割 TS 进程组，
+    // 否则 TS 及其 Rust 子进程全部孤儿化。优雅关停仍走 runtime.shutdown 协议。
+    let pid = TERMINATED_RUNTIME_PID.load(Ordering::SeqCst);
+    if pid > 0 {
+        unsafe {
+            libc::kill(-(pid as i32), libc::SIGKILL);
+        }
+    }
+    unsafe {
+        libc::_exit(0);
+    }
+}
+
+#[cfg(unix)]
+fn install_terminate_signal_handler() {
+    unsafe {
+        libc::signal(libc::SIGTERM, on_terminate_signal as libc::sighandler_t);
+        libc::signal(libc::SIGINT, on_terminate_signal as libc::sighandler_t);
+    }
+}
+
+#[cfg(not(unix))]
+fn install_terminate_signal_handler() {}
 
 pub fn run() {
+    install_terminate_signal_handler();
     let state = Arc::new(SupervisorState {
         snapshot: Mutex::new(initial_snapshot()),
         runtime: Mutex::new(None),
-        system: Mutex::new(None),
         stopping: AtomicBool::new(false),
         request_seq: AtomicU64::new(0),
     });
@@ -403,7 +464,6 @@ pub fn run() {
         .manage(state)
         .invoke_handler(tauri::generate_handler![
             bootstrap_get_state,
-            bootstrap_ping,
             runtime_request
         ])
         .setup(move |app| {
@@ -419,8 +479,9 @@ pub fn run() {
                 begin_shutdown(&state_for_window);
                 let state_for_exit = state_for_window.clone();
                 std::thread::spawn(move || {
-                    std::thread::sleep(Duration::from_millis(1000));
-                    kill_sidecars(&state_for_exit);
+                    // 宽限须覆盖 TS 的 Rust 协议关停宽限（2s），否则优雅关停被掐断。
+                    std::thread::sleep(Duration::from_millis(3000));
+                    kill_runtime_tree(&state_for_exit);
                     std::process::exit(0);
                 });
             }
@@ -431,7 +492,7 @@ pub fn run() {
             if matches!(event, tauri::RunEvent::Exit { .. }) {
                 let managed = app_handle.state::<Arc<SupervisorState>>();
                 begin_shutdown(managed.inner());
-                kill_sidecars(managed.inner());
+                kill_runtime_tree(managed.inner());
             }
         });
 }

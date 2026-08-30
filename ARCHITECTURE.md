@@ -25,23 +25,29 @@ Python 不进入新 Runtime 的核心路径，仅作为迁移期旧系统。
 Renderer (React)
    │ safe IPC: commands/events
 Tauri Rust Host (Desktop Host / Supervisor)
-   ├── spawn/supervise → TypeScript Runtime
-   └── spawn/supervise → Rust System Runtime
+   └── spawn/supervise → TypeScript Runtime
+       （进程树监管：POSIX 进程组 / Windows Job Object 语义，兜底收割整棵树）
 
 TypeScript Runtime
    ├── Agent / Context / Model / Tool orchestration
    ├── Product Policy Gateway
    ├── SQLite canonical state + minimal audit event log
-   └── JSON-RPC over stdio → Rust System Runtime
-
-Rust System Runtime
-   ├── File Service
-   ├── Shell Service
-   ├── System Process Executor
-   └── deny-by-default enforcement
+   └── spawn/supervise → Rust System Runtime（JSON-RPC over stdio）
+       ├── File Service
+       ├── Shell Service
+       ├── System Process Executor
+       └── deny-by-default enforcement
 ```
 
-Tauri Host 创建启动页并分别启动 Rust 与 TypeScript Runtime；TypeScript Runtime 发出 `runtime.ready` 后向 Renderer 报告 Chat ready，Rust 发出 `system.ready` 后启用工具能力。两个 sidecar 都由 Host 监控，但 Rust ready 不阻塞纯 Chat。Host 负责启动超时、版本不兼容、有限重启、关闭传播和 degraded 状态。Runtime 不依赖桌面宿主或 React。Renderer 不直接访问 Provider、数据库或系统工具。TS Runtime 与 Rust 使用 JSON-RPC 2.0 over newline-delimited stdio；stdout 只传协议，stderr 只写日志。固定端口 HTTP 不是核心通信方式，避免本机暴露面和端口冲突。
+进程归属：**TS Runtime 拥有 Rust System Runtime 的通道与生命周期**（spawn、握手、状态上报、
+协议关停、有限重启）；Tauri Host 只 spawn TS，并在 env 中交接 Rust 二进制路径
+（`REFLEXION_SYSTEM_RUNTIME_BIN`），保留进程树兜底收割权。TS 发出 `runtime.ready` 后向
+Renderer 报告 Chat ready，Rust ready 不阻塞纯 Chat；系统可用性由 TS 以 `runtime.status`
+事件第一手上报，Host 从协议流投影 `bootstrap:state` 快照给前端。Host 负责启动超时、
+版本不兼容、TS 有限重启、关闭传播和 degraded 状态。Runtime 不依赖桌面宿主或 React。
+Renderer 不直接访问 Provider、数据库或系统工具。TS Runtime 与 Rust 使用 JSON-RPC 2.0
+over newline-delimited stdio；stdout 只传协议，stderr 只写日志。固定端口 HTTP 不是核心
+通信方式，避免本机暴露面和端口冲突。
 
 ## 4. 统一执行模型
 

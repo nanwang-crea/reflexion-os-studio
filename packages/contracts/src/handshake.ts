@@ -2,7 +2,11 @@ import { z } from 'zod'
 
 export const PROTOCOL_VERSION = '1.0'
 
-export const CapabilitySchema = z.enum(['chat', 'system.bootstrap'])
+export const CapabilitySchema = z.enum([
+  'chat',
+  'system.bootstrap',
+  'system.tools',
+])
 export type Capability = z.infer<typeof CapabilitySchema>
 
 export const SidecarStateSchema = z.enum([

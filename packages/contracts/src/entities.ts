@@ -3,6 +3,42 @@ import { z } from 'zod'
 export const IsoDateTimeSchema = z.iso.datetime()
 export type IsoDateTime = z.infer<typeof IsoDateTimeSchema>
 
+/** JSON 动态值：工具参数/结果等不预设结构的负载。 */
+export type JsonValue =
+  string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
+
+export const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(JsonValueSchema),
+    z.record(z.string(), JsonValueSchema),
+  ]),
+)
+
+/** 消息内容块：canonical 表示；媒体以引用进入，不内联原始数据。 */
+export const TextPartSchema = z.object({
+  type: z.literal('text'),
+  text: z.string(),
+})
+export type TextPart = z.infer<typeof TextPartSchema>
+
+export const ImagePartSchema = z.object({
+  type: z.literal('image'),
+  // 指向 Asset Store 的引用；原始媒体不进协议、数据库或上下文。
+  assetId: z.string().min(1),
+  mimeType: z.string().min(1),
+})
+export type ImagePart = z.infer<typeof ImagePartSchema>
+
+export const ContentPartSchema = z.discriminatedUnion('type', [
+  TextPartSchema,
+  ImagePartSchema,
+])
+export type ContentPart = z.infer<typeof ContentPartSchema>
+
 export const ProjectSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -45,6 +81,8 @@ export const MessageSchema = z.object({
   runId: z.string().min(1).nullable(),
   role: MessageRoleSchema,
   content: z.string(),
+  // canonical 内容块；content 是其中 text 块拼接的纯文本投影，仅供 UI 显示。
+  parts: z.array(ContentPartSchema),
   // 推理模型的思考内容；非思考模型或旧数据为空字符串。
   reasoning: z.string(),
   status: MessageStatusSchema,
@@ -56,6 +94,8 @@ export type Message = z.infer<typeof MessageSchema>
 export const RunStatusSchema = z.enum([
   'created',
   'running',
+  // Run 暂停等待用户审批工具调用；崩溃重启后恢复为 interrupted，不自动放行。
+  'awaiting_approval',
   'completed',
   'failed',
   'cancelled',
@@ -73,8 +113,65 @@ export const RunSchema = z.object({
   completedAt: IsoDateTimeSchema.nullable(),
   errorCode: z.string().nullable(),
   retryOfRunId: z.string().min(1).nullable(),
+  // 执行该 Run 的 Agent；多 Agent 委派链路字段，Primary Agent 为 null。
+  agentId: z.string().min(1).nullable(),
+  parentRunId: z.string().min(1).nullable(),
+  delegationId: z.string().min(1).nullable(),
 })
 export type Run = z.infer<typeof RunSchema>
+
+export const ToolCallStatusSchema = z.enum([
+  'pending',
+  'awaiting_approval',
+  'running',
+  'completed',
+  'failed',
+  'cancelled',
+])
+export type ToolCallStatus = z.infer<typeof ToolCallStatusSchema>
+
+export const ToolCallSchema = z.object({
+  id: z.string().min(1),
+  runId: z.string().min(1),
+  // 发出该调用的 assistant 消息；无关联消息时为 null。
+  messageId: z.string().min(1).nullable(),
+  toolName: z.string().min(1),
+  args: JsonValueSchema,
+  result: JsonValueSchema.nullable(),
+  status: ToolCallStatusSchema,
+  errorCode: z.string().nullable(),
+  // 关联的短期审批授权引用；不进事件 payload，不落审计日志。
+  approvalGrantId: z.string().nullable(),
+  createdAt: IsoDateTimeSchema,
+  completedAt: IsoDateTimeSchema.nullable(),
+})
+export type ToolCall = z.infer<typeof ToolCallSchema>
+
+/** Agent 可见工具操作类型；与 PERMISSION-MODEL 的审批维度一致。 */
+export const ToolOperationSchema = z.enum([
+  'file.read',
+  'file.list',
+  'file.write',
+  'shell.execute',
+])
+export type ToolOperation = z.infer<typeof ToolOperationSchema>
+
+/** Agent 侧工具声明的 canonical 形式；provider 适配层投影为方言格式。 */
+export const ToolSpecSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().min(1),
+  // JSON Schema 形式的参数声明。
+  parameters: JsonValueSchema,
+})
+export type ToolSpec = z.infer<typeof ToolSpecSchema>
+
+export const ProviderCapabilitySchema = z.enum([
+  'chat',
+  'embedding',
+  'image',
+  'video',
+])
+export type ProviderCapability = z.infer<typeof ProviderCapabilitySchema>
 
 export const ProviderProfileSchema = z.object({
   id: z.string().min(1),
@@ -82,8 +179,59 @@ export const ProviderProfileSchema = z.object({
   baseUrl: z.url(),
   // 该供应商下可选的模型列表；对话时可指定其中一个。
   models: z.array(z.string().min(1)).min(1),
+  // 供应商提供的能力类型；决定该 Provider 可参与的负载（对话/向量/生图/生视频）。
+  capabilities: z.array(ProviderCapabilitySchema),
   secretRef: z.string().min(1),
   enabled: z.boolean(),
   updatedAt: IsoDateTimeSchema,
 })
 export type ProviderProfile = z.infer<typeof ProviderProfileSchema>
+
+/** 记忆归属范围：session/project 绑定 scopeId，user 为跨项目长期记忆（null）。 */
+export const MemoryScopeSchema = z.enum(['session', 'project', 'user'])
+export type MemoryScope = z.infer<typeof MemoryScopeSchema>
+
+export const MemoryKindSchema = z.enum(['fact', 'preference', 'procedure'])
+export type MemoryKind = z.infer<typeof MemoryKindSchema>
+
+export const MemoryStatusSchema = z.enum(['active', 'pinned', 'archived'])
+export type MemoryStatus = z.infer<typeof MemoryStatusSchema>
+
+/**
+ * 记忆条目（A2 mem0 式管线）。embedding 向量不进协议：
+ * 召回在 Runtime 内完成，协议只携带可读内容。
+ */
+export const MemorySchema = z
+  .object({
+    id: z.string().min(1),
+    scope: MemoryScopeSchema,
+    // scope=session 时为会话 id，scope=project 时为项目 id，scope=user 时为 null。
+    scopeId: z.string().min(1).nullable(),
+    kind: MemoryKindSchema,
+    content: z.string().min(1),
+    sourceRunId: z.string().min(1).nullable(),
+    confidence: z.number().min(0).max(1),
+    status: MemoryStatusSchema,
+    createdAt: IsoDateTimeSchema,
+    updatedAt: IsoDateTimeSchema,
+    // null 表示不过期；到期条目召回时跳过并可被清理。
+    expiresAt: IsoDateTimeSchema.nullable(),
+  })
+  .superRefine((memory, ctx) => {
+    // 交叉校验：session/project 必须可回溯到具体范围，user 必须全局。
+    if (memory.scope === 'user' && memory.scopeId !== null) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['scopeId'],
+        message: 'user 级记忆的 scopeId 必须为 null',
+      })
+    }
+    if (memory.scope !== 'user' && memory.scopeId === null) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['scopeId'],
+        message: 'session/project 级记忆必须携带 scopeId',
+      })
+    }
+  })
+export type Memory = z.infer<typeof MemorySchema>

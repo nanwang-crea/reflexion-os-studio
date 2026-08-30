@@ -1,10 +1,15 @@
 import { z } from 'zod'
 import {
+  MemoryScopeSchema,
+  MemorySchema,
+  MemoryStatusSchema,
   MessageSchema,
+  ProviderCapabilitySchema,
   ProviderProfileSchema,
   ProjectSchema,
   RunSchema,
   SessionSchema,
+  ToolCallSchema,
 } from './entities.js'
 import { RuntimeStatusSchema } from './handshake.js'
 
@@ -18,8 +23,18 @@ export const MessageSendParamsSchema = z.object({
   // 不传则使用启用的 Provider 及其第一个模型。
   providerId: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
+  // 本次会话执行的工具权限 Profile；缺省 workspace。
+  permissionMode: z.enum(['workspace', 'read-only']).optional(),
 })
 export type ChatCommand = z.infer<typeof MessageSendParamsSchema>
+
+export const ApprovalResolveParamsSchema = z.object({
+  requestId: RequestIdSchema,
+  toolCallId: z.string().min(1),
+  decision: z.enum(['approved', 'denied']),
+  scope: z.enum(['once', 'session']),
+})
+export type ApprovalResolveCommand = z.infer<typeof ApprovalResolveParamsSchema>
 
 export const RunCancelParamsSchema = z.object({
   requestId: RequestIdSchema,
@@ -99,6 +114,8 @@ export const CommandSchemaRegistry = {
       session: SessionSchema.nullable(),
       messages: z.array(MessageSchema),
       runs: z.array(RunSchema),
+      // 会话内全部工具调用（跨 Run 汇总），供 UI 呈现工具轨迹。
+      toolCalls: z.array(ToolCallSchema),
     }),
   },
   'message.send': {
@@ -120,6 +137,11 @@ export const CommandSchemaRegistry = {
       retryOfRunId: z.string().min(1),
     }),
   },
+  'approval.resolve': {
+    params: ApprovalResolveParamsSchema,
+    // accepted=false 表示该调用不在等待审批（已解决/已取消）。
+    result: z.object({ accepted: z.boolean() }),
+  },
   'provider.list': {
     params: z.object({ requestId: RequestIdSchema }),
     result: z.object({ profiles: z.array(ProviderProfileSchema) }),
@@ -136,6 +158,8 @@ export const CommandSchemaRegistry = {
       secret: z.string().min(1).optional(),
       // 编辑且不换 Key 时必须回传既有 secretRef。
       secretRef: z.string().min(1).optional(),
+      // 供应商能力类型；省略时编辑保留原值、新建为 ['chat']。
+      capabilities: z.array(ProviderCapabilitySchema).optional(),
       enabled: z.boolean().optional(),
     }),
     result: z.object({ profile: ProviderProfileSchema }),
@@ -162,6 +186,32 @@ export const CommandSchemaRegistry = {
       model: z.string().min(1),
       error: z.string().nullable(),
     }),
+  },
+  'memory.list': {
+    // scopeId 语义与 Memory.scopeId 一致：省略 → 全部；null → user 级。
+    params: z.object({
+      requestId: RequestIdSchema,
+      scope: MemoryScopeSchema.optional(),
+      scopeId: z.union([z.string().min(1), z.null()]).optional(),
+    }),
+    result: z.object({ memories: z.array(MemorySchema) }),
+  },
+  'memory.update': {
+    // 记忆管理页的编辑/固定/归档；content 编辑会作废原 embedding（召回侧重建）。
+    params: z.object({
+      requestId: RequestIdSchema,
+      id: z.string().min(1),
+      content: z.string().min(1).optional(),
+      status: MemoryStatusSchema.optional(),
+    }),
+    result: z.object({ memory: MemorySchema.nullable() }),
+  },
+  'memory.delete': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      id: z.string().min(1),
+    }),
+    result: z.object({ removed: z.boolean() }),
   },
 } satisfies Record<string, { params: z.ZodType; result: z.ZodType }>
 

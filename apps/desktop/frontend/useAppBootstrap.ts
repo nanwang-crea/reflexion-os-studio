@@ -12,6 +12,14 @@ export interface BootstrapSnapshot {
   detail?: string
 }
 
+/** 等待用户审批的工具调用（approval.required → approval.resolved 之间可见）。 */
+export interface PendingApproval {
+  toolCallId: string
+  runId: string
+  operation: string
+  summary: string
+}
+
 /** Run 结束类事件：触发会话数据与列表刷新（标题可能已被自动命名）。 */
 const EVENT_TYPES_TRIGGERING_REFRESH = new Set([
   'message.completed',
@@ -40,6 +48,9 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
   streaming: Record<string, string>
   streamingReasoning: Record<string, string>
   resetStreaming: () => void
+  pendingApprovals: PendingApproval[]
+  clearPendingApprovals: (runId: string) => void
+  memoryNotice: string | null
 } {
   const [bootstrap, setBootstrap] = useState<BootstrapSnapshot | null>(null)
   const [streaming, setStreaming] = useState<Record<string, string>>({})
@@ -48,6 +59,32 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     Record<string, string>
   >({})
   const streamingReasoningRef = useRef<Record<string, string>>({})
+  const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>(
+    [],
+  )
+  // A2 Memory：非打断式写入提示（顶栏角标，自动消失），不用弹窗。
+  const [memoryNotice, setMemoryNotice] = useState<string | null>(null)
+  const memoryNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const showMemoryNotice = useCallback((text: string): void => {
+    if (memoryNoticeTimer.current) clearTimeout(memoryNoticeTimer.current)
+    setMemoryNotice(text)
+    memoryNoticeTimer.current = setTimeout(() => {
+      memoryNoticeTimer.current = null
+      setMemoryNotice(null)
+    }, 6000)
+  }, [])
+  // 工具事件触发的防抖刷新：Run 进行中让轨迹卡状态跟进，不必等 Run 结束。
+  const toolRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scheduleToolRefresh = useCallback((): void => {
+    if (toolRefreshTimer.current) clearTimeout(toolRefreshTimer.current)
+    toolRefreshTimer.current = setTimeout(() => {
+      toolRefreshTimer.current = null
+      const sessionId = deps.activeSessionRef.current
+      if (sessionId !== null) {
+        void deps.refreshSessionData(sessionId).catch(() => undefined)
+      }
+    }, 200)
+  }, [deps])
 
   const fail = useCallback(
     (error: unknown): void => {
@@ -61,6 +98,13 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     setStreaming({})
     streamingReasoningRef.current = {}
     setStreamingReasoning({})
+  }, [])
+
+  /** Run 终态时清理该 Run 遗留的审批等待（取消/失败路径的兜底）。 */
+  const clearPendingApprovals = useCallback((runId: string): void => {
+    setPendingApprovals((pending) =>
+      pending.filter((entry) => entry.runId !== runId),
+    )
   }, [])
 
   /**
@@ -153,6 +197,39 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           setStreamingReasoning(streamingReasoningRef.current)
           return
         }
+        if (event.type === 'approval.required') {
+          setPendingApprovals((pending) => [
+            ...pending.filter((entry) => entry.toolCallId !== event.toolCallId),
+            {
+              toolCallId: event.toolCallId,
+              runId: event.runId,
+              operation: event.operation,
+              summary: event.summary,
+            },
+          ])
+          return
+        }
+        if (event.type === 'approval.resolved') {
+          setPendingApprovals((pending) =>
+            pending.filter((entry) => entry.toolCallId !== event.toolCallId),
+          )
+          return
+        }
+        // 工具调用事件：防抖刷新当前会话，轨迹卡在 Run 进行中也能推进状态。
+        if (
+          event.type === 'tool.requested' ||
+          event.type === 'tool.completed'
+        ) {
+          scheduleToolRefresh()
+          return
+        }
+        // 记忆写入事件：轻提示，不打断对话；同时刷新会话数据无需做（记忆不进消息流）。
+        if (event.type === 'memory.written') {
+          if (event.memories.length > 0) {
+            showMemoryNotice(`已记住 ${event.memories.length} 条新信息`)
+          }
+          return
+        }
         if (EVENT_TYPES_TRIGGERING_REFRESH.has(event.type)) {
           if (event.type === 'message.completed') {
             // 最终正文先落缓存占位，等刷新落地后再由 prune 清理，避免闪空。
@@ -170,6 +247,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           void deps.refreshStandaloneSessions()
           const projectId = deps.activeProjectRef.current
           if (projectId) void deps.refreshProjectSessions(projectId)
+          clearPendingApprovals(event.runId)
           refreshAndPrune()
         }
       })
@@ -197,10 +275,28 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
 
     return () => {
       disposed = true
+      if (toolRefreshTimer.current) clearTimeout(toolRefreshTimer.current)
+      if (memoryNoticeTimer.current) clearTimeout(memoryNoticeTimer.current)
       unlistenState?.()
       unlistenEvents?.()
     }
-  }, [deps, fail, loadInitialData, refreshAndPrune])
+  }, [
+    deps,
+    fail,
+    loadInitialData,
+    refreshAndPrune,
+    clearPendingApprovals,
+    scheduleToolRefresh,
+    showMemoryNotice,
+  ])
 
-  return { bootstrap, streaming, streamingReasoning, resetStreaming }
+  return {
+    bootstrap,
+    streaming,
+    streamingReasoning,
+    resetStreaming,
+    pendingApprovals,
+    clearPendingApprovals,
+    memoryNotice,
+  }
 }

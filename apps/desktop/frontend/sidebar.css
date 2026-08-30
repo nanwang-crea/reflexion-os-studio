@@ -251,3 +251,24 @@
   padding: 6px 10px;
   line-height: 1.5;
 }
+
+/* ---------- 侧边栏底部入口（记忆 / 设置，ChatGPT 式） ---------- */
+
+.sidebar-footer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-footer .row svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.sidebar-footer .row:hover svg,
+.sidebar-footer .row.active svg {
+  color: var(--text);
+}

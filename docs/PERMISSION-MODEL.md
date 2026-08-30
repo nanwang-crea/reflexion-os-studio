@@ -42,6 +42,8 @@ interface ApprovalGrant {
 
 Grant 不是跨机器安全凭证，不写入数据库，不进事件 payload，不需要签名/MAC/nonce。Rust 只接受由已连接 Runtime 建立的 grant 引用，并检查 request、workspace、operation、scope 和过期时间；进程重启后全部失效。
 
+**MVP 落地边界**：grant 语义（once/session 范围、过期）由 Runtime 内存管理（ApprovalGateway）；Rust 侧当前只校验 write/execute 请求携带非空 grant 引用，完整 grant 对象校验（scope/expiry 绑定）随 Phase 6 加固下沉 Rust。Rust 的硬边界（路径规范化/符号链接/体量/超时/树杀）已完整生效。
+
 ## 两层职责
 
 ### TypeScript Policy Gateway

@@ -1,6 +1,8 @@
 # Memory System
 
 > Phase 1A 限定：只实现 Run-local Working Memory 和 Session Context。Project Memory 仅作为显式用户维护的只读/受限占位；不做自动提取、召回、Embedding、自动写入或 Long-term Memory。
+> 更新：A2 已按 `AGENT-PLATFORM-PLAN.md` §5 落地 mem0 式本地管线（提取/合并/召回/管理页），
+> scope 语义、生命周期与权限边界以该节与本文为准；User 级 propose→confirm 流程待 A2 收尾。
 
 Memory 分为四层：
 

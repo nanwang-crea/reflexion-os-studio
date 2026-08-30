@@ -1,5 +1,12 @@
 import { z } from 'zod'
-import { MessageSchema, RunSchema, SessionSchema } from './entities.js'
+import {
+  JsonValueSchema,
+  MemorySchema,
+  MessageSchema,
+  RunSchema,
+  SessionSchema,
+  ToolOperationSchema,
+} from './entities.js'
 import { RuntimeErrorSchema } from './errors.js'
 import { RuntimeStatusSchema } from './handshake.js'
 
@@ -7,6 +14,8 @@ export const FinishReasonSchema = z.enum([
   'stop',
   'length',
   'content_filter',
+  // 模型请求工具调用；Agent 工具循环据此继续本轮 Run。
+  'tool_calls',
   'cancelled',
 ])
 export type FinishReason = z.infer<typeof FinishReasonSchema>
@@ -71,6 +80,36 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
   }),
   RuntimeEventEnvelopeSchema.extend({
     type: z.literal('run.cancelled'),
+  }),
+  // 工具调用与审批事件（Agent Core 阶段开始发出；A0 先固定契约）。
+  RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('tool.requested'),
+    toolCallId: z.string().min(1),
+    toolName: z.string().min(1),
+    args: JsonValueSchema,
+  }),
+  RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('tool.completed'),
+    toolCallId: z.string().min(1),
+    status: z.enum(['completed', 'failed', 'cancelled']),
+    errorCode: z.string().nullable(),
+  }),
+  RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('approval.required'),
+    toolCallId: z.string().min(1),
+    operation: ToolOperationSchema,
+    summary: z.string(),
+  }),
+  RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('approval.resolved'),
+    toolCallId: z.string().min(1),
+    decision: z.enum(['approved', 'denied']),
+    scope: z.enum(['once', 'session']),
+  }),
+  // A2 Memory：Run 结束后异步提取落库的记忆；UI 据此做非打断式提示。
+  RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('memory.written'),
+    memories: z.array(MemorySchema),
   }),
 ])
 export type RuntimeEvent = z.infer<typeof RuntimeEventSchema>

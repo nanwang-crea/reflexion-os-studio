@@ -14,24 +14,25 @@ React Renderer（未来） → Tauri Host → TypeScript Runtime → Rust System
 
 ## 2. 目录结构与职责
 
-| 路径                       | 职责                                                                                |
-| -------------------------- | ----------------------------------------------------------------------------------- |
-| `apps/desktop/frontend/`   | WebView 前端（Vite + TypeScript），通过 `@tauri-apps/api` 的 `invoke`/`listen` 通信 |
-| `apps/desktop/src-tauri/`  | Tauri Rust 宿主：窗口、白名单 command/event、sidecar supervisor                     |
-| `apps/runtime/`            | TypeScript Runtime（Node sidecar，stdio JSON-RPC）                                  |
-| `packages/contracts/`      | 跨进程协议类型的**唯一真源**，新增协议先改这里                                      |
-| `packages/runtime-client/` | 前端唯一 typed facade，不得绕过它直连任何进程                                       |
-| `packages/*`（其余）       | 仅 README 占位，不要在其中堆放实现代码                                              |
-| `crates/system-runtime/`   | Rust System Runtime sidecar（独立 Cargo workspace，根目录 `Cargo.toml` 不存在）     |
-| `scripts/`                 | bash 构建编排                                                                       |
-| `docs/`                    | 设计文档；改架构先改文档                                                            |
+| 路径                       | 职责                                                                                     |
+| -------------------------- | ---------------------------------------------------------------------------------------- |
+| `apps/desktop/frontend/`   | WebView 前端（Vite + TypeScript），通过 `@tauri-apps/api` 的 `invoke`/`listen` 通信      |
+| `apps/desktop/src-tauri/`  | Tauri Rust 宿主：窗口、白名单 command/event、sidecar supervisor                          |
+| `apps/runtime/`            | TypeScript Runtime（Node sidecar，stdio JSON-RPC）                                       |
+| `packages/contracts/`      | 跨进程协议类型的**唯一真源**，新增协议先改这里                                           |
+| `packages/agent-core/`     | Agent 循环内核（内部 SDK）：runAgentLoop / ToolRegistry / 上下文压缩，不碰 SQLite 与传输 |
+| `packages/runtime-client/` | 前端唯一 typed facade，不得绕过它直连任何进程                                            |
+| `packages/*`（其余）       | 仅 README 占位，不要在其中堆放实现代码                                                   |
+| `crates/system-runtime/`   | Rust System Runtime sidecar（独立 Cargo workspace，根目录 `Cargo.toml` 不存在）          |
+| `scripts/`                 | bash 构建编排                                                                            |
+| `docs/`                    | 设计文档；改架构先改文档                                                                 |
 
 依赖方向硬约束：`contracts → all`；`desktop → runtime-client`；`runtime → contracts/SDK`。反向依赖即返工。
 
 ## 3. 架构红线（违反即错误实现）
 
 1. **stdout 只传 JSON-RPC 协议消息，stderr 只写日志**。newline-delimited、单行 JSON。
-2. 前端不得直接访问 Node API、文件系统、Provider、数据库或 sidecar 原始 stdio；只能调用 Tauri 白名单 command（当前：`bootstrap_get_state`、`bootstrap_ping`）。
+2. 前端不得直接访问 Node API、文件系统、Provider、数据库或 sidecar 原始 stdio；只能调用 Tauri 白名单 command（当前：`bootstrap_get_state`、`runtime_request`）。
 3. Runtime 不依赖 Tauri/桌面宿主/React；宿主不实现业务逻辑。
 4. 不用固定 localhost HTTP 做进程间通信。
 5. Chat 不因 Rust 未 ready 阻塞：`system-degraded` 是降级不是 `error`；`runtime.ready` 才代表 Chat 可用。
@@ -52,7 +53,8 @@ React Renderer（未来） → Tauri Host → TypeScript Runtime → Rust System
 - **前端访问 Runtime 的唯一通道**：`runtime-client` 的 `RuntimeTransport`（Tauri 白名单 command `runtime_request` + `bootstrap:message` 事件按 id 关联）；新增业务命令需同步更新 Rust 侧白名单数组。
 - **按职责拆分（硬规则，新代码先拆再写）**：不先写大文件再事后补拆。
   - 一个文件只承载一个职责；TypeScript 单文件超过约 300 行即应拆分，**500 行是硬上限**；本次变更中发现超纲文件就在当次拆掉，不留"以后再拆"。
-  - **Runtime 存储**：`store/` 按领域分文件（projects / sessions / messages / runs / providers 各一个类），schema 与版本迁移独立在 `store/migrations.ts`，共享工具在 `store/shared.ts`，`store/index.ts` 只做门面（连接、事务边界、启动恢复编排）。业务代码只调领域方法（如 `store.sessions.list(null)`），不直接写 SQL。
+  - **Runtime 存储**：`store/` 按领域分文件（projects / sessions / messages / runs / providers / toolCalls 各一个类），schema 与版本迁移独立在 `store/migrations.ts`，共享工具在 `store/shared.ts`，`store/index.ts` 只做门面（连接、事务边界、启动恢复编排）。业务代码只调领域方法（如 `store.sessions.list(null)`），不直接写 SQL。
+  - **Runtime Agent**：`agent/` 按职责分文件——`prompts/`（一个 prompt 一个文件，禁止在代码里内联长 prompt）、`context.ts`（历史重建与压缩）、`permissions.ts`（权限策略表 + ApprovalGateway + PermissionGate）、`tools.ts`（按 Run 装配工具，Rust 工具经 SystemRuntimeClient）、`runner.ts`（Run 编排：循环+持久化+事件+审批+取消）、`errors.ts`、`title.ts`，`agent/index.ts` 只做命令门面。循环算法本身在 `packages/agent-core`，不得把 SQLite/传输细节漏进去。
   - **前端请求**：组件不得直接 `transport.request`。统一走 `api/` 层并按功能分文件（projects / sessions / chat / providers / client），`requestId` 由 api 层自动注入；组件调用具名函数（如 `createSession(projectId)`）。
   - **前端组件与样式**：页面级组件、共享组件（如 `SessionRow`）各自成文件；CSS 按页面/职责拆文件（base / sidebar / chat / settings），不要堆进单个大 css。
   - 拆分以"职责"为界而不是"行数均摊"：领域、页面、传输层各自的内聚单元独立成文件，避免把不相关逻辑凑进同一个文件。
@@ -99,7 +101,7 @@ pnpm build:desktop         # release 宿主二进制（不打包安装器）
 
   预期：先输出 `system.ready` 通知，再输出两个 id 对应的 result，最后干净退出。
 
-- **宿主 sidecar 监管**：后台启动 `apps/desktop/src-tauri/target/release/reflexion-desktop`，数秒后用 `pgrep -fl` 确认 `node …/apps/runtime/dist/index.js` 与 `reflexion-system-runtime` 两个子进程存在；TERM 宿主后再次 pgrep 确认无孤儿进程。
+- **宿主 sidecar 监管**：后台启动 `apps/desktop/src-tauri/target/release/reflexion-desktop`，数秒后用 `pgrep -fl` 确认 `node …/apps/runtime/dist/index.js` 与 `reflexion-system-runtime` 两个进程存在（Rust 由 TS spawn 监管，Host 只握进程树兜底收割权）；TERM 宿主后再次 pgrep 确认无孤儿进程。
 
 ## 8. 跨平台纪律（红线第 8 条的落地清单）
 

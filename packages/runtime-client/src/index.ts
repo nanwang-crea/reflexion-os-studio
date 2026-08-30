@@ -4,6 +4,8 @@ export type {
   JsonRpcNotification,
   JsonRpcRequest,
   JsonRpcResponse,
+  JsonValue,
+  Memory,
   Message,
   Project,
   ProviderProfile,
@@ -11,6 +13,7 @@ export type {
   RuntimeEvent,
   RuntimeStatus,
   Session,
+  ToolCall,
 } from '@reflexion-os-studio/contracts'
 
 export {

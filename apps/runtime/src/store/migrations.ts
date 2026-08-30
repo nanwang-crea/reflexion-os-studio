@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS messages (
   run_id TEXT,
   role TEXT NOT NULL,
   content TEXT NOT NULL,
+  parts_json TEXT NOT NULL DEFAULT '[]',
   reasoning TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL,
   created_at TEXT NOT NULL,
@@ -39,21 +40,73 @@ CREATE TABLE IF NOT EXISTS runs (
   started_at TEXT,
   completed_at TEXT,
   error_code TEXT,
-  retry_of_run_id TEXT
+  retry_of_run_id TEXT,
+  agent_id TEXT,
+  parent_run_id TEXT,
+  delegation_id TEXT
+);
+CREATE TABLE IF NOT EXISTS tool_calls (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  message_id TEXT REFERENCES messages(id) ON DELETE CASCADE,
+  tool_name TEXT NOT NULL,
+  args_json TEXT NOT NULL,
+  result_json TEXT,
+  status TEXT NOT NULL,
+  error_code TEXT,
+  approval_grant_id TEXT,
+  created_at TEXT NOT NULL,
+  completed_at TEXT
 );
 CREATE TABLE IF NOT EXISTS provider_profiles (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   base_url TEXT NOT NULL,
   models TEXT NOT NULL,
+  capabilities TEXT NOT NULL DEFAULT '["chat"]',
   secret_ref TEXT NOT NULL,
   enabled INTEGER NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS memories (
+  id TEXT PRIMARY KEY,
+  scope TEXT NOT NULL,
+  scope_id TEXT,
+  kind TEXT NOT NULL,
+  content TEXT NOT NULL,
+  source_run_id TEXT,
+  confidence REAL NOT NULL DEFAULT 0.8,
+  embedding BLOB,
+  embedding_model TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  expires_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope, scope_id);
+-- A2 Memory 全文索引：trigram 分词对中文子串检索有效（unicode61 无法切分 CJK）。
+CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+  content,
+  tokenize='trigram',
+  content='memories',
+  content_rowid='rowid'
+);
+CREATE TRIGGER IF NOT EXISTS memories_fts_ai AFTER INSERT ON memories BEGIN
+  INSERT INTO memories_fts(rowid, content) VALUES (new.rowid, new.content);
+END;
+CREATE TRIGGER IF NOT EXISTS memories_fts_ad AFTER DELETE ON memories BEGIN
+  INSERT INTO memories_fts(memories_fts, rowid, content)
+  VALUES ('delete', old.rowid, old.content);
+END;
+CREATE TRIGGER IF NOT EXISTS memories_fts_au AFTER UPDATE OF content ON memories BEGIN
+  INSERT INTO memories_fts(memories_fts, rowid, content)
+  VALUES ('delete', old.rowid, old.content);
+  INSERT INTO memories_fts(rowid, content) VALUES (new.rowid, new.content);
+END;
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 3
+export const LATEST_SCHEMA_VERSION = 5
 
 const SESSIONS_TABLE_V1 = `
 CREATE TABLE sessions (
@@ -101,6 +154,11 @@ function tableColumns(db: DatabaseSync, table: string): TableColumn[] {
  * v0 → v1：sessions.project_id 改为可空（独立会话），projects 增加 folder_path。
  * v1 → v2：provider_profiles 单 model 列改为 models JSON 数组（多模型）。
  * v2 → v3：messages 增加 reasoning 列（推理模型思考内容）。
+ * v3 → v4：Agent 契约地基——messages 增加 parts_json（content 一次性回填为单 text 块）、
+ *          runs 增加 agent_id/parent_run_id/delegation_id、provider_profiles 增加 capabilities、
+ *          tool_calls 表由 SCHEMA 创建。
+ * v4 → v5：A2 Memory——memories 表 + FTS5 索引 + 同步触发器由 SCHEMA 创建（全新表，
+ *          无历史数据回填；升级只推进版本号）。
  * 各步骤带形状检测：SCHEMA 刚建好的新库不会空跑重建。
  */
 export function runMigrations(db: DatabaseSync): void {
@@ -185,6 +243,47 @@ export function runMigrations(db: DatabaseSync): void {
         // 加列可直接 ALTER TABLE，无需重建表。
         db.exec(
           "ALTER TABLE messages ADD COLUMN reasoning TEXT NOT NULL DEFAULT ''",
+        )
+      }
+    }
+    if (version < 4) {
+      if (
+        !tableColumns(db, 'messages').some(
+          (column) => column.name === 'parts_json',
+        )
+      ) {
+        db.exec(
+          "ALTER TABLE messages ADD COLUMN parts_json TEXT NOT NULL DEFAULT '[]'",
+        )
+      }
+      // 一次性迁移：content → 单 text 内容块；此后 parts 为 canonical 表示。
+      const legacyRows = db
+        .prepare(
+          "SELECT id, content FROM messages WHERE parts_json = '[]' AND content <> ''",
+        )
+        .all() as { id: string; content: string }[]
+      const backfill = db.prepare(
+        'UPDATE messages SET parts_json = ? WHERE id = ?',
+      )
+      for (const row of legacyRows) {
+        backfill.run(
+          JSON.stringify([{ type: 'text', text: String(row.content) }]),
+          String(row.id),
+        )
+      }
+      const runColumns = tableColumns(db, 'runs').map((column) => column.name)
+      for (const column of ['agent_id', 'parent_run_id', 'delegation_id']) {
+        if (!runColumns.includes(column)) {
+          db.exec(`ALTER TABLE runs ADD COLUMN ${column} TEXT`)
+        }
+      }
+      if (
+        !tableColumns(db, 'provider_profiles').some(
+          (column) => column.name === 'capabilities',
+        )
+      ) {
+        db.exec(
+          `ALTER TABLE provider_profiles ADD COLUMN capabilities TEXT NOT NULL DEFAULT '["chat"]'`,
         )
       }
     }

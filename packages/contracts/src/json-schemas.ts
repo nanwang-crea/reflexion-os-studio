@@ -1,11 +1,14 @@
 import { z } from 'zod'
 import { CommandSchemaRegistry } from './commands.js'
 import {
+  MemorySchema,
   MessageSchema,
   ProjectSchema,
   ProviderProfileSchema,
   RunSchema,
   SessionSchema,
+  ToolCallSchema,
+  ToolSpecSchema,
 } from './entities.js'
 import { RuntimeErrorSchema } from './errors.js'
 import { JsonRpcMessageSchema } from './jsonrpc.js'
@@ -22,6 +25,9 @@ export const jsonSchemas: Readonly<Record<string, unknown>> = Object.freeze(
     toJSONSchema('Session', SessionSchema),
     toJSONSchema('Message', MessageSchema),
     toJSONSchema('Run', RunSchema),
+    toJSONSchema('ToolCall', ToolCallSchema),
+    toJSONSchema('ToolSpec', ToolSpecSchema),
+    toJSONSchema('Memory', MemorySchema),
     toJSONSchema('ProviderProfile', ProviderProfileSchema),
     toJSONSchema('RuntimeError', RuntimeErrorSchema),
     toJSONSchema('RuntimeEvent', RuntimeEventSchema),

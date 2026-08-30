@@ -9,12 +9,13 @@ import {
   type RuntimeEvent,
   type RuntimeStatus,
 } from '@reflexion-os-studio/contracts'
-import { ChatAgent, CommandError } from './agent.js'
+import { ChatAgent, CommandError } from './agent/index.js'
+import { RunEventEmitter } from './events.js'
 import { dispatchCommand, testProviderConnection } from './handlers.js'
 import { resolveDataDir, Store } from './store/index.js'
+import { resolveSystemRuntimeBinary, SystemRuntimeClient } from './system.js'
 
 const RUNTIME_VERSION = '0.1.0'
-let rustAvailable = false
 
 function write(message: JsonRpcMessage, onFlush?: () => void): void {
   process.stdout.write(`${JSON.stringify(message)}\n`, onFlush)
@@ -50,6 +51,22 @@ function notify(event: RuntimeEvent): void {
   write({ jsonrpc: '2.0', method: event.type, params: event })
 }
 
+// 全局状态事件信封（不归属任何 Run）。
+const statusEmitter = new RunEventEmitter('runtime', notify)
+
+// 方案 A：TS Runtime 拥有 Rust System Runtime 的通道与生命周期；
+// 系统可用性第一手在此产生，经 runtime.status 事件上报（Host/前端据此投影）。
+const systemRuntime = new SystemRuntimeClient(
+  resolveSystemRuntimeBinary(),
+  [],
+  (status, detail) => {
+    process.stderr.write(
+      `[runtime] system runtime ${status}${detail ? `: ${detail}` : ''}\n`,
+    )
+    statusEmitter.next({ type: 'runtime.status', status: getStatus() })
+  },
+)
+
 function getStatus(): RuntimeStatus {
   return {
     state: 'ready',
@@ -57,7 +74,7 @@ function getStatus(): RuntimeStatus {
     runtimeVersion: RUNTIME_VERSION,
     capabilities: ['chat'],
     chatAvailable: true,
-    systemAvailable: rustAvailable,
+    systemAvailable: systemRuntime.available,
   }
 }
 
@@ -71,23 +88,32 @@ function summarizeZodIssues(error: {
 }
 
 const store = new Store(resolveDataDir())
-const agent = new ChatAgent(store, notify)
-const commandContext = { store, agent }
+const agent = new ChatAgent(store, notify, systemRuntime)
+const commandContext = { store, agent, approvals: agent.approvals }
 
-function handleSystemStatus(request: JsonRpcRequest): void {
-  const params = request.params as { available?: boolean } | undefined
-  rustAvailable = Boolean(params?.available)
-  sendResponse(request.id, { available: rustAvailable })
-}
+systemRuntime.start()
+// 初始状态上报：让 Host/前端立即拿到 systemAvailable 基线（后续变化走回调）。
+statusEmitter.next({ type: 'runtime.status', status: getStatus() })
 
 function handleRequest(request: JsonRpcRequest): void {
-  if (request.method === 'system.status') {
-    handleSystemStatus(request)
+  if (request.method === 'system.ping') {
+    // 工具健康检查代理：TS 转发给自有的 Rust 子进程。
+    void systemRuntime.request('system.ping').then(
+      () => sendResponse(request.id, { ok: true }),
+      (error: unknown) =>
+        sendResponse(request.id, {
+          ok: false,
+          detail: error instanceof Error ? error.message : String(error),
+        }),
+    )
     return
   }
 
   if (request.method === 'runtime.shutdown') {
-    sendResponse(request.id, { ok: true }, () => process.exit(0))
+    // 先协议关停 Rust 子进程，再退出自身；宿主侧另有进程树兜底收割。
+    sendResponse(request.id, { ok: true }, () => {
+      void systemRuntime.shutdown().finally(() => process.exit(0))
+    })
     return
   }
 

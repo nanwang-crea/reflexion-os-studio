@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { ToolCall } from '@reflexion-os-studio/runtime-client'
 import { Composer, type ComposerModelOption } from './Composer'
 import { ArrowDownIcon, SparkIcon } from './ui/icons'
+import { ApprovalCard } from './chat/ApprovalCard'
 import { AssistantMessage } from './chat/AssistantMessage'
 import type { SessionData } from './api/sessions'
+import type { PendingApproval } from './useAppBootstrap'
 
 interface ChatViewProps {
   sessionData: SessionData | null
@@ -18,6 +21,12 @@ interface ChatViewProps {
   onStop: () => Promise<void>
   onRetry: () => Promise<void>
   onGoSettings: () => void
+  pendingApprovals: PendingApproval[]
+  onResolveApproval: (
+    toolCallId: string,
+    decision: 'approved' | 'denied',
+    scope: 'once' | 'session',
+  ) => void
 }
 
 /** 距底部小于该值视为“贴底”，流式期间继续跟随滚动。 */
@@ -30,9 +39,28 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
 
   const messages = props.sessionData?.messages ?? []
   const runs = props.sessionData?.runs ?? []
-  const runActive = runs.some(
-    (run) => run.status === 'created' || run.status === 'running',
+  const toolCalls = props.sessionData?.toolCalls ?? []
+  const runIds = new Set(runs.map((run) => run.id))
+  // 工具调用按发起消息分组，随助手消息渲染轨迹卡片。
+  const toolCallsByMessage = new Map<string, ToolCall[]>()
+  for (const call of toolCalls) {
+    if (call.messageId === null) continue
+    const group = toolCallsByMessage.get(call.messageId)
+    if (group) group.push(call)
+    else toolCallsByMessage.set(call.messageId, [call])
+  }
+  // 审批卡只展示当前会话的等待项（切会话时不串场）。
+  const sessionApprovals = props.pendingApprovals.filter((entry) =>
+    runIds.has(entry.runId),
   )
+  const runActive =
+    sessionApprovals.length > 0 ||
+    runs.some(
+      (run) =>
+        run.status === 'created' ||
+        run.status === 'running' ||
+        run.status === 'awaiting_approval',
+    )
   const lastRetryableRun = [...runs]
     .reverse()
     .find(
@@ -84,6 +112,17 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
             </div>
           )}
           {messages.map((message) => {
+            const messageToolCalls = toolCallsByMessage.get(message.id) ?? []
+            // 既无正文/思考也无工具调用的占位消息不渲染。
+            if (
+              message.role === 'assistant' &&
+              message.status === 'completed' &&
+              message.content === '' &&
+              message.reasoning === '' &&
+              messageToolCalls.length === 0
+            ) {
+              return null
+            }
             if (message.role === 'user') {
               return (
                 <div key={message.id} className="msg-user">
@@ -96,6 +135,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
                 <AssistantMessage
                   key={message.id}
                   message={message}
+                  toolCalls={messageToolCalls}
                   runActive={runActive}
                   streamingText={props.streaming[message.id]}
                   streamingReasoning={props.streamingReasoning[message.id]}
@@ -128,6 +168,13 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
       )}
 
       <div className="composer-wrap">
+        {sessionApprovals.map((approval) => (
+          <ApprovalCard
+            key={approval.toolCallId}
+            approval={approval}
+            onResolve={props.onResolveApproval}
+          />
+        ))}
         {!pinned && messages.length > 0 && (
           <button
             className="scroll-bottom"

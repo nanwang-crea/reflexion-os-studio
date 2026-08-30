@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import type { Message } from '@reflexion-os-studio/runtime-client'
+import type { Message, ToolCall } from '@reflexion-os-studio/runtime-client'
 import { CheckIcon, CopyIcon, SparkIcon } from '../ui/icons'
 import { MessageMarkdown } from './MessageMarkdown'
 import { ThinkingPanel } from './ThinkingPanel'
+import { ToolTraceCard } from './ToolTraceCard'
 
 const MESSAGE_STATUS_LABELS: Record<string, string> = {
   interrupted: '已中断',
@@ -11,6 +12,8 @@ const MESSAGE_STATUS_LABELS: Record<string, string> = {
 
 interface AssistantMessageProps {
   message: Message
+  /** 该消息发起的工具调用；纯工具轮次只有轨迹卡没有正文。 */
+  toolCalls: ToolCall[]
   /** 会话内是否有进行中的 Run；配合流式缓存区分等待/思考/作答阶段。 */
   runActive: boolean
   /** 该消息的流式正文增量缓存；undefined 表示不在本次流式窗口内。 */
@@ -68,6 +71,12 @@ export function AssistantMessage(
         <SparkIcon size={14} />
       </div>
       <div className="assistant-main">
+        {props.toolCalls.length > 0 && (
+          <ToolTraceCard
+            toolCalls={props.toolCalls}
+            runActive={props.runActive}
+          />
+        )}
         {reasoningText !== '' && (
           <ThinkingPanel text={reasoningText} streaming={thinkingStreaming} />
         )}

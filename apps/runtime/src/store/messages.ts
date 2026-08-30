@@ -1,11 +1,18 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
-import type {
-  Message,
-  MessageRole,
-  MessageStatus,
+import {
+  ContentPartSchema,
+  type ContentPart,
+  type Message,
+  type MessageRole,
+  type MessageStatus,
 } from '@reflexion-os-studio/contracts'
 import { nowIso, type Row } from './shared.js'
+
+/** content（纯文本投影）对应的 canonical 内容块。 */
+function textParts(content: string): ContentPart[] {
+  return content === '' ? [] : [{ type: 'text', text: content }]
+}
 
 /** 消息领域：会话内的 user/assistant/system 消息。 */
 export class MessageStore {
@@ -29,12 +36,14 @@ export class MessageStore {
     content: string
     status: MessageStatus
   }): Message {
+    const parts = textParts(input.content)
     const message: Message = {
       id: randomUUID(),
       sessionId: input.sessionId,
       runId: input.runId,
       role: input.role,
       content: input.content,
+      parts,
       reasoning: '',
       status: input.status,
       createdAt: nowIso(),
@@ -42,7 +51,7 @@ export class MessageStore {
     }
     this.db
       .prepare(
-        'INSERT INTO messages (id, session_id, run_id, role, content, reasoning, status, created_at, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO messages (id, session_id, run_id, role, content, parts_json, reasoning, status, created_at, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .run(
         message.id,
@@ -50,6 +59,7 @@ export class MessageStore {
         message.runId,
         message.role,
         message.content,
+        JSON.stringify(parts),
         message.reasoning,
         message.status,
         message.createdAt,
@@ -58,7 +68,7 @@ export class MessageStore {
     return message
   }
 
-  /** 终态写入：正文与思考内容一并在单事务内落库（由门面保证事务）。 */
+  /** 终态写入：正文、内容块与思考内容一并在单事务内落库（由门面保证事务）。 */
   finalize(
     id: string,
     content: string,
@@ -67,9 +77,16 @@ export class MessageStore {
   ): void {
     this.db
       .prepare(
-        'UPDATE messages SET content = ?, reasoning = ?, status = ?, completed_at = ? WHERE id = ?',
+        'UPDATE messages SET content = ?, parts_json = ?, reasoning = ?, status = ?, completed_at = ? WHERE id = ?',
       )
-      .run(content, reasoning, status, nowIso(), id)
+      .run(
+        content,
+        JSON.stringify(textParts(content)),
+        reasoning,
+        status,
+        nowIso(),
+        id,
+      )
   }
 
   markStreaming(id: string): void {
@@ -95,10 +112,24 @@ export class MessageStore {
       runId: row.run_id == null ? null : String(row.run_id),
       role: String(row.role) as MessageRole,
       content: String(row.content),
+      parts: this.parseParts(row),
       reasoning: row.reasoning == null ? '' : String(row.reasoning),
       status: String(row.status) as MessageStatus,
       createdAt: String(row.created_at),
       completedAt: row.completed_at == null ? null : String(row.completed_at),
     }
+  }
+
+  /** parts_json 解析；异常数据回退为 content 的单 text 块，不让坏行炸掉读取。 */
+  private parseParts(row: Row): ContentPart[] {
+    try {
+      const parsed: unknown = JSON.parse(String(row.parts_json ?? '[]'))
+      const result = ContentPartSchema.array().safeParse(parsed)
+      if (result.success) return result.data
+    } catch {
+      // 落入回退分支
+    }
+    const content = String(row.content ?? '')
+    return content === '' ? [] : [{ type: 'text', text: content }]
   }
 }

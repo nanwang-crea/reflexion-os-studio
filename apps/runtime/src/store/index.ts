@@ -2,11 +2,13 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { MessageStore } from './messages.js'
+import { MemoryStore } from './memories.js'
 import { ProviderStore } from './providers.js'
 import { ProjectStore } from './projects.js'
 import { RunStore } from './runs.js'
 import { runMigrations, SCHEMA } from './migrations.js'
 import { SessionStore } from './sessions.js'
+import { ToolCallStore } from './toolCalls.js'
 
 export { DEFAULT_SESSION_TITLE, resolveDataDir } from './shared.js'
 
@@ -20,7 +22,9 @@ export class Store {
   readonly sessions: SessionStore
   readonly messages: MessageStore
   readonly runs: RunStore
+  readonly toolCalls: ToolCallStore
   readonly providers: ProviderStore
+  readonly memories: MemoryStore
 
   constructor(dir: string) {
     mkdirSync(dir, { recursive: true })
@@ -37,11 +41,14 @@ export class Store {
     this.sessions = new SessionStore(this.db)
     this.messages = new MessageStore(this.db)
     this.runs = new RunStore(this.db)
+    this.toolCalls = new ToolCallStore(this.db)
     this.providers = new ProviderStore(this.db)
+    this.memories = new MemoryStore(this.db)
 
-    // 启动恢复：上次进程未走完的生命周期统一落为 interrupted。
+    // 启动恢复：上次进程未走完的生命周期统一落为 interrupted/cancelled。
     this.runs.recoverInterrupted()
     this.messages.recoverInterrupted()
+    this.toolCalls.recoverUnfinished()
   }
 
   /** 单事务边界：同连接上的多个领域写入要么全部提交要么全部回滚。 */

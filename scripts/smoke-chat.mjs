@@ -3,7 +3,14 @@
 // 用法：先 pnpm build:packages，再 node scripts/smoke-chat.mjs
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { mkdtempSync, rmSync } from 'node:fs'
+import {
+  mkdtempSync,
+  rmSync,
+  existsSync,
+  writeFileSync,
+  readFileSync,
+  mkdirSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -28,6 +35,126 @@ function startMockProvider() {
     })
     request.on('end', () => {
       const parsed = JSON.parse(body)
+      if (
+        parsed.model === 'file-agent-model' ||
+        parsed.model === 'write-agent-model'
+      ) {
+        // 真实 Rust 工具场景：最后一条是 tool 结果 → 给最终答复；否则请求文件工具。
+        const last = parsed.messages[parsed.messages.length - 1]
+        response.writeHead(200, { 'content-type': 'text/event-stream' })
+        if (last.role === 'tool') {
+          let payload = ''
+          try {
+            payload = JSON.parse(last.content).content ?? ''
+          } catch {
+            payload = ''
+          }
+          const reply =
+            parsed.model === 'file-agent-model'
+              ? `读取完成：${payload}`
+              : '写入完成。'
+          response.write(
+            `data: ${JSON.stringify({ choices: [{ delta: { content: reply } }] })}\n\n`,
+          )
+          response.write(
+            `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\n`,
+          )
+        } else if (parsed.model === 'file-agent-model') {
+          response.write(
+            `data: ${JSON.stringify({
+              choices: [
+                {
+                  delta: {
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: 'call-file-1',
+                        function: {
+                          name: 'file.read',
+                          arguments: '{"path":"note.txt"}',
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            })}\n\n`,
+          )
+          response.write(
+            `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'tool_calls' }] })}\n\n`,
+          )
+        } else {
+          response.write(
+            `data: ${JSON.stringify({
+              choices: [
+                {
+                  delta: {
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: 'call-write-1',
+                        function: {
+                          name: 'file.write',
+                          arguments:
+                            '{"path":"output.txt","content":"审批写入的内容"}',
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            })}\n\n`,
+          )
+          response.write(
+            `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'tool_calls' }] })}\n\n`,
+          )
+        }
+        response.write('data: [DONE]\n\n')
+        response.end()
+        return
+      }
+      if (parsed.model === 'tool-loop-model') {
+        // Agent 任务循环场景：最后一条消息是 tool 结果 → 给最终答复；
+        // 否则返回一次工具调用（get_current_time），驱动 runtime 完成两轮循环。
+        const last = parsed.messages[parsed.messages.length - 1]
+        response.writeHead(200, { 'content-type': 'text/event-stream' })
+        if (last.role === 'tool') {
+          response.write(
+            `data: ${JSON.stringify({ choices: [{ delta: { content: '任务完成：' } }] })}\n\n`,
+          )
+          response.write(
+            `data: ${JSON.stringify({ choices: [{ delta: { content: '时间已获取。' } }] })}\n\n`,
+          )
+          response.write(
+            `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 9, completion_tokens: 4 } })}\n\n`,
+          )
+        } else {
+          response.write(
+            `data: ${JSON.stringify({
+              choices: [
+                {
+                  delta: {
+                    content: '我先查一下时间',
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: 'call-smoke-1',
+                        function: { name: 'get_current_time', arguments: '{}' },
+                      },
+                    ],
+                  },
+                },
+              ],
+            })}\n\n`,
+          )
+          response.write(
+            `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'tool_calls' }] })}\n\n`,
+          )
+        }
+        response.write('data: [DONE]\n\n')
+        response.end()
+        return
+      }
       if (parsed.model !== 'mock-model') {
         response.writeHead(404)
         response.end('unknown model')
@@ -75,11 +202,22 @@ const address = mockServer.address()
 const baseUrl = `http://127.0.0.1:${address.port}/v1`
 
 const dataDir = mkdtempSync(join(tmpdir(), 'reflexion-smoke-'))
+const systemBin = join(ROOT, 'crates/target/debug/reflexion-system-runtime')
+if (!existsSync(systemBin)) {
+  console.error(
+    'smoke-chat: Rust binary missing, run cargo build --manifest-path crates/Cargo.toml',
+  )
+  process.exit(1)
+}
 const runtime = spawn(
   process.execPath,
   [join(ROOT, 'apps/runtime/dist/index.js')],
   {
-    env: { ...process.env, REFLEXION_DATA_DIR: dataDir },
+    env: {
+      ...process.env,
+      REFLEXION_DATA_DIR: dataDir,
+      REFLEXION_SYSTEM_RUNTIME_BIN: systemBin,
+    },
     stdio: ['pipe', 'pipe', 'pipe'],
   },
 )
@@ -161,15 +299,18 @@ function request(id, method, params) {
   })
 }
 
-function waitForEvent(type, timeoutMs = 15_000) {
+function waitForEvent(match, timeoutMs = 15_000, fromIndex = 0, description) {
+  const predicate =
+    typeof match === 'string' ? (event) => event.type === match : match
+  const label = description ?? (typeof match === 'string' ? match : 'event')
   return new Promise((resolve, reject) => {
-    const existing = events.find((event) => event.type === type)
+    const existing = events.slice(fromIndex).find(predicate)
     if (existing) {
       resolve(existing)
       return
     }
     const timer = setInterval(() => {
-      const found = events.find((event) => event.type === type)
+      const found = events.slice(fromIndex).find(predicate)
       if (found) {
         clearInterval(timer)
         clearTimeout(failTimer)
@@ -180,7 +321,10 @@ function waitForEvent(type, timeoutMs = 15_000) {
       clearInterval(timer)
       reject(
         new Error(
-          `event timeout: ${type}; got ${events.map((event) => event.type).join(',')}`,
+          `event timeout: ${label}; got ${events
+            .slice(fromIndex)
+            .map((event) => event.type)
+            .join(',')}`,
         ),
       )
     }, timeoutMs)
@@ -273,6 +417,9 @@ try {
   )
 
   const projectDir = join(dataDir, 'smoke-project')
+  // 真实工作区：预置一个文件供 file.read 场景读取。
+  mkdirSync(projectDir, { recursive: true })
+  writeFileSync(join(projectDir, 'note.txt'), 'Rust 读到了我', 'utf8')
   const { project } = await request(2, 'project.create', {
     requestId: randomUUID(),
     folderPath: projectDir,
@@ -378,6 +525,196 @@ try {
         event.usage?.promptTokens === 5 &&
         event.usage?.completionTokens === 7,
     ),
+  )
+
+  // ---------- Agent 任务循环：工具调用 → 结果回填 → 最终答复 ----------
+  const agentSession = await request(30, 'session.create', {
+    requestId: randomUUID(),
+    projectId: project.id,
+  })
+  const agentEventBase = events.length
+  const agentSend = await request(31, 'message.send', {
+    requestId: randomUUID(),
+    sessionId: agentSession.session.id,
+    model: 'tool-loop-model',
+    content: '现在几点？',
+  })
+  check(
+    'agent message.send returns ids',
+    Boolean(agentSend.messageId && agentSend.runId),
+  )
+  const toolRequested = await waitForEvent(
+    'tool.requested',
+    15_000,
+    agentEventBase,
+  )
+  check(
+    'tool.requested names get_current_time',
+    toolRequested.toolName === 'get_current_time' &&
+      toolRequested.toolCallId !== '',
+    `event=${JSON.stringify(toolRequested)}`,
+  )
+  const toolCompleted = await waitForEvent(
+    'tool.completed',
+    15_000,
+    agentEventBase,
+  )
+  check('tool.completed succeeded', toolCompleted.status === 'completed')
+  await waitForEvent('run.completed', 15_000, agentEventBase)
+
+  const agentDetail = await request(32, 'session.get', {
+    requestId: randomUUID(),
+    sessionId: agentSession.session.id,
+  })
+  const agentMessages = agentDetail.messages
+  check(
+    'agent run persisted two assistant turns',
+    agentMessages.filter((message) => message.role === 'assistant').length ===
+      2,
+    `roles=${agentMessages.map((message) => message.role).join(',')}`,
+  )
+  const finalAgentMessage = agentMessages[agentMessages.length - 1]
+  check(
+    'final answer after tool loop',
+    finalAgentMessage.status === 'completed' &&
+      finalAgentMessage.content === '任务完成：时间已获取。',
+    `content=${JSON.stringify(finalAgentMessage?.content)}`,
+  )
+  const firstAgentAssistant = agentMessages.find(
+    (message) => message.role === 'assistant',
+  )
+  check(
+    'tool call persisted and linked to its assistant turn',
+    agentDetail.toolCalls.length === 1 &&
+      agentDetail.toolCalls[0].toolName === 'get_current_time' &&
+      agentDetail.toolCalls[0].status === 'completed' &&
+      agentDetail.toolCalls[0].messageId === firstAgentAssistant?.id,
+    `toolCalls=${JSON.stringify(agentDetail.toolCalls)}`,
+  )
+  const agentRun = agentDetail.runs.find((item) => item.id === agentSend.runId)
+  check('agent run completed', agentRun?.status === 'completed')
+
+  // ---------- 真实 Rust 工具：file.read（automatic，直接执行） ----------
+  const readSession = await request(40, 'session.create', {
+    requestId: randomUUID(),
+    projectId: project.id,
+  })
+  const readFileBase = events.length
+  await request(41, 'message.send', {
+    requestId: randomUUID(),
+    sessionId: readSession.session.id,
+    model: 'file-agent-model',
+    content: '读一下 note.txt',
+  })
+  const readFileCall = await waitForEvent(
+    (event) =>
+      event.type === 'tool.requested' && event.toolName === 'file.read',
+    15_000,
+    readFileBase,
+    'file.read requested',
+  )
+  check(
+    'file.read requested with relative path',
+    readFileCall.args?.path === 'note.txt',
+    JSON.stringify(readFileCall),
+  )
+  await waitForEvent(
+    (event) =>
+      event.type === 'tool.completed' &&
+      event.toolCallId === readFileCall.toolCallId &&
+      event.status === 'completed',
+    15_000,
+    readFileBase,
+    'file.read completed',
+  )
+  await waitForEvent('run.completed', 15_000, readFileBase)
+  const readDetail = await request(42, 'session.get', {
+    requestId: randomUUID(),
+    sessionId: readSession.session.id,
+  })
+  const readFinal = readDetail.messages[readDetail.messages.length - 1]
+  check(
+    'file.read result flows back into final answer',
+    readFinal?.content === '读取完成：Rust 读到了我',
+    `content=${JSON.stringify(readFinal?.content)}`,
+  )
+
+  // ---------- 真实 Rust 工具 + 审批：file.write（ask，等待用户决策） ----------
+  const writeSession = await request(43, 'session.create', {
+    requestId: randomUUID(),
+    projectId: project.id,
+  })
+  const writeFileBase = events.length
+  await request(44, 'message.send', {
+    requestId: randomUUID(),
+    sessionId: writeSession.session.id,
+    model: 'write-agent-model',
+    content: '写一个 output.txt',
+  })
+  const approvalRequired = await waitForEvent(
+    (event) => event.type === 'approval.required',
+    15_000,
+    writeFileBase,
+    'approval.required',
+  )
+  check(
+    'approval.required carries summary',
+    approvalRequired.operation === 'file.write' &&
+      typeof approvalRequired.summary === 'string' &&
+      approvalRequired.summary.includes('output.txt'),
+    JSON.stringify(approvalRequired),
+  )
+  // 审批等待期间 Run 应为 awaiting_approval（会话忙碌）。
+  const awaitingDetail = await request(45, 'session.get', {
+    requestId: randomUUID(),
+    sessionId: writeSession.session.id,
+  })
+  check(
+    'run enters awaiting_approval while waiting',
+    awaitingDetail.runs[awaitingDetail.runs.length - 1]?.status ===
+      'awaiting_approval',
+    JSON.stringify(awaitingDetail.runs.map((run) => run.status)),
+  )
+  const resolved = await request(46, 'approval.resolve', {
+    requestId: randomUUID(),
+    toolCallId: approvalRequired.toolCallId,
+    decision: 'approved',
+    scope: 'once',
+  })
+  check('approval.resolve accepted', resolved?.accepted === true)
+  await waitForEvent(
+    (event) =>
+      event.type === 'approval.resolved' &&
+      event.toolCallId === approvalRequired.toolCallId &&
+      event.decision === 'approved',
+    15_000,
+    writeFileBase,
+    'approval.resolved',
+  )
+  await waitForEvent(
+    (event) =>
+      event.type === 'tool.completed' &&
+      event.toolCallId === approvalRequired.toolCallId &&
+      event.status === 'completed',
+    15_000,
+    writeFileBase,
+    'file.write completed',
+  )
+  await waitForEvent('run.completed', 15_000, writeFileBase)
+  check(
+    'approved write landed in workspace',
+    existsSync(join(projectDir, 'output.txt')) &&
+      readFileSync(join(projectDir, 'output.txt'), 'utf8') === '审批写入的内容',
+  )
+  const duplicateResolve = await request(47, 'approval.resolve', {
+    requestId: randomUUID(),
+    toolCallId: approvalRequired.toolCallId,
+    decision: 'denied',
+    scope: 'once',
+  })
+  check(
+    'duplicate approval.resolve is a no-op',
+    duplicateResolve?.accepted === false,
   )
 
   const cancelled = await request(6, 'run.cancel', {

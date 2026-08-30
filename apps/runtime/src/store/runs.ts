@@ -22,6 +22,9 @@ export class RunStore {
     providerId: string | null
     model: string | null
     retryOfRunId?: string | null
+    agentId?: string | null
+    parentRunId?: string | null
+    delegationId?: string | null
   }): Run {
     const run: Run = {
       id: randomUUID(),
@@ -33,10 +36,13 @@ export class RunStore {
       completedAt: null,
       errorCode: null,
       retryOfRunId: input.retryOfRunId ?? null,
+      agentId: input.agentId ?? null,
+      parentRunId: input.parentRunId ?? null,
+      delegationId: input.delegationId ?? null,
     }
     this.db
       .prepare(
-        'INSERT INTO runs (id, session_id, status, provider_id, model, started_at, completed_at, error_code, retry_of_run_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO runs (id, session_id, status, provider_id, model, started_at, completed_at, error_code, retry_of_run_id, agent_id, parent_run_id, delegation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .run(
         run.id,
@@ -48,6 +54,9 @@ export class RunStore {
         run.completedAt,
         run.errorCode,
         run.retryOfRunId,
+        run.agentId,
+        run.parentRunId,
+        run.delegationId,
       )
     return run
   }
@@ -65,21 +74,34 @@ export class RunStore {
       .run(status, nowIso(), errorCode ?? null, id)
   }
 
+  /** 非终态推进：running ↔ awaiting_approval（工具审批等待）；终态一律走 finalize。 */
+  setIntermediateStatus(
+    id: string,
+    status: 'running' | 'awaiting_approval',
+  ): void {
+    this.db
+      .prepare(
+        "UPDATE runs SET status = ? WHERE id = ? AND status IN ('running', 'awaiting_approval')",
+      )
+      .run(status, id)
+  }
+
   activeForSession(sessionId: string): Run | null {
     const row = this.db
       .prepare(
-        "SELECT * FROM runs WHERE session_id = ? AND status IN ('created', 'running') LIMIT 1",
+        // awaiting_approval 同属进行中：审批等待期间不允许并发发送新消息。
+        "SELECT * FROM runs WHERE session_id = ? AND status IN ('created', 'running', 'awaiting_approval') LIMIT 1",
       )
       .get(sessionId)
     return row ? this.toRun(row as Row) : null
   }
 
-  /** 启动恢复：未结束的 Run 标记为 interrupted。 */
+  /** 启动恢复：未结束的 Run 标记为 interrupted；等待审批的 Run 不自动放行。 */
   recoverInterrupted(): void {
     this.db
       .prepare(
         `UPDATE runs SET status = 'interrupted', completed_at = ?
-         WHERE status IN ('created', 'running')`,
+         WHERE status IN ('created', 'running', 'awaiting_approval')`,
       )
       .run(nowIso())
   }
@@ -96,6 +118,10 @@ export class RunStore {
       errorCode: row.error_code == null ? null : String(row.error_code),
       retryOfRunId:
         row.retry_of_run_id == null ? null : String(row.retry_of_run_id),
+      agentId: row.agent_id == null ? null : String(row.agent_id),
+      parentRunId: row.parent_run_id == null ? null : String(row.parent_run_id),
+      delegationId:
+        row.delegation_id == null ? null : String(row.delegation_id),
     }
   }
 }

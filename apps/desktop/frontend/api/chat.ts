@@ -6,12 +6,22 @@ export function sendMessage(input: {
   content: string
   providerId?: string
   model?: string
+  /** 工具权限 Profile；缺省 workspace（Runtime 侧默认）。 */
+  permissionMode?: 'workspace' | 'read-only'
 }): Promise<{ messageId: string; runId: string }> {
   return request<{ messageId: string; runId: string }>('message.send', input)
 }
 
 export function cancelRun(runId: string): Promise<{ accepted: boolean }> {
   return request<{ accepted: boolean }>('run.cancel', { runId })
+}
+
+export function resolveApproval(input: {
+  toolCallId: string
+  decision: 'approved' | 'denied'
+  scope: 'once' | 'session'
+}): Promise<{ accepted: boolean }> {
+  return request<{ accepted: boolean }>('approval.resolve', input)
 }
 
 export function retryRun(runId: string): Promise<{

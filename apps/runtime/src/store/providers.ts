@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
-import type { ProviderProfile } from '@reflexion-os-studio/contracts'
+import {
+  ProviderCapabilitySchema,
+  type ProviderCapability,
+  type ProviderProfile,
+} from '@reflexion-os-studio/contracts'
 import { nowIso, type Row } from './shared.js'
 
 /** 模型供应商领域：多供应商 × 多模型配置。 */
@@ -35,19 +39,28 @@ export class ProviderStore {
     name: string
     baseUrl: string
     models: string[]
+    capabilities?: ProviderCapability[]
     secretRef: string
     enabled: boolean
   }): ProviderProfile {
     const id = input.id ?? randomUUID()
+    // capabilities 省略时：编辑保留原值，新建缺省 ['chat']。
+    let capabilities = input.capabilities
+    if (capabilities === undefined) {
+      capabilities = input.id
+        ? (this.get(id)?.capabilities ?? ['chat'])
+        : ['chat']
+    }
     const updatedAt = nowIso()
     this.db
       .prepare(
-        `INSERT INTO provider_profiles (id, name, base_url, models, secret_ref, enabled, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO provider_profiles (id, name, base_url, models, capabilities, secret_ref, enabled, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            base_url = excluded.base_url,
            models = excluded.models,
+           capabilities = excluded.capabilities,
            secret_ref = excluded.secret_ref,
            enabled = excluded.enabled,
            updated_at = excluded.updated_at`,
@@ -57,6 +70,7 @@ export class ProviderStore {
         input.name,
         input.baseUrl,
         JSON.stringify(input.models),
+        JSON.stringify(capabilities),
         input.secretRef,
         input.enabled ? 1 : 0,
         updatedAt,
@@ -93,9 +107,22 @@ export class ProviderStore {
       name: String(row.name),
       baseUrl: String(row.base_url),
       models,
+      capabilities: this.parseCapabilities(row.capabilities),
       secretRef: String(row.secret_ref),
       enabled: Number(row.enabled) === 1,
       updatedAt: String(row.updated_at),
     }
+  }
+
+  /** capabilities 解析；异常/缺失数据回退为 ['chat']，保证读取永远可校验。 */
+  private parseCapabilities(value: unknown): ProviderCapability[] {
+    try {
+      const parsed: unknown = JSON.parse(String(value ?? '["chat"]'))
+      const result = ProviderCapabilitySchema.array().safeParse(parsed)
+      if (result.success) return result.data
+    } catch {
+      // 落入回退分支
+    }
+    return ['chat']
   }
 }

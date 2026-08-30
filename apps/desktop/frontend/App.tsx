@@ -9,10 +9,12 @@ import { useModelSelection } from './useModelSelection'
 import { usePermissionMode } from './usePermissionMode'
 import { listProviders } from './api/providers'
 import { listProjects } from './api/projects'
+import { resolveApproval } from './api/chat'
 import { getSessionData, listSessions, type SessionData } from './api/sessions'
 import { ConfirmDialog, type ConfirmDialogState } from './ConfirmDialog'
 import { ChatView } from './ChatView'
 import { LandingView } from './LandingView'
+import { MemoryView } from './MemoryView'
 import { Sidebar } from './Sidebar'
 import { SettingsView } from './SettingsView'
 import { useSessionActions } from './useSessionActions'
@@ -27,7 +29,7 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 export default function App() {
-  const [view, setView] = useState<'chat' | 'settings'>('chat')
+  const [view, setView] = useState<'chat' | 'settings' | 'memories'>('chat')
   const [profiles, setProfiles] = useState<ProviderProfile[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [projectSessions, setProjectSessions] = useState<Session[]>([])
@@ -98,8 +100,30 @@ export default function App() {
     ],
   )
 
-  const { bootstrap, streaming, streamingReasoning, resetStreaming } =
-    useAppBootstrap(bootstrapDeps)
+  const {
+    bootstrap,
+    streaming,
+    streamingReasoning,
+    resetStreaming,
+    pendingApprovals,
+    memoryNotice,
+  } = useAppBootstrap(bootstrapDeps)
+
+  /** 审批决策：approval.resolve 命令；事件回执负责移除等待卡片。 */
+  const handleResolveApproval = useCallback(
+    async (
+      toolCallId: string,
+      decision: 'approved' | 'denied',
+      scope: 'once' | 'session',
+    ): Promise<void> => {
+      try {
+        await resolveApproval({ toolCallId, decision, scope })
+      } catch (error) {
+        setNotice(error instanceof Error ? error.message : String(error))
+      }
+    },
+    [],
+  )
 
   useEffect(() => {
     activeSessionRef.current = activeSessionId
@@ -169,6 +193,7 @@ export default function App() {
     activeProjectId,
     selectedModelKey,
     sessionData,
+    permissionMode,
     activeSessionRef,
     activeProjectRef,
     refreshSessionData,
@@ -196,11 +221,13 @@ export default function App() {
   const contextTitle =
     view === 'settings'
       ? '设置'
-      : activeSessionId
-        ? (sessionData?.session?.title ?? '对话')
-        : activeProject
-          ? activeProject.name
-          : '新对话'
+      : view === 'memories'
+        ? '记忆'
+        : activeSessionId
+          ? (sessionData?.session?.title ?? '对话')
+          : activeProject
+            ? activeProject.name
+            : '新对话'
 
   if (!runtimeReady) {
     return (
@@ -221,6 +248,7 @@ export default function App() {
         activeProjectId={activeProjectId}
         activeSessionId={activeSessionId}
         creatingProject={creatingProject}
+        view={view}
         onSelectProject={selectProject}
         onSelectSession={openSession}
         onSelectStandaloneSession={selectStandaloneSession}
@@ -230,22 +258,23 @@ export default function App() {
         onDeleteProject={deleteProject}
         onRenameSession={renameSession}
         onDeleteSession={deleteSession}
+        onOpenSettings={() => {
+          setView(view === 'settings' ? 'chat' : 'settings')
+        }}
+        onOpenMemories={() => {
+          setView(view === 'memories' ? 'chat' : 'memories')
+        }}
       />
       <div className="main-pane">
         <header className="topbar">
           <span className="topbar-title">{contextTitle}</span>
           <span className="spacer" />
+          {memoryNotice && (
+            <span className="badge badge-memory">{memoryNotice}</span>
+          )}
           <span className={`badge badge-${bootstrap?.state ?? ''}`}>
             {statusLabel}
           </span>
-          <button
-            className="ghost"
-            onClick={() => {
-              setView(view === 'settings' ? 'chat' : 'settings')
-            }}
-          >
-            设置
-          </button>
         </header>
 
         {notice && (
@@ -259,6 +288,8 @@ export default function App() {
 
         {view === 'settings' ? (
           <SettingsView profiles={profiles} onSaved={() => refreshProfiles()} />
+        ) : view === 'memories' ? (
+          <MemoryView confirm={confirm} />
         ) : activeSessionId ? (
           <ChatView
             sessionData={sessionData}
@@ -276,6 +307,8 @@ export default function App() {
             onGoSettings={() => {
               setView('settings')
             }}
+            pendingApprovals={pendingApprovals}
+            onResolveApproval={handleResolveApproval}
           />
         ) : (
           <LandingView

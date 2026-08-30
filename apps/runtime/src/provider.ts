@@ -1,5 +1,10 @@
-import type { FinishReason, Usage } from '@reflexion-os-studio/contracts'
-import type { RuntimeErrorCode } from '@reflexion-os-studio/contracts'
+import type {
+  FinishReason,
+  RuntimeErrorCode,
+  ToolSpec,
+  Usage,
+} from '@reflexion-os-studio/contracts'
+import type { ModelMessage } from '@reflexion-os-studio/agent-core'
 
 const DEFAULT_TIMEOUT_MS = 120_000
 
@@ -13,20 +18,24 @@ export class ProviderError extends Error {
   }
 }
 
-export interface ChatContextMessage {
-  role: 'system' | 'user' | 'assistant'
-  content: string
+/** 流式聚合后的一条工具调用；arguments 为原始 JSON 字符串，由调用方校验。 */
+export interface StreamedToolCall {
+  id: string
+  name: string
+  arguments: string
 }
 
 export interface StreamChatOptions {
   baseUrl: string
   apiKey: string
   model: string
-  messages: ChatContextMessage[]
+  messages: ModelMessage[]
   signal: AbortSignal
   timeoutMs?: number
   /** 传入时限制补全长度（连接测试用 1，避免无谓消耗）。 */
   maxTokens?: number
+  /** Agent 侧 canonical 工具声明；适配层投影为 OpenAI function 格式。 */
+  tools?: ToolSpec[]
 }
 
 export interface StreamChatResult {
@@ -34,6 +43,7 @@ export interface StreamChatResult {
   reasoning: string
   finishReason: FinishReason
   usage?: Usage
+  toolCalls: StreamedToolCall[]
 }
 
 function mapHttpStatus(code: number): RuntimeErrorCode {
@@ -47,7 +57,12 @@ function mapHttpStatus(code: number): RuntimeErrorCode {
 function mapFinishReason(
   reason: string | null | undefined,
 ): FinishReason | null {
-  if (reason === 'stop' || reason === 'length' || reason === 'content_filter') {
+  if (
+    reason === 'stop' ||
+    reason === 'length' ||
+    reason === 'content_filter' ||
+    reason === 'tool_calls'
+  ) {
     return reason
   }
   return null
@@ -60,6 +75,38 @@ function isAbort(error: unknown): boolean {
   )
 }
 
+/**
+ * canonical ModelMessage 投影为 OpenAI chat 方言：
+ * assistant 的工具调用回到 tool_calls 数组，工具结果走 role=tool + tool_call_id。
+ */
+function toProviderMessage(message: ModelMessage): Record<string, unknown> {
+  switch (message.role) {
+    case 'system':
+    case 'user':
+      return { role: message.role, content: message.content }
+    case 'assistant':
+      return {
+        role: 'assistant',
+        content: message.content,
+        ...(message.toolCalls.length > 0
+          ? {
+              tool_calls: message.toolCalls.map((call) => ({
+                id: call.id,
+                type: 'function',
+                function: { name: call.name, arguments: call.arguments },
+              })),
+            }
+          : {}),
+      }
+    case 'tool':
+      return {
+        role: 'tool',
+        tool_call_id: message.toolCallId,
+        content: message.content,
+      }
+  }
+}
+
 export async function streamChatCompletion(
   options: StreamChatOptions,
   onDelta: (delta: string) => void,
@@ -70,6 +117,18 @@ export async function streamChatCompletion(
 
   let response: Response
   try {
+    // canonical 工具声明投影为 OpenAI function calling 方言。
+    const tools =
+      options.tools && options.tools.length > 0
+        ? options.tools.map((tool) => ({
+            type: 'function',
+            function: {
+              name: tool.name,
+              description: tool.description,
+              parameters: tool.parameters,
+            },
+          }))
+        : undefined
     response = await fetch(
       `${options.baseUrl.replace(/\/$/, '')}/chat/completions`,
       {
@@ -80,12 +139,13 @@ export async function streamChatCompletion(
         },
         body: JSON.stringify({
           model: options.model,
-          messages: options.messages,
+          messages: options.messages.map(toProviderMessage),
           stream: true,
           stream_options: { include_usage: true },
           ...(options.maxTokens !== undefined
             ? { max_tokens: options.maxTokens }
             : {}),
+          ...(tools !== undefined ? { tools } : {}),
         }),
         signal,
       },
@@ -113,6 +173,7 @@ export async function streamChatCompletion(
   let reasoning = ''
   let finishReason: FinishReason = 'stop'
   let usage: Usage | undefined
+  const toolCallByIndex = new Map<number, StreamedToolCall>()
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
@@ -130,6 +191,12 @@ export async function streamChatCompletion(
           // OpenRouter 等用 reasoning。
           reasoning_content?: string
           reasoning?: string
+          // 工具调用增量：按 index 分片累积 id/name/arguments。
+          tool_calls?: {
+            index?: number
+            id?: string
+            function?: { name?: string; arguments?: string }
+          }[]
         }
         finish_reason?: string | null
       }[]
@@ -149,6 +216,23 @@ export async function streamChatCompletion(
     if (delta?.content) {
       content += delta.content
       onDelta(delta.content)
+    }
+    for (const chunk of delta?.tool_calls ?? []) {
+      const index = typeof chunk.index === 'number' ? chunk.index : 0
+      const existing = toolCallByIndex.get(index) ?? {
+        id: '',
+        name: '',
+        arguments: '',
+      }
+      if (typeof chunk.id === 'string' && chunk.id !== '')
+        existing.id = chunk.id
+      if (typeof chunk.function?.name === 'string') {
+        existing.name += chunk.function.name
+      }
+      if (typeof chunk.function?.arguments === 'string') {
+        existing.arguments += chunk.function.arguments
+      }
+      toolCallByIndex.set(index, existing)
     }
     const mapped = mapFinishReason(parsed.choices?.[0]?.finish_reason)
     if (mapped) finishReason = mapped
@@ -181,5 +265,9 @@ export async function streamChatCompletion(
     )
   }
 
-  return { content, reasoning, finishReason, usage }
+  const toolCalls = [...toolCallByIndex.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([, toolCall]) => toolCall)
+
+  return { content, reasoning, finishReason, usage, toolCalls }
 }

@@ -624,3 +624,142 @@ button.link {
     max-height: 150px;
   }
 }
+
+/* ---------- 工具轨迹卡 ---------- */
+
+.tool-trace {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tool-trace-item {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-inset);
+  overflow: hidden;
+}
+
+.tool-trace-item > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.tool-trace-item > summary::-webkit-details-marker {
+  display: none;
+}
+
+.tool-trace-item > summary:hover {
+  color: var(--text);
+}
+
+.trace-dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.tool-trace-item.status-completed .trace-dot {
+  background: var(--ok);
+}
+
+.tool-trace-item.status-failed .trace-dot {
+  background: var(--danger);
+}
+
+.trace-dot.pulse {
+  animation: trace-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes trace-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.trace-name {
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.trace-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-family: var(--mono);
+}
+
+.trace-status {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.tool-trace-item.status-failed .trace-status {
+  color: var(--danger);
+}
+
+.trace-detail {
+  margin: 0;
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--border-subtle);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+/* ---------- 工具审批卡 ---------- */
+.approval-card {
+  margin-bottom: 12px;
+  border: 1px solid var(--border, #d9d9e3);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--surface-raised, #f7f7fa);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.approval-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.approval-summary {
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--surface, #fff);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.approval-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.approval-actions .danger {
+  color: #c0392b;
+}

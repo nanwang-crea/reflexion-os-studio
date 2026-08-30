@@ -1,6 +1,14 @@
 import type { Project, Session } from '@reflexion-os-studio/runtime-client'
 import { SessionRow } from './SessionRow'
-import { FolderIcon, PlusIcon, TrashIcon } from './ui/icons'
+import {
+  ArchiveIcon,
+  FolderIcon,
+  GearIcon,
+  PlusIcon,
+  TrashIcon,
+} from './ui/icons'
+
+export type AppView = 'chat' | 'settings' | 'memories'
 
 interface SidebarProps {
   projects: Project[]
@@ -11,6 +19,8 @@ interface SidebarProps {
   activeProjectId: string | null
   activeSessionId: string | null
   creatingProject: boolean
+  /** 当前主视图；底部入口据此高亮。 */
+  view: AppView
   onSelectProject: (projectId: string) => void
   onSelectSession: (sessionId: string) => void
   onSelectStandaloneSession: (sessionId: string) => void
@@ -21,6 +31,8 @@ interface SidebarProps {
   onDeleteProject: (projectId: string) => Promise<void>
   onRenameSession: (sessionId: string, title: string) => Promise<void>
   onDeleteSession: (sessionId: string) => Promise<void>
+  onOpenSettings: () => void
+  onOpenMemories: () => void
 }
 
 /** ChatGPT 式时间分组：今天 / 昨天 / 7 天内 / 30 天内 / 更早。 */
@@ -168,6 +180,23 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
             </ul>
           </div>
         ))}
+      </div>
+
+      <div className="sidebar-footer">
+        <button
+          className={`row${props.view === 'memories' ? ' active' : ''}`}
+          onClick={props.onOpenMemories}
+        >
+          <ArchiveIcon />
+          <span className="row-label">记忆</span>
+        </button>
+        <button
+          className={`row${props.view === 'settings' ? ' active' : ''}`}
+          onClick={props.onOpenSettings}
+        >
+          <GearIcon />
+          <span className="row-label">设置</span>
+        </button>
       </div>
     </aside>
   )
