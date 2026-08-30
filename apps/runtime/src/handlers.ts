@@ -4,7 +4,7 @@ import type { ChatAgent } from './agent.js'
 import { CommandError } from './agent.js'
 import { streamChatCompletion } from './provider.js'
 import { deleteSecret, loadSecret, saveSecret } from './secrets.js'
-import type { Store } from './store.js'
+import type { Store } from './store/index.js'
 
 type CommandResult = Record<string, unknown>
 
@@ -37,7 +37,7 @@ export function dispatchCommand(
 ): CommandResult {
   const handlers: Record<string, CommandHandler> = {
     'project.list': (_params, { store }) => ({
-      projects: store.listProjects(),
+      projects: store.projects.list(),
     }),
     'project.create': (p, { store }) => {
       // 去掉结尾分隔符再查重/落盘，避免同一文件夹因尾部斜杠重复建项。
@@ -45,7 +45,7 @@ export function dispatchCommand(
       if (folderPath === '') {
         throw new CommandError('invalid_request', 'folderPath 不能为空')
       }
-      const existing = store.findProjectByFolderPath(folderPath)
+      const existing = store.projects.findByFolderPath(folderPath)
       if (existing) {
         throw new CommandError(
           'invalid_request',
@@ -56,10 +56,10 @@ export function dispatchCommand(
         typeof p.name === 'string' && p.name.trim() !== ''
           ? p.name.trim()
           : basename(folderPath) || folderPath
-      return { project: store.createProject({ name, folderPath }) }
+      return { project: store.projects.create({ name, folderPath }) }
     },
     'session.list': (p, { store }) => ({
-      sessions: store.listSessions(
+      sessions: store.sessions.list(
         p.projectId === undefined
           ? undefined
           : p.projectId === null
@@ -72,14 +72,14 @@ export function dispatchCommand(
         p.projectId === undefined || p.projectId === null
           ? null
           : requireString(p, 'projectId')
-      if (projectId !== null && !store.getProject(projectId)) {
+      if (projectId !== null && !store.projects.get(projectId)) {
         throw new CommandError(
           'invalid_request',
           `project not found: ${projectId}`,
         )
       }
       return {
-        session: store.createSession(
+        session: store.sessions.create(
           projectId,
           typeof p.title === 'string' && p.title !== '' ? p.title : undefined,
         ),
@@ -88,10 +88,49 @@ export function dispatchCommand(
     'session.get': (p, { store }) => {
       const sessionId = requireString(p, 'sessionId')
       return {
-        session: store.getSession(sessionId),
-        messages: store.getSessionMessages(sessionId),
-        runs: store.getSessionRuns(sessionId),
+        session: store.sessions.get(sessionId),
+        messages: store.messages.listBySession(sessionId),
+        runs: store.runs.listBySession(sessionId),
       }
+    },
+    'session.rename': (p, { store }) => {
+      const sessionId = requireString(p, 'sessionId')
+      const title = requireString(p, 'title').trim()
+      if (title === '') {
+        throw new CommandError('invalid_request', '标题不能为空')
+      }
+      if (!store.sessions.get(sessionId)) {
+        throw new CommandError(
+          'invalid_request',
+          `session not found: ${sessionId}`,
+        )
+      }
+      store.sessions.rename(sessionId, title)
+      return { session: store.sessions.get(sessionId) }
+    },
+    'session.delete': (p, { store }) => {
+      const sessionId = requireString(p, 'sessionId')
+      // 有进行中的 Run 时拒绝删除，避免流式写入悬空会话。
+      if (store.runs.activeForSession(sessionId)) {
+        throw new CommandError(
+          'invalid_request',
+          '会话正在回复中，请先停止再删除',
+        )
+      }
+      return { removed: store.sessions.delete(sessionId) }
+    },
+    'project.delete': (p, { store }) => {
+      const projectId = requireString(p, 'projectId')
+      const sessions = store.sessions.list(projectId)
+      for (const session of sessions) {
+        if (store.runs.activeForSession(session.id)) {
+          throw new CommandError(
+            'invalid_request',
+            `项目内会话正在回复中（${session.title}），请先停止再删除`,
+          )
+        }
+      }
+      return { removed: store.projects.delete(projectId) }
     },
     'message.send': (p, { agent }) =>
       agent.startSend(p as unknown as ChatCommand),
@@ -102,7 +141,7 @@ export function dispatchCommand(
         runId: requireString(p, 'runId'),
       }),
     'provider.list': (_p, { store }) => ({
-      profiles: store.listProviderProfiles(),
+      profiles: store.providers.list(),
     }),
     'provider.configure': (p, { store }) => {
       let secretRef =
@@ -128,21 +167,27 @@ export function dispatchCommand(
           'provider.configure 至少需要一个模型',
         )
       }
-      const profile = store.upsertProviderProfile({
-        id: typeof p.id === 'string' && p.id !== '' ? p.id : undefined,
+      const id = typeof p.id === 'string' && p.id !== '' ? p.id : undefined
+      const existing = id ? store.providers.get(id) : null
+      const profile = store.providers.upsert({
+        id,
         name: requireString(p, 'name'),
         baseUrl: requireString(p, 'baseUrl'),
         models: [...new Set(models)],
         secretRef,
         enabled: p.enabled === undefined ? true : p.enabled === true,
       })
+      // 换 Key 后清理被替换的旧密钥，secrets.json 不留孤儿条目。
+      if (existing && existing.secretRef !== profile.secretRef) {
+        deleteSecret(existing.secretRef)
+      }
       return { profile }
     },
     'provider.delete': (p, { store }) => {
       const id = requireString(p, 'id')
-      const profile = store.getProviderProfile(id)
+      const profile = store.providers.get(id)
       if (!profile) return { removed: false }
-      const removed = store.deleteProviderProfile(id)
+      const removed = store.providers.delete(id)
       // 配置行已删则其密钥引用也不应残留；secret 文件里其余条目不受影响。
       deleteSecret(profile.secretRef)
       return { removed }

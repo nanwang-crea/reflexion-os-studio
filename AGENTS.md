@@ -50,6 +50,12 @@ React Renderer（未来） → Tauri Host → TypeScript Runtime → Rust System
 - **存储**：MVP 用 Node 内置 `node:sqlite`（无原生依赖），数据目录 `REFLEXION_DATA_DIR` ?? `~/.reflexion-os-studio`；外键开启；Run/Message 终态写入用单事务；启动时把未完成 Run/Message 恢复为 `interrupted`。
 - **Secret 纪律**：API Key 等机密只经 `provider.configure` 的只写 `secret` 参数出现一次，落入数据目录 `secrets.json`（0600），其余任何地方只出现 `secretRef`；secret 不得进入响应、事件、日志或错误详情。
 - **前端访问 Runtime 的唯一通道**：`runtime-client` 的 `RuntimeTransport`（Tauri 白名单 command `runtime_request` + `bootstrap:message` 事件按 id 关联）；新增业务命令需同步更新 Rust 侧白名单数组。
+- **按职责拆分（硬规则，新代码先拆再写）**：不先写大文件再事后补拆。
+  - 一个文件只承载一个职责；TypeScript 单文件超过约 300 行即应拆分，**500 行是硬上限**；本次变更中发现超纲文件就在当次拆掉，不留"以后再拆"。
+  - **Runtime 存储**：`store/` 按领域分文件（projects / sessions / messages / runs / providers 各一个类），schema 与版本迁移独立在 `store/migrations.ts`，共享工具在 `store/shared.ts`，`store/index.ts` 只做门面（连接、事务边界、启动恢复编排）。业务代码只调领域方法（如 `store.sessions.list(null)`），不直接写 SQL。
+  - **前端请求**：组件不得直接 `transport.request`。统一走 `api/` 层并按功能分文件（projects / sessions / chat / providers / client），`requestId` 由 api 层自动注入；组件调用具名函数（如 `createSession(projectId)`）。
+  - **前端组件与样式**：页面级组件、共享组件（如 `SessionRow`）各自成文件；CSS 按页面/职责拆文件（base / sidebar / chat / settings），不要堆进单个大 css。
+  - 拆分以"职责"为界而不是"行数均摊"：领域、页面、传输层各自的内聚单元独立成文件，避免把不相关逻辑凑进同一个文件。
 - Prettier 不支持的语言（如 shell）不做机械格式化，保持手写整洁即可。
 
 ## 5. 生成物纪律（曾真实踩坑）
@@ -113,4 +119,4 @@ pnpm build:desktop         # release 宿主二进制（不打包安装器）
 - 格式化与重构分离：格式化提交只动排版；本次会话规则是"格式化不改运行时行为、不引入逻辑重构"。
 - 修复问题前先确认证据支持该动作（如 PATH 问题与"未安装"是两类问题）。
 - 每次交付说明：通过了什么验证、跳过了什么及原因，不夸大完成度。
-- 核心模块超过约 300–500 行时重新审视职责拆分（`ARCHITECTURE.md` 验收标准）。
+- 核心模块超过约 300–500 行时重新审视职责拆分（`ARCHITECTURE.md` 验收标准）；新代码的拆分要求见第 4 节"按职责拆分"，不满足即返工。

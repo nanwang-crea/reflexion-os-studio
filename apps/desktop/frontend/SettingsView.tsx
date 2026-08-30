@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react'
 import type { ProviderProfile } from '@reflexion-os-studio/runtime-client'
-import { newRequestId, transport } from './transport'
+import {
+  configureProvider,
+  deleteProvider,
+  testProvider,
+} from './api/providers'
+import { EyeIcon, PlusIcon, RefreshIcon, TrashIcon } from './ui/icons'
+import { ProviderList } from './ProviderList'
 
 interface SettingsViewProps {
   profiles: ProviderProfile[]
@@ -39,63 +45,6 @@ function draftFromProfile(profile: ProviderProfile): Draft {
     secretRef: profile.secretRef,
     enabled: profile.enabled,
   }
-}
-
-function PlusIcon(): React.JSX.Element {
-  return (
-    <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-      <path
-        d="M12 5v14M5 12h14"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-    </svg>
-  )
-}
-
-function BoxIcon(): React.JSX.Element {
-  return (
-    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-      <path
-        d="M12 2l9 5v10l-9 5-9-5V7l9-5zm0 2.3L5.5 8 12 11.7 18.5 8 12 4.3zM5 9.7v6.2l6 3.3v-6.2l-6-3.3zm14 0l-6 3.3v6.2l6-3.3V9.7z"
-        fill="currentColor"
-      />
-    </svg>
-  )
-}
-
-function EyeIcon(): React.JSX.Element {
-  return (
-    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-      <path
-        d="M12 5c5 0 9 4.5 10 7-1 2.5-5 7-10 7S3 14.5 2 12c1-2.5 5-7 10-7zm0 2C8.2 7 5.1 10.2 4.2 12 5.1 13.8 8.2 17 12 17s6.9-3.2 7.8-5C18.9 10.2 15.8 7 12 7zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"
-        fill="currentColor"
-      />
-    </svg>
-  )
-}
-
-function TrashIcon(): React.JSX.Element {
-  return (
-    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-      <path
-        d="M9 3h6a1 1 0 0 1 1 1v1h4a1 1 0 0 1 0 2h-1.1l-1 12.1A2 2 0 0 1 15.9 21H8.1a2 2 0 0 1-2-1.9L5.1 7H4a1 1 0 1 1 0-2h4V4a1 1 0 0 1 1-1zm1 2h4V5h-4v0zM7.1 7l1 12h7.8l1-12H7.1z"
-        fill="currentColor"
-      />
-    </svg>
-  )
-}
-
-function RefreshIcon(): React.JSX.Element {
-  return (
-    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-      <path
-        d="M12 4a8 8 0 0 1 7.4 5H17a6 6 0 1 0-1.2 6.9l1.5 1.5A8 8 0 1 1 12 4zm8 0v5h-5V7h2.6A7.9 7.9 0 0 0 20 4z"
-        fill="currentColor"
-      />
-    </svg>
-  )
 }
 
 export function SettingsView(props: SettingsViewProps): React.JSX.Element {
@@ -172,10 +121,7 @@ export function SettingsView(props: SettingsViewProps): React.JSX.Element {
     setBusy(true)
     setError(null)
     try {
-      const result = await transport.request<{
-        profile: ProviderProfile
-      }>('provider.configure', {
-        requestId: newRequestId(),
+      const result = await configureProvider({
         id: draft.id ?? undefined,
         name: draft.name.trim(),
         baseUrl: draft.baseUrl.trim(),
@@ -204,8 +150,7 @@ export function SettingsView(props: SettingsViewProps): React.JSX.Element {
     setBusy(true)
     setError(null)
     try {
-      await transport.request('provider.configure', {
-        requestId: newRequestId(),
+      await configureProvider({
         id: selected.id,
         name: selected.name,
         baseUrl: selected.baseUrl,
@@ -226,10 +171,7 @@ export function SettingsView(props: SettingsViewProps): React.JSX.Element {
     setBusy(true)
     setError(null)
     try {
-      await transport.request('provider.delete', {
-        requestId: newRequestId(),
-        id: selected.id,
-      })
+      await deleteProvider(selected.id)
       setSelectedKey(null)
       setSavedAt(null)
       await props.onSaved()
@@ -255,13 +197,7 @@ export function SettingsView(props: SettingsViewProps): React.JSX.Element {
     setTesting(true)
     setTestState(null)
     try {
-      const result = await transport.request<{
-        ok: boolean
-        latencyMs: number
-        model: string
-        error: string | null
-      }>('provider.test', {
-        requestId: newRequestId(),
+      const result = await testProvider({
         baseUrl: draft.baseUrl.trim(),
         model,
         secret: draft.secret.trim() || undefined,
@@ -306,38 +242,13 @@ export function SettingsView(props: SettingsViewProps): React.JSX.Element {
       </div>
 
       <div className="provider-manager">
-        <aside className="provider-list">
-          <ul>
-            {props.profiles.map((profile) => (
-              <li key={profile.id}>
-                <button
-                  className={`provider-item${
-                    profile.id === selectedKey && selectedKey !== 'new'
-                      ? ' active'
-                      : ''
-                  }`}
-                  onClick={() => setSelectedKey(profile.id)}
-                >
-                  <BoxIcon />
-                  <span className="row-label">{profile.name}</span>
-                  <span
-                    className={`status-dot${profile.enabled ? ' on' : ''}`}
-                  />
-                </button>
-              </li>
-            ))}
-            {props.profiles.length === 0 && (
-              <li className="empty">还没有供应商</li>
-            )}
-          </ul>
-          <button
-            className="provider-add"
-            onClick={() => setSelectedKey('new')}
-          >
-            <PlusIcon />
-            添加供应商
-          </button>
-        </aside>
+        <ProviderList
+          profiles={props.profiles}
+          selectedKey={selectedKey}
+          onSelect={setSelectedKey}
+          creating={false}
+          onCreate={() => setSelectedKey('new')}
+        />
 
         <section className="provider-detail">
           {draft && (selected || selectedKey === 'new') ? (

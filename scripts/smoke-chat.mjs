@@ -357,6 +357,47 @@ try {
   })
   check('run.cancel idempotent for unknown run', cancelled.accepted === false)
 
+  const renamedSession = await request(18, 'session.rename', {
+    requestId: randomUUID(),
+    sessionId: session.id,
+    title: '自定义标题',
+  })
+  check(
+    'session.rename updates title',
+    renamedSession.session.title === '自定义标题',
+  )
+
+  const removedSession = await request(19, 'session.delete', {
+    requestId: randomUUID(),
+    sessionId: standalone.id,
+  })
+  check(
+    'session.delete removes standalone session',
+    removedSession.removed === true,
+  )
+  const afterSessionDelete = await request(20, 'session.list', {
+    requestId: randomUUID(),
+    projectId: null,
+  })
+  check(
+    'deleted standalone session gone from list',
+    !afterSessionDelete.sessions.some((item) => item.id === standalone.id),
+  )
+
+  const removedProject = await request(21, 'project.delete', {
+    requestId: randomUUID(),
+    projectId: project.id,
+  })
+  check('project.delete removes project', removedProject.removed === true)
+  const afterProjectDelete = await request(22, 'session.list', {
+    requestId: randomUUID(),
+    projectId: project.id,
+  })
+  check(
+    'project sessions cascade-deleted',
+    afterProjectDelete.sessions.length === 0,
+  )
+
   await request(7, 'runtime.shutdown', {})
   await new Promise((resolve, reject) => {
     const timer = setTimeout(

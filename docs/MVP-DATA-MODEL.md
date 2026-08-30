@@ -8,7 +8,8 @@ MVP 采用 SQLite 单 Runtime 写入，不实现 outbox；实现使用 Node 内�
 - `sessions(id, project_id, title, status, created_at, updated_at)`
 - `messages(id, session_id, run_id, role, content, status, created_at, completed_at)`
 - `runs(id, session_id, status, provider_id, model, started_at, completed_at, error_code, retry_of_run_id)`
-- `provider_profiles(id, name, base_url, models, secret_ref, enabled, updated_at)`，`models` 为 JSON 字符串数组：一个供应商可配多个模型，对话时按 `message.send` 的可选 `providerId`/`model` 指定，缺省回退到启用供应商的第一个模型；`provider.delete` 删除配置并清理对应密钥引用。
+- `provider_profiles(id, name, base_url, models, secret_ref, enabled, updated_at)`，`models` 为 JSON 字符串数组：一个供应商可配多个模型，对话时按 `message.send` 的可选 `providerId`/`model` 指定，缺省回退到启用供应商的第一个模型；`provider.delete` 删除配置并清理对应密钥引用；`provider.test` 发起 1 token 补全做连接测试，错误原样返回 UI。
+- 会话管理：`session.rename` 更新标题；`session.delete` 删除会话（消息与 Run 级联），有进行中 Run 时拒绝；`project.delete` 删除项目并级联其下会话。
 
 所有 ID 使用稳定字符串；外键约束开启；Session 删除策略明确为级联其消息和 Run，Provider secret 只保存引用。
 

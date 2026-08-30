@@ -1,5 +1,6 @@
 import type { Project, Session } from '@reflexion-os-studio/runtime-client'
 import { Composer, type ComposerModelOption } from './Composer'
+import { SessionRow } from './SessionRow'
 
 interface LandingViewProps {
   /** 当前选中的项目；null 表示独立对话模式。 */
@@ -14,6 +15,8 @@ interface LandingViewProps {
   onModelChange: (key: string) => void
   onSend: (content: string) => Promise<void>
   onSelectSession: (sessionId: string) => void
+  onRenameSession: (sessionId: string, title: string) => Promise<void>
+  onDeleteSession: (sessionId: string) => Promise<void>
   onGoSettings: () => void
 }
 
@@ -38,13 +41,16 @@ export function LandingView(props: LandingViewProps): React.JSX.Element {
               {props.sessions.length > 0 && (
                 <div className="landing-sessions">
                   {props.sessions.map((session) => (
-                    <button
+                    <SessionRow
                       key={session.id}
-                      className="landing-session"
-                      onClick={() => props.onSelectSession(session.id)}
-                    >
-                      {session.title}
-                    </button>
+                      session={session}
+                      active={false}
+                      onSelect={() => props.onSelectSession(session.id)}
+                      onRename={(title) =>
+                        props.onRenameSession(session.id, title)
+                      }
+                      onDelete={() => props.onDeleteSession(session.id)}
+                    />
                   ))}
                 </div>
               )}

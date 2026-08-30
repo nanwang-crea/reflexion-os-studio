@@ -11,7 +11,7 @@ import {
 } from '@reflexion-os-studio/contracts'
 import { ChatAgent, CommandError } from './agent.js'
 import { dispatchCommand, testProviderConnection } from './handlers.js'
-import { resolveDataDir, Store } from './store.js'
+import { resolveDataDir, Store } from './store/index.js'
 
 const RUNTIME_VERSION = '0.1.0'
 let rustAvailable = false

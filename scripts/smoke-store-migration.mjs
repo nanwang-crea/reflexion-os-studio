@@ -2,13 +2,11 @@
 // 用新 Store 打开，验证 user_version 升级、旧数据保留、新能力可用。
 // 用法：先 pnpm build:packages，再 node scripts/smoke-store-migration.mjs
 import { mkdirSync, rmSync } from 'node:fs'
-import { join, dirname } from 'node:path'
+import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { fileURLToPath } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
-import { Store } from '../apps/runtime/dist/store.js'
+import { Store } from '../apps/runtime/dist/store/index.js'
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const dir = join(tmpdir(), `reflexion-migration-smoke-${process.pid}`)
 rmSync(dir, { recursive: true, force: true })
 mkdirSync(dir, { recursive: true })
@@ -40,8 +38,8 @@ old.close()
 
 const store = new Store(dir)
 
-const projects = store.listProjects()
-const projectSessions = store.listSessions('p-old')
+const projects = store.projects.list()
+const projectSessions = store.sessions.list('p-old')
 
 let failures = 0
 function check(name, condition, detail) {
@@ -69,23 +67,23 @@ check(
 )
 check(
   'standalone list empty after migration',
-  store.listSessions(null).length === 0,
+  store.sessions.list(null).length === 0,
 )
 check(
   'all-sessions list contains legacy row',
-  store.listSessions().length === 1,
+  store.sessions.list().length === 1,
 )
 
-store.createProject({ name: 'demo', folderPath: '/tmp/demo' })
+store.projects.create({ name: 'demo', folderPath: '/tmp/demo' })
 check(
   'findProjectByFolderPath hits new project',
-  store.findProjectByFolderPath('/tmp/demo') !== null,
+  store.projects.findByFolderPath('/tmp/demo') !== null,
 )
-const standalone = store.createSession(null)
+const standalone = store.sessions.create(null)
 check('standalone session projectId null', standalone.projectId === null)
-store.updateSessionTitle(standalone.id, '改过的标题')
-store.touchSession(standalone.id)
-const standaloneList = store.listSessions(null)
+store.sessions.rename(standalone.id, '改过的标题')
+store.sessions.touch(standalone.id)
+const standaloneList = store.sessions.list(null)
 check(
   'standalone title update + recency sort',
   standaloneList[0]?.id === standalone.id &&
@@ -133,7 +131,7 @@ INSERT INTO provider_profiles (id, name, base_url, model, secret_ref, enabled, u
 dbV1.close()
 
 const storeV1 = new Store(dirV1)
-const profiles = storeV1.listProviderProfiles()
+const profiles = storeV1.providers.list()
 check(
   'v1 single model migrated to models array',
   profiles.length === 1 &&
@@ -141,7 +139,7 @@ check(
     profiles[0].models.join(',') === 'old-model',
   JSON.stringify(profiles),
 )
-const upserted = storeV1.upsertProviderProfile({
+const upserted = storeV1.providers.upsert({
   id: 'pp-old',
   name: '旧供应商',
   baseUrl: 'https://example.com/v1',
@@ -152,12 +150,9 @@ const upserted = storeV1.upsertProviderProfile({
 check(
   'multi-model upsert persists',
   upserted.models.join(',') === 'm1,m2' &&
-    storeV1.getProviderProfile('pp-old')?.models.join(',') === 'm1,m2',
+    storeV1.providers.get('pp-old')?.models.join(',') === 'm1,m2',
 )
-check(
-  'deleteProviderProfile removes row',
-  storeV1.deleteProviderProfile('pp-old'),
-)
+check('deleteProviderProfile removes row', storeV1.providers.delete('pp-old'))
 storeV1.close()
 
 rmSync(dir, { recursive: true, force: true })

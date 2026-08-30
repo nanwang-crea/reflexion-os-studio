@@ -1,33 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
-import { open } from '@tauri-apps/plugin-dialog'
 import type {
-  Message,
   ProviderProfile,
   Project,
-  Run,
-  RuntimeEvent,
   Session,
 } from '@reflexion-os-studio/runtime-client'
+import { useAppBootstrap, type BootstrapSnapshot } from './useAppBootstrap'
+import { useModelSelection } from './useModelSelection'
+import { usePermissionMode } from './usePermissionMode'
+import { listProviders } from './api/providers'
+import { listProjects } from './api/projects'
+import { getSessionData, listSessions, type SessionData } from './api/sessions'
+import { ConfirmDialog, type ConfirmDialogState } from './ConfirmDialog'
 import { ChatView } from './ChatView'
 import { LandingView } from './LandingView'
 import { Sidebar } from './Sidebar'
 import { SettingsView } from './SettingsView'
-import { newRequestId, transport } from './transport'
-
-export interface BootstrapSnapshot {
-  state: string
-  runtimeReady: boolean
-  systemReady: boolean
-  detail?: string
-}
-
-export interface SessionData {
-  session: Session | null
-  messages: Message[]
-  runs: Run[]
-}
+import { useSessionActions } from './useSessionActions'
 
 const STATUS_LABELS: Record<string, string> = {
   starting: '正在启动本地 Runtime…',
@@ -38,17 +26,7 @@ const STATUS_LABELS: Record<string, string> = {
   stopping: '正在关闭…',
 }
 
-const EVENT_TYPES_TRIGGERING_REFRESH = new Set([
-  'message.completed',
-  'run.completed',
-  'run.failed',
-  'run.cancelled',
-])
-
-const PERMISSION_STORAGE_KEY = 'reflexion.permission-mode'
-
 export default function App() {
-  const [bootstrap, setBootstrap] = useState<BootstrapSnapshot | null>(null)
   const [view, setView] = useState<'chat' | 'settings'>('chat')
   const [profiles, setProfiles] = useState<ProviderProfile[]>([])
   const [projects, setProjects] = useState<Project[]>([])
@@ -57,191 +35,71 @@ export default function App() {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null)
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [sessionData, setSessionData] = useState<SessionData | null>(null)
-  const [streaming, setStreaming] = useState<Record<string, string>>({})
   const [creatingProject, setCreatingProject] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
-  const [permissionMode, setPermissionMode] = useState<string>(() => {
-    const stored = localStorage.getItem(PERMISSION_STORAGE_KEY)
-    return stored === 'read-only' || stored === 'workspace'
-      ? stored
-      : 'workspace'
-  })
-  const [selectedModelKey, setSelectedModelKey] = useState<string | null>(null)
+  const [confirmState, setConfirmState] = useState<ConfirmDialogState | null>(
+    null,
+  )
+  const confirmResolverRef = useRef<((ok: boolean) => void) | null>(null)
   const activeProjectRef = useRef<string | null>(null)
   const activeSessionRef = useRef<string | null>(null)
-  const streamingRef = useRef<Record<string, string>>({})
 
-  const changePermissionMode = useCallback((value: string): void => {
-    setPermissionMode(value)
-    localStorage.setItem(PERMISSION_STORAGE_KEY, value)
-  }, [])
-
-  // 启用供应商的可用模型（按供应商分组），供 Composer 底部模型选择器使用。
-  const modelOptions = useMemo(
-    () =>
-      profiles
-        .filter((profile) => profile.enabled)
-        .flatMap((profile) =>
-          profile.models.map((model) => ({
-            key: `${profile.id}::${model}`,
-            label: model,
-            group: profile.name,
-          })),
-        ),
-    [profiles],
-  )
-
-  useEffect(() => {
-    if (modelOptions.length === 0) {
-      if (selectedModelKey !== null) setSelectedModelKey(null)
-      return
-    }
-    if (
-      selectedModelKey === null ||
-      !modelOptions.some((option) => option.key === selectedModelKey)
-    ) {
-      setSelectedModelKey(modelOptions[0].key)
-    }
-  }, [modelOptions, selectedModelKey])
-
-  const fail = useCallback((error: unknown): void => {
-    setNotice(error instanceof Error ? error.message : String(error))
-  }, [])
+  const { permissionMode, changePermissionMode } = usePermissionMode()
+  const { modelOptions, selectedModelKey, setSelectedModelKey } =
+    useModelSelection(profiles)
 
   const refreshSessionData = useCallback(async (sessionId: string) => {
-    const result = await transport.request<SessionData>('session.get', {
-      requestId: newRequestId(),
-      sessionId,
-    })
+    const result = await getSessionData(sessionId)
     setSessionData(result)
   }, [])
 
   const refreshProfiles = useCallback(async () => {
-    const result = await transport.request<{ profiles: ProviderProfile[] }>(
-      'provider.list',
-      { requestId: newRequestId() },
-    )
+    const result = await listProviders()
     setProfiles(result.profiles)
   }, [])
 
   const refreshProjects = useCallback(async () => {
-    const result = await transport.request<{ projects: Project[] }>(
-      'project.list',
-      { requestId: newRequestId() },
-    )
+    const result = await listProjects()
     setProjects(result.projects)
   }, [])
 
   const refreshProjectSessions = useCallback(async (projectId: string) => {
-    const result = await transport.request<{ sessions: Session[] }>(
-      'session.list',
-      { requestId: newRequestId(), projectId },
-    )
+    const result = await listSessions(projectId)
     setProjectSessions(result.sessions)
   }, [])
 
   const refreshStandaloneSessions = useCallback(async () => {
-    const result = await transport.request<{ sessions: Session[] }>(
-      'session.list',
-      { requestId: newRequestId(), projectId: null },
-    )
+    const result = await listSessions(null)
     setStandaloneSessions(result.sessions)
   }, [])
 
-  /** 启动期初始数据：并行拉取，失败自动重试一次后降级为通知（非致命）。 */
-  const loadInitialData = useCallback(
-    async (retry = true): Promise<void> => {
-      const fetchAll = () =>
-        Promise.allSettled([
-          refreshProfiles(),
-          refreshProjects(),
-          refreshStandaloneSessions(),
-        ])
-      const findFailure = (
-        results: PromiseSettledResult<void>[],
-      ): PromiseRejectedResult | undefined =>
-        results.find(
-          (result): result is PromiseRejectedResult =>
-            result.status === 'rejected',
-        )
-      let failure = findFailure(await fetchAll())
-      if (failure && retry) {
-        // sidecar 就绪竞态等瞬时错误：稍等后自动重试一次
-        await new Promise((resolve) => setTimeout(resolve, 2000))
-        failure = findFailure(await fetchAll())
-      }
-      if (failure) fail(failure.reason)
-    },
-    [fail, refreshProfiles, refreshProjects, refreshStandaloneSessions],
+  // deps 对象必须稳定：useAppBootstrap 内部的引导 effect 以它为依赖，
+  // 每次渲染重建会导致事件监听反复重挂、启动拉取反复触发。
+  const bootstrapDeps = useMemo(
+    () => ({
+      activeSessionRef,
+      activeProjectRef,
+      refreshProfiles,
+      refreshProjects,
+      refreshSessionData,
+      refreshStandaloneSessions,
+      refreshProjectSessions,
+      setNotice,
+    }),
+    [
+      activeProjectRef,
+      activeSessionRef,
+      refreshProjectSessions,
+      refreshProfiles,
+      refreshProjects,
+      refreshSessionData,
+      refreshStandaloneSessions,
+      setNotice,
+    ],
   )
 
-  useEffect(() => {
-    let unlistenState: (() => void) | undefined
-    let unlistenEvents: (() => void) | undefined
-    let disposed = false
-
-    const start = async (): Promise<void> => {
-      await transport.attach()
-      unlistenEvents = transport.onEvent((event: RuntimeEvent) => {
-        if (event.type === 'message.delta') {
-          const next = {
-            ...streamingRef.current,
-            [event.messageId]:
-              (streamingRef.current[event.messageId] ?? '') + event.delta,
-          }
-          streamingRef.current = next
-          setStreaming(next)
-          return
-        }
-        if (EVENT_TYPES_TRIGGERING_REFRESH.has(event.type)) {
-          streamingRef.current = {}
-          setStreaming({})
-          // Provider/网络等失败原因必须可见：直接进顶部通知条。
-          if (event.type === 'run.failed') {
-            fail(new Error(event.error.message))
-          }
-          // Run 结束后标题可能已被自动命名，会话列表一并刷新。
-          const sessionId = activeSessionRef.current
-          if (sessionId) void refreshSessionData(sessionId)
-          void refreshStandaloneSessions()
-          const projectId = activeProjectRef.current
-          if (projectId) void refreshProjectSessions(projectId)
-        }
-      })
-      unlistenState = await listen<BootstrapSnapshot>(
-        'bootstrap:state',
-        (event) => {
-          if (!disposed) setBootstrap(event.payload)
-        },
-      )
-      if (disposed) return
-      setBootstrap(await invoke<BootstrapSnapshot>('bootstrap_get_state'))
-      // 启动期数据拉取不属于引导本身：失败只降级为通知并自动重试一次，
-      // 不把整个应用打成启动失败（sidecar 就绪竞态、瞬时错误都能自愈）。
-      void loadInitialData()
-    }
-
-    void start().catch((error: unknown) => {
-      setBootstrap({
-        state: 'error',
-        runtimeReady: false,
-        systemReady: false,
-        detail: String(error),
-      })
-    })
-
-    return () => {
-      disposed = true
-      unlistenState?.()
-      unlistenEvents?.()
-    }
-  }, [
-    fail,
-    loadInitialData,
-    refreshProjectSessions,
-    refreshSessionData,
-    refreshStandaloneSessions,
-  ])
+  const { bootstrap, streaming, resetStreaming } =
+    useAppBootstrap(bootstrapDeps)
 
   useEffect(() => {
     activeSessionRef.current = activeSessionId
@@ -251,10 +109,28 @@ export default function App() {
     activeProjectRef.current = activeProjectId
   }, [activeProjectId])
 
+  /** 应用内确认弹窗：promise 风格，供变更类操作等待用户决定。 */
+  const confirm = useCallback((state: ConfirmDialogState): Promise<boolean> => {
+    return new Promise((resolve) => {
+      // 理论上不会连开两个弹窗；万一发生，先了结旧 promise 避免挂起。
+      confirmResolverRef.current?.(false)
+      confirmResolverRef.current = resolve
+      setConfirmState(state)
+    })
+  }, [])
+
+  const settleConfirm = useCallback((ok: boolean): void => {
+    setConfirmState(null)
+    confirmResolverRef.current?.(ok)
+    confirmResolverRef.current = null
+  }, [])
+
+  const handleConfirm = useCallback(() => settleConfirm(true), [settleConfirm])
+  const handleCancel = useCallback(() => settleConfirm(false), [settleConfirm])
+
   const openSession = (sessionId: string): void => {
     setActiveSessionId(sessionId)
-    streamingRef.current = {}
-    setStreaming({})
+    resetStreaming()
     void refreshSessionData(sessionId)
   }
 
@@ -279,108 +155,35 @@ export default function App() {
     setView('chat')
   }
 
-  const createProject = async (): Promise<void> => {
-    setCreatingProject(true)
-    setNotice(null)
-    try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: '选择项目文件夹',
-      })
-      if (typeof selected !== 'string' || selected === '') return
-      const result = await transport.request<{ project: Project }>(
-        'project.create',
-        { requestId: newRequestId(), folderPath: selected },
-      )
-      await refreshProjects()
-      selectProject(result.project.id)
-    } catch (error) {
-      fail(error)
-    } finally {
-      setCreatingProject(false)
-    }
-  }
-
-  const sendMessage = async (content: string): Promise<void> => {
-    setNotice(null)
-    // 模型选择形如 `${providerId}::${model}`；未选择时由 Runtime 回退默认。
-    const modelKey = selectedModelKey
-    const separator = modelKey ? modelKey.indexOf('::') : -1
-    const providerId =
-      modelKey && separator > 0 ? modelKey.slice(0, separator) : undefined
-    const model =
-      modelKey && separator > 0 ? modelKey.slice(separator + 2) : undefined
-    try {
-      let sessionId = activeSessionId
-      if (!sessionId) {
-        // 落地页直接发言：选中项目则在项目内建会话，否则建独立会话。
-        const created = await transport.request<{ session: Session }>(
-          'session.create',
-          { requestId: newRequestId(), projectId: activeProjectId },
-        )
-        await transport.request('message.send', {
-          requestId: newRequestId(),
-          sessionId: created.session.id,
-          content,
-          providerId,
-          model,
-        })
-        sessionId = created.session.id
-        setActiveSessionId(sessionId)
-      } else {
-        await transport.request('message.send', {
-          requestId: newRequestId(),
-          sessionId,
-          content,
-          providerId,
-          model,
-        })
-      }
-      await refreshSessionData(sessionId)
-      await refreshStandaloneSessions()
-      if (activeProjectId) await refreshProjectSessions(activeProjectId)
-    } catch (error) {
-      fail(error)
-    }
-  }
-
-  const stopRun = async (): Promise<void> => {
-    const activeRun = sessionData?.runs.find(
-      (run) => run.status === 'created' || run.status === 'running',
-    )
-    if (!activeRun) return
-    try {
-      await transport.request('run.cancel', {
-        requestId: newRequestId(),
-        runId: activeRun.id,
-      })
-    } catch (error) {
-      fail(error)
-    }
-  }
-
-  const retryRun = async (): Promise<void> => {
-    if (!activeSessionId || !sessionData) return
-    const lastFinishedBadly = [...sessionData.runs]
-      .reverse()
-      .find(
-        (run) =>
-          run.status === 'failed' ||
-          run.status === 'interrupted' ||
-          run.status === 'cancelled',
-      )
-    if (!lastFinishedBadly) return
-    try {
-      await transport.request('run.retry', {
-        requestId: newRequestId(),
-        runId: lastFinishedBadly.id,
-      })
-      await refreshSessionData(activeSessionId)
-    } catch (error) {
-      fail(error)
-    }
-  }
+  const {
+    createProject,
+    deleteProject,
+    renameSession,
+    deleteSession,
+    sendMessage,
+    stopRun,
+    retryRun,
+  } = useSessionActions({
+    projects,
+    activeSessionId,
+    activeProjectId,
+    selectedModelKey,
+    sessionData,
+    activeSessionRef,
+    activeProjectRef,
+    refreshSessionData,
+    refreshStandaloneSessions,
+    refreshProjectSessions,
+    refreshProjects,
+    setActiveSessionId,
+    setActiveProjectId,
+    setSessionData,
+    setProjectSessions,
+    setCreatingProject,
+    setNotice,
+    confirm,
+    selectProject,
+  })
 
   const hasEnabledProvider = profiles.some((profile) => profile.enabled)
   const statusLabel = bootstrap
@@ -419,11 +222,14 @@ export default function App() {
         activeSessionId={activeSessionId}
         creatingProject={creatingProject}
         onSelectProject={selectProject}
-        onSelectProjectSession={openSession}
+        onSelectSession={openSession}
         onSelectStandaloneSession={selectStandaloneSession}
         onNewSessionInProject={selectProject}
         onNewChat={newStandaloneChat}
         onCreateProject={createProject}
+        onDeleteProject={deleteProject}
+        onRenameSession={renameSession}
+        onDeleteSession={deleteSession}
       />
       <div className="main-pane">
         <header className="topbar">
@@ -482,12 +288,19 @@ export default function App() {
             onModelChange={setSelectedModelKey}
             onSend={sendMessage}
             onSelectSession={openSession}
+            onRenameSession={renameSession}
+            onDeleteSession={deleteSession}
             onGoSettings={() => {
               setView('settings')
             }}
           />
         )}
       </div>
+      <ConfirmDialog
+        state={confirmState}
+        onConfirm={handleConfirm}
+        onCancel={handleCancel}
+      />
     </div>
   )
 }

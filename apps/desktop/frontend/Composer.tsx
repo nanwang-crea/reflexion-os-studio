@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { ChevronIcon, SendIcon, ShieldIcon, StopIcon } from './ui/icons'
 
 export interface ComposerModelOption {
   /** `${providerId}::${model}` */
@@ -21,32 +22,6 @@ interface ComposerProps {
   onModelChange?: (key: string) => void
   onSend: (content: string) => Promise<void> | void
   onStop?: () => Promise<void> | void
-}
-
-function ShieldIcon(): React.JSX.Element {
-  return (
-    <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-      <path
-        d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5l8-3zm0 2.2L6 6.4V11c0 3.9 2.5 7.4 6 8.9 3.5-1.5 6-5 6-8.9V6.4l-6-2.2z"
-        fill="currentColor"
-      />
-    </svg>
-  )
-}
-
-function ChevronIcon(): React.JSX.Element {
-  return (
-    <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
-      <path
-        d="M6 9l6 6 6-6"
-        stroke="currentColor"
-        strokeWidth="2"
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
 }
 
 export function Composer(props: ComposerProps): React.JSX.Element {
@@ -155,16 +130,7 @@ export function Composer(props: ComposerProps): React.JSX.Element {
             title="停止当前回复"
             onClick={() => void props.onStop?.()}
           >
-            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-              <rect
-                x="6"
-                y="6"
-                width="12"
-                height="12"
-                rx="2"
-                fill="currentColor"
-              />
-            </svg>
+            <StopIcon />
           </button>
         ) : (
           <button
@@ -174,16 +140,7 @@ export function Composer(props: ComposerProps): React.JSX.Element {
             disabled={props.disabled || !draft.trim() || sending}
             onClick={() => void submit()}
           >
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-              <path
-                d="M12 19V5M5 12l7-7 7 7"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <SendIcon />
           </button>
         )}
       </div>

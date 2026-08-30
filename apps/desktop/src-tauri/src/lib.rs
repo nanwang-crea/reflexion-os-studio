@@ -305,12 +305,15 @@ fn runtime_request(
     method: String,
     params: serde_json::Value,
 ) -> Result<u64, String> {
-    const RUNTIME_METHODS: [&str; 13] = [
+    const RUNTIME_METHODS: [&str; 16] = [
         "runtime.get_status",
         "project.list",
         "project.create",
+        "project.delete",
         "session.list",
         "session.create",
+        "session.rename",
+        "session.delete",
         "session.get",
         "message.send",
         "run.cancel",

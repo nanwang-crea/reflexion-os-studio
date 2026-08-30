@@ -11,7 +11,7 @@ import {
   type ChatContextMessage,
 } from './provider.js'
 import { loadSecret } from './secrets.js'
-import { DEFAULT_SESSION_TITLE, type Store } from './store.js'
+import { DEFAULT_SESSION_TITLE, type Store } from './store/index.js'
 
 export class CommandError extends Error {
   readonly code: string
@@ -52,8 +52,8 @@ export class ChatAgent {
   /** 解析本次对话使用的 Provider 与模型；不指定时回退到启用的 Provider 第一个模型。 */
   private resolveProvider(providerId?: string, model?: string) {
     const profile = providerId
-      ? this.store.getProviderProfile(providerId)
-      : this.store.getEnabledProviderProfile()
+      ? this.store.providers.get(providerId)
+      : this.store.providers.getEnabled()
     if (!profile) {
       throw new CommandError(
         'configuration',
@@ -86,7 +86,7 @@ export class ChatAgent {
   }
 
   private requireSession(sessionId: string) {
-    const session = this.store.getSession(sessionId)
+    const session = this.store.sessions.get(sessionId)
     if (!session) {
       throw new CommandError(
         'invalid_request',
@@ -97,7 +97,7 @@ export class ChatAgent {
   }
 
   private requireIdleSession(sessionId: string): void {
-    if (this.store.activeRunForSession(sessionId)) {
+    if (this.store.runs.activeForSession(sessionId)) {
       throw new CommandError(
         'invalid_request',
         '该会话有正在进行的回复，请等待完成或先停止',
@@ -109,7 +109,7 @@ export class ChatAgent {
     const context: ChatContextMessage[] = [
       { role: 'system', content: SYSTEM_PROMPT },
     ]
-    for (const message of this.store.getSessionMessages(sessionId)) {
+    for (const message of this.store.messages.listBySession(sessionId)) {
       if (message.role === 'system') continue
       if (message.role === 'assistant' && message.status !== 'completed')
         continue
@@ -128,12 +128,12 @@ export class ChatAgent {
     )
     this.requireIdleSession(params.sessionId)
 
-    const run = this.store.createRun({
+    const run = this.store.runs.create({
       sessionId: params.sessionId,
       providerId: profile.id,
       model,
     })
-    const userMessage = this.store.createMessage({
+    const userMessage = this.store.messages.create({
       sessionId: params.sessionId,
       runId: run.id,
       role: 'user',
@@ -142,10 +142,10 @@ export class ChatAgent {
     })
     if (session.title === DEFAULT_SESSION_TITLE) {
       const title = deriveSessionTitle(params.content)
-      if (title) this.store.updateSessionTitle(params.sessionId, title)
+      if (title) this.store.sessions.rename(params.sessionId, title)
     }
-    this.store.touchSession(params.sessionId)
-    const assistantMessage = this.store.createMessage({
+    this.store.sessions.touch(params.sessionId)
+    const assistantMessage = this.store.messages.create({
       sessionId: params.sessionId,
       runId: run.id,
       role: 'assistant',
@@ -182,7 +182,7 @@ export class ChatAgent {
     runId: string
     retryOfRunId: string
   } {
-    const original = this.store.getRun(params.runId)
+    const original = this.store.runs.get(params.runId)
     if (!original) {
       throw new CommandError(
         'invalid_request',
@@ -200,14 +200,14 @@ export class ChatAgent {
     )
     this.requireIdleSession(original.sessionId)
 
-    const run = this.store.createRun({
+    const run = this.store.runs.create({
       sessionId: original.sessionId,
       providerId: profile.id,
       model,
       retryOfRunId: original.id,
     })
-    this.store.touchSession(original.sessionId)
-    const assistantMessage = this.store.createMessage({
+    this.store.sessions.touch(original.sessionId)
+    const assistantMessage = this.store.messages.create({
       sessionId: original.sessionId,
       runId: run.id,
       role: 'assistant',
@@ -247,7 +247,7 @@ export class ChatAgent {
       stream.controller.abort()
       return { accepted: true }
     }
-    return { accepted: this.store.getRun(runId) !== null }
+    return { accepted: this.store.runs.get(runId) !== null }
   }
 
   private async stream(input: {
@@ -279,7 +279,7 @@ export class ChatAgent {
           accumulated += delta
           if (!streamingMarked) {
             streamingMarked = true
-            this.store.setMessageStreaming(assistantMessage.id)
+            this.store.messages.markStreaming(assistantMessage.id)
           }
           emitter.next({
             type: 'message.delta',
@@ -291,12 +291,12 @@ export class ChatAgent {
       )
 
       this.store.transaction(() => {
-        this.store.finalizeMessage(
+        this.store.messages.finalize(
           assistantMessage.id,
           result.content,
           'completed',
         )
-        this.store.finalizeRun(run.id, 'completed')
+        this.store.runs.finalize(run.id, 'completed')
       })
       emitter.next({
         type: 'message.completed',
@@ -326,12 +326,12 @@ export class ChatAgent {
 
     if (error instanceof Error && error.name === 'AbortError') {
       this.store.transaction(() => {
-        this.store.finalizeMessage(
+        this.store.messages.finalize(
           assistantMessage.id,
           accumulated,
           'interrupted',
         )
-        this.store.finalizeRun(run.id, 'cancelled')
+        this.store.runs.finalize(run.id, 'cancelled')
       })
       emitter.next({ type: 'run.cancelled' })
       return
@@ -343,8 +343,8 @@ export class ChatAgent {
     // Provider/网络错误只经事件与 stderr 暴露，不进 stdout 协议通道。
     process.stderr.write(`[runtime] run failed (${code}): ${message}\n`)
     this.store.transaction(() => {
-      this.store.finalizeMessage(assistantMessage.id, accumulated, 'failed')
-      this.store.finalizeRun(run.id, 'failed', code)
+      this.store.messages.finalize(assistantMessage.id, accumulated, 'failed')
+      this.store.runs.finalize(run.id, 'failed', code)
     })
     emitter.next({ type: 'run.failed', error: { code, message } })
   }

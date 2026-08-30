@@ -7,7 +7,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { join } from 'node:path'
-import { resolveDataDir } from './store.js'
+import { resolveDataDir } from './store/index.js'
 
 interface SecretFile {
   [secretRef: string]: string

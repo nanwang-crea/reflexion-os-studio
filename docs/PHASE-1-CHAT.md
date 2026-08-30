@@ -37,11 +37,13 @@ Phase 1 采用 Chat-first，拆为 **1A-0 Bootstrap**、**1A-1 Chat Core**、**1
 
 ## UI 原则
 
-不做常驻 Run Inspector。MVP 主界面只常驻 Project/Session Sidebar、Chat Transcript、Composer 和 Runtime/Provider 状态，整体采用 Codex 式深色布局：左侧栏分"项目"与"对话"两个分区（新建入口在各分区标题右侧与项目行尾），主区为居中消息流和圆角 Composer。
+不做常驻 Run Inspector。MVP 主界面只常驻 Project/Session Sidebar、Chat Transcript、Composer 和 Runtime/Provider 状态，整体采用 Codex 式深色布局：左侧栏分"项目"与"对话"两个分区（新建入口在各分区标题右侧），主区为居中消息流和圆角 Composer。
+
+侧边栏交互参照 ChatGPT 与旧版 ReflexionOS：会话行悬停浮现"重命名/删除"（重命名走行内输入，Enter 提交、Esc 取消；删除走原生确认框），项目行悬停提供"新建会话/删除项目"（项目删除级联其下会话）；独立对话按"今天/昨天/7 天内/30 天内/更早"时间分组。
 
 Composer 底部控制条（参照主流 Agent 形态）：左侧为权限 Profile 选择器（`workspace` 工作区读写 / `read-only` 只读，取自 Permission Model 文档命名，UI 偏好存 localStorage，工具能力上线后接入策略网关）；右侧为模型选择器（启用供应商 × 其模型列表，`message.send` 携带 `providerId`/`model`）和发送/停止按钮。
 
-设置页为"供应商列表 + 详情编辑"双栏：支持多供应商的增删改、启用/禁用、名称/Base URL/模型列表编辑；编辑时无需重输 API Key（沿用已存 `secretRef`），仅输入新 Key 时覆盖。
+设置页为"供应商列表 + 详情编辑"双栏：支持多供应商的增删改、启用/禁用、名称/Base URL/模型列表编辑；编辑时无需重输 API Key（沿用已存 `secretRef`），仅输入新 Key 时覆盖；"测试连接"发起 1 token 补全，把 Provider 鉴权/网络/模型错误原样回显到界面。
 
 会话分两类，入口都是直接在 Composer 输入：
 

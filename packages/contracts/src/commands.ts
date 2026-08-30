@@ -67,6 +67,29 @@ export const CommandSchemaRegistry = {
     }),
     result: z.object({ session: SessionSchema }),
   },
+  'session.rename': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      sessionId: z.string().min(1),
+      title: z.string().min(1),
+    }),
+    result: z.object({ session: SessionSchema }),
+  },
+  'session.delete': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      sessionId: z.string().min(1),
+    }),
+    result: z.object({ removed: z.boolean() }),
+  },
+  'project.delete': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+    }),
+    // 项目删除级联其下会话（会话再级联消息与 Run）。
+    result: z.object({ removed: z.boolean() }),
+  },
   'session.get': {
     params: z.object({
       requestId: RequestIdSchema,

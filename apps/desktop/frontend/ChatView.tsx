@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { Message } from '@reflexion-os-studio/runtime-client'
 import { Composer, type ComposerModelOption } from './Composer'
-import type { SessionData } from './App'
+import type { SessionData } from './api/sessions'
 
 interface ChatViewProps {
   sessionData: SessionData | null
