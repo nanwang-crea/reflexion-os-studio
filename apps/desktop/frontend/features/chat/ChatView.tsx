@@ -58,19 +58,41 @@ interface DisplayItem {
 }
 
 /**
- * 组装展示单元：同一 Run 内无正文的“过程轮次”（工具调用/纯思考，content
- * 为空）吸附到同 Run 的最终回答消息上，只保留一条聚合消息，避免每个工具
- * 各成一个折叠行——最终回答消息上的 WorkSummary 聚合全部工具明细。
+ * 组装展示单元：一个 Run 只产出一条最终回答单元，其余模型轮次（工具调用
+ * 轮、中途文本）吸附到它上面——最终回答消息上的 WorkSummary 聚合全部
+ * 工具明细与思考，中间轮次的模型文本不展示为正文（与 ChatGPT 桌面版一致：
+ * 工具执行过程中的 content 属于过程，不当作消息展示）。
  *
- * 细节：
- * - 尚无最终回答的过程轮次（进行中或 run 失败/中断）按 Run 聚合为一条
- *   过程单元展示（进行中显示实时状态，结束后显示耗时摘要）。
- * - 采用最终回答消息的 id/status/时间戳；reasoning 与 toolCalls 为聚合值。
+ * 最终回答按 Run 判定：优先取 run 内最后一条无工具调用的消息（纯文本轮）；
+ * run 进行中且全为工具轮（final 未出现）时聚合为实时过程单元；终态 run
+ * 全工具（如 max_turns 失败）降级取最后一条。
  */
 function buildDisplayItems(
   messages: Message[],
   toolCallsByMessage: Map<string, ToolCall[]>,
+  activeRunIds: Set<string>,
 ): DisplayItem[] {
+  // 预扫描：每个 run 的最终回答在 messages 中的下标。最终回答 = run 内
+  // 最后一条无工具调用的消息（纯文本轮）；进行中且全为工具轮时无最终回答，
+  // 终态 run 全工具（如 max_turns 失败）降级取最后一条。
+  const finalIndexByRun = new Map<string, number>()
+  {
+    const lastIndexByRun = new Map<string, number>()
+    messages.forEach((message, index) => {
+      if (message.role !== 'assistant' || message.runId === null) return
+      // 覆盖式记录：遍历结束后即为该 run 的最后一条 assistant 消息。
+      lastIndexByRun.set(message.runId, index)
+    })
+    for (const [runId, lastIndex] of lastIndexByRun) {
+      const lastMessage = messages[lastIndex]
+      const lastHasTools =
+        (toolCallsByMessage.get(lastMessage.id) ?? []).length > 0
+      if (!lastHasTools || !activeRunIds.has(runId)) {
+        finalIndexByRun.set(runId, lastIndex)
+      }
+    }
+  }
+
   const items: DisplayItem[] = []
   let pending: Message[] = []
 
@@ -99,34 +121,33 @@ function buildDisplayItems(
     items.push({ message, toolCalls: toolCallsByMessage.get(message.id) ?? [] })
   }
 
-  for (const message of messages) {
-    if (message.role === 'assistant' && message.content === '') {
-      pending.push(message)
-      continue
-    }
-    if (message.role === 'assistant' && pending.length > 0) {
-      const consumed = pending.filter((m) => m.runId === message.runId)
-      if (consumed.length > 0) {
-        pending = pending.filter((m) => m.runId !== message.runId)
-        emitPending()
-        const reasoning = joinReasonings([...consumed, message])
-        items.push({
-          message:
-            reasoning !== message.reasoning
-              ? { ...message, reasoning }
-              : message,
-          toolCalls: [
-            ...consumed.flatMap((m) => toolCallsByMessage.get(m.id) ?? []),
-            ...(toolCallsByMessage.get(message.id) ?? []),
-          ],
-        })
-        continue
+  messages.forEach((message, index) => {
+    if (message.role === 'assistant' && message.runId !== null) {
+      const finalIndex = finalIndexByRun.get(message.runId)
+      if (finalIndex === undefined || index !== finalIndex) {
+        // 过程轮次：工具/思考归入最终回答，content（中途文本）不展示。
+        pending.push(message)
+        return
       }
+      // 最终回答：吸收同 Run 的过程轮次后作为唯一单元输出。
+      const consumed = pending.filter((m) => m.runId === message.runId)
+      pending = pending.filter((m) => m.runId !== message.runId)
+      emitPending()
+      const reasoning = joinReasonings([...consumed, message])
+      items.push({
+        message:
+          reasoning !== message.reasoning ? { ...message, reasoning } : message,
+        toolCalls: [
+          ...consumed.flatMap((m) => toolCallsByMessage.get(m.id) ?? []),
+          ...(toolCallsByMessage.get(message.id) ?? []),
+        ],
+      })
+      return
     }
     // user/system：未吸收的过程轮次先聚合并输出，保持时间顺序。
     emitPending()
     pushPlain(message)
-  }
+  })
   emitPending()
   return items
 }
@@ -171,10 +192,24 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
         run.status === 'running' ||
         run.status === 'awaiting_approval',
     )
+  const activeRunIds = useMemo(
+    () =>
+      new Set(
+        runs
+          .filter(
+            (run) =>
+              run.status === 'created' ||
+              run.status === 'running' ||
+              run.status === 'awaiting_approval',
+          )
+          .map((run) => run.id),
+      ),
+    [runs],
+  )
   // 过程轮次吸附到最终回答：每条工具/思考消息不再各自显示折叠行。
   const displayItems = useMemo(
-    () => buildDisplayItems(messages, toolCallsByMessage),
-    [messages, toolCallsByMessage],
+    () => buildDisplayItems(messages, toolCallsByMessage, activeRunIds),
+    [messages, toolCallsByMessage, activeRunIds],
   )
   const lastRetryableRun = [...runs]
     .reverse()
