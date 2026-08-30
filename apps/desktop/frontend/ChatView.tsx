@@ -1,12 +1,17 @@
 import { useEffect, useRef } from 'react'
 import type { Message } from '@reflexion-os-studio/runtime-client'
-import { Composer } from './Composer'
+import { Composer, type ComposerModelOption } from './Composer'
 import type { SessionData } from './App'
 
 interface ChatViewProps {
   sessionData: SessionData | null
   streaming: Record<string, string>
   hasEnabledProvider: boolean
+  permissionValue: string
+  onPermissionChange: (value: string) => void
+  modelOptions: ComposerModelOption[]
+  selectedModelKey: string | null
+  onModelChange: (key: string) => void
   onSend: (content: string) => Promise<void>
   onStop: () => Promise<void>
   onRetry: () => Promise<void>
@@ -104,6 +109,11 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
           }
           disabled={!props.hasEnabledProvider}
           busy={activeRun !== undefined}
+          permissionValue={props.permissionValue}
+          onPermissionChange={props.onPermissionChange}
+          modelOptions={props.modelOptions}
+          selectedModelKey={props.selectedModelKey}
+          onModelChange={props.onModelChange}
           onSend={props.onSend}
           onStop={props.onStop}
         />

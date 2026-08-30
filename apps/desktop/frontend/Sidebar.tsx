@@ -12,6 +12,8 @@ interface SidebarProps {
   onSelectProject: (projectId: string) => void
   onSelectProjectSession: (sessionId: string) => void
   onSelectStandaloneSession: (sessionId: string) => void
+  /** 在指定项目内新建会话（进入项目落地页）。 */
+  onNewSessionInProject: (projectId: string) => void
   onNewChat: () => void
   onCreateProject: () => Promise<void>
 }
@@ -48,17 +50,12 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
         <span className="brand-name">ReflexionOS Studio</span>
       </div>
 
-      <button className="new-chat-btn" onClick={props.onNewChat}>
-        <PlusIcon />
-        新建对话
-      </button>
-
       <div className="sidebar-scroll">
         <div className="section-head">
           <span>项目</span>
           <button
             className="icon-btn"
-            title="选择本地文件夹，创建关联项目"
+            title="新建项目：选择本地文件夹"
             aria-label="新建项目"
             disabled={props.creatingProject}
             onClick={() => void props.onCreateProject()}
@@ -71,14 +68,24 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
             const active = project.id === props.activeProjectId
             return (
               <li key={project.id}>
-                <button
-                  className={`row project-row${active ? ' active' : ''}`}
-                  title={project.folderPath || '未关联文件夹'}
-                  onClick={() => props.onSelectProject(project.id)}
-                >
-                  <FolderIcon />
-                  <span className="row-label">{project.name}</span>
-                </button>
+                <div className={`project-row${active ? ' active' : ''}`}>
+                  <button
+                    className="row project-select"
+                    title={project.folderPath || '未关联文件夹'}
+                    onClick={() => props.onSelectProject(project.id)}
+                  >
+                    <FolderIcon />
+                    <span className="row-label">{project.name}</span>
+                  </button>
+                  <button
+                    className="row-action"
+                    title="在该项目中新建会话"
+                    aria-label={`在 ${project.name} 中新建会话`}
+                    onClick={() => props.onNewSessionInProject(project.id)}
+                  >
+                    <PlusIcon />
+                  </button>
+                </div>
                 {active && (
                   <ul className="nested-list">
                     {props.projectSessions.map((session) => (
@@ -113,6 +120,14 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
 
         <div className="section-head">
           <span>对话</span>
+          <button
+            className="icon-btn"
+            title="新建独立对话"
+            aria-label="新建独立对话"
+            onClick={props.onNewChat}
+          >
+            <PlusIcon />
+          </button>
         </div>
         <ul className="section-list">
           {props.standaloneSessions.map((session) => (
@@ -129,7 +144,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
             </li>
           ))}
           {props.standaloneSessions.length === 0 && (
-            <li className="empty">点击“新建对话”开始一段独立对话</li>
+            <li className="empty">点击“＋”开始一段独立对话</li>
           )}
         </ul>
       </div>

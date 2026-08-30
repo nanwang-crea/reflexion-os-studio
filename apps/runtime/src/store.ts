@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS provider_profiles (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   base_url TEXT NOT NULL,
-  model TEXT NOT NULL,
+  models TEXT NOT NULL,
   secret_ref TEXT NOT NULL,
   enabled INTEGER NOT NULL,
   updated_at TEXT NOT NULL
@@ -76,7 +76,7 @@ function nowIso(): string {
 }
 
 /** 当前 schema 版本；递增时必须在 migrate() 中补充对应升级路径。 */
-const LATEST_SCHEMA_VERSION = 1
+const LATEST_SCHEMA_VERSION = 2
 
 const SESSIONS_TABLE_V1 = `
 CREATE TABLE sessions (
@@ -97,6 +97,17 @@ CREATE TABLE projects (
   updated_at TEXT NOT NULL
 )`
 
+const PROVIDER_PROFILES_TABLE_V2 = `
+CREATE TABLE provider_profiles (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  base_url TEXT NOT NULL,
+  models TEXT NOT NULL,
+  secret_ref TEXT NOT NULL,
+  enabled INTEGER NOT NULL,
+  updated_at TEXT NOT NULL
+)`
+
 export class Store {
   private readonly db: DatabaseSync
 
@@ -104,6 +115,9 @@ export class Store {
     mkdirSync(dir, { recursive: true })
     this.db = new DatabaseSync(join(dir, 'reflexion.db'))
     this.db.exec('PRAGMA foreign_keys = ON')
+    // node:sqlite 默认无 busy_timeout：多实例共存（误重复启动）时，
+    // 启动恢复/事务撞上另一实例的写锁会直接抛 SQLITE_BUSY 打挂 Runtime。
+    this.db.exec('PRAGMA busy_timeout = 3000')
     this.db.exec('PRAGMA journal_mode = WAL')
     this.db.exec(SCHEMA)
     this.migrate()
@@ -111,32 +125,82 @@ export class Store {
   }
 
   /**
+   * 分版本迁移；SQLite 无法直接改列约束，重建表需在关闭外键 + legacy_alter_table 下进行。
    * v0 → v1：sessions.project_id 改为可空（独立会话），projects 增加 folder_path。
-   * SQLite 无法直接改列约束，需在关闭外键 + legacy_alter_table 下重建两张表。
+   * v1 → v2：provider_profiles 单 model 列改为 models JSON 数组（多模型）。
    */
   private migrate(): void {
     const row = this.db.prepare('PRAGMA user_version').get() as
       { user_version: number | bigint } | undefined
-    if (Number(row?.user_version ?? 0) >= LATEST_SCHEMA_VERSION) return
+    let version = Number(row?.user_version ?? 0)
+    if (version >= LATEST_SCHEMA_VERSION) return
     this.db.exec('PRAGMA foreign_keys = OFF')
     this.db.exec('PRAGMA legacy_alter_table = ON')
     this.db.exec('BEGIN IMMEDIATE')
     try {
-      this.db.exec('ALTER TABLE sessions RENAME TO sessions_v0')
-      this.db.exec(SESSIONS_TABLE_V1)
-      this.db.exec(
-        `INSERT INTO sessions (id, project_id, title, status, created_at, updated_at)
+      if (version < 1) {
+        this.db.exec('ALTER TABLE sessions RENAME TO sessions_v0')
+        this.db.exec(SESSIONS_TABLE_V1)
+        this.db.exec(
+          `INSERT INTO sessions (id, project_id, title, status, created_at, updated_at)
          SELECT id, project_id, title, status, created_at, updated_at FROM sessions_v0`,
-      )
-      this.db.exec('DROP TABLE sessions_v0')
-      this.db.exec('ALTER TABLE projects RENAME TO projects_v0')
-      this.db.exec(PROJECTS_TABLE_V1)
-      this.db.exec(
-        `INSERT INTO projects (id, name, folder_path, created_at, updated_at)
+        )
+        this.db.exec('DROP TABLE sessions_v0')
+        this.db.exec('ALTER TABLE projects RENAME TO projects_v0')
+        this.db.exec(PROJECTS_TABLE_V1)
+        this.db.exec(
+          `INSERT INTO projects (id, name, folder_path, created_at, updated_at)
          SELECT id, name, '', created_at, updated_at FROM projects_v0`,
-      )
-      this.db.exec('DROP TABLE projects_v0')
+        )
+        this.db.exec('DROP TABLE projects_v0')
+      }
+      if (version < 2) {
+        // 全新库由 SCHEMA 直接建成 v2 形状；仅当还是旧的单 model 列时才重建。
+        const columns = this.db
+          .prepare('PRAGMA table_info(provider_profiles)')
+          .all() as { name: string }[]
+        const hasLegacyModelColumn = columns.some(
+          (column) => column.name === 'model',
+        )
+        if (hasLegacyModelColumn) {
+          // 单 model 列 → models JSON 数组（多模型供应商）。
+          this.db.exec(
+            'ALTER TABLE provider_profiles RENAME TO provider_profiles_v1',
+          )
+          this.db.exec(PROVIDER_PROFILES_TABLE_V2)
+          const legacy = this.db
+            .prepare(
+              'SELECT id, name, base_url, model, secret_ref, enabled, updated_at FROM provider_profiles_v1',
+            )
+            .all() as {
+            id: string
+            name: string
+            base_url: string
+            model: string
+            secret_ref: string
+            enabled: number
+            updated_at: string
+          }[]
+          const insert = this.db.prepare(
+            'INSERT INTO provider_profiles (id, name, base_url, models, secret_ref, enabled, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          )
+          for (const row of legacy) {
+            insert.run(
+              row.id,
+              row.name,
+              row.base_url,
+              JSON.stringify([row.model]),
+              row.secret_ref,
+              row.enabled,
+              row.updated_at,
+            )
+          }
+          this.db.exec('DROP TABLE provider_profiles_v1')
+        }
+      }
       this.db.exec('COMMIT')
+      // 迁移全部执行完毕才推进版本号；否则下次启动会重复进入迁移分支。
+      version = LATEST_SCHEMA_VERSION
     } catch (error) {
       this.db.exec('ROLLBACK')
       throw error
@@ -144,7 +208,7 @@ export class Store {
       this.db.exec('PRAGMA legacy_alter_table = OFF')
       this.db.exec('PRAGMA foreign_keys = ON')
     }
-    this.db.exec(`PRAGMA user_version = ${LATEST_SCHEMA_VERSION}`)
+    this.db.exec(`PRAGMA user_version = ${version}`)
   }
 
   transaction<T>(fn: () => T): T {
@@ -157,6 +221,10 @@ export class Store {
       this.db.exec('ROLLBACK')
       throw error
     }
+  }
+
+  close(): void {
+    this.db.close()
   }
 
   private recoverInterrupted(): void {
@@ -422,11 +490,18 @@ export class Store {
     return row ? this.toProviderProfile(row) : null
   }
 
+  getProviderProfile(id: string): ProviderProfile | null {
+    const row = this.db
+      .prepare('SELECT * FROM provider_profiles WHERE id = ?')
+      .get(id)
+    return row ? this.toProviderProfile(row) : null
+  }
+
   upsertProviderProfile(input: {
     id?: string
     name: string
     baseUrl: string
-    model: string
+    models: string[]
     secretRef: string
     enabled: boolean
   }): ProviderProfile {
@@ -434,12 +509,12 @@ export class Store {
     const updatedAt = nowIso()
     this.db
       .prepare(
-        `INSERT INTO provider_profiles (id, name, base_url, model, secret_ref, enabled, updated_at)
+        `INSERT INTO provider_profiles (id, name, base_url, models, secret_ref, enabled, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            base_url = excluded.base_url,
-           model = excluded.model,
+           models = excluded.models,
            secret_ref = excluded.secret_ref,
            enabled = excluded.enabled,
            updated_at = excluded.updated_at`,
@@ -448,7 +523,7 @@ export class Store {
         id,
         input.name,
         input.baseUrl,
-        input.model,
+        JSON.stringify(input.models),
         input.secretRef,
         input.enabled ? 1 : 0,
         updatedAt,
@@ -458,6 +533,14 @@ export class Store {
       .get(id)
     if (!row) throw new Error(`provider profile not found after upsert: ${id}`)
     return this.toProviderProfile(row)
+  }
+
+  /** 删除供应商配置；返回是否确实删除了行。 */
+  deleteProviderProfile(id: string): boolean {
+    const result = this.db
+      .prepare('DELETE FROM provider_profiles WHERE id = ?')
+      .run(id)
+    return Number(result.changes) > 0
   }
 
   private toProject(row: Record<string, unknown>): Project {
@@ -510,11 +593,22 @@ export class Store {
   }
 
   private toProviderProfile(row: Record<string, unknown>): ProviderProfile {
+    let models: string[] = []
+    try {
+      const parsed: unknown = JSON.parse(String(row.models ?? '[]'))
+      if (Array.isArray(parsed)) {
+        models = parsed
+          .map((item) => String(item))
+          .filter((item) => item !== '')
+      }
+    } catch {
+      models = []
+    }
     return {
       id: String(row.id),
       name: String(row.name),
       baseUrl: String(row.base_url),
-      model: String(row.model),
+      models,
       secretRef: String(row.secret_ref),
       enabled: Number(row.enabled) === 1,
       updatedAt: String(row.updated_at),

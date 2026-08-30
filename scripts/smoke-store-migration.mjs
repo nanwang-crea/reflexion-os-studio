@@ -93,7 +93,75 @@ check(
   JSON.stringify(standaloneList),
 )
 
+store.close()
+
+// ---------- v1 → v2：provider_profiles 单 model 列 → models JSON 数组 ----------
+const dirV1 = join(tmpdir(), `reflexion-migration-smoke-v1-${process.pid}`)
+rmSync(dirV1, { recursive: true, force: true })
+mkdirSync(dirV1, { recursive: true })
+const dbV1 = new DatabaseSync(join(dirV1, 'reflexion.db'))
+dbV1.exec('PRAGMA user_version = 1')
+dbV1.exec(`
+CREATE TABLE projects (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  folder_path TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE sessions (
+  id TEXT PRIMARY KEY,
+  project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE provider_profiles (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  base_url TEXT NOT NULL,
+  model TEXT NOT NULL,
+  secret_ref TEXT NOT NULL,
+  enabled INTEGER NOT NULL,
+  updated_at TEXT NOT NULL
+);
+INSERT INTO provider_profiles (id, name, base_url, model, secret_ref, enabled, updated_at)
+  VALUES ('pp-old', '旧供应商', 'https://example.com/v1', 'old-model', 'local:x', 1,
+          '2026-01-01T00:00:00.000Z');
+`)
+dbV1.close()
+
+const storeV1 = new Store(dirV1)
+const profiles = storeV1.listProviderProfiles()
+check(
+  'v1 single model migrated to models array',
+  profiles.length === 1 &&
+    profiles[0].id === 'pp-old' &&
+    profiles[0].models.join(',') === 'old-model',
+  JSON.stringify(profiles),
+)
+const upserted = storeV1.upsertProviderProfile({
+  id: 'pp-old',
+  name: '旧供应商',
+  baseUrl: 'https://example.com/v1',
+  models: ['m1', 'm2'],
+  secretRef: 'local:x',
+  enabled: true,
+})
+check(
+  'multi-model upsert persists',
+  upserted.models.join(',') === 'm1,m2' &&
+    storeV1.getProviderProfile('pp-old')?.models.join(',') === 'm1,m2',
+)
+check(
+  'deleteProviderProfile removes row',
+  storeV1.deleteProviderProfile('pp-old'),
+)
+storeV1.close()
+
 rmSync(dir, { recursive: true, force: true })
+rmSync(dirV1, { recursive: true, force: true })
 
 if (failures > 0) {
   console.error(`smoke-store-migration: ${failures} failure(s)`)

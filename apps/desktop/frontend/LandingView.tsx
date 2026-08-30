@@ -1,5 +1,5 @@
 import type { Project, Session } from '@reflexion-os-studio/runtime-client'
-import { Composer } from './Composer'
+import { Composer, type ComposerModelOption } from './Composer'
 
 interface LandingViewProps {
   /** 当前选中的项目；null 表示独立对话模式。 */
@@ -7,6 +7,11 @@ interface LandingViewProps {
   /** 选中项目时展示该项目下的历史会话。 */
   sessions: Session[]
   hasEnabledProvider: boolean
+  permissionValue: string
+  onPermissionChange: (value: string) => void
+  modelOptions: ComposerModelOption[]
+  selectedModelKey: string | null
+  onModelChange: (key: string) => void
   onSend: (content: string) => Promise<void>
   onSelectSession: (sessionId: string) => void
   onGoSettings: () => void
@@ -63,6 +68,7 @@ export function LandingView(props: LandingViewProps): React.JSX.Element {
             </div>
           )}
           <Composer
+            autoFocus
             placeholder={
               !props.hasEnabledProvider
                 ? '请先在设置中配置 API Key…'
@@ -71,6 +77,11 @@ export function LandingView(props: LandingViewProps): React.JSX.Element {
                   : '输入消息，Enter 发送…'
             }
             disabled={!props.hasEnabledProvider}
+            permissionValue={props.permissionValue}
+            onPermissionChange={props.onPermissionChange}
+            modelOptions={props.modelOptions}
+            selectedModelKey={props.selectedModelKey}
+            onModelChange={props.onModelChange}
             onSend={props.onSend}
           />
         </div>

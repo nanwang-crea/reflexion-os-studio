@@ -25,6 +25,8 @@ export interface StreamChatOptions {
   messages: ChatContextMessage[]
   signal: AbortSignal
   timeoutMs?: number
+  /** 传入时限制补全长度（连接测试用 1，避免无谓消耗）。 */
+  maxTokens?: number
 }
 
 export interface StreamChatResult {
@@ -79,6 +81,9 @@ export async function streamChatCompletion(
           messages: options.messages,
           stream: true,
           stream_options: { include_usage: true },
+          ...(options.maxTokens !== undefined
+            ? { max_tokens: options.maxTokens }
+            : {}),
         }),
         signal,
       },

@@ -15,6 +15,9 @@ export const MessageSendParamsSchema = z.object({
   requestId: RequestIdSchema,
   sessionId: z.string().min(1),
   content: z.string().min(1),
+  // 不传则使用启用的 Provider 及其第一个模型。
+  providerId: z.string().min(1).optional(),
+  model: z.string().min(1).optional(),
 })
 export type ChatCommand = z.infer<typeof MessageSendParamsSchema>
 
@@ -104,14 +107,38 @@ export const CommandSchemaRegistry = {
       id: z.string().min(1).optional(),
       name: z.string().min(1),
       baseUrl: z.url(),
-      model: z.string().min(1),
+      models: z.array(z.string().min(1)).min(1),
       // 只写字段：明文 Key 仅在请求中出现一次，runtime 落入本地 secret 存储，
       // profile 只返回 secretRef。任何响应/事件/日志不得包含 secret。
       secret: z.string().min(1).optional(),
+      // 编辑且不换 Key 时必须回传既有 secretRef。
       secretRef: z.string().min(1).optional(),
       enabled: z.boolean().optional(),
     }),
     result: z.object({ profile: ProviderProfileSchema }),
+  },
+  'provider.delete': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      id: z.string().min(1),
+    }),
+    result: z.object({ removed: z.boolean() }),
+  },
+  'provider.test': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      baseUrl: z.url(),
+      model: z.string().min(1),
+      // 测试请求的明文 Key 只在内存中使用一次，不落盘。
+      secret: z.string().min(1).optional(),
+      secretRef: z.string().min(1).optional(),
+    }),
+    result: z.object({
+      ok: z.boolean(),
+      latencyMs: z.number().int().nonnegative(),
+      model: z.string().min(1),
+      error: z.string().nullable(),
+    }),
   },
 } satisfies Record<string, { params: z.ZodType; result: z.ZodType }>
 

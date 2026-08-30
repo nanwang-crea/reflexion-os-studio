@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { open } from '@tauri-apps/plugin-dialog'
@@ -45,6 +45,8 @@ const EVENT_TYPES_TRIGGERING_REFRESH = new Set([
   'run.cancelled',
 ])
 
+const PERMISSION_STORAGE_KEY = 'reflexion.permission-mode'
+
 export default function App() {
   const [bootstrap, setBootstrap] = useState<BootstrapSnapshot | null>(null)
   const [view, setView] = useState<'chat' | 'settings'>('chat')
@@ -58,9 +60,49 @@ export default function App() {
   const [streaming, setStreaming] = useState<Record<string, string>>({})
   const [creatingProject, setCreatingProject] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [permissionMode, setPermissionMode] = useState<string>(() => {
+    const stored = localStorage.getItem(PERMISSION_STORAGE_KEY)
+    return stored === 'read-only' || stored === 'workspace'
+      ? stored
+      : 'workspace'
+  })
+  const [selectedModelKey, setSelectedModelKey] = useState<string | null>(null)
   const activeProjectRef = useRef<string | null>(null)
   const activeSessionRef = useRef<string | null>(null)
   const streamingRef = useRef<Record<string, string>>({})
+
+  const changePermissionMode = useCallback((value: string): void => {
+    setPermissionMode(value)
+    localStorage.setItem(PERMISSION_STORAGE_KEY, value)
+  }, [])
+
+  // 启用供应商的可用模型（按供应商分组），供 Composer 底部模型选择器使用。
+  const modelOptions = useMemo(
+    () =>
+      profiles
+        .filter((profile) => profile.enabled)
+        .flatMap((profile) =>
+          profile.models.map((model) => ({
+            key: `${profile.id}::${model}`,
+            label: model,
+            group: profile.name,
+          })),
+        ),
+    [profiles],
+  )
+
+  useEffect(() => {
+    if (modelOptions.length === 0) {
+      if (selectedModelKey !== null) setSelectedModelKey(null)
+      return
+    }
+    if (
+      selectedModelKey === null ||
+      !modelOptions.some((option) => option.key === selectedModelKey)
+    ) {
+      setSelectedModelKey(modelOptions[0].key)
+    }
+  }, [modelOptions, selectedModelKey])
 
   const fail = useCallback((error: unknown): void => {
     setNotice(error instanceof Error ? error.message : String(error))
@@ -106,6 +148,33 @@ export default function App() {
     setStandaloneSessions(result.sessions)
   }, [])
 
+  /** 启动期初始数据：并行拉取，失败自动重试一次后降级为通知（非致命）。 */
+  const loadInitialData = useCallback(
+    async (retry = true): Promise<void> => {
+      const fetchAll = () =>
+        Promise.allSettled([
+          refreshProfiles(),
+          refreshProjects(),
+          refreshStandaloneSessions(),
+        ])
+      const findFailure = (
+        results: PromiseSettledResult<void>[],
+      ): PromiseRejectedResult | undefined =>
+        results.find(
+          (result): result is PromiseRejectedResult =>
+            result.status === 'rejected',
+        )
+      let failure = findFailure(await fetchAll())
+      if (failure && retry) {
+        // sidecar 就绪竞态等瞬时错误：稍等后自动重试一次
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+        failure = findFailure(await fetchAll())
+      }
+      if (failure) fail(failure.reason)
+    },
+    [fail, refreshProfiles, refreshProjects, refreshStandaloneSessions],
+  )
+
   useEffect(() => {
     let unlistenState: (() => void) | undefined
     let unlistenEvents: (() => void) | undefined
@@ -127,6 +196,10 @@ export default function App() {
         if (EVENT_TYPES_TRIGGERING_REFRESH.has(event.type)) {
           streamingRef.current = {}
           setStreaming({})
+          // Provider/网络等失败原因必须可见：直接进顶部通知条。
+          if (event.type === 'run.failed') {
+            fail(new Error(event.error.message))
+          }
           // Run 结束后标题可能已被自动命名，会话列表一并刷新。
           const sessionId = activeSessionRef.current
           if (sessionId) void refreshSessionData(sessionId)
@@ -143,9 +216,9 @@ export default function App() {
       )
       if (disposed) return
       setBootstrap(await invoke<BootstrapSnapshot>('bootstrap_get_state'))
-      await refreshProfiles()
-      await refreshProjects()
-      await refreshStandaloneSessions()
+      // 启动期数据拉取不属于引导本身：失败只降级为通知并自动重试一次，
+      // 不把整个应用打成启动失败（sidecar 就绪竞态、瞬时错误都能自愈）。
+      void loadInitialData()
     }
 
     void start().catch((error: unknown) => {
@@ -163,8 +236,8 @@ export default function App() {
       unlistenEvents?.()
     }
   }, [
-    refreshProfiles,
-    refreshProjects,
+    fail,
+    loadInitialData,
     refreshProjectSessions,
     refreshSessionData,
     refreshStandaloneSessions,
@@ -231,6 +304,13 @@ export default function App() {
 
   const sendMessage = async (content: string): Promise<void> => {
     setNotice(null)
+    // 模型选择形如 `${providerId}::${model}`；未选择时由 Runtime 回退默认。
+    const modelKey = selectedModelKey
+    const separator = modelKey ? modelKey.indexOf('::') : -1
+    const providerId =
+      modelKey && separator > 0 ? modelKey.slice(0, separator) : undefined
+    const model =
+      modelKey && separator > 0 ? modelKey.slice(separator + 2) : undefined
     try {
       let sessionId = activeSessionId
       if (!sessionId) {
@@ -243,6 +323,8 @@ export default function App() {
           requestId: newRequestId(),
           sessionId: created.session.id,
           content,
+          providerId,
+          model,
         })
         sessionId = created.session.id
         setActiveSessionId(sessionId)
@@ -251,6 +333,8 @@ export default function App() {
           requestId: newRequestId(),
           sessionId,
           content,
+          providerId,
+          model,
         })
       }
       await refreshSessionData(sessionId)
@@ -337,6 +421,7 @@ export default function App() {
         onSelectProject={selectProject}
         onSelectProjectSession={openSession}
         onSelectStandaloneSession={selectStandaloneSession}
+        onNewSessionInProject={selectProject}
         onNewChat={newStandaloneChat}
         onCreateProject={createProject}
       />
@@ -373,6 +458,11 @@ export default function App() {
             sessionData={sessionData}
             streaming={streaming}
             hasEnabledProvider={hasEnabledProvider}
+            permissionValue={permissionMode}
+            onPermissionChange={changePermissionMode}
+            modelOptions={modelOptions}
+            selectedModelKey={selectedModelKey}
+            onModelChange={setSelectedModelKey}
             onSend={sendMessage}
             onStop={stopRun}
             onRetry={retryRun}
@@ -385,6 +475,11 @@ export default function App() {
             project={activeProject}
             sessions={activeProject ? projectSessions : []}
             hasEnabledProvider={hasEnabledProvider}
+            permissionValue={permissionMode}
+            onPermissionChange={changePermissionMode}
+            modelOptions={modelOptions}
+            selectedModelKey={selectedModelKey}
+            onModelChange={setSelectedModelKey}
             onSend={sendMessage}
             onSelectSession={openSession}
             onGoSettings={() => {

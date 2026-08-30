@@ -78,7 +78,8 @@ export const ProviderProfileSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   baseUrl: z.url(),
-  model: z.string().min(1),
+  // 该供应商下可选的模型列表；对话时可指定其中一个。
+  models: z.array(z.string().min(1)).min(1),
   secretRef: z.string().min(1),
   enabled: z.boolean(),
   updatedAt: IsoDateTimeSchema,

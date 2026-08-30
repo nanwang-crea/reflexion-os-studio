@@ -2,7 +2,8 @@ import { basename } from 'node:path'
 import type { ChatCommand } from '@reflexion-os-studio/contracts'
 import type { ChatAgent } from './agent.js'
 import { CommandError } from './agent.js'
-import { saveSecret } from './secrets.js'
+import { streamChatCompletion } from './provider.js'
+import { deleteSecret, loadSecret, saveSecret } from './secrets.js'
 import type { Store } from './store.js'
 
 type CommandResult = Record<string, unknown>
@@ -118,15 +119,33 @@ export function dispatchCommand(
           'provider.configure 需要 secret 或 secretRef',
         )
       }
+      const models = (Array.isArray(p.models) ? p.models : [])
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter((item) => item !== '')
+      if (models.length === 0) {
+        throw new CommandError(
+          'invalid_request',
+          'provider.configure 至少需要一个模型',
+        )
+      }
       const profile = store.upsertProviderProfile({
         id: typeof p.id === 'string' && p.id !== '' ? p.id : undefined,
         name: requireString(p, 'name'),
         baseUrl: requireString(p, 'baseUrl'),
-        model: requireString(p, 'model'),
+        models: [...new Set(models)],
         secretRef,
         enabled: p.enabled === undefined ? true : p.enabled === true,
       })
       return { profile }
+    },
+    'provider.delete': (p, { store }) => {
+      const id = requireString(p, 'id')
+      const profile = store.getProviderProfile(id)
+      if (!profile) return { removed: false }
+      const removed = store.deleteProviderProfile(id)
+      // 配置行已删则其密钥引用也不应残留；secret 文件里其余条目不受影响。
+      deleteSecret(profile.secretRef)
+      return { removed }
     },
   }
 
@@ -135,4 +154,55 @@ export function dispatchCommand(
     throw new CommandError('unsupported', `unsupported command: ${method}`)
   }
   return handler(params, ctx)
+}
+
+/**
+ * 供应商连接测试：发起一次 1 token 的补全，把 Provider 的
+ * 鉴权/网络/模型错误原样返回给 UI（不落盘、不写库）。
+ * 涉及网络等待，由 index.ts 异步调度、完成后单独回包。
+ */
+export async function testProviderConnection(
+  params: Record<string, unknown>,
+): Promise<CommandResult> {
+  const baseUrl = requireString(params, 'baseUrl')
+  const model = requireString(params, 'model')
+  const secret =
+    typeof params.secret === 'string' && params.secret !== ''
+      ? params.secret
+      : undefined
+  const secretRef =
+    typeof params.secretRef === 'string' && params.secretRef !== ''
+      ? params.secretRef
+      : undefined
+  const apiKey = secret ?? (secretRef ? loadSecret(secretRef) : undefined)
+  if (!apiKey) {
+    throw new CommandError(
+      'invalid_request',
+      '缺少 API Key：请填写或先保存配置',
+    )
+  }
+  const startedAt = Date.now()
+  try {
+    await streamChatCompletion(
+      {
+        baseUrl,
+        apiKey,
+        model,
+        messages: [{ role: 'user', content: 'ping' }],
+        maxTokens: 1,
+        timeoutMs: 15_000,
+        signal: new AbortController().signal,
+      },
+      () => {},
+    )
+    return { ok: true, latencyMs: Date.now() - startedAt, model, error: null }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return {
+      ok: false,
+      latencyMs: Date.now() - startedAt,
+      model,
+      error: message,
+    }
+  }
 }

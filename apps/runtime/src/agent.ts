@@ -49,12 +49,23 @@ export class ChatAgent {
     private readonly notifier: EventNotifier,
   ) {}
 
-  private requireEnabledProfile() {
-    const profile = this.store.getEnabledProviderProfile()
+  /** 解析本次对话使用的 Provider 与模型；不指定时回退到启用的 Provider 第一个模型。 */
+  private resolveProvider(providerId?: string, model?: string) {
+    const profile = providerId
+      ? this.store.getProviderProfile(providerId)
+      : this.store.getEnabledProviderProfile()
     if (!profile) {
       throw new CommandError(
         'configuration',
-        '未配置可用的模型 Provider，请先在设置中配置 API Key',
+        providerId
+          ? `未找到模型 Provider：${providerId}`
+          : '未配置可用的模型 Provider，请先在设置中配置 API Key',
+      )
+    }
+    if (!profile.enabled) {
+      throw new CommandError(
+        'configuration',
+        `模型 Provider 已禁用：${profile.name}`,
       )
     }
     const apiKey = loadSecret(profile.secretRef)
@@ -64,7 +75,14 @@ export class ChatAgent {
         'Provider 密钥缺失，请重新在设置中保存 API Key',
       )
     }
-    return { profile, apiKey }
+    const resolvedModel = model ?? profile.models[0]
+    if (!resolvedModel) {
+      throw new CommandError(
+        'configuration',
+        `Provider 未配置模型：${profile.name}`,
+      )
+    }
+    return { profile, apiKey, model: resolvedModel }
   }
 
   private requireSession(sessionId: string) {
@@ -104,13 +122,16 @@ export class ChatAgent {
   /** 同步创建 user/assistant 消息与 Run 并返回，流式在后台继续。 */
   startSend(params: ChatCommand): { messageId: string; runId: string } {
     const session = this.requireSession(params.sessionId)
-    const { profile, apiKey } = this.requireEnabledProfile()
+    const { profile, apiKey, model } = this.resolveProvider(
+      params.providerId,
+      params.model,
+    )
     this.requireIdleSession(params.sessionId)
 
     const run = this.store.createRun({
       sessionId: params.sessionId,
       providerId: profile.id,
-      model: profile.model,
+      model,
     })
     const userMessage = this.store.createMessage({
       sessionId: params.sessionId,
@@ -144,7 +165,7 @@ export class ChatAgent {
       run,
       assistantMessage,
       profileId: profile.id,
-      model: profile.model,
+      model,
       baseUrl: profile.baseUrl,
       apiKey,
       history,
@@ -172,13 +193,17 @@ export class ChatAgent {
       throw new CommandError('invalid_request', '原 Run 仍在进行中，无法重试')
     }
     this.requireSession(original.sessionId)
-    const { profile, apiKey } = this.requireEnabledProfile()
+    // 重试沿用原 Run 的 Provider/模型；旧 Run 未记录时回退到当前启用配置。
+    const { profile, apiKey, model } = this.resolveProvider(
+      original.providerId ?? undefined,
+      original.model ?? undefined,
+    )
     this.requireIdleSession(original.sessionId)
 
     const run = this.store.createRun({
       sessionId: original.sessionId,
       providerId: profile.id,
-      model: profile.model,
+      model,
       retryOfRunId: original.id,
     })
     this.store.touchSession(original.sessionId)
@@ -201,7 +226,7 @@ export class ChatAgent {
       run,
       assistantMessage,
       profileId: profile.id,
-      model: profile.model,
+      model,
       baseUrl: profile.baseUrl,
       apiKey,
       history,
@@ -315,6 +340,8 @@ export class ChatAgent {
     const code = error instanceof ProviderError ? error.code : 'internal'
     const message =
       error instanceof Error ? error.message : 'unknown provider failure'
+    // Provider/网络错误只经事件与 stderr 暴露，不进 stdout 协议通道。
+    process.stderr.write(`[runtime] run failed (${code}): ${message}\n`)
     this.store.transaction(() => {
       this.store.finalizeMessage(assistantMessage.id, accumulated, 'failed')
       this.store.finalizeRun(run.id, 'failed', code)

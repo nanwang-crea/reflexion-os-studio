@@ -37,12 +37,16 @@ Phase 1 采用 Chat-first，拆为 **1A-0 Bootstrap**、**1A-1 Chat Core**、**1
 
 ## UI 原则
 
-不做常驻 Run Inspector。MVP 主界面只常驻 Project/Session Sidebar、Chat Transcript、Composer 和 Runtime/Provider 状态，整体采用 Codex 式深色布局：左侧栏分"项目"与"对话"两个分区，主区为居中消息流和圆角 Composer。
+不做常驻 Run Inspector。MVP 主界面只常驻 Project/Session Sidebar、Chat Transcript、Composer 和 Runtime/Provider 状态，整体采用 Codex 式深色布局：左侧栏分"项目"与"对话"两个分区（新建入口在各分区标题右侧与项目行尾），主区为居中消息流和圆角 Composer。
+
+Composer 底部控制条（参照主流 Agent 形态）：左侧为权限 Profile 选择器（`workspace` 工作区读写 / `read-only` 只读，取自 Permission Model 文档命名，UI 偏好存 localStorage，工具能力上线后接入策略网关）；右侧为模型选择器（启用供应商 × 其模型列表，`message.send` 携带 `providerId`/`model`）和发送/停止按钮。
+
+设置页为"供应商列表 + 详情编辑"双栏：支持多供应商的增删改、启用/禁用、名称/Base URL/模型列表编辑；编辑时无需重输 API Key（沿用已存 `secretRef`），仅输入新 Key 时覆盖。
 
 会话分两类，入口都是直接在 Composer 输入：
 
-- **独立对话**：不关联项目；侧栏"新建对话"或未选项目时在落地页输入即创建。
-- **项目对话**：项目与本地文件夹一一对应（`tauri-plugin-dialog` 让用户选择文件夹，三平台原生对话框）；选中项目后在落地页输入即在项目内创建会话，项目节点展开显示其下会话。
+- **独立对话**：不关联项目；侧栏"对话"分区"＋"或未选项目时在落地页输入即创建。
+- **项目对话**：项目与本地文件夹一一对应（`tauri-plugin-dialog` 让用户选择文件夹，三平台原生对话框）；选中项目后在落地页输入即在项目内创建会话，项目行尾"＋"新建项目内会话，项目节点展开显示其下会话。
 
 启动页状态：`starting`、`runtime-ready`、`system-degraded`、`provider-required`、`ready`、`error`。Plan、Tool Trace、Approval、Artifact 和 Git 内容在对应阶段按需加入。
 

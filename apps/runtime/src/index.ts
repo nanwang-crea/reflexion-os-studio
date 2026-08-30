@@ -10,7 +10,7 @@ import {
   type RuntimeStatus,
 } from '@reflexion-os-studio/contracts'
 import { ChatAgent, CommandError } from './agent.js'
-import { dispatchCommand } from './handlers.js'
+import { dispatchCommand, testProviderConnection } from './handlers.js'
 import { resolveDataDir, Store } from './store.js'
 
 const RUNTIME_VERSION = '0.1.0'
@@ -113,6 +113,27 @@ function handleRequest(request: JsonRpcRequest): void {
     return
   }
 
+  if (request.method === 'provider.test') {
+    // 连接测试涉及网络等待：异步执行，完成后单独回包（JSON-RPC 不要求按序响应）。
+    void testProviderConnection(params.data as Record<string, unknown>).then(
+      (result) => sendResponse(request.id, result),
+      (error: unknown) => {
+        if (error instanceof CommandError) {
+          sendError(request.id, -32000, error.message, {
+            code: error.code,
+            message: error.message,
+          })
+          return
+        }
+        sendError(request.id, -32000, 'internal error', {
+          code: 'internal',
+          message: error instanceof Error ? error.message : String(error),
+        })
+      },
+    )
+    return
+  }
+
   try {
     const result = dispatchCommand(
       request.method,
@@ -122,15 +143,23 @@ function handleRequest(request: JsonRpcRequest): void {
     sendResponse(request.id, result)
   } catch (error) {
     if (error instanceof CommandError) {
+      // 业务错误同步落 stderr，便于从终端排障；stdout 仍只传协议。
+      process.stderr.write(
+        `[runtime] ${request.method} failed (${error.code}): ${error.message}\n`,
+      )
       sendError(request.id, -32000, error.message, {
         code: error.code,
         message: error.message,
       })
       return
     }
+    const detail = error instanceof Error ? error.message : String(error)
+    process.stderr.write(
+      `[runtime] ${request.method} internal error: ${detail}\n`,
+    )
     sendError(request.id, -32000, 'internal error', {
       code: 'internal',
-      message: error instanceof Error ? error.message : String(error),
+      message: detail,
     })
   }
 }

@@ -33,12 +33,22 @@ interface PendingRequest {
   timer: ReturnType<typeof setTimeout>
 }
 
+/** 响应先于 invoke 回执到达时的暂存条目。 */
+interface EarlyResponse {
+  result?: unknown
+  error?: JsonRpcErrorDetail
+  receivedAt: number
+}
+
+const EARLY_RESPONSE_TTL_MS = 15_000
+
 /**
  * 前端访问 Runtime 的唯一 typed 通道。
  * 响应按 JSON-RPC id 关联（Host 只负责透传），事件按通知分发。
  */
 export class RuntimeTransport {
   private readonly pending = new Map<number, PendingRequest>()
+  private readonly earlyResponses = new Map<number, EarlyResponse>()
   private readonly eventHandlers = new Set<(event: RuntimeEvent) => void>()
   private unlisten?: () => void
   private queuedMessages: TransportSidecarMessage[] = []
@@ -70,6 +80,7 @@ export class RuntimeTransport {
       pending.reject(new TransportError('transport disposed'))
     }
     this.pending.clear()
+    this.earlyResponses.clear()
     this.eventHandlers.clear()
   }
 
@@ -89,6 +100,18 @@ export class RuntimeTransport {
       method,
       params: params ?? {},
     })
+    // invoke 回执可能晚于响应事件到达 webview（宿主与 Runtime 往返竞态）：
+    // 若响应已先到，立即补交，避免伪超时。
+    const early = this.earlyResponses.get(id)
+    if (early) {
+      this.earlyResponses.delete(id)
+      if (early.error) {
+        return Promise.reject(
+          new TransportError(early.error.message, early.error),
+        )
+      }
+      return Promise.resolve(early.result as R)
+    }
     return new Promise<R>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id)
@@ -119,7 +142,21 @@ export class RuntimeTransport {
 
     if (typeof message.id === 'number' && !('method' in message)) {
       const pending = this.pending.get(message.id)
-      if (!pending) return
+      if (!pending) {
+        // 响应先于 invoke 回执到达：暂存等 request() 注册后补交。
+        const now = Date.now()
+        for (const [key, value] of this.earlyResponses) {
+          if (now - value.receivedAt > EARLY_RESPONSE_TTL_MS) {
+            this.earlyResponses.delete(key)
+          }
+        }
+        this.earlyResponses.set(message.id, {
+          result: message.result,
+          error: message.error as JsonRpcErrorDetail | undefined,
+          receivedAt: now,
+        })
+        return
+      }
       this.pending.delete(message.id)
       clearTimeout(pending.timer)
       if (message.error) {

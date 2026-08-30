@@ -45,6 +45,11 @@ fn update_state(
     next: &str,
     detail: Option<String>,
 ) {
+    // 失败详情此前只发前端，排障时终端里毫无线索；这里同步落一份到 stderr。
+    match &detail {
+        Some(text) => eprintln!("[host] state -> {next}: {text}"),
+        None => eprintln!("[host] state -> {next}"),
+    }
     let snapshot = {
         let Ok(mut snapshot) = state.snapshot.lock() else {
             return;
@@ -300,7 +305,7 @@ fn runtime_request(
     method: String,
     params: serde_json::Value,
 ) -> Result<u64, String> {
-    const RUNTIME_METHODS: [&str; 11] = [
+    const RUNTIME_METHODS: [&str; 13] = [
         "runtime.get_status",
         "project.list",
         "project.create",
@@ -312,9 +317,24 @@ fn runtime_request(
         "run.retry",
         "provider.list",
         "provider.configure",
+        "provider.delete",
+        "provider.test",
     ];
     if !RUNTIME_METHODS.contains(&method.as_str()) {
         return Err(format!("method not allowed: {method}"));
+    }
+    // webview 可能早于 setup 完成 invoke；sidecar 尚未就绪时短暂等待而不是立刻失败。
+    for _ in 0..20 {
+        {
+            let guard = state
+                .runtime
+                .lock()
+                .map_err(|_| "runtime process lock poisoned".to_string())?;
+            if guard.is_some() {
+                break;
+            }
+        }
+        std::thread::sleep(Duration::from_millis(100));
     }
     let mut guard = state
         .runtime

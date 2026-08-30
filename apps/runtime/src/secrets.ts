@@ -41,3 +41,11 @@ export function saveSecret(value: string): string {
 export function loadSecret(secretRef: string): string | undefined {
   return readSecrets()[secretRef]
 }
+
+/** 删除指定引用的密钥；引用不存在时静默成功。 */
+export function deleteSecret(secretRef: string): void {
+  const secrets = readSecrets()
+  if (!(secretRef in secrets)) return
+  delete secrets[secretRef]
+  writeSecrets(secrets)
+}

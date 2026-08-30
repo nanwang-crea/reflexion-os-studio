@@ -195,11 +195,71 @@ try {
     requestId: randomUUID(),
     name: 'mock',
     baseUrl,
-    model: 'mock-model',
+    models: ['mock-model'],
     secret: 'sk-mock',
     enabled: true,
   })
   console.log('PASS provider.configure')
+
+  const second = await request(12, 'provider.configure', {
+    requestId: randomUUID(),
+    name: 'mock-two',
+    baseUrl,
+    models: ['mock-model', 'spare-model'],
+    secret: 'sk-mock-2',
+    enabled: false,
+  })
+  check(
+    'provider saves multiple models',
+    second.profile.models.join(',') === 'mock-model,spare-model',
+  )
+  const renamed = await request(13, 'provider.configure', {
+    requestId: randomUUID(),
+    id: second.profile.id,
+    name: 'mock-two-renamed',
+    baseUrl,
+    models: ['mock-model'],
+    secretRef: second.profile.secretRef,
+    enabled: false,
+  })
+  check(
+    'provider editable without re-entering secret',
+    renamed.profile.name === 'mock-two-renamed' &&
+      renamed.profile.secretRef === second.profile.secretRef,
+  )
+  const removed = await request(14, 'provider.delete', {
+    requestId: randomUUID(),
+    id: second.profile.id,
+  })
+  check('provider.delete removes profile', removed.removed === true)
+  const afterDelete = await request(15, 'provider.list', {
+    requestId: randomUUID(),
+  })
+  check(
+    'deleted provider gone from list',
+    !afterDelete.profiles.some((profile) => profile.id === second.profile.id),
+  )
+  const testOk = await request(16, 'provider.test', {
+    requestId: randomUUID(),
+    baseUrl,
+    model: 'mock-model',
+    secret: 'sk-mock',
+  })
+  check(
+    'provider.test succeeds against mock provider',
+    testOk.ok === true && testOk.error === null && testOk.latencyMs >= 0,
+  )
+  const testBad = await request(17, 'provider.test', {
+    requestId: randomUUID(),
+    baseUrl,
+    model: 'unknown-model',
+    secret: 'sk-mock',
+  })
+  check(
+    'provider.test surfaces provider error verbatim',
+    testBad.ok === false && (testBad.error ?? '').includes('404'),
+    `error=${JSON.stringify(testBad.error)}`,
+  )
 
   const projectDir = join(dataDir, 'smoke-project')
   const { project } = await request(2, 'project.create', {
