@@ -117,6 +117,8 @@ export const RunSchema = z.object({
   agentId: z.string().min(1).nullable(),
   parentRunId: z.string().min(1).nullable(),
   delegationId: z.string().min(1).nullable(),
+  // 本次 Run 激活的 Skill（斜杠命令或显式传入）；未激活为 null。
+  skillId: z.string().min(1).nullable(),
 })
 export type Run = z.infer<typeof RunSchema>
 
@@ -151,7 +153,13 @@ export type ToolCall = z.infer<typeof ToolCallSchema>
 export const ToolOperationSchema = z.enum([
   'file.read',
   'file.list',
+  'file.glob',
+  'file.grep',
   'file.write',
+  'file.edit',
+  'file.delete',
+  'file.move',
+  'file.mkdir',
   'shell.execute',
 ])
 export type ToolOperation = z.infer<typeof ToolOperationSchema>
@@ -164,6 +172,23 @@ export const ToolSpecSchema = z.object({
   parameters: JsonValueSchema,
 })
 export type ToolSpec = z.infer<typeof ToolSpecSchema>
+
+/**
+ * Skill manifest（元数据，不含 instructions 正文）。
+ * Phase 1A 只允许内置 Skill；第三方安装/启停/Registry 属 Phase 2。
+ * tools 为该 Skill 约定使用的工具名（信息性；实际可用性仍由 Run 装配与权限策略决定）。
+ */
+export const SkillManifestSchema = z.object({
+  // 稳定引用：斜杠命令与 skill.use 都用它；小写字母/数字/连字符。
+  id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+  name: z.string().min(1),
+  version: z.string().min(1),
+  description: z.string().min(1),
+  tools: z.array(z.string().min(1)),
+  // 斜杠命令的参数占位提示；无参技能为 null。
+  argumentHint: z.string().min(1).nullable(),
+})
+export type SkillManifest = z.infer<typeof SkillManifestSchema>
 
 export const ProviderCapabilitySchema = z.enum([
   'chat',

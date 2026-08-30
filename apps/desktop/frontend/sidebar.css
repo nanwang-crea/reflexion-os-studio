@@ -1,50 +1,105 @@
-/* ---------- 侧边栏 ---------- */
+/* ---------- 单列侧边栏（桌面版 Codex 式：品牌 → 搜索 → 列表 → 底部导航） ---------- */
 
 .sidebar {
-  width: 264px;
+  width: 272px;
   flex-shrink: 0;
   background: var(--bg-sidebar);
+  border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 10px;
+  min-height: 0;
 }
 
-.sidebar-brand {
+/* 收起时仍保持挂载（保留过滤状态），仅隐藏。 */
+.sidebar-hidden {
+  display: none;
+}
+
+/* ---------- 顶部：品牌 + 新建对话 ---------- */
+
+.sidebar-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 2px 8px;
-  font-weight: 600;
-  font-size: 13px;
+  padding: 12px 10px 8px;
+  flex-shrink: 0;
 }
 
 .brand-mark {
-  width: 14px;
-  height: 14px;
-  border-radius: 4px;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
   background: linear-gradient(135deg, #60a5fa, #a78bfa);
+  color: #0c1828;
+  font-weight: 700;
+  font-size: 13px;
+  display: grid;
+  place-items: center;
   flex-shrink: 0;
 }
 
-.new-chat-btn {
+.brand-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- 主体：搜索 + 滚动列表 ---------- */
+
+.chats-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 8px;
+}
+
+.panel-search {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 12px;
+  gap: 7px;
+  margin: 0 4px 10px;
+  padding: 0 10px;
+  height: 32px;
+  background: var(--bg-inset);
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.panel-search:focus-within {
+  border-color: var(--border);
+}
+
+.panel-search input {
+  flex: 1;
+  min-width: 0;
   background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: none;
   color: var(--text);
   font-size: 13px;
 }
 
-.new-chat-btn:hover:not(:disabled) {
-  background: var(--bg-hover);
+.panel-search input:focus-visible {
+  outline: none;
 }
 
-/* ChatGPT 式：行整体高亮，行尾操作按钮仅在悬停/激活时出现 */
+.panel-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* 行整体高亮，行尾操作按钮仅在悬停/激活时出现 */
 .project-row,
 .session-row {
   display: flex;
@@ -159,15 +214,6 @@
   color: var(--text);
 }
 
-.sidebar-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
 .section-head {
   display: flex;
   align-items: center;
@@ -252,23 +298,44 @@
   line-height: 1.5;
 }
 
-/* ---------- 侧边栏底部入口（记忆 / 设置，ChatGPT 式） ---------- */
+/* ---------- 底部导航：技能 / 自动化 / 记忆 / 设置 ---------- */
 
-.sidebar-footer {
+.sidebar-nav {
   flex-shrink: 0;
-  border-top: 1px solid var(--border-subtle);
-  padding-top: 8px;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  padding: 8px;
+  border-top: 1px solid var(--border-subtle);
 }
 
-.sidebar-footer .row svg {
-  flex-shrink: 0;
-  color: var(--text-muted);
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  text-align: left;
+  font-size: 13px;
 }
 
-.sidebar-footer .row:hover svg,
-.sidebar-footer .row.active svg {
+.nav-item:hover:not(:disabled) {
+  background: var(--bg-hover);
   color: var(--text);
+}
+
+.nav-item.active {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+.nav-item svg {
+  flex-shrink: 0;
+}
+
+.nav-label {
+  flex: 1;
 }

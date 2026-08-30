@@ -3,6 +3,7 @@ import type {
   ProviderProfile,
   Project,
   Session,
+  SkillManifest,
 } from '@reflexion-os-studio/runtime-client'
 import { useAppBootstrap, type BootstrapSnapshot } from './useAppBootstrap'
 import { useModelSelection } from './useModelSelection'
@@ -10,14 +11,18 @@ import { usePermissionMode } from './usePermissionMode'
 import { listProviders } from './api/providers'
 import { listProjects } from './api/projects'
 import { resolveApproval } from './api/chat'
+import { listSkills } from './api/skills'
 import { getSessionData, listSessions, type SessionData } from './api/sessions'
 import { ConfirmDialog, type ConfirmDialogState } from './ConfirmDialog'
 import { ChatView } from './ChatView'
 import { LandingView } from './LandingView'
 import { MemoryView } from './MemoryView'
 import { Sidebar } from './Sidebar'
+import { SkillsView } from './SkillsView'
+import { AutomationsView } from './AutomationsView'
 import { SettingsView } from './SettingsView'
 import { useSessionActions } from './useSessionActions'
+import { DoubleChevronIcon } from './ui/icons'
 
 const STATUS_LABELS: Record<string, string> = {
   starting: '正在启动本地 Runtime…',
@@ -29,8 +34,16 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 export default function App() {
-  const [view, setView] = useState<'chat' | 'settings' | 'memories'>('chat')
+  const [view, setView] = useState<
+    'chat' | 'settings' | 'memories' | 'skills' | 'automations'
+  >('chat')
   const [profiles, setProfiles] = useState<ProviderProfile[]>([])
+  const [skills, setSkills] = useState<SkillManifest[]>([])
+  // SkillsView 点击"在对话中使用"：记一个 nonce 触发 Composer 预填 /<skillId>。
+  const [composerPrefill, setComposerPrefill] = useState<{
+    skillId: string
+    nonce: number
+  } | null>(null)
   const [projects, setProjects] = useState<Project[]>([])
   const [projectSessions, setProjectSessions] = useState<Session[]>([])
   const [standaloneSessions, setStandaloneSessions] = useState<Session[]>([])
@@ -38,6 +51,10 @@ export default function App() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [sessionData, setSessionData] = useState<SessionData | null>(null)
   const [creatingProject, setCreatingProject] = useState(false)
+  // 侧栏开合（单栏 Codex 式）：收起时隐藏侧栏但保留挂载状态。
+  const [sidebarOpen, setSidebarOpen] = useState(
+    () => localStorage.getItem('reflexion.sidebarOpen') !== '0',
+  )
   const [notice, setNotice] = useState<string | null>(null)
   const [confirmState, setConfirmState] = useState<ConfirmDialogState | null>(
     null,
@@ -45,6 +62,10 @@ export default function App() {
   const confirmResolverRef = useRef<((ok: boolean) => void) | null>(null)
   const activeProjectRef = useRef<string | null>(null)
   const activeSessionRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    localStorage.setItem('reflexion.sidebarOpen', sidebarOpen ? '1' : '0')
+  }, [sidebarOpen])
 
   const { permissionMode, changePermissionMode } = usePermissionMode()
   const { modelOptions, selectedModelKey, setSelectedModelKey } =
@@ -213,8 +234,16 @@ export default function App() {
   const hasEnabledProvider = profiles.some((profile) => profile.enabled)
   const statusLabel = bootstrap
     ? (STATUS_LABELS[bootstrap.state] ?? bootstrap.state)
-    : '正在启动…'
+    : '启动中…'
   const runtimeReady = bootstrap?.runtimeReady ?? false
+
+  // 技能清单是内置静态数据，runtime 一就绪就拉一次；失败不阻塞聊天。
+  useEffect(() => {
+    if (!runtimeReady) return
+    listSkills()
+      .then((result) => setSkills(result.skills))
+      .catch(() => {})
+  }, [runtimeReady])
 
   const activeProject =
     projects.find((project) => project.id === activeProjectId) ?? null
@@ -223,11 +252,15 @@ export default function App() {
       ? '设置'
       : view === 'memories'
         ? '记忆'
-        : activeSessionId
-          ? (sessionData?.session?.title ?? '对话')
-          : activeProject
-            ? activeProject.name
-            : '新对话'
+        : view === 'skills'
+          ? '技能'
+          : view === 'automations'
+            ? '自动化'
+            : activeSessionId
+              ? (sessionData?.session?.title ?? '对话')
+              : activeProject
+                ? activeProject.name
+                : '新对话'
 
   if (!runtimeReady) {
     return (
@@ -242,6 +275,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <Sidebar
+        open={sidebarOpen}
         projects={projects}
         projectSessions={projectSessions}
         standaloneSessions={standaloneSessions}
@@ -258,15 +292,22 @@ export default function App() {
         onDeleteProject={deleteProject}
         onRenameSession={renameSession}
         onDeleteSession={deleteSession}
-        onOpenSettings={() => {
-          setView(view === 'settings' ? 'chat' : 'settings')
-        }}
-        onOpenMemories={() => {
-          setView(view === 'memories' ? 'chat' : 'memories')
+        onSelectView={(nextView) => {
+          // 底部导航：打开对应页面；点已激活项回到聊天。
+          setView((current) => (current === nextView ? 'chat' : nextView))
         }}
       />
       <div className="main-pane">
         <header className="topbar">
+          <button
+            type="button"
+            className="topbar-toggle"
+            title={sidebarOpen ? '收起侧边栏' : '展开侧边栏'}
+            aria-label={sidebarOpen ? '收起侧边栏' : '展开侧边栏'}
+            onClick={() => setSidebarOpen((open) => !open)}
+          >
+            <DoubleChevronIcon direction={sidebarOpen ? 'left' : 'right'} />
+          </button>
           <span className="topbar-title">{contextTitle}</span>
           <span className="spacer" />
           {memoryNotice && (
@@ -290,6 +331,19 @@ export default function App() {
           <SettingsView profiles={profiles} onSaved={() => refreshProfiles()} />
         ) : view === 'memories' ? (
           <MemoryView confirm={confirm} />
+        ) : view === 'skills' ? (
+          <SkillsView
+            onUseSkill={(skillId, sessionId) => {
+              setActiveProjectId(null)
+              setActiveSessionId(sessionId)
+              void refreshSessionData(sessionId)
+              void refreshStandaloneSessions()
+              setComposerPrefill({ skillId, nonce: Date.now() })
+              setView('chat')
+            }}
+          />
+        ) : view === 'automations' ? (
+          <AutomationsView />
         ) : activeSessionId ? (
           <ChatView
             sessionData={sessionData}
@@ -301,6 +355,9 @@ export default function App() {
             modelOptions={modelOptions}
             selectedModelKey={selectedModelKey}
             onModelChange={setSelectedModelKey}
+            skills={skills}
+            composerPrefill={composerPrefill}
+            onPrefillConsumed={() => setComposerPrefill(null)}
             onSend={sendMessage}
             onStop={stopRun}
             onRetry={retryRun}
@@ -320,6 +377,8 @@ export default function App() {
             modelOptions={modelOptions}
             selectedModelKey={selectedModelKey}
             onModelChange={setSelectedModelKey}
+            composerPrefill={composerPrefill}
+            onPrefillConsumed={() => setComposerPrefill(null)}
             onSend={sendMessage}
             onSelectSession={openSession}
             onRenameSession={renameSession}

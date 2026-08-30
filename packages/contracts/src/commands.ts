@@ -9,6 +9,7 @@ import {
   ProjectSchema,
   RunSchema,
   SessionSchema,
+  SkillManifestSchema,
   ToolCallSchema,
 } from './entities.js'
 import { RuntimeStatusSchema } from './handshake.js'
@@ -25,6 +26,8 @@ export const MessageSendParamsSchema = z.object({
   model: z.string().min(1).optional(),
   // 本次会话执行的工具权限 Profile；缺省 workspace。
   permissionMode: z.enum(['workspace', 'read-only']).optional(),
+  // 显式激活的 Skill；内容以 /<skillId> 开头时也可隐式激活（显式优先）。
+  skillId: z.string().min(1).optional(),
 })
 export type ChatCommand = z.infer<typeof MessageSendParamsSchema>
 
@@ -212,6 +215,11 @@ export const CommandSchemaRegistry = {
       id: z.string().min(1),
     }),
     result: z.object({ removed: z.boolean() }),
+  },
+  'skill.list': {
+    // 内置 Skill 清单（Phase 1A 无安装/启停，列表即全部可用项）。
+    params: z.object({ requestId: RequestIdSchema }),
+    result: z.object({ skills: z.array(SkillManifestSchema) }),
   },
 } satisfies Record<string, { params: z.ZodType; result: z.ZodType }>
 

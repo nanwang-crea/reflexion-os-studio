@@ -13,6 +13,7 @@ import {
   type CommandResult,
 } from './command-utils.js'
 import { memoryCommandHandlers } from './handlers-memory.js'
+import { builtinSkills } from './skills/index.js'
 
 /**
  * 已通过 contracts schema 校验的命令分发。
@@ -207,6 +208,7 @@ const handlers: Record<string, CommandHandler> = {
     deleteSecret(profile.secretRef)
     return { removed }
   },
+  'skill.list': () => ({ skills: builtinSkills.list() }),
 }
 
 Object.assign(handlers, memoryCommandHandlers)

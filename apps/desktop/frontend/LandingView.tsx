@@ -13,6 +13,8 @@ interface LandingViewProps {
   modelOptions: ComposerModelOption[]
   selectedModelKey: string | null
   onModelChange: (key: string) => void
+  composerPrefill?: { skillId: string; nonce: number } | null
+  onPrefillConsumed?: () => void
   onSend: (content: string) => Promise<void>
   onSelectSession: (sessionId: string) => void
   onRenameSession: (sessionId: string, title: string) => Promise<void>
@@ -88,6 +90,7 @@ export function LandingView(props: LandingViewProps): React.JSX.Element {
             modelOptions={props.modelOptions}
             selectedModelKey={props.selectedModelKey}
             onModelChange={props.onModelChange}
+            prefill={props.composerPrefill ?? null}
             onSend={props.onSend}
           />
         </div>

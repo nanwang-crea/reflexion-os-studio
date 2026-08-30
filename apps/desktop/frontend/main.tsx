@@ -5,6 +5,7 @@ import './sidebar.css'
 import './chat.css'
 import './settings.css'
 import './memory.css'
+import './skills.css'
 
 const rootElement = document.getElementById('root')
 if (!rootElement) throw new Error('#root not found')

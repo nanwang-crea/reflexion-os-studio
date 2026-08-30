@@ -7,6 +7,13 @@ import type {
 } from '@reflexion-os-studio/contracts'
 import { RunEventEmitter, type EventNotifier } from '../events.js'
 import { loadSecret } from '../secrets.js'
+import {
+  activeSkillPromptSection,
+  builtinSkills,
+  resolveInvocation,
+  skillsPromptSection,
+} from '../skills/index.js'
+import type { SkillDefinition } from '../skills/index.js'
 import { DEFAULT_SESSION_TITLE, type Store } from '../store/index.js'
 import type { SystemRuntimeClient } from '../system.js'
 import { ContextBuilder, type ProviderRuntimeConfig } from './context.js'
@@ -15,7 +22,7 @@ import { MemoryService } from './memory/service.js'
 import { ApprovalGateway, PermissionGate } from './permissions.js'
 import { PRIMARY_AGENT_SYSTEM_PROMPT } from './prompts/index.js'
 import { RunRunner } from './runner.js'
-import { createToolRegistry } from './tools.js'
+import { createToolRegistry } from './tools/index.js'
 import { deriveSessionTitle } from './title.js'
 
 export { CommandError } from './errors.js'
@@ -105,6 +112,11 @@ export class ChatAgent {
   /** 同步创建 user/assistant 消息与 Run 并返回；工具循环在后台继续。 */
   startSend(params: ChatCommand): { messageId: string; runId: string } {
     const session = this.requireSession(params.sessionId)
+    // Skill 激活先于 Provider 解析：参数写错立刻反馈，不与配置错误混淆。
+    const { skill } = this.resolveSkillInvocation(
+      params.content,
+      params.skillId,
+    )
     const { profile, apiKey, model } = this.resolveProvider(
       params.providerId,
       params.model,
@@ -115,6 +127,7 @@ export class ChatAgent {
       sessionId: params.sessionId,
       providerId: profile.id,
       model,
+      skillId: skill?.manifest.id ?? null,
     })
     const userMessage = this.store.messages.create({
       sessionId: params.sessionId,
@@ -141,6 +154,7 @@ export class ChatAgent {
       apiKey,
       model,
       permissionMode: params.permissionMode,
+      skill,
       assistantMessage,
       emitter,
     })
@@ -165,7 +179,7 @@ export class ChatAgent {
       throw new CommandError('invalid_request', '原 Run 仍在进行中，无法重试')
     }
     const originalSession = this.requireSession(original.sessionId)
-    // 重试沿用原 Run 的 Provider/模型；旧 Run 未记录时回退到当前启用配置。
+    // 重试沿用原 Run 的 Provider/模型/Skill；旧 Run 未记录时回退到当前启用配置。
     const { profile, apiKey, model } = this.resolveProvider(
       original.providerId ?? undefined,
       original.model ?? undefined,
@@ -177,6 +191,7 @@ export class ChatAgent {
       providerId: profile.id,
       model,
       retryOfRunId: original.id,
+      skillId: original.skillId,
     })
     this.store.sessions.touch(original.sessionId)
     const assistantMessage = this.createAssistantMessage(
@@ -194,6 +209,8 @@ export class ChatAgent {
       apiKey,
       model,
       permissionMode: undefined,
+      skill:
+        original.skillId === null ? null : builtinSkills.get(original.skillId),
       assistantMessage,
       emitter,
     })
@@ -232,6 +249,7 @@ export class ChatAgent {
     apiKey: string
     model: string
     permissionMode: ChatCommand['permissionMode']
+    skill: SkillDefinition | null
     assistantMessage: Message
     emitter: RunEventEmitter
   }): void {
@@ -249,6 +267,7 @@ export class ChatAgent {
     const registry = createToolRegistry({
       system: this.system,
       workspaceRoot,
+      skills: builtinSkills,
     })
     const gate = new PermissionGate(
       input.permissionMode ?? 'workspace',
@@ -261,7 +280,7 @@ export class ChatAgent {
         buildHistory: (signal) =>
           this.contextBuilder.build(
             sessionId,
-            PRIMARY_AGENT_SYSTEM_PROMPT,
+            this.composeSystemPrompt(input.skill),
             provider,
             signal,
           ),
@@ -278,6 +297,27 @@ export class ChatAgent {
       .finally(() => {
         this.streams.delete(run.id)
       })
+  }
+
+  /** system prompt = 主 prompt + 可用 Skills 清单 +（可选）本次激活技能的完整说明。 */
+  private composeSystemPrompt(skill: SkillDefinition | null): string {
+    const base = `${PRIMARY_AGENT_SYSTEM_PROMPT}${skillsPromptSection(builtinSkills.list())}`
+    return skill === null ? base : `${base}${activeSkillPromptSection(skill)}`
+  }
+
+  /** 消息发送的 Skill 激活解析；显式 skillId 未知视为 invalid_request。 */
+  private resolveSkillInvocation(
+    content: string,
+    explicitSkillId: string | undefined,
+  ): ReturnType<typeof resolveInvocation> {
+    try {
+      return resolveInvocation(content, explicitSkillId, builtinSkills)
+    } catch (error) {
+      throw new CommandError(
+        'invalid_request',
+        error instanceof Error ? error.message : String(error),
+      )
+    }
   }
 
   /** 会话的工作区根：项目 folderPath；独立会话/空路径返回 null（工具被拒绝）。 */

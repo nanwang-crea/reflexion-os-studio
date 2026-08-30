@@ -375,7 +375,7 @@ function parseToolArgs(arguments_: string): JsonValue {
   }
 }
 
-/** 审批卡摘要：文件操作显示路径，shell 显示命令，其余回退到参数 JSON。 */
+/** 审批卡摘要：文件操作显示路径，move 显示 from→to，shell 显示命令，其余回退到参数 JSON。 */
 function summarizeArgs(toolName: string, args: JsonValue): string {
   const record =
     typeof args === 'object' && args !== null && !Array.isArray(args)
@@ -383,6 +383,9 @@ function summarizeArgs(toolName: string, args: JsonValue): string {
       : undefined
   if (record !== undefined) {
     if (typeof record.path === 'string') return `${toolName}: ${record.path}`
+    if (typeof record.from === 'string' && typeof record.to === 'string') {
+      return `${toolName}: ${record.from} → ${record.to}`
+    }
     if (typeof record.command === 'string')
       return `${toolName}: ${record.command}`
   }

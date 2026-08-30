@@ -6,11 +6,11 @@ Phase 1 采用主流桌面 Agent 的简单模型：**Permission Profile + Chat A
 
 ### `read-only`
 
-允许 `file.read`、`file.list`，禁止写入和 Shell。
+允许 `file.read`、`file.list`、`file.glob`、`file.grep`，禁止一切写类操作和 Shell。
 
 ### `workspace`
 
-允许在当前 Workspace 内读取、写入、列目录和执行 Shell。Shell 的 cwd 必须位于 Workspace；危险命令仍按操作策略请求审批。`workspace` 是默认推荐 Profile。
+允许在当前 Workspace 内读取、搜索（glob/grep）、写入/编辑/删除/移动/建目录和执行 Shell。Shell 的 cwd 必须位于 Workspace；危险命令仍按操作策略请求审批。`workspace` 是默认推荐 Profile。
 
 不在 Phase 1 提供 `full-access` Profile。
 
@@ -34,7 +34,17 @@ interface ApprovalGrant {
   grantId: string
   requestId: string
   workspaceId: string
-  operation: 'file.read' | 'file.write' | 'shell.execute'
+  operation:
+    | 'file.read'
+    | 'file.list'
+    | 'file.glob'
+    | 'file.grep'
+    | 'file.write'
+    | 'file.edit'
+    | 'file.delete'
+    | 'file.move'
+    | 'file.mkdir'
+    | 'shell.execute'
   scope: 'once' | 'session'
   expiresAt: string
 }
@@ -58,9 +68,9 @@ Phase 1 的 Rust 是应用级执行边界，不承诺跨平台完整 OS Sandbox�
 
 ## Agent 可见能力
 
-Phase 1 Agent Tool 只有 `file.read`、`file.write`、`file.list`、`shell.execute`。`process.spawn` 是 Rust 内部实现细节，不作为独立 Agent Tool 或独立审批项。
+Phase 1 Agent Tool：只读类 `file.read`、`file.list`、`file.glob`、`file.grep`；写类 `file.write`、`file.edit`、`file.delete`、`file.move`、`file.mkdir`；执行类 `shell.execute`。另有不依赖 Workspace 的纯工具 `get_current_time`、`web.fetch`（只读网络抓取，无本地副作用，不进入审批维度）。`process.spawn` 是 Rust 内部实现细节，不作为独立 Agent Tool 或独立审批项。
 
-浏览器、网络域名、脚本、下载、剪贴板、Asset 导出和系统应用打开不属于 Phase 1A；Phase 1B 仅在需要系统浏览器打开时增加明确的 `resource.open.external`。
+浏览器、网络域名策略、脚本、下载、剪贴板、Asset 导出和系统应用打开不属于 Phase 1A；Phase 1B 仅在需要系统浏览器打开时增加明确的 `resource.open.external`。
 
 ## 审计
 

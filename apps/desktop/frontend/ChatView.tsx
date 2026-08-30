@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ToolCall } from '@reflexion-os-studio/runtime-client'
+import type {
+  SkillManifest,
+  ToolCall,
+} from '@reflexion-os-studio/runtime-client'
 import { Composer, type ComposerModelOption } from './Composer'
 import { ArrowDownIcon, SparkIcon } from './ui/icons'
 import { ApprovalCard } from './chat/ApprovalCard'
@@ -17,6 +20,9 @@ interface ChatViewProps {
   modelOptions: ComposerModelOption[]
   selectedModelKey: string | null
   onModelChange: (key: string) => void
+  skills: SkillManifest[]
+  composerPrefill?: { skillId: string; nonce: number } | null
+  onPrefillConsumed?: () => void
   onSend: (content: string) => Promise<void>
   onStop: () => Promise<void>
   onRetry: () => Promise<void>
@@ -191,7 +197,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
               ? '正在回复，可点击右侧停止…'
               : !props.hasEnabledProvider
                 ? '请先在设置中配置 API Key…'
-                : '输入消息，Enter 发送'
+                : '输入消息，Enter 发送；/ 使用技能'
           }
           disabled={!props.hasEnabledProvider}
           busy={runActive}
@@ -200,6 +206,8 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
           modelOptions={props.modelOptions}
           selectedModelKey={props.selectedModelKey}
           onModelChange={props.onModelChange}
+          skills={props.skills}
+          prefill={props.composerPrefill ?? null}
           onSend={props.onSend}
           onStop={props.onStop}
         />

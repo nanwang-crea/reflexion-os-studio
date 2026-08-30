@@ -25,6 +25,7 @@ export class RunStore {
     agentId?: string | null
     parentRunId?: string | null
     delegationId?: string | null
+    skillId?: string | null
   }): Run {
     const run: Run = {
       id: randomUUID(),
@@ -39,10 +40,11 @@ export class RunStore {
       agentId: input.agentId ?? null,
       parentRunId: input.parentRunId ?? null,
       delegationId: input.delegationId ?? null,
+      skillId: input.skillId ?? null,
     }
     this.db
       .prepare(
-        'INSERT INTO runs (id, session_id, status, provider_id, model, started_at, completed_at, error_code, retry_of_run_id, agent_id, parent_run_id, delegation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO runs (id, session_id, status, provider_id, model, started_at, completed_at, error_code, retry_of_run_id, agent_id, parent_run_id, delegation_id, skill_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .run(
         run.id,
@@ -57,6 +59,7 @@ export class RunStore {
         run.agentId,
         run.parentRunId,
         run.delegationId,
+        run.skillId,
       )
     return run
   }
@@ -122,6 +125,7 @@ export class RunStore {
       parentRunId: row.parent_run_id == null ? null : String(row.parent_run_id),
       delegationId:
         row.delegation_id == null ? null : String(row.delegation_id),
+      skillId: row.skill_id == null ? null : String(row.skill_id),
     }
   }
 }

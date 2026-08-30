@@ -45,11 +45,14 @@ fn resolve_with_symlink_boundary(root: &Path, target: &Path) -> Result<PathBuf, 
             let canonical = dir
                 .canonicalize()
                 .map_err(|error| format!("path resolve failed: {error}"))?;
-            ensure_inside(root, canonical)?;
+            let canonical = ensure_inside(root, canonical)?;
             let tail = target
                 .strip_prefix(dir)
                 .map_err(|error| format!("invalid path: {error}"))?;
-            return Ok(root.join(tail));
+            // 拼回 canonical 化后的祖先，而不是 workspace 根：
+            // 根下更深的已存在目录（如 a/）不能被拍平，否则 `a/b/c.txt`
+            // 会被解析成根下的 `b/c.txt`。
+            return Ok(canonical.join(tail));
         }
         ancestor = dir.parent();
     }
@@ -137,6 +140,16 @@ mod tests {
             resolve_in_workspace(&root, "a/b/c.txt").expect("deep new path should resolve");
         assert!(resolved.starts_with(root.canonicalize().unwrap()));
         assert!(resolved.ends_with("c.txt"));
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn keeps_intermediate_segments_when_deeper_ancestor_exists() {
+        let root = temp_workspace("deep-ancestor");
+        fs::create_dir_all(root.join("a")).unwrap();
+        fs::write(root.join("a/dup.txt"), "x").unwrap();
+        let resolved = resolve_in_workspace(&root, "a/b/c.txt").expect("path under existing dir");
+        assert_eq!(resolved, root.canonicalize().unwrap().join("a/b/c.txt"));
         fs::remove_dir_all(&root).ok();
     }
 }

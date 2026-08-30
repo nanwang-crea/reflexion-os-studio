@@ -7,6 +7,7 @@ import {
   ProviderProfileSchema,
   RunSchema,
   SessionSchema,
+  SkillManifestSchema,
   ToolCallSchema,
   ToolSpecSchema,
 } from './entities.js'
@@ -27,6 +28,7 @@ export const jsonSchemas: Readonly<Record<string, unknown>> = Object.freeze(
     toJSONSchema('Run', RunSchema),
     toJSONSchema('ToolCall', ToolCallSchema),
     toJSONSchema('ToolSpec', ToolSpecSchema),
+    toJSONSchema('SkillManifest', SkillManifestSchema),
     toJSONSchema('Memory', MemorySchema),
     toJSONSchema('ProviderProfile', ProviderProfileSchema),
     toJSONSchema('RuntimeError', RuntimeErrorSchema),

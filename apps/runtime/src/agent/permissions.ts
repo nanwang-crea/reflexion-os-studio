@@ -7,14 +7,26 @@ export type PermissionMode = 'workspace' | 'read-only'
 const WORKSPACE_POLICY: Record<ToolOperation, DecisionMode> = {
   'file.read': 'automatic',
   'file.list': 'automatic',
+  'file.glob': 'automatic',
+  'file.grep': 'automatic',
   'file.write': 'ask',
+  'file.edit': 'ask',
+  'file.delete': 'ask',
+  'file.move': 'ask',
+  'file.mkdir': 'ask',
   'shell.execute': 'ask',
 }
 
 const READ_ONLY_POLICY: Record<ToolOperation, DecisionMode> = {
   'file.read': 'automatic',
   'file.list': 'automatic',
+  'file.glob': 'automatic',
+  'file.grep': 'automatic',
   'file.write': 'denied',
+  'file.edit': 'denied',
+  'file.delete': 'denied',
+  'file.move': 'denied',
+  'file.mkdir': 'denied',
   'shell.execute': 'denied',
 }
 

@@ -1,16 +1,25 @@
+import { useMemo, useState } from 'react'
 import type { Project, Session } from '@reflexion-os-studio/runtime-client'
 import { SessionRow } from './SessionRow'
 import {
   ArchiveIcon,
-  FolderIcon,
+  BoxIcon,
   GearIcon,
   PlusIcon,
+  SearchIcon,
+  SparkIcon,
   TrashIcon,
 } from './ui/icons'
 
-export type AppView = 'chat' | 'settings' | 'memories'
+export type AppView =
+  'chat' | 'settings' | 'memories' | 'skills' | 'automations'
+
+/** 底部导航可打开的页面（chat 由会话行/新建入口进入，不进底部导航）。 */
+type OtherView = Exclude<AppView, 'chat'>
 
 interface SidebarProps {
+  /** 收起时仍保持挂载（保留搜索过滤等状态），仅隐藏。 */
+  open: boolean
   projects: Project[]
   /** 激活项目下的会话；仅当项目展开时展示。 */
   projectSessions: Session[]
@@ -19,8 +28,10 @@ interface SidebarProps {
   activeProjectId: string | null
   activeSessionId: string | null
   creatingProject: boolean
-  /** 当前主视图；底部入口据此高亮。 */
+  /** 当前主视图；底部导航据此高亮。 */
   view: AppView
+  /** 底部导航切换；点击已激活页回到聊天。 */
+  onSelectView: (view: OtherView) => void
   onSelectProject: (projectId: string) => void
   onSelectSession: (sessionId: string) => void
   onSelectStandaloneSession: (sessionId: string) => void
@@ -31,11 +42,9 @@ interface SidebarProps {
   onDeleteProject: (projectId: string) => Promise<void>
   onRenameSession: (sessionId: string, title: string) => Promise<void>
   onDeleteSession: (sessionId: string) => Promise<void>
-  onOpenSettings: () => void
-  onOpenMemories: () => void
 }
 
-/** ChatGPT 式时间分组：今天 / 昨天 / 7 天内 / 30 天内 / 更早。 */
+/** Codex 式时间分组：今天 / 昨天 / 7 天内 / 30 天内 / 更早。 */
 function timeBucket(iso: string): string {
   const time = Date.parse(iso)
   if (Number.isNaN(time)) return '更早'
@@ -66,15 +75,172 @@ function groupByTime(sessions: Session[]): [string, Session[]][] {
   ])
 }
 
+/**
+ * 桌面版 Codex 式单列侧栏：顶部品牌 + 新建对话，搜索框，
+ * 下方项目/对话分组列表，底部导航进技能/自动化/记忆/设置。
+ * 点底部导航打开对应主区页面；点已激活项回到聊天（与旧图标轨行为一致）。
+ */
 export function Sidebar(props: SidebarProps): React.JSX.Element {
   return (
-    <aside className="sidebar">
-      <div className="sidebar-brand">
-        <span className="brand-mark" />
-        <span className="brand-name">ReflexionOS Studio</span>
+    <aside
+      className={props.open ? 'sidebar' : 'sidebar sidebar-hidden'}
+      aria-hidden={!props.open}
+    >
+      <header className="sidebar-head">
+        <span className="brand-mark" aria-hidden="true">
+          R
+        </span>
+        <span className="brand-name">ReflexionOS</span>
+        <button
+          type="button"
+          className="icon-btn"
+          title="新建对话"
+          aria-label="新建对话"
+          onClick={props.onNewChat}
+        >
+          <PlusIcon />
+        </button>
+      </header>
+      <nav className="sidebar-nav" aria-label="页面导航">
+        <NavItem
+          label="技能"
+          icon={<SparkIcon size={15} />}
+          active={props.view === 'skills'}
+          onClick={() => props.onSelectView('skills')}
+        />
+        <NavItem
+          label="自动化"
+          icon={<BoxIcon size={15} />}
+          active={props.view === 'automations'}
+          onClick={() => props.onSelectView('automations')}
+        />
+        <NavItem
+          label="记忆"
+          icon={<ArchiveIcon size={15} />}
+          active={props.view === 'memories'}
+          onClick={() => props.onSelectView('memories')}
+        />
+        <NavItem
+          label="设置"
+          icon={<GearIcon size={15} />}
+          active={props.view === 'settings'}
+          onClick={() => props.onSelectView('settings')}
+        />
+      </nav>
+
+      <ChatsPanel
+        projects={props.projects}
+        projectSessions={props.projectSessions}
+        standaloneSessions={props.standaloneSessions}
+        activeProjectId={props.activeProjectId}
+        activeSessionId={props.activeSessionId}
+        creatingProject={props.creatingProject}
+        onSelectProject={props.onSelectProject}
+        onSelectSession={props.onSelectSession}
+        onSelectStandaloneSession={props.onSelectStandaloneSession}
+        onNewSessionInProject={props.onNewSessionInProject}
+        onCreateProject={props.onCreateProject}
+        onDeleteProject={props.onDeleteProject}
+        onRenameSession={props.onRenameSession}
+        onDeleteSession={props.onDeleteSession}
+      />
+
+      {/* <nav className="sidebar-nav" aria-label="页面导航">
+        <NavItem
+          label="技能"
+          icon={<SparkIcon size={15} />}
+          active={props.view === 'skills'}
+          onClick={() => props.onSelectView('skills')}
+        />
+        <NavItem
+          label="自动化"
+          icon={<BoxIcon size={15} />}
+          active={props.view === 'automations'}
+          onClick={() => props.onSelectView('automations')}
+        />
+        <NavItem
+          label="记忆"
+          icon={<ArchiveIcon size={15} />}
+          active={props.view === 'memories'}
+          onClick={() => props.onSelectView('memories')}
+        />
+        <NavItem
+          label="设置"
+          icon={<GearIcon size={15} />}
+          active={props.view === 'settings'}
+          onClick={() => props.onSelectView('settings')}
+        />
+      </nav> */}
+    </aside>
+  )
+}
+
+interface NavItemProps {
+  label: string
+  icon: React.ReactNode
+  active: boolean
+  onClick: () => void
+}
+
+function NavItem(props: NavItemProps): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className={`nav-item${props.active ? ' active' : ''}`}
+      onClick={props.onClick}
+    >
+      {props.icon}
+      <span className="nav-label">{props.label}</span>
+    </button>
+  )
+}
+
+interface ChatsPanelProps {
+  projects: Project[]
+  projectSessions: Session[]
+  standaloneSessions: Session[]
+  activeProjectId: string | null
+  activeSessionId: string | null
+  creatingProject: boolean
+  onSelectProject: (projectId: string) => void
+  onSelectSession: (sessionId: string) => void
+  onSelectStandaloneSession: (sessionId: string) => void
+  onNewSessionInProject: (projectId: string) => void
+  onCreateProject: () => Promise<void>
+  onDeleteProject: (projectId: string) => Promise<void>
+  onRenameSession: (sessionId: string, title: string) => Promise<void>
+  onDeleteSession: (sessionId: string) => Promise<void>
+}
+
+/** 侧栏主体：过滤框 + 项目折叠区 + 独立会话时间分组。 */
+function ChatsPanel(props: ChatsPanelProps): React.JSX.Element {
+  const [filter, setFilter] = useState('')
+  const keyword = filter.trim().toLowerCase()
+  const match = (text: string): boolean =>
+    keyword === '' || text.toLowerCase().includes(keyword)
+  const projects = useMemo(
+    () => props.projects.filter((project) => match(project.name)),
+    // match 是纯函数，依赖 filter/props.projects。
+    [props.projects, keyword],
+  )
+  const standalone = useMemo(
+    () => props.standaloneSessions.filter((session) => match(session.title)),
+    [props.standaloneSessions, keyword],
+  )
+
+  return (
+    <div className="chats-panel">
+      <div className="panel-search">
+        <SearchIcon size={13} />
+        <input
+          type="text"
+          placeholder="搜索项目与会话"
+          value={filter}
+          onChange={(event) => setFilter(event.target.value)}
+        />
       </div>
 
-      <div className="sidebar-scroll">
+      <div className="panel-scroll">
         <div className="section-head">
           <span>项目</span>
           <button
@@ -88,7 +254,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
           </button>
         </div>
         <ul className="section-list">
-          {props.projects.map((project) => {
+          {projects.map((project) => {
             const active = project.id === props.activeProjectId
             return (
               <li key={project.id}>
@@ -98,7 +264,6 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
                     title={project.folderPath || '未关联文件夹'}
                     onClick={() => props.onSelectProject(project.id)}
                   >
-                    <FolderIcon />
                     <span className="row-label">{project.name}</span>
                   </button>
                   <button
@@ -141,26 +306,22 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
               </li>
             )
           })}
-          {props.projects.length === 0 && (
-            <li className="empty">点击“＋”选择本地文件夹创建项目</li>
+          {projects.length === 0 && (
+            <li className="empty">
+              {keyword === '' ? '点击“＋”选择本地文件夹创建项目' : '无匹配项目'}
+            </li>
           )}
         </ul>
 
         <div className="section-head">
           <span>对话</span>
-          <button
-            className="icon-btn"
-            title="新建独立对话"
-            aria-label="新建独立对话"
-            onClick={props.onNewChat}
-          >
-            <PlusIcon />
-          </button>
         </div>
-        {props.standaloneSessions.length === 0 && (
-          <p className="empty">点击“＋”开始一段独立对话</p>
+        {standalone.length === 0 && (
+          <p className="empty">
+            {keyword === '' ? '点上方“+”开始一段独立对话' : '无匹配会话'}
+          </p>
         )}
-        {groupByTime(props.standaloneSessions).map(([bucket, sessions]) => (
+        {groupByTime(standalone).map(([bucket, sessions]) => (
           <div key={bucket} className="time-group">
             <div className="time-group-label">{bucket}</div>
             <ul className="section-list">
@@ -181,23 +342,6 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
           </div>
         ))}
       </div>
-
-      <div className="sidebar-footer">
-        <button
-          className={`row${props.view === 'memories' ? ' active' : ''}`}
-          onClick={props.onOpenMemories}
-        >
-          <ArchiveIcon />
-          <span className="row-label">记忆</span>
-        </button>
-        <button
-          className={`row${props.view === 'settings' ? ' active' : ''}`}
-          onClick={props.onOpenSettings}
-        >
-          <GearIcon />
-          <span className="row-label">设置</span>
-        </button>
-      </div>
-    </aside>
+    </div>
   )
 }

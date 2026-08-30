@@ -13,6 +13,7 @@ export type {
   RuntimeEvent,
   RuntimeStatus,
   Session,
+  SkillManifest,
   ToolCall,
 } from '@reflexion-os-studio/contracts'
 

@@ -43,7 +43,8 @@ CREATE TABLE IF NOT EXISTS runs (
   retry_of_run_id TEXT,
   agent_id TEXT,
   parent_run_id TEXT,
-  delegation_id TEXT
+  delegation_id TEXT,
+  skill_id TEXT
 );
 CREATE TABLE IF NOT EXISTS tool_calls (
   id TEXT PRIMARY KEY,
@@ -106,7 +107,7 @@ END;
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 5
+export const LATEST_SCHEMA_VERSION = 6
 
 const SESSIONS_TABLE_V1 = `
 CREATE TABLE sessions (
@@ -159,6 +160,7 @@ function tableColumns(db: DatabaseSync, table: string): TableColumn[] {
  *          tool_calls 表由 SCHEMA 创建。
  * v4 → v5：A2 Memory——memories 表 + FTS5 索引 + 同步触发器由 SCHEMA 创建（全新表，
  *          无历史数据回填；升级只推进版本号）。
+ * v5 → v6：runs 增加 skill_id 列（Skill 激活来源记录；加列可直接 ALTER TABLE）。
  * 各步骤带形状检测：SCHEMA 刚建好的新库不会空跑重建。
  */
 export function runMigrations(db: DatabaseSync): void {
@@ -285,6 +287,13 @@ export function runMigrations(db: DatabaseSync): void {
         db.exec(
           `ALTER TABLE provider_profiles ADD COLUMN capabilities TEXT NOT NULL DEFAULT '["chat"]'`,
         )
+      }
+    }
+    if (version < 6) {
+      if (
+        !tableColumns(db, 'runs').some((column) => column.name === 'skill_id')
+      ) {
+        db.exec('ALTER TABLE runs ADD COLUMN skill_id TEXT')
       }
     }
     db.exec('COMMIT')

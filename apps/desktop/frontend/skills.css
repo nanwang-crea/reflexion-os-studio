@@ -1,0 +1,277 @@
+/* ---------- 技能 / 自动化面板 ---------- */
+
+.skills-view,
+.automations-view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  max-width: 960px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 24px 16px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.skills-view .panel-head,
+.automations-view .panel-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.skills-view h1,
+.automations-view h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.panel-sub {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.inline-banner.error {
+  border: 1px solid var(--danger);
+  background: rgba(248, 113, 113, 0.1);
+  color: var(--danger);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.skill-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.skill-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 16px;
+  transition: border-color 120ms ease;
+}
+
+.skill-card:hover {
+  border-color: var(--border);
+}
+
+.skill-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.skill-card-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--bg-inset);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--info);
+  flex-shrink: 0;
+}
+
+.skill-card-titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.skill-card-name {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-card-id {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.skill-card-ver {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.skill-card-tag {
+  background: var(--bg-inset);
+  color: var(--text-muted);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.skill-card-desc {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.skill-card-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.skill-card-hint-label {
+  color: var(--text-muted);
+}
+
+.skill-card-hint code {
+  font-family: var(--mono);
+  background: var(--bg-inset);
+  border-radius: 6px;
+  padding: 2px 6px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.skill-card-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.skill-card-tool {
+  background: var(--bg-inset);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.skill-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.skill-card-actions .ghost,
+.skill-card-actions .primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.skill-card-actions .primary {
+  background: var(--info);
+  color: #0c1828;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.skill-card-actions .primary:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.skill-card-actions .primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.skill-card-actions .ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.skill-card-actions .ghost:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.skill-card-instructions {
+  margin: 0;
+  background: var(--bg-inset);
+  color: var(--text-secondary);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+/* ---------- 自动化占位 ---------- */
+
+.placeholder-card {
+  background: var(--bg-elevated);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.placeholder-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--bg-inset);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.placeholder-card h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.placeholder-text {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.placeholder-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.placeholder-card .ghost {
+  align-self: flex-start;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: not-allowed;
+  opacity: 0.6;
+}

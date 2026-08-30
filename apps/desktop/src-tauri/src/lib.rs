@@ -323,7 +323,7 @@ fn runtime_request(
     method: String,
     params: serde_json::Value,
 ) -> Result<u64, String> {
-    const RUNTIME_METHODS: [&str; 21] = [
+    const RUNTIME_METHODS: [&str; 22] = [
         "runtime.get_status",
         "system.ping",
         "project.list",
@@ -345,6 +345,7 @@ fn runtime_request(
         "memory.list",
         "memory.update",
         "memory.delete",
+        "skill.list",
     ];
     if !RUNTIME_METHODS.contains(&method.as_str()) {
         return Err(format!("method not allowed: {method}"));
@@ -440,8 +441,14 @@ extern "C" fn on_terminate_signal(_signal: libc::c_int) {
 #[cfg(unix)]
 fn install_terminate_signal_handler() {
     unsafe {
-        libc::signal(libc::SIGTERM, on_terminate_signal as libc::sighandler_t);
-        libc::signal(libc::SIGINT, on_terminate_signal as libc::sighandler_t);
+        libc::signal(
+            libc::SIGTERM,
+            on_terminate_signal as *const () as libc::sighandler_t,
+        );
+        libc::signal(
+            libc::SIGINT,
+            on_terminate_signal as *const () as libc::sighandler_t,
+        );
     }
 }
 

@@ -2,9 +2,11 @@ import type { ReactNode } from 'react'
 
 /**
  * 轻量 Markdown 渲染：覆盖对话常见结构（标题 / 列表 / 引用 / 围栏代码 /
- * 行内加粗、斜体、删除线、代码、链接），零依赖，且对未完成的流式输入
- * （如未闭合的代码围栏）保持稳定渲染。表格等复杂结构暂不支持。
+ * GFM 表格 / 行内加粗、斜体、删除线、代码、链接），零依赖，且对未完成的
+ * 流式输入（如未闭合的代码围栏）保持稳定渲染。
  */
+
+type Align = 'left' | 'center' | 'right'
 
 type Block =
   | { kind: 'p'; text: string }
@@ -12,6 +14,7 @@ type Block =
   | { kind: 'code'; lang: string; text: string; open: boolean }
   | { kind: 'list'; ordered: boolean; items: string[] }
   | { kind: 'quote'; text: string }
+  | { kind: 'table'; rows: string[][]; aligns: Align[] }
   | { kind: 'hr' }
 
 const FENCE_RE = /^```(.*)$/
@@ -23,6 +26,7 @@ const HR_RE = /^(?:-{3,}|\*{3,}|_{3,})$/
 const LINK_RE = /^\[([^\]]*)\]\(([^)\s]*)\)$/
 const INLINE_RE =
   /(`[^`]+`)|(\*\*[^*]+?\*\*)|(\*[^*\n]+?\*)|(~~[^~]+?~~)|(\[[^\]]*\]\([^)\s]*\))/g
+const ALIGN_CELL_RE = /^:?-+:?$/
 
 function renderInline(text: string, keyBase: string): ReactNode[] {
   const nodes: ReactNode[] = []
@@ -71,6 +75,69 @@ function renderInline(text: string, keyBase: string): ReactNode[] {
   return nodes
 }
 
+/** 拆一行表格行：容忍首尾竖线缺失，`\|` 转义为字面竖线。 */
+function splitTableRow(line: string): string[] {
+  let row = line.trim()
+  if (row.startsWith('|')) row = row.slice(1)
+  if (row.endsWith('|') && !row.endsWith('\\|')) row = row.slice(0, -1)
+  const cells: string[] = []
+  let current = ''
+  for (let index = 0; index < row.length; index++) {
+    const char = row[index]
+    if (char === '\\' && row[index + 1] === '|') {
+      current += '|'
+      index++
+    } else if (char === '|') {
+      cells.push(current.trim())
+      current = ''
+    } else {
+      current += char
+    }
+  }
+  cells.push(current.trim())
+  return cells
+}
+
+function isTableSeparator(line: string): boolean {
+  const trimmed = line.trim()
+  if (!trimmed.includes('|') || !trimmed.includes('-')) return false
+  const cells = splitTableRow(trimmed)
+  return cells.length >= 2 && cells.every((cell) => ALIGN_CELL_RE.test(cell))
+}
+
+function alignOfSeparatorCell(cell: string): Align {
+  const trimmed = cell.trim()
+  if (trimmed.startsWith(':') && trimmed.endsWith(':')) return 'center'
+  if (trimmed.endsWith(':')) return 'right'
+  return 'left'
+}
+
+/**
+ * 行 index 处是否是表头（下一行是分隔行）。返回行数组（含表头）与对齐，
+ * 未构成表格（如流式中分隔行还没到）返回 null，按普通段落渲染。
+ */
+function tryParseTable(
+  lines: string[],
+  index: number,
+): { rows: string[][]; aligns: Align[] } | null {
+  const header = lines[index]
+  if (!header.includes('|')) return null
+  const separator = lines[index + 1]
+  if (separator === undefined || !isTableSeparator(separator)) return null
+  const headerCells = splitTableRow(header)
+  const separatorCells = splitTableRow(separator)
+  const aligns = headerCells.map((_, cellIndex) =>
+    alignOfSeparatorCell(separatorCells[cellIndex] ?? ''),
+  )
+  const rows = [headerCells]
+  let cursor = index + 2
+  while (cursor < lines.length && lines[cursor].includes('|')) {
+    rows.push(splitTableRow(lines[cursor]))
+    cursor++
+  }
+  return { rows, aligns }
+}
+
 function parseBlocks(source: string): Block[] {
   const lines = source.split('\n')
   const blocks: Block[] = []
@@ -103,7 +170,8 @@ function parseBlocks(source: string): Block[] {
     flushList()
   }
 
-  for (const line of lines) {
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index]
     if (code) {
       if (line.trimEnd() === '```') {
         blocks.push({
@@ -127,6 +195,14 @@ function parseBlocks(source: string): Block[] {
     if (HR_RE.test(line.trim())) {
       flushAll()
       blocks.push({ kind: 'hr' })
+      continue
+    }
+    const table = tryParseTable(lines, index)
+    if (table) {
+      flushAll()
+      blocks.push({ kind: 'table', rows: table.rows, aligns: table.aligns })
+      // 跳过已消费的表体行（-1 抵消循环自增）。
+      index += table.rows.length + 1
       continue
     }
     const heading = HEADING_RE.exec(line)
@@ -227,6 +303,50 @@ function renderBlock(block: Block, key: string, withCaret: boolean): ReactNode {
           {caret}
         </blockquote>
       )
+    case 'table': {
+      const alignOf = (cellIndex: number): Align =>
+        block.aligns[cellIndex] ?? 'left'
+      const [head, ...body] = block.rows
+      const width = head.length
+      const normalize = (row: string[]): string[] => {
+        const cells = row.slice(0, width)
+        while (cells.length < width) cells.push('')
+        return cells
+      }
+      return (
+        <div key={key} className="md-table-wrap">
+          <table className="md-table">
+            <thead>
+              <tr>
+                {head.map((cell, cellIndex) => (
+                  <th key={cellIndex} style={{ textAlign: alignOf(cellIndex) }}>
+                    {renderInline(cell, `${key}-h-${cellIndex}`)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {body.map((row, rowIndex) => {
+                const cells = normalize(row)
+                return (
+                  <tr key={rowIndex}>
+                    {cells.map((cell, cellIndex) => (
+                      <td
+                        key={cellIndex}
+                        style={{ textAlign: alignOf(cellIndex) }}
+                      >
+                        {renderInline(cell, `${key}-${rowIndex}-${cellIndex}`)}
+                      </td>
+                    ))}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          {caret}
+        </div>
+      )
+    }
     case 'hr':
       return <hr key={key} className="md-hr" />
   }

@@ -161,6 +161,24 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 
+/* 侧栏收起/展开切换（桌面版 Codex 式，左侧「«」）。 */
+.topbar-toggle {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 7px;
+  flex-shrink: 0;
+}
+
+.topbar-toggle:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
 .topbar .spacer {
   flex: 1;
 }
@@ -260,12 +278,6 @@ textarea:focus-visible {
 }
 
 /* ---------- 响应式 ---------- */
-
-@media (max-width: 1100px) {
-  .sidebar {
-    width: 228px;
-  }
-}
 
 @media (max-width: 760px) {
   .landing-center {
