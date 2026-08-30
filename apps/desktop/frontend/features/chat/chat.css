@@ -136,26 +136,26 @@ button.link {
   font-size: 12px;
 }
 
-/* ---------- 思考面板 ---------- */
+/* ---------- 工作摘要（思考 + 工具聚合折叠） ---------- */
 
-.thinking-toggle {
-  display: flex;
+.work-summary-toggle {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  width: 100%;
-  background: transparent;
-  border-radius: 0;
-  padding: 4px 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 3px 12px;
   color: var(--text-muted);
   font-size: 12.5px;
 }
 
-.thinking-toggle:hover:not(:disabled) {
-  background: transparent;
+.work-summary-toggle:hover:not(:disabled) {
+  background: var(--bg-hover);
   color: var(--text-secondary);
 }
 
-.thinking-label.shimmer {
+.work-summary-label.shimmer {
   background: linear-gradient(
     90deg,
     var(--text-muted) 30%,
@@ -166,10 +166,10 @@ button.link {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  animation: thinking-shimmer 1.6s linear infinite;
+  animation: work-summary-shimmer 1.6s linear infinite;
 }
 
-@keyframes thinking-shimmer {
+@keyframes work-summary-shimmer {
   from {
     background-position: 200% 0;
   }
@@ -178,18 +178,31 @@ button.link {
   }
 }
 
-.thinking-chevron {
+.work-summary-chevron {
   display: inline-flex;
   color: var(--text-muted);
   transition: transform 0.18s ease;
 }
 
-.thinking-chevron.open {
+.work-summary-chevron.open {
   transform: rotate(180deg);
 }
 
-.thinking-body {
-  padding: 2px 6px 8px;
+.work-summary-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+  padding-left: 4px;
+}
+
+.work-thinking-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.work-thinking-text {
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.7;
@@ -690,55 +703,17 @@ button.link {
     padding: 6px 12px 12px;
   }
 
-  .thinking-body {
+  .work-thinking-text {
     max-height: 150px;
   }
 }
 
-/* ---------- 工具轨迹组 ---------- */
-
-.tool-group-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  background: transparent;
-  border-radius: 0;
-  padding: 4px 6px;
-  color: var(--text-muted);
-  font-size: 12.5px;
-  text-align: left;
-}
-
-.tool-group-toggle:hover:not(:disabled) {
-  background: transparent;
-  color: var(--text-secondary);
-}
-
-.tool-group-label {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tool-group-chevron {
-  display: inline-flex;
-  flex-shrink: 0;
-  color: var(--text-muted);
-  transition: transform 0.18s ease;
-}
-
-.tool-group-chevron.open {
-  transform: rotate(180deg);
-}
+/* ---------- 工具轨迹明细 ---------- */
 
 .tool-trace {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 2px 6px 6px;
 }
 
 .tool-trace-item {

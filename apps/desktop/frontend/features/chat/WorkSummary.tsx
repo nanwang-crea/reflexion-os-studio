@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { JsonValue, ToolCall } from '@reflexion-os-studio/runtime-client'
 import { ChevronIcon } from '../../ui/icons'
 
@@ -22,62 +22,84 @@ const STATUS_LABELS: Record<string, string> = {
 
 const RESULT_PREVIEW_MAX_CHARS = 2000
 
-interface ToolTraceCardProps {
+interface WorkSummaryProps {
+  /** 已合成流式增量的思考文本；空串表示无思考过程。 */
+  reasoningText: string
+  /** 思考阶段进行中（回答尚未开始流式）。 */
+  thinkingStreaming: boolean
   toolCalls: ToolCall[]
-  /** 会话内是否有进行中的 Run；进行中时未完结调用显示脉冲状态。 */
+  /** 会话内是否有进行中的 Run；配合轨迹行的脉冲状态。 */
   runActive: boolean
+  /** 本次运行耗时；未结束或数据缺失时为 null（显示进行中态）。 */
+  runDurationMs: number | null
 }
 
 /**
- * 工具轨迹组：一条 assistant 消息发起的工具调用合并成一个可折叠单元。
- * 有调用进行中时组自动展开、组头显示当前调用；全部结束后自动折叠为
- * “编辑了 N 个文件 · 执行了 N 条命令”式一行摘要（与思考面板同构：
- * 用户手动开合在下次状态切换前有效）。
+ * 工作摘要：思考过程与工具轨迹合并为一个聚合折叠块（对齐 ChatGPT 桌面版）。
+ * 进行中显示“思考中…/正在处理…”并自动展开明细；全部结束后折叠为
+ * “工作了 X 分 X 秒”一行，点击展开回看思考与工具步骤，最终回答在下方。
  */
-export function ToolTraceCard(props: ToolTraceCardProps): React.JSX.Element {
-  const activeCall = props.toolCalls.find(isInFlight)
-  const active = activeCall !== undefined
+export function WorkSummary(props: WorkSummaryProps): React.JSX.Element {
+  const active = props.thinkingStreaming || props.toolCalls.some(isInFlight)
   const [open, setOpen] = useState(false)
+  const bodyRef = useRef<HTMLDivElement>(null)
 
   // 跟随状态：进行中展开、结束后收起；手动开合在下一次状态切换前有效。
   useEffect(() => {
     setOpen(active)
   }, [active])
 
+  // 思考进行中正文自动滚到底部，让用户持续看到新思考内容。
+  useEffect(() => {
+    if (!open || !props.thinkingStreaming) return
+    const el = bodyRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [props.reasoningText, open, props.thinkingStreaming])
+
+  const label = active
+    ? props.thinkingStreaming
+      ? '思考中…'
+      : '正在处理…'
+    : props.runDurationMs !== null
+      ? `工作了 ${formatDuration(props.runDurationMs)}`
+      : '处理完成'
+
   return (
-    <div className="tool-group">
+    <div className="work-summary">
       <button
         type="button"
-        className="tool-group-toggle"
+        className="work-summary-toggle"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
-        {active ? (
-          <>
-            <span className="trace-dot pulse" aria-hidden />
-            <span className="tool-group-label">
-              {TOOL_LABELS[activeCall.toolName] ?? activeCall.toolName}{' '}
-              {summarizeArgs(activeCall.args)}
-            </span>
-          </>
-        ) : (
-          <span className="tool-group-label">
-            {summarizeCompleted(props.toolCalls)}
-          </span>
-        )}
-        <span className={`tool-group-chevron${open ? ' open' : ''}`}>
+        <span className={`work-summary-label${active ? ' shimmer' : ''}`}>
+          {label}
+        </span>
+        <span className={`work-summary-chevron${open ? ' open' : ''}`}>
           <ChevronIcon />
         </span>
       </button>
       {open && (
-        <div className="tool-trace">
-          {props.toolCalls.map((call) => (
-            <ToolTraceItem
-              key={call.id}
-              call={call}
-              runActive={props.runActive}
-            />
-          ))}
+        <div className="work-summary-body">
+          {props.reasoningText !== '' && (
+            <div className="work-thinking">
+              <div className="work-thinking-label">思考</div>
+              <div className="work-thinking-text" ref={bodyRef}>
+                {props.reasoningText}
+              </div>
+            </div>
+          )}
+          {props.toolCalls.length > 0 && (
+            <div className="tool-trace">
+              {props.toolCalls.map((call) => (
+                <ToolTraceItem
+                  key={call.id}
+                  call={call}
+                  runActive={props.runActive}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -121,32 +143,16 @@ function isInFlight(call: ToolCall): boolean {
   )
 }
 
-/** 完成态摘要：按类别计数，未使用的类别不出现，失败数量追加在末尾。 */
-function summarizeCompleted(calls: ToolCall[]): string {
-  let filesEdited = 0
-  let filesRead = 0
-  let commands = 0
-  let others = 0
-  let failed = 0
-  for (const call of calls) {
-    if (call.status === 'failed') failed += 1
-    if (call.toolName === 'file.edit' || call.toolName === 'file.write') {
-      filesEdited += 1
-    } else if (call.toolName.startsWith('file.')) {
-      filesRead += 1
-    } else if (call.toolName === 'shell.execute') {
-      commands += 1
-    } else {
-      others += 1
-    }
-  }
-  const parts: string[] = []
-  if (filesEdited > 0) parts.push(`编辑了 ${filesEdited} 个文件`)
-  if (filesRead > 0) parts.push(`读取了 ${filesRead} 个文件`)
-  if (commands > 0) parts.push(`执行了 ${commands} 条命令`)
-  if (others > 0) parts.push(`${others} 个操作`)
-  if (failed > 0) parts.push(`失败 ${failed} 个`)
-  return parts.join(' · ')
+/** 耗时展示：不足一分钟显示秒数，秒数为零的整分/整时省略秒。 */
+function formatDuration(ms: number): string {
+  const seconds = Math.max(0, Math.round(ms / 1000))
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const secs = seconds % 60
+  if (hours > 0) return `${hours} 小时 ${minutes} 分`
+  if (minutes > 0)
+    return secs > 0 ? `${minutes} 分 ${secs} 秒` : `${minutes} 分`
+  return `${secs} 秒`
 }
 
 /** 一行摘要：文件显示路径，shell 显示命令，其余回退参数 JSON。 */

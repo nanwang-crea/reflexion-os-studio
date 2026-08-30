@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Message, ToolCall } from '@reflexion-os-studio/runtime-client'
 import { CheckIcon, CopyIcon } from '../../ui/icons'
 import { MessageMarkdown } from './MessageMarkdown'
-import { ThinkingPanel } from './ThinkingPanel'
-import { ToolTraceCard } from './ToolTraceCard'
+import { WorkSummary } from './WorkSummary'
 
 const MESSAGE_STATUS_LABELS: Record<string, string> = {
   interrupted: '已中断',
@@ -20,13 +19,15 @@ interface AssistantMessageProps {
   streamingText: string | undefined
   /** 该消息的流式思考增量缓存。 */
   streamingReasoning: string | undefined
+  /** 该消息所属 Run 的耗时；未结束或数据缺失时为 null。 */
+  runDurationMs: number | null
   /** 该消息属于最近一个可重试的失败 Run 时展示重试入口。 */
   canRetry: boolean
   onRetry: () => void
 }
 
 /**
- * 助手消息：思考面板（有思考内容时）+ 正文 + 状态/操作。
+ * 助手消息：工作摘要（思考+工具聚合折叠，有过程内容时）+ 正文 + 状态/操作。
  * 阶段推导：等待（无任何增量）→ 思考中 → 作答（流式光标）→ 完成。
  */
 export function AssistantMessage(
@@ -68,14 +69,14 @@ export function AssistantMessage(
   return (
     <div className="msg-assistant">
       <div className="assistant-main">
-        {props.toolCalls.length > 0 && (
-          <ToolTraceCard
+        {(reasoningText !== '' || props.toolCalls.length > 0) && (
+          <WorkSummary
+            reasoningText={reasoningText}
+            thinkingStreaming={thinkingStreaming}
             toolCalls={props.toolCalls}
             runActive={props.runActive}
+            runDurationMs={props.runDurationMs}
           />
-        )}
-        {reasoningText !== '' && (
-          <ThinkingPanel text={reasoningText} streaming={thinkingStreaming} />
         )}
         {waiting && (
           <div className="typing-dots" role="status" aria-label="正在思考">
