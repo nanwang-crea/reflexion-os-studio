@@ -1,4 +1,4 @@
-import { newRequestId, transport } from '../transport'
+import { newRequestId, transport } from '../lib/transport'
 
 /** 统一入口：自动注入 requestId，调用方不再手写。 */
 export function request<T>(method: string, params?: object): Promise<T> {

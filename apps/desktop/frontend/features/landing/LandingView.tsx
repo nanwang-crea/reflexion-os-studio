@@ -1,6 +1,6 @@
 import type { Project, Session } from '@reflexion-os-studio/runtime-client'
-import { Composer, type ComposerModelOption } from './Composer'
-import { SessionRow } from './SessionRow'
+import { Composer, type ComposerModelOption } from '../../components/Composer'
+import { SessionRow } from '../../components/SessionRow'
 
 interface LandingViewProps {
   /** 当前选中的项目；null 表示独立对话模式。 */

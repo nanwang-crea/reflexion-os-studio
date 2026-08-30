@@ -1,14 +1,14 @@
 import type { RefObject } from 'react'
 import { open } from '@tauri-apps/plugin-dialog'
 import type { Project, Session } from '@reflexion-os-studio/runtime-client'
-import type { ConfirmDialogState } from './ConfirmDialog'
-import * as chatApi from './api/chat'
+import type { ConfirmDialogState } from '../components/ConfirmDialog'
+import * as chatApi from '../api/chat'
 import {
   createProject as createProjectApi,
   deleteProject as deleteProjectApi,
-} from './api/projects'
-import * as sessionsApi from './api/sessions'
-import type { SessionData } from './api/sessions'
+} from '../api/projects'
+import * as sessionsApi from '../api/sessions'
+import type { SessionData } from '../api/sessions'
 
 interface SessionActionsDeps {
   // 选择状态（渲染值）

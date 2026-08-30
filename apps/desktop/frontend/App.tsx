@@ -5,23 +5,29 @@ import type {
   Session,
   SkillManifest,
 } from '@reflexion-os-studio/runtime-client'
-import { useAppBootstrap, type BootstrapSnapshot } from './useAppBootstrap'
-import { useModelSelection } from './useModelSelection'
-import { usePermissionMode } from './usePermissionMode'
+import {
+  useAppBootstrap,
+  type BootstrapSnapshot,
+} from './hooks/useAppBootstrap'
+import { useModelSelection } from './hooks/useModelSelection'
+import { usePermissionMode } from './hooks/usePermissionMode'
 import { listProviders } from './api/providers'
 import { listProjects } from './api/projects'
 import { resolveApproval } from './api/chat'
 import { listSkills } from './api/skills'
 import { getSessionData, listSessions, type SessionData } from './api/sessions'
-import { ConfirmDialog, type ConfirmDialogState } from './ConfirmDialog'
-import { ChatView } from './ChatView'
-import { LandingView } from './LandingView'
-import { MemoryView } from './MemoryView'
-import { Sidebar } from './Sidebar'
-import { SkillsView } from './SkillsView'
-import { AutomationsView } from './AutomationsView'
-import { SettingsView } from './SettingsView'
-import { useSessionActions } from './useSessionActions'
+import {
+  ConfirmDialog,
+  type ConfirmDialogState,
+} from './components/ConfirmDialog'
+import { ChatView } from './features/chat/ChatView'
+import { LandingView } from './features/landing/LandingView'
+import { MemoryView } from './features/memories/MemoryView'
+import { Sidebar } from './components/Sidebar'
+import { SkillsView } from './features/skills/SkillsView'
+import { AutomationsView } from './features/automations/AutomationsView'
+import { SettingsView } from './features/settings/SettingsView'
+import { useSessionActions } from './hooks/useSessionActions'
 import { DoubleChevronIcon } from './ui/icons'
 
 const STATUS_LABELS: Record<string, string> = {

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Memory } from '@reflexion-os-studio/runtime-client'
-import { PencilIcon, TrashIcon } from './ui/icons'
-import { deleteMemory, listMemories, updateMemory } from './api/memory'
-import { listProjects } from './api/projects'
-import { listSessions } from './api/sessions'
-import type { ConfirmDialogState } from './ConfirmDialog'
+import { PencilIcon, TrashIcon } from '../../ui/icons'
+import { deleteMemory, listMemories, updateMemory } from '../../api/memory'
+import { listProjects } from '../../api/projects'
+import { listSessions } from '../../api/sessions'
+import type { ConfirmDialogState } from '../../components/ConfirmDialog'
 
 const SCOPE_LABELS: Record<string, string> = {
   session: '会话记忆',

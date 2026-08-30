@@ -16,10 +16,10 @@
 .transcript {
   max-width: 760px;
   margin: 0 auto;
-  padding: 24px 16px 12px;
+  padding: 16px 16px 8px;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 20px;
 }
 
 /* ---------- 空态 ---------- */
@@ -53,10 +53,10 @@
 
 .user-bubble {
   background: var(--bg-elevated);
-  border-radius: 18px 18px 4px 18px;
-  padding: 10px 16px;
+  border-radius: 16px 16px 4px 16px;
+  padding: 8px 14px;
   max-width: 78%;
-  line-height: 1.7;
+  line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -64,31 +64,18 @@
 /* ---------- 助手消息 ---------- */
 
 .msg-assistant {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.assistant-avatar {
-  width: 27px;
-  height: 27px;
-  flex-shrink: 0;
-  margin-top: 2px;
-  border-radius: 8px;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-elevated);
-  color: var(--ok);
-  display: grid;
-  place-items: center;
+  display: block;
+  width: 100%;
+  position: relative;
 }
 
 .assistant-main {
-  flex: 1;
+  width: 100%;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  line-height: 1.75;
+  gap: 8px;
+  line-height: 1.65;
 }
 
 .assistant-content {
@@ -100,7 +87,18 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 24px;
+}
+
+/* 操作按钮 hover 浮现，悬浮于消息右下角，不占消息流高度。 */
+.assistant-actions {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: none;
+}
+
+.msg-assistant:hover .assistant-actions {
+  display: flex;
 }
 
 .assistant-status {
@@ -140,13 +138,6 @@ button.link {
 
 /* ---------- 思考面板 ---------- */
 
-.thinking {
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  background: var(--bg-inset);
-  overflow: hidden;
-}
-
 .thinking-toggle {
   display: flex;
   align-items: center;
@@ -154,9 +145,9 @@ button.link {
   width: 100%;
   background: transparent;
   border-radius: 0;
-  padding: 8px 12px;
+  padding: 4px 6px;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 12.5px;
 }
 
 .thinking-toggle:hover:not(:disabled) {
@@ -198,7 +189,7 @@ button.link {
 }
 
 .thinking-body {
-  padding: 2px 12px 10px;
+  padding: 2px 6px 8px;
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.7;
@@ -213,7 +204,7 @@ button.link {
 .typing-dots {
   display: inline-flex;
   gap: 5px;
-  padding: 6px 0;
+  padding: 4px 0;
 }
 
 .typing-dots span {
@@ -293,11 +284,11 @@ button.link {
 }
 
 .md-p {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
 }
 
 .md-h {
-  margin: 4px 0 10px;
+  margin: 2px 0 8px;
   font-weight: 600;
   line-height: 1.4;
 }
@@ -319,7 +310,7 @@ button.link {
 }
 
 .md-list {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   padding-left: 22px;
 }
 
@@ -343,7 +334,7 @@ button.link {
 .md-pre {
   position: relative;
   margin: 0 0 10px;
-  padding: 12px 14px;
+  padding: 10px 12px;
   background: var(--bg-inset);
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
@@ -704,12 +695,50 @@ button.link {
   }
 }
 
-/* ---------- 工具轨迹卡 ---------- */
+/* ---------- 工具轨迹组 ---------- */
+
+.tool-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border-radius: 0;
+  padding: 4px 6px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.tool-group-toggle:hover:not(:disabled) {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.tool-group-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-group-chevron {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform 0.18s ease;
+}
+
+.tool-group-chevron.open {
+  transform: rotate(180deg);
+}
 
 .tool-trace {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+  padding: 2px 6px 6px;
 }
 
 .tool-trace-item {

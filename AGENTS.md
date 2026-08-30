@@ -56,7 +56,12 @@ React Renderer（未来） → Tauri Host → TypeScript Runtime → Rust System
   - **Runtime 存储**：`store/` 按领域分文件（projects / sessions / messages / runs / providers / toolCalls 各一个类），schema 与版本迁移独立在 `store/migrations.ts`，共享工具在 `store/shared.ts`，`store/index.ts` 只做门面（连接、事务边界、启动恢复编排）。业务代码只调领域方法（如 `store.sessions.list(null)`），不直接写 SQL。
   - **Runtime Agent**：`agent/` 按职责分文件——`prompts/`（一个 prompt 一个文件，禁止在代码里内联长 prompt）、`context.ts`（历史重建与压缩）、`permissions.ts`（权限策略表 + ApprovalGateway + PermissionGate）、`tools.ts`（按 Run 装配工具，Rust 工具经 SystemRuntimeClient）、`runner.ts`（Run 编排：循环+持久化+事件+审批+取消）、`errors.ts`、`title.ts`，`agent/index.ts` 只做命令门面。循环算法本身在 `packages/agent-core`，不得把 SQLite/传输细节漏进去。
   - **前端请求**：组件不得直接 `transport.request`。统一走 `api/` 层并按功能分文件（projects / sessions / chat / providers / client），`requestId` 由 api 层自动注入；组件调用具名函数（如 `createSession(projectId)`）。
-  - **前端组件与样式**：页面级组件、共享组件（如 `SessionRow`）各自成文件；CSS 按页面/职责拆文件（base / sidebar / chat / settings），不要堆进单个大 css。
+  - **前端目录结构**：`apps/desktop/frontend/` 按功能模块分包，禁止根目录平铺组件/样式/hooks。
+    - `features/<name>/`：一个功能模块一个目录（chat / landing / memories / skills / settings / automations），模块内放页面组件 + 仅该模块使用的子组件 + 该模块 CSS（如 `features/chat/chat.css`、`features/settings/settings.css`）。
+    - `components/`：跨功能模块复用的共享组件（如 `Composer`、`SessionRow`、`Sidebar`、`ConfirmDialog`）。
+    - `hooks/`：应用级/跨模块 hooks（如 `useAppBootstrap`、`useModelSelection`、`useSessionActions`）。
+    - `api/`：唯一请求层，按领域分文件；`lib/`：传输与基础设施（如 `transport.ts`）；`styles/`：全局 base 与布局样式（如 `style.css`、`sidebar.css`）；`ui/`：通用图标等纯展示资源。
+    - 仅被单个功能模块引用的组件/样式归 `features/` 对应模块，不放进 `components/`；被两个以上模块引用才上移共享目录，避免"每个模块都有一份"或"共享目录堆积模块私货"。
   - 拆分以"职责"为界而不是"行数均摊"：领域、页面、传输层各自的内聚单元独立成文件，避免把不相关逻辑凑进同一个文件。
 - Prettier 不支持的语言（如 shell）不做机械格式化，保持手写整洁即可。
 

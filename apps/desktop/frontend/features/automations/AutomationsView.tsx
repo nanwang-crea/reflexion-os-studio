@@ -1,4 +1,4 @@
-import { BoxIcon } from './ui/icons'
+import { BoxIcon } from '../../ui/icons'
 
 /**
  * 自动化占位：定时任务 / 工作流编排将在后续版本提供。

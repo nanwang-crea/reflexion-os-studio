@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { SkillManifest } from '@reflexion-os-studio/runtime-client'
-import { ChevronIcon, SendIcon, ShieldIcon, StopIcon } from './ui/icons'
+import { ChevronIcon, SendIcon, ShieldIcon, StopIcon } from '../ui/icons'
 
 export interface ComposerModelOption {
   /** `${providerId}::${model}` */

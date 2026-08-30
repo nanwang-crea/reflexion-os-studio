@@ -1,11 +1,11 @@
 import { createRoot } from 'react-dom/client'
 import App from './App'
-import './style.css'
-import './sidebar.css'
-import './chat.css'
-import './settings.css'
-import './memory.css'
-import './skills.css'
+import './styles/style.css'
+import './styles/sidebar.css'
+import './features/chat/chat.css'
+import './features/settings/settings.css'
+import './features/memories/memory.css'
+import './features/skills/skills.css'
 
 const rootElement = document.getElementById('root')
 if (!rootElement) throw new Error('#root not found')

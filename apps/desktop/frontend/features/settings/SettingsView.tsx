@@ -4,8 +4,8 @@ import {
   configureProvider,
   deleteProvider,
   testProvider,
-} from './api/providers'
-import { EyeIcon, PlusIcon, RefreshIcon, TrashIcon } from './ui/icons'
+} from '../../api/providers'
+import { EyeIcon, PlusIcon, RefreshIcon, TrashIcon } from '../../ui/icons'
 import { ProviderList } from './ProviderList'
 
 interface SettingsViewProps {

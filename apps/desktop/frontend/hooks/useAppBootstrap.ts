@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import type { RefObject } from 'react'
 import type { RuntimeEvent } from '@reflexion-os-studio/runtime-client'
-import { transport } from './transport'
+import { transport } from '../lib/transport'
 
 export interface BootstrapSnapshot {
   state: string

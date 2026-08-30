@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ProviderProfile } from '@reflexion-os-studio/runtime-client'
-import type { ComposerModelOption } from './Composer'
-import type { SessionData } from './api/sessions'
+import type { ComposerModelOption } from '../components/Composer'
+import type { SessionData } from '../api/sessions'
 
 /**
  * 模型选择：从启用供应商派生可选模型（按供应商分组），并保证选中项始终

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Message, ToolCall } from '@reflexion-os-studio/runtime-client'
-import { CheckIcon, CopyIcon, SparkIcon } from '../ui/icons'
+import { CheckIcon, CopyIcon } from '../../ui/icons'
 import { MessageMarkdown } from './MessageMarkdown'
 import { ThinkingPanel } from './ThinkingPanel'
 import { ToolTraceCard } from './ToolTraceCard'
@@ -67,9 +67,6 @@ export function AssistantMessage(
 
   return (
     <div className="msg-assistant">
-      <div className="assistant-avatar" aria-hidden="true">
-        <SparkIcon size={14} />
-      </div>
       <div className="assistant-main">
         {props.toolCalls.length > 0 && (
           <ToolTraceCard
@@ -92,16 +89,18 @@ export function AssistantMessage(
             <MessageMarkdown text={contentText} caret={answerStreaming} />
           </div>
         )}
-        <div className="assistant-meta">
-          {statusLabel && (
+        {statusLabel && (
+          <div className="assistant-meta">
             <span className="assistant-status">{statusLabel}</span>
-          )}
-          {statusLabel && props.canRetry && (
-            <button className="link" onClick={() => void props.onRetry()}>
-              重新生成
-            </button>
-          )}
-          {props.message.status === 'completed' && contentText !== '' && (
+            {props.canRetry && (
+              <button className="link" onClick={() => void props.onRetry()}>
+                重新生成
+              </button>
+            )}
+          </div>
+        )}
+        {props.message.status === 'completed' && contentText !== '' && (
+          <div className="assistant-actions">
             <button
               className="msg-action"
               title={copied ? '已复制' : '复制'}
@@ -110,8 +109,8 @@ export function AssistantMessage(
             >
               {copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   )

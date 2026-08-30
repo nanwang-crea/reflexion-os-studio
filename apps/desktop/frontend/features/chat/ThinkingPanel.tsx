@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronIcon } from '../ui/icons'
+import { ChevronIcon } from '../../ui/icons'
 
 interface ThinkingPanelProps {
   /** 思考文本；空串时只显示标题态（连接尚未产出增量的阶段）。 */

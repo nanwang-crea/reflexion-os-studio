@@ -3,9 +3,9 @@ import type {
   Session,
   SkillManifest,
 } from '@reflexion-os-studio/runtime-client'
-import { SparkIcon } from './ui/icons'
-import { createSession } from './api/sessions'
-import { listSkills } from './api/skills'
+import { SparkIcon } from '../../ui/icons'
+import { createSession } from '../../api/sessions'
+import { listSkills } from '../../api/skills'
 
 interface SkillsViewProps {
   /** 点击“在对话中使用”：创建独立会话并跳回 chat，Composer 预填 /<id> 。 */

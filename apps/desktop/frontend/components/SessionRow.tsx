@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Session } from '@reflexion-os-studio/runtime-client'
-import { PencilIcon, TrashIcon } from './ui/icons'
+import { PencilIcon, TrashIcon } from '../ui/icons'
 
 /** 会话行：悬停浮现重命名/删除；重命名走行内输入（Enter 提交、Esc 取消）。 */
 export function SessionRow(props: {

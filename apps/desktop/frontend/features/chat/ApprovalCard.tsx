@@ -1,4 +1,4 @@
-import type { PendingApproval } from '../useAppBootstrap'
+import type { PendingApproval } from '../../hooks/useAppBootstrap'
 
 const OPERATION_LABELS: Record<string, string> = {
   'file.read': '读取文件',

@@ -1,5 +1,5 @@
 import type { ProviderProfile } from '@reflexion-os-studio/runtime-client'
-import { BoxIcon, PlusIcon } from './ui/icons'
+import { BoxIcon, PlusIcon } from '../../ui/icons'
 
 interface ProviderListProps {
   profiles: ProviderProfile[]

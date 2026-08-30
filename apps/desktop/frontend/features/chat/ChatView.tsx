@@ -3,12 +3,12 @@ import type {
   SkillManifest,
   ToolCall,
 } from '@reflexion-os-studio/runtime-client'
-import { Composer, type ComposerModelOption } from './Composer'
-import { ArrowDownIcon, SparkIcon } from './ui/icons'
-import { ApprovalCard } from './chat/ApprovalCard'
-import { AssistantMessage } from './chat/AssistantMessage'
-import type { SessionData } from './api/sessions'
-import type { PendingApproval } from './useAppBootstrap'
+import { Composer, type ComposerModelOption } from '../../components/Composer'
+import { ArrowDownIcon, SparkIcon } from '../../ui/icons'
+import { ApprovalCard } from './ApprovalCard'
+import { AssistantMessage } from './AssistantMessage'
+import type { SessionData } from '../../api/sessions'
+import type { PendingApproval } from '../../hooks/useAppBootstrap'
 
 interface ChatViewProps {
   sessionData: SessionData | null

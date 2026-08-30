@@ -9,7 +9,7 @@ import {
   SearchIcon,
   SparkIcon,
   TrashIcon,
-} from './ui/icons'
+} from '../ui/icons'
 
 export type AppView =
   'chat' | 'settings' | 'memories' | 'skills' | 'automations'
