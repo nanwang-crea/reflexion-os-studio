@@ -1,44 +1,51 @@
 # ReflexionOS Studio 分阶段路线图
 
+## 当前状态（2026-08-30）
+
+Phase 1A 全部完成；Phase 2 的技能（Skills）与记忆（Memory，会话/项目级）子集已完成，其余待办如下：
+工具（`file.*`/`shell.execute`）、审批与权限 Profile、技能斜杠激活、记忆提取-合并-召回均已接入对话链路与 UI。
+
 ## Phase 0：Architecture Foundation（已完成）
 
 项目骨架、总体架构和协议边界文档。
 
-## Phase 1A-0：Bootstrap
+## Phase 1A-0：Bootstrap（已完成）
 
 Tauri 启动页、TypeScript Runtime 和 Rust sidecar 启动/监控、JSON-RPC 握手、状态展示和优雅关闭。Rust 未 ready 不阻塞 Chat。
 
-## Phase 1A-1：Chat Core（最小 MVP）
+## Phase 1A-1：Chat Core（已完成）
 
 OpenAI-compatible Provider、Secret Store、Project/Session/Message/Run、Primary Agent、Session Context、SSE 流式 Chat、Stop、Retry、错误处理、SQLite 历史恢复。验收标准是冷启动、首配、流式回复、重启后历史仍在。
 
-不包含 Tool Calling、文件/Shell、审批、Workspace、Browser、Asset、Skills、Memory pipeline、Multi-Agent、Workflow 或 CLI。
+<span>注：上线范围已按后续阶段扩展——Tool Calling、文件/Shell、审批、Skills 与 Memory 均已实装（见 Phase 1A-2 / Phase 2）。</span>
 
-## Phase 1A-2：System Tools
+## Phase 1A-2：System Tools（已完成）
 
 Rust File/Shell Service、Workspace 边界、read-only/workspace Profile、Chat Approval、短期 ApprovalGrant、Tool Trace、超时、取消和工具恢复。
 
-## Phase 1B：Workspace Surfaces
+## Phase 1B：Workspace Surfaces（进行中）
 
-异步 Workspace Indexer、文件树和统计、代码/文档查看器、Git Diff、Asset/Artifact Card、ResourceLink、安全 URL 系统浏览器打开和可选只读内嵌 Browser。均不阻塞 Chat。
+- **已完成第一部分（2026-08-31）**：异步 Workspace Indexer（纯 TS worker、progress/cancel/stale/failed 状态、忽略目录与符号链接、快照落库+版本号）、文件树（按需懒加载，经 Rust 侧 workspace 边界）、文件/文档查看器（行号、复制、跳转行、分段加载、Markdown/JSON 预览）、`workspace.*` 命令与白名单、工作区页面 UI。
+- **待完成**：Git Diff（文件状态/diff 查看）、Asset/Artifact Card、ResourceLink（消息内点击定位文件/资产）、安全 URL 系统浏览器打开和可选只读内嵌 Browser。均不阻塞 Chat。
 
-## Phase 2：Agent Platform
+## Phase 2：Agent Platform（进行中）
 
-Memory、Context Pipeline、Skills、MCP、Provider/Tool Plugins、Browser Tool 和更完整的资产检索。
+- **已完成子集**：Skills（内置技能注册表、斜杠激活、skill.use）、Memory（提取 → 合并 → 落库 → 召回注入、记忆管理页）。
+- **待完成**：MCP、Provider/Tool Plugins、Browser Tool、user 级记忆写入确认流程、更完整的资产检索。
 
-## Phase 3：Multi-Agent Orchestration
+## Phase 3：Multi-Agent Orchestration（未开始）
 
 Agent Registry、Worker/Research/Coding/Review Agent、顺序/并行/层级委派、Context 隔离、结构化结果聚合、预算和恢复。
 
-## Phase 4：Workflow Engine
+## Phase 4：Workflow Engine（未开始）
 
 Node SDK、Workflow Definition、DAG 校验、调度、checkpoint、React Flow 画布以及 Asset/File/Document/Browser 节点。
 
-## Phase 5：Multimodal Workflow
+## Phase 5：Multimodal Workflow（未开始）
 
 Prompt → Text-to-Image → Review → Image-to-Video → Export，媒体 Asset、异步任务、预览、版本和 ComfyUI Backend。
 
-## Phase 6：Desktop Hardening
+## Phase 6：Desktop Hardening（未开始）
 
 平台级 Rust Sandbox、插件隔离、资源限制、激活码许可（离线优先、设备绑定、宽限期与撤销）、签名、公证、自动更新、崩溃诊断、版本回滚和备份恢复。
 

@@ -5,9 +5,16 @@ import { ChevronIcon } from '../../ui/icons'
 const TOOL_LABELS: Record<string, string> = {
   'file.read': '读取文件',
   'file.list': '列出目录',
+  'file.glob': '查找文件',
+  'file.grep': '搜索内容',
   'file.write': '写入文件',
   'file.edit': '编辑文件',
+  'file.delete': '删除文件',
+  'file.move': '移动文件',
+  'file.mkdir': '创建目录',
   'shell.execute': '执行命令',
+  'web.fetch': '网络抓取',
+  'skill.use': '加载技能',
   get_current_time: '获取时间',
 }
 

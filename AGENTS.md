@@ -5,12 +5,20 @@
 ## 1. 项目概览与当前阶段
 
 ```text
-React Renderer（未来） → Tauri Host → TypeScript Runtime → Rust System Services
-                                              ↘ SQLite / Event Store（未来）
+React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
+                                        ↘ SQLite / Event Store
 ```
 
 - 桌面宿主是 **Tauri 2**（已从 Electron 迁移），不是 Electron。任何文档或代码里残留的 Electron 假设都应视为待清理项。
-- 当前处于 **M0 Bootstrap** 阶段：只有启动页、两个 sidecar 的生命周期与 JSON-RPC 握手。**没有** Chat、数据库、工具、审批、React UI。不要提前实现后续阶段的能力，也不要让占位文案（如"Chat Core 尚未实现"）与实际能力不符。
+- 当前已完成 **Phase 1A**（M0 启动骨架 → 1A-1 Chat Core → 1A-2 System Tools）、**Phase 1B 第一部分（Workspace Surface）** 与 **Phase 2 的 Skills / Memory 子集**：
+  - **Chat**：Provider 配置与密钥存储、Project/Session/Message/Run、SSE 流式（正文+思考）、Stop/Retry/错误恢复、重启后历史仍在；
+  - **Tools**：纯 TS 工具（时间 / web.fetch / skill.use）+ Rust 工具（file.read/list/glob/grep/write/edit/delete/move/mkdir、shell.execute），workspace / read-only 权限 Profile、审批卡（once / session）、会话级授权、工具轨迹聚合展示；
+  - **Skills**：内置 code-review / web-research / workspace-report；斜杠命令激活 + skill.use 工具加载全文；
+  - **Memory**：Run 结束后自动提取-合并（会话/项目级，user 级待确认流程落地前不产出候选项）、记忆管理页、上下文召回注入；
+  - **Workspace（Phase 1B 第一部分）**：异步 Indexer（progress/cancel/stale/failed、忽略目录与符号链接、快照落库）、文件树按需加载、只读代码/文档查看器（行号/复制/跳转行/分段加载/Markdown·JSON 预览），全部经 Rust 侧 workspace 边界；
+  - **存储**：`node:sqlite`（WAL、外键、启动把未完成 Run/Message 恢复为 interrupted、终态单事务、workspace_index 快照表）。
+- **尚未实现、不得提前实现**：Phase 1B 剩余（Git Diff、Asset/Artifact Card、ResourceLink、Browser Surface）、Phase 2 剩余（MCP、Provider/Tool 插件、Browser 工具、user 级记忆写入确认）、Phase 3 多 Agent、Phase 4 Workflow、Phase 5 多模态、Phase 6 硬化与激活码许可。
+- 现有页面与占位边界：聊天区、落地页、工作区页（索引状态+文件树+查看器）、技能页、记忆管理页、设置页（Provider）均为可用功能；Automations 页是 Phase 4 占位（文案如实标注"尚未开放"），不要在占位页假装能力存在。
 
 ## 2. 目录结构与职责
 

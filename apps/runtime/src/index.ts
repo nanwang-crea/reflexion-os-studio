@@ -14,6 +14,7 @@ import { RunEventEmitter } from './events.js'
 import { dispatchCommand, testProviderConnection } from './handlers.js'
 import { resolveDataDir, Store } from './store/index.js'
 import { resolveSystemRuntimeBinary, SystemRuntimeClient } from './system.js'
+import { WorkspaceIndexer } from './workspace/indexer.js'
 
 const RUNTIME_VERSION = '0.1.0'
 
@@ -89,13 +90,24 @@ function summarizeZodIssues(error: {
 
 const store = new Store(resolveDataDir())
 const agent = new ChatAgent(store, notify, systemRuntime)
-const commandContext = { store, agent, approvals: agent.approvals }
+const workspaceIndexer = new WorkspaceIndexer(store, notify)
+const commandContext = {
+  store,
+  agent,
+  approvals: agent.approvals,
+  workspace: workspaceIndexer,
+  system: systemRuntime,
+}
 
 systemRuntime.start()
 // 初始状态上报：让 Host/前端立即拿到 systemAvailable 基线（后续变化走回调）。
 statusEmitter.next({ type: 'runtime.status', status: getStatus() })
 
 function handleRequest(request: JsonRpcRequest): void {
+  void handleRequestAsync(request)
+}
+
+async function handleRequestAsync(request: JsonRpcRequest): Promise<void> {
   if (request.method === 'system.ping') {
     // 工具健康检查代理：TS 转发给自有的 Rust 子进程。
     void systemRuntime.request('system.ping').then(
@@ -161,7 +173,7 @@ function handleRequest(request: JsonRpcRequest): void {
   }
 
   try {
-    const result = dispatchCommand(
+    const result = await dispatchCommand(
       request.method,
       params.data as Record<string, unknown>,
       commandContext,

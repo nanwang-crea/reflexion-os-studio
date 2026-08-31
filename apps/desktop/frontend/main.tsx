@@ -6,6 +6,7 @@ import './features/chat/chat.css'
 import './features/settings/settings.css'
 import './features/memories/memory.css'
 import './features/skills/skills.css'
+import './features/workspace/workspace.css'
 
 const rootElement = document.getElementById('root')
 if (!rootElement) throw new Error('#root not found')

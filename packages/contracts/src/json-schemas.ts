@@ -10,6 +10,9 @@ import {
   SkillManifestSchema,
   ToolCallSchema,
   ToolSpecSchema,
+  WorkspaceEntrySchema,
+  WorkspaceIndexSnapshotSchema,
+  WorkspaceReadResultSchema,
 } from './entities.js'
 import { RuntimeErrorSchema } from './errors.js'
 import { JsonRpcMessageSchema } from './jsonrpc.js'
@@ -31,6 +34,9 @@ export const jsonSchemas: Readonly<Record<string, unknown>> = Object.freeze(
     toJSONSchema('SkillManifest', SkillManifestSchema),
     toJSONSchema('Memory', MemorySchema),
     toJSONSchema('ProviderProfile', ProviderProfileSchema),
+    toJSONSchema('WorkspaceEntry', WorkspaceEntrySchema),
+    toJSONSchema('WorkspaceIndexSnapshot', WorkspaceIndexSnapshotSchema),
+    toJSONSchema('WorkspaceReadResult', WorkspaceReadResultSchema),
     toJSONSchema('RuntimeError', RuntimeErrorSchema),
     toJSONSchema('RuntimeEvent', RuntimeEventSchema),
     ...Object.entries(CommandSchemaRegistry).map(([method, entry]) =>

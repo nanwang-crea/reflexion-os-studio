@@ -1,0 +1,357 @@
+/* Phase 1B Workspace Surface：索引状态区 + 文件树 + 只读查看器 */
+
+.workspace {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  flex: 1;
+  min-height: 0;
+  gap: 1px;
+  background: var(--border-subtle);
+}
+
+.workspace-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.workspace-head {
+  padding: 12px 16px 4px;
+}
+
+.workspace-title {
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace-path {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace-index {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+}
+
+.index-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.index-chip.index-scanning {
+  color: var(--info);
+  border-color: rgba(96, 165, 250, 0.4);
+}
+
+.index-chip.index-completed {
+  color: var(--ok);
+  border-color: rgba(52, 211, 153, 0.35);
+}
+
+.index-chip.index-stale,
+.index-chip.index-failed {
+  color: var(--warning-text);
+  border-color: rgba(251, 191, 36, 0.35);
+}
+
+.index-stats {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace-error {
+  margin: 4px 16px 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--danger);
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.workspace-degraded {
+  margin: 4px 16px 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--warning-text);
+  background: var(--warning-bg);
+}
+
+/* ---------- 文件树 ---------- */
+
+.file-tree {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.file-tree-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.file-tree-bar .ghost {
+  padding: 4px;
+}
+
+.tree-root,
+.tree-children {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 16px;
+}
+
+.tree-children {
+  list-style: none;
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 8px;
+  background: transparent;
+  border-radius: 0;
+  font-size: 13px;
+  text-align: left;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.tree-row:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.tree-row.active {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+.tree-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+  transition: transform 0.12s ease;
+  flex: none;
+}
+
+.tree-chevron.open {
+  transform: rotate(90deg);
+}
+
+.tree-chevron svg {
+  width: 11px;
+  height: 11px;
+}
+
+.tree-file-dot {
+  width: 6px;
+  height: 6px;
+  margin-left: 8px;
+  border-radius: 2px;
+  background: var(--text-muted);
+  flex: none;
+  opacity: 0.7;
+}
+
+.tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-hint {
+  padding: 4px 24px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.tree-hint-error {
+  color: var(--danger);
+}
+
+.workspace-empty {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text-muted);
+  background: var(--bg);
+}
+
+/* ---------- 查看器 ---------- */
+
+.workspace-viewer {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.workspace-viewer-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.content-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.content-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.content-close {
+  padding: 2px 8px;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.content-name {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.content-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.content-head .ghost {
+  padding: 4px 8px;
+}
+
+.content-head .ghost.active {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+.jump-form input {
+  width: 72px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.content-body {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+  background: var(--bg-inset);
+}
+
+.content-text {
+  margin: 0;
+  padding: 8px 0;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 20px; /* 与 LINE_HEIGHT_PX 对应，跳转行依赖 */
+}
+
+.content-line {
+  display: flex;
+  white-space: pre;
+  min-width: 100%;
+  width: fit-content;
+  padding-right: 24px;
+}
+
+.content-line:hover {
+  background: var(--bg-hover);
+}
+
+.content-no {
+  width: 56px;
+  padding-right: 12px;
+  text-align: right;
+  color: var(--text-muted);
+  flex: none;
+  user-select: none;
+}
+
+.content-code {
+  color: var(--text);
+}
+
+.content-md {
+  padding: 12px 20px;
+  background: var(--bg-inset);
+}
+
+.content-error {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.content-hint,
+.content-more {
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.content-more {
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  justify-content: center;
+  padding: 8px;
+}
+
+.content-more .ghost {
+  width: 100%;
+  font-size: 12px;
+}

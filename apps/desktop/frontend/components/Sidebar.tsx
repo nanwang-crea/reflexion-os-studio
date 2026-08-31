@@ -4,6 +4,7 @@ import { SessionRow } from './SessionRow'
 import {
   ArchiveIcon,
   BoxIcon,
+  FolderIcon,
   GearIcon,
   PlusIcon,
   SearchIcon,
@@ -12,7 +13,7 @@ import {
 } from '../ui/icons'
 
 export type AppView =
-  'chat' | 'settings' | 'memories' | 'skills' | 'automations'
+  'chat' | 'workspace' | 'settings' | 'memories' | 'skills' | 'automations'
 
 /** 底部导航可打开的页面（chat 由会话行/新建入口进入，不进底部导航）。 */
 type OtherView = Exclude<AppView, 'chat'>
@@ -103,6 +104,12 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
       </header>
       <nav className="sidebar-nav" aria-label="页面导航">
         <NavItem
+          label="工作区"
+          icon={<FolderIcon />}
+          active={props.view === 'workspace'}
+          onClick={() => props.onSelectView('workspace')}
+        />
+        <NavItem
           label="技能"
           icon={<SparkIcon size={15} />}
           active={props.view === 'skills'}
@@ -146,6 +153,12 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
       />
 
       {/* <nav className="sidebar-nav" aria-label="页面导航">
+        <NavItem
+          label="工作区"
+          icon={<FolderIcon />}
+          active={props.view === 'workspace'}
+          onClick={() => props.onSelectView('workspace')}
+        />
         <NavItem
           label="技能"
           icon={<SparkIcon size={15} />}

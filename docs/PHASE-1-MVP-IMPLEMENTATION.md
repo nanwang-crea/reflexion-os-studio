@@ -1,5 +1,10 @@
 # Phase 1 MVP 实施步骤
 
+> **状态：已完成（2026-08-30）**。本文档是 M1–M5 阶段的实施记录，M5 验收通过后
+> 扩展范围已由 Phase 1A-1 / 1A-2 与 Phase 2 子集（Skills、Memory）接管；
+> 其中的"MVP 明确不做"清单已是历史约束，不代表当前能力边界。
+> 当前阶段与能力边界见 `ROADMAP.md` 与 `AGENTS.md` §1。
+
 ## 目标
 
 先交付一个可以启动、配置模型并正常流式沟通的桌面 Chat MVP。MVP 不包含 Tool Calling、文件操作、审批、Workspace、浏览器、插件、Memory、Multi-Agent 或 Workflow。

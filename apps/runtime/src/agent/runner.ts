@@ -5,6 +5,7 @@ import {
   type ModelMessage,
   type ModelTurn,
   type ToolRegistry,
+  type ToolResult,
 } from '@reflexion-os-studio/agent-core'
 import {
   JsonValueSchema,
@@ -19,6 +20,7 @@ import type { ProviderRuntimeConfig } from './context.js'
 import type { MemoryService } from './memory/service.js'
 import type { ApprovalGateway, PermissionGate } from './permissions.js'
 import { isToolOperation } from './permissions.js'
+import { capToolResultForModel } from './toolResults.js'
 
 interface RunStreamInput {
   run: Run
@@ -288,6 +290,11 @@ export class RunRunner {
 
           const result = await registry.call(request, signal, grant)
           state.toolCallRowId = null
+          // 持久化保存完整结果（审计不做盲区），回填模型前只取截断副本。
+          const modelResult: ToolResult = {
+            ...result,
+            content: capToolResultForModel(result.content),
+          }
           if (result.isError) {
             const errorCode = result.code ?? 'tool_error'
             this.store.toolCalls.finalize(
@@ -315,7 +322,7 @@ export class RunRunner {
               errorCode: null,
             })
           }
-          return result
+          return modelResult
         },
       })
 

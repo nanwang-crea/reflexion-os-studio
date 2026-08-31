@@ -323,7 +323,7 @@ fn runtime_request(
     method: String,
     params: serde_json::Value,
 ) -> Result<u64, String> {
-    const RUNTIME_METHODS: [&str; 22] = [
+    const RUNTIME_METHODS: [&str; 27] = [
         "runtime.get_status",
         "system.ping",
         "project.list",
@@ -346,6 +346,11 @@ fn runtime_request(
         "memory.update",
         "memory.delete",
         "skill.list",
+        "workspace.index.start",
+        "workspace.index.cancel",
+        "workspace.index.status",
+        "workspace.list_dir",
+        "workspace.read_file",
     ];
     if !RUNTIME_METHODS.contains(&method.as_str()) {
         return Err(format!("method not allowed: {method}"));

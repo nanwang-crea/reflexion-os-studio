@@ -104,10 +104,25 @@ CREATE TRIGGER IF NOT EXISTS memories_fts_au AFTER UPDATE OF content ON memories
   VALUES ('delete', old.rowid, old.content);
   INSERT INTO memories_fts(rowid, content) VALUES (new.rowid, new.content);
 END;
+-- Phase 1B：每项目一份 Workspace 索引快照；项目删除级联清掉。
+CREATE TABLE IF NOT EXISTS workspace_index (
+  project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+  status TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  started_at TEXT,
+  completed_at TEXT,
+  stale_at TEXT,
+  file_count INTEGER NOT NULL DEFAULT 0,
+  dir_count INTEGER NOT NULL DEFAULT 0,
+  total_bytes INTEGER NOT NULL DEFAULT 0,
+  ext_stats_json TEXT NOT NULL DEFAULT '[]',
+  truncated INTEGER NOT NULL DEFAULT 0,
+  error TEXT
+);
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 6
+export const LATEST_SCHEMA_VERSION = 7
 
 const SESSIONS_TABLE_V1 = `
 CREATE TABLE sessions (
@@ -296,6 +311,8 @@ export function runMigrations(db: DatabaseSync): void {
         db.exec('ALTER TABLE runs ADD COLUMN skill_id TEXT')
       }
     }
+    // v7：workspace_index 表为纯新增（SCHEMA CREATE TABLE IF NOT EXISTS
+    // 已覆盖新库与旧库），迁移只需推进版本号。
     db.exec('COMMIT')
     // 迁移全部执行完毕才推进版本号；否则下次启动会重复进入迁移分支。
     version = LATEST_SCHEMA_VERSION

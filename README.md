@@ -4,11 +4,25 @@ ReflexionOS 的下一代桌面 Agent 与可视化工作流平台。它不是现�
 
 ## 当前阶段
 
-当前仓库处于 **Architecture Foundation** 阶段：只定义边界、协议和迁移路线，不迁移旧 Python 业务代码。
+当前仓库已完成 **Phase 1A**（Bootstrap → Chat Core → System Tools）、**Phase 1B 第一部分（Workspace Surface）** 与 **Phase 2 的 Skills / Memory 子集**：
 
-```text
-React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
-                                      ↘ SQLite / Event Store
+- **Chat**：OpenAI-compatible Provider 配置与本地密钥存储，Project/Session/Message/Run，SSE 流式回复（含思考过程）、Stop / Retry、SQLite 持久化与重启恢复；
+- **工具**：文件读写/搜索（经 Rust System Runtime）与 Shell、网络抓取、计时器；workspace / read-only 权限 Profile、工具审批（允许一次 / 本会话允许 / 拒绝）、工具轨迹聚合展示；
+- **Skills**：内置 code-review、web-research、workspace-report，斜杠命令（`/code-review …`）与 skill.use 激活；
+- **Memory**：Run 结束后自动提取与合并、记忆管理页、上下文召回注入；
+- **Workspace**：按项目异步索引（进度/取消/过期状态与统计）、文件树按需加载、只读代码/文档查看器（行号、复制、跳转行、Markdown/JSON 预览），文件访问经 Rust 侧 workspace 边界；
+- **UI**：项目/会话侧栏、聊天区、落地页、工作区页、技能页、记忆管理页、Provider 设置页。
+
+尚未实现（见 `docs/ROADMAP.md`）：Phase 1B 剩余（Git Diff、Asset Card、ResourceLink、内嵌浏览器）、MCP 与插件、Browser 工具、多 Agent、Workflow Engine、多模态、激活码许可。
+
+## 常用命令
+
+```bash
+pnpm dev          # 开发模式启动桌面应用
+pnpm build        # 全量构建
+pnpm clean        # 清理构建产物
+pnpm test:ts      # TypeScript 单测（contracts / agent-core / runtime）
+scripts/test-all.sh   # 全量验证（含 cargo 与冒烟）
 ```
 
 ## 目录

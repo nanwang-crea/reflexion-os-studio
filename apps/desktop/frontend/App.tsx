@@ -26,6 +26,7 @@ import { MemoryView } from './features/memories/MemoryView'
 import { Sidebar } from './components/Sidebar'
 import { SkillsView } from './features/skills/SkillsView'
 import { AutomationsView } from './features/automations/AutomationsView'
+import { WorkspaceView } from './features/workspace/WorkspaceView'
 import { SettingsView } from './features/settings/SettingsView'
 import { useSessionActions } from './hooks/useSessionActions'
 import { DoubleChevronIcon } from './ui/icons'
@@ -41,7 +42,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function App() {
   const [view, setView] = useState<
-    'chat' | 'settings' | 'memories' | 'skills' | 'automations'
+    'chat' | 'workspace' | 'settings' | 'memories' | 'skills' | 'automations'
   >('chat')
   const [profiles, setProfiles] = useState<ProviderProfile[]>([])
   const [skills, setSkills] = useState<SkillManifest[]>([])
@@ -350,6 +351,11 @@ export default function App() {
           />
         ) : view === 'automations' ? (
           <AutomationsView />
+        ) : view === 'workspace' ? (
+          <WorkspaceView
+            project={activeProject}
+            systemReady={bootstrap?.systemReady ?? false}
+          />
         ) : activeSessionId ? (
           <ChatView
             sessionData={sessionData}
@@ -383,6 +389,7 @@ export default function App() {
             modelOptions={modelOptions}
             selectedModelKey={selectedModelKey}
             onModelChange={setSelectedModelKey}
+            skills={skills}
             composerPrefill={composerPrefill}
             onPrefillConsumed={() => setComposerPrefill(null)}
             onSend={sendMessage}

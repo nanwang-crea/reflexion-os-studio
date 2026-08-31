@@ -23,9 +23,24 @@ function check(name, condition, detail) {
   }
 }
 
-function countRustProcesses() {
+/** 统计某 TS Runtime 直属的 Rust 子进程数（状态可见性用，避免误报全局其它实例）。 */
+function countChildRustProcesses(pid) {
   try {
-    const output = execSync('pgrep -fl reflexion-system-runtime', {
+    const output = execSync(`pgrep -P ${pid} -fl reflexion-system-runtime`, {
+      encoding: 'utf8',
+    })
+    return output
+      .split('\n')
+      .filter((line) => line.includes('reflexion-system-runtime')).length
+  } catch {
+    return 0 // pgrep 无匹配时以非零码退出
+  }
+}
+
+/** 统计已脱离宿主的 Rust 孤儿（PPID=1）：原 TS Runtime 已退出却仍有遗留进程。 */
+function countOrphanRustProcesses() {
+  try {
+    const output = execSync('pgrep -P 1 -fl reflexion-system-runtime', {
       encoding: 'utf8',
     })
     return output
@@ -171,7 +186,10 @@ console.log('smoke-system-channel: starting')
       status?.systemAvailable === true,
     )
 
-    check('rust child process visible', countRustProcesses() >= 1)
+    check(
+      'rust child process visible',
+      countChildRustProcesses(runtime.child.pid) >= 1,
+    )
 
     const shutdownStart = Date.now()
     await runtime.request(3, 'runtime.shutdown')
@@ -191,7 +209,10 @@ console.log('smoke-system-channel: starting')
       Date.now() - shutdownStart < 7000,
     )
     await new Promise((resolve) => setTimeout(resolve, 500))
-    check('no orphan rust process after shutdown', countRustProcesses() === 0)
+    check(
+      'no orphan rust process after shutdown',
+      countOrphanRustProcesses() === 0,
+    )
   } catch (error) {
     failures++
     console.error(`FAIL unexpected — ${error.message}`)

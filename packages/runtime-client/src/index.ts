@@ -15,6 +15,10 @@ export type {
   Session,
   SkillManifest,
   ToolCall,
+  WorkspaceEntry,
+  WorkspaceExtStats,
+  WorkspaceIndexSnapshot,
+  WorkspaceReadResult,
 } from '@reflexion-os-studio/contracts'
 
 export {

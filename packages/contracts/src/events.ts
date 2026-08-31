@@ -6,6 +6,7 @@ import {
   RunSchema,
   SessionSchema,
   ToolOperationSchema,
+  WorkspaceIndexSnapshotSchema,
 } from './entities.js'
 import { RuntimeErrorSchema } from './errors.js'
 import { RuntimeStatusSchema } from './handshake.js'
@@ -110,6 +111,24 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
   RuntimeEventEnvelopeSchema.extend({
     type: z.literal('memory.written'),
     memories: z.array(MemorySchema),
+  }),
+  // Phase 1B Workspace 索引事件：不属于任何 Run，envelope.runId 复用 projectId。
+  RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('workspace.index.progress'),
+    projectId: z.string().min(1),
+    version: z.number().int().nonnegative(),
+    files: z.number().int().nonnegative(),
+    dirs: z.number().int().nonnegative(),
+  }),
+  RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('workspace.index.completed'),
+    projectId: z.string().min(1),
+    snapshot: WorkspaceIndexSnapshotSchema,
+  }),
+  RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('workspace.index.failed'),
+    projectId: z.string().min(1),
+    error: z.string(),
   }),
 ])
 export type RuntimeEvent = z.infer<typeof RuntimeEventSchema>

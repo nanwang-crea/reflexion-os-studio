@@ -7,7 +7,7 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "tsc -p tsconfig.json && node --test test/store.test.mjs test/provider-sse.test.mjs test/system-client.test.mjs test/memory.test.mjs",
+    "test": "tsc -p tsconfig.json && node --test test/store.test.mjs test/provider-sse.test.mjs test/system-client.test.mjs test/memory.test.mjs test/tool-results.test.mjs test/workspace-indexer.test.mjs",
     "start": "node dist/index.js"
   },
   "dependencies": {

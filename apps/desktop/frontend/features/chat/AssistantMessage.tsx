@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Message, ToolCall } from '@reflexion-os-studio/runtime-client'
 import { CheckIcon, CopyIcon } from '../../ui/icons'
-import { MessageMarkdown } from './MessageMarkdown'
+import { MessageMarkdown } from '../../components/MessageMarkdown'
 import { WorkSummary } from './WorkSummary'
 
 const MESSAGE_STATUS_LABELS: Record<string, string> = {

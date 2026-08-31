@@ -11,6 +11,9 @@ import {
   SessionSchema,
   SkillManifestSchema,
   ToolCallSchema,
+  WorkspaceEntrySchema,
+  WorkspaceIndexSnapshotSchema,
+  WorkspaceReadResultSchema,
 } from './entities.js'
 import { RuntimeStatusSchema } from './handshake.js'
 
@@ -220,6 +223,48 @@ export const CommandSchemaRegistry = {
     // 内置 Skill 清单（Phase 1A 无安装/启停，列表即全部可用项）。
     params: z.object({ requestId: RequestIdSchema }),
     result: z.object({ skills: z.array(SkillManifestSchema) }),
+  },
+  // ---------- Phase 1B：Workspace Surface ----------
+  'workspace.index.start': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+    }),
+    result: z.object({ accepted: z.boolean() }),
+  },
+  'workspace.index.cancel': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+    }),
+    result: z.object({ accepted: z.boolean() }),
+  },
+  'workspace.index.status': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+    }),
+    // 从未索引过返回 null；stale 状态由查询时按根目录 mtime 推导。
+    result: z.object({ snapshot: WorkspaceIndexSnapshotSchema.nullable() }),
+  },
+  'workspace.list_dir': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+      // 工作区相对目录；缺省 "."（根），只允许相对路径。
+      path: z.string().optional(),
+    }),
+    result: z.object({ entries: z.array(WorkspaceEntrySchema) }),
+  },
+  'workspace.read_file': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+      path: z.string().min(1),
+      offset: z.number().int().nonnegative().optional(),
+      limit: z.number().int().nonnegative().optional(),
+    }),
+    result: WorkspaceReadResultSchema,
   },
 } satisfies Record<string, { params: z.ZodType; result: z.ZodType }>
 

@@ -13,3 +13,4 @@ cargo test --manifest-path crates/Cargo.toml
 cargo build --manifest-path crates/Cargo.toml
 node scripts/smoke-system-channel.mjs
 node scripts/smoke-chat.mjs
+node scripts/smoke-workspace.mjs

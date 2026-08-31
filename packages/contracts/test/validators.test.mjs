@@ -93,6 +93,7 @@ test('RunSchema carries agent delegation fields and awaiting_approval', () => {
     agentId: null,
     parentRunId: null,
     delegationId: null,
+    skillId: null,
   }
   assert.equal(RunSchema.safeParse(run).success, true)
   assert.equal(

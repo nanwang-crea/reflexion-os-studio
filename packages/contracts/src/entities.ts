@@ -260,3 +260,61 @@ export const MemorySchema = z
     }
   })
 export type Memory = z.infer<typeof MemorySchema>
+
+// ---------------- Workspace Surface (Phase 1B) ----------------
+
+/** 文件树条目（Rust file.list 透传）：路径为 workspace 相对形状。 */
+export const WorkspaceEntrySchema = z.object({
+  path: z.string().min(1),
+  kind: z.enum(['file', 'dir']),
+  sizeBytes: z.number().int().nonnegative(),
+})
+export type WorkspaceEntry = z.infer<typeof WorkspaceEntrySchema>
+
+export const WorkspaceIndexStatusSchema = z.enum([
+  'idle',
+  'scanning',
+  'completed',
+  'stale',
+  'failed',
+])
+export type WorkspaceIndexStatus = z.infer<typeof WorkspaceIndexStatusSchema>
+
+/** 按扩展名统计：ext 带点（.ts），无扩展名归 .bin 无法区分时归 "（无）"。 */
+export const WorkspaceExtStatsSchema = z.object({
+  ext: z.string().min(1),
+  files: z.number().int().nonnegative(),
+  bytes: z.number().int().nonnegative(),
+})
+export type WorkspaceExtStats = z.infer<typeof WorkspaceExtStatsSchema>
+
+/**
+ * 每项目一份的索引快照：version 单调递增，staleAt 表示"与磁盘不再一致"的时间
+ * （按工作区根目录 mtime 推断），仅查询时计算、不落盘。
+ */
+export const WorkspaceIndexSnapshotSchema = z.object({
+  projectId: z.string().min(1),
+  status: WorkspaceIndexStatusSchema,
+  version: z.number().int().nonnegative(),
+  startedAt: IsoDateTimeSchema.nullable(),
+  completedAt: IsoDateTimeSchema.nullable(),
+  staleAt: IsoDateTimeSchema.nullable(),
+  fileCount: z.number().int().nonnegative(),
+  dirCount: z.number().int().nonnegative(),
+  totalBytes: z.number().int().nonnegative(),
+  extStats: z.array(WorkspaceExtStatsSchema),
+  truncated: z.boolean(),
+  error: z.string().nullable(),
+})
+export type WorkspaceIndexSnapshot = z.infer<
+  typeof WorkspaceIndexSnapshotSchema
+>
+
+/** workspace.read_file 结果（Rust file.read 透传）。 */
+export const WorkspaceReadResultSchema = z.object({
+  content: z.string(),
+  sizeBytes: z.number().int().nonnegative(),
+  totalLines: z.number().int().nonnegative(),
+  offset: z.number().int().nonnegative(),
+})
+export type WorkspaceReadResult = z.infer<typeof WorkspaceReadResultSchema>

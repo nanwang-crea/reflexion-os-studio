@@ -13,6 +13,7 @@ import {
   type CommandResult,
 } from './command-utils.js'
 import { memoryCommandHandlers } from './handlers-memory.js'
+import { workspaceCommandHandlers } from './handlers-workspace.js'
 import { builtinSkills } from './skills/index.js'
 
 /**
@@ -212,12 +213,13 @@ const handlers: Record<string, CommandHandler> = {
 }
 
 Object.assign(handlers, memoryCommandHandlers)
+Object.assign(handlers, workspaceCommandHandlers)
 
-export function dispatchCommand(
+export async function dispatchCommand(
   method: string,
   params: Record<string, unknown>,
   ctx: CommandContext,
-): CommandResult {
+): Promise<CommandResult> {
   const handler = handlers[method]
   if (!handler) {
     throw new CommandError('unsupported', `unsupported command: ${method}`)

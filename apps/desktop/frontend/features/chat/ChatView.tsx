@@ -258,7 +258,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
               <div className="chat-empty-icon" aria-hidden="true">
                 <SparkIcon size={20} />
               </div>
-              发送第一条消息开始对话。
+              发送第一条消息开始对话。输入 / 可选用技能。
             </div>
           )}
           {displayItems.map((item) => {

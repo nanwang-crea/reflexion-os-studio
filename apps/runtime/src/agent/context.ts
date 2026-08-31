@@ -11,6 +11,7 @@ import type { Store } from '../store/index.js'
 import { streamChatCompletion } from '../provider.js'
 import { buildMemoryBlock } from './memory/recall.js'
 import { HISTORY_COMPACTOR_SYSTEM_PROMPT } from './prompts/index.js'
+import { capToolResultForModel } from './toolResults.js'
 
 /**
  * 上下文 token 预算：超过即触发摘要压缩。
@@ -147,7 +148,10 @@ function toAssistantToolCall(row: ToolCall): AssistantToolCall {
 }
 
 function toolResultText(row: ToolCall): string {
-  if (row.status === 'completed') return JSON.stringify(row.result ?? null)
+  if (row.status === 'completed') {
+    // 历史重建与实时回填保持同一截断边界，避免重启前后上下文口径不一致。
+    return capToolResultForModel(JSON.stringify(row.result ?? null))
+  }
   return `工具执行失败${row.errorCode ? `（${row.errorCode}）` : ''}`
 }
 

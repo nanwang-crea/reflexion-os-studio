@@ -9,6 +9,7 @@ import { RunStore } from './runs.js'
 import { runMigrations, SCHEMA } from './migrations.js'
 import { SessionStore } from './sessions.js'
 import { ToolCallStore } from './toolCalls.js'
+import { WorkspaceIndexStore } from './workspaceIndex.js'
 
 export { DEFAULT_SESSION_TITLE, resolveDataDir } from './shared.js'
 
@@ -25,6 +26,7 @@ export class Store {
   readonly toolCalls: ToolCallStore
   readonly providers: ProviderStore
   readonly memories: MemoryStore
+  readonly workspaceIndex: WorkspaceIndexStore
 
   constructor(dir: string) {
     mkdirSync(dir, { recursive: true })
@@ -44,11 +46,13 @@ export class Store {
     this.toolCalls = new ToolCallStore(this.db)
     this.providers = new ProviderStore(this.db)
     this.memories = new MemoryStore(this.db)
+    this.workspaceIndex = new WorkspaceIndexStore(this.db)
 
     // 启动恢复：上次进程未走完的生命周期统一落为 interrupted/cancelled。
     this.runs.recoverInterrupted()
     this.messages.recoverInterrupted()
     this.toolCalls.recoverUnfinished()
+    this.workspaceIndex.recoverInterrupted()
   }
 
   /** 单事务边界：同连接上的多个领域写入要么全部提交要么全部回滚。 */
