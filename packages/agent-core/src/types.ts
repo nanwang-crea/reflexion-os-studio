@@ -79,6 +79,8 @@ export interface AgentLoopOptions {
   signal: AbortSignal
   /** 最大模型调用轮次；超出即停止，避免无限循环。 */
   maxTurns?: number
+  /** 工具失败累计次数达到该值后注入反思消息；缺省 2，传 0 禁用。 */
+  reflectionThreshold?: number
 }
 
 export interface AgentLoopOutcome {

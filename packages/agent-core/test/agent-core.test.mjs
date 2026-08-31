@@ -343,3 +343,72 @@ test('boundMessagesForModel truncates as last resort without dangling tools', ()
   }
   assert.ok(estimateMessageTokens(bounded) <= 500)
 })
+
+test('loop injects reflection message after repeated tool failures', async () => {
+  const seenMessages = []
+  let failsLeft = 2
+  const outcome = await runAgentLoop({
+    history: [userMessage('反复失败的任务')],
+    signal: new AbortController().signal,
+    callModel: async (messages) => {
+      seenMessages.push(messages)
+      if (failsLeft > 0) {
+        failsLeft -= 1
+        return {
+          content: '',
+          toolCalls: [{ id: `f${failsLeft}`, name: 'boom', arguments: '{}' }],
+        }
+      }
+      return { content: '放弃了', toolCalls: [] }
+    },
+    executeTool: async () => ({
+      content: '失败',
+      isError: true,
+      code: 'tool_error',
+    }),
+  })
+
+  assert.equal(outcome.status, 'completed')
+  const lastMessages = seenMessages[seenMessages.length - 1]
+  const reflection = lastMessages.find(
+    (message) =>
+      message.role === 'user' && message.content.startsWith('[反思]'),
+  )
+  assert.ok(
+    reflection !== undefined,
+    'should inject reflection before third turn',
+  )
+  assert.match(reflection.content, /2 次工具调用失败/)
+  assert.match(reflection.content, /boom/)
+})
+
+test('reflectionThreshold=0 disables reflection injection', async () => {
+  const seenMessages = []
+  let calls = 0
+  await runAgentLoop({
+    history: [userMessage('任务')],
+    signal: new AbortController().signal,
+    maxTurns: 4,
+    reflectionThreshold: 0,
+    callModel: async (messages) => {
+      seenMessages.push(messages)
+      calls += 1
+      return {
+        content: '',
+        toolCalls: [{ id: `c${calls}`, name: 'boom', arguments: '{}' }],
+      }
+    },
+    executeTool: async () => ({
+      content: '失败',
+      isError: true,
+      code: 'tool_error',
+    }),
+  })
+
+  for (const messages of seenMessages) {
+    assert.equal(
+      messages.some((message) => message.content?.startsWith('[反思]')),
+      false,
+    )
+  }
+})

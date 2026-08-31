@@ -846,3 +846,9 @@ button.link {
 .approval-actions .danger {
   color: #c0392b;
 }
+
+.assistant-usage {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}

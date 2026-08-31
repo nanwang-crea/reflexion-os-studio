@@ -112,8 +112,8 @@ async function main() {
     )
     const skills = listed.result?.skills ?? []
     check(
-      '内置技能为 3 个',
-      skills.length === 3,
+      '内置技能为 5 个',
+      skills.length === 5,
       `got ${skills.length}: ${skills.map((s) => s.id).join(',')}`,
     )
     const byId = new Map(skills.map((skill) => [skill.id, skill]))
@@ -261,7 +261,7 @@ async function main() {
     const listed = await legacy.request('skill.list', {
       requestId: randomUUID(),
     })
-    check('旧库（v5）启动后命令正常', listed.result?.skills?.length === 3)
+    check('旧库（v5）启动后命令正常', listed.result?.skills?.length === 5)
     await legacy.shutdown()
     const after = new DatabaseSync(join(legacyDir, 'reflexion.db'))
     const version = after.prepare('PRAGMA user_version').get().user_version
@@ -270,7 +270,7 @@ async function main() {
       .all()
       .map((column) => column.name)
     after.close()
-    check('user_version 推进到 6', Number(version) === 6, `got ${version}`)
+    check('user_version 推进到 8', Number(version) === 8, `got ${version}`)
     check(
       'runs 表新增 skill_id 列',
       columns.includes('skill_id'),

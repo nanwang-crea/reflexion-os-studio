@@ -15,6 +15,10 @@ export interface ConfigureProviderPayload {
   /** 新明文 Key 只在此处出现一次；留空表示沿用已保存密钥。 */
   secret?: string
   secretRef?: string
+  temperature?: number | null
+  maxTokens?: number | null
+  /** 模型上下文窗口（token 数）；Runtime 据此动态计算上下文预算。 */
+  contextWindow?: number | null
   enabled?: boolean
 }
 

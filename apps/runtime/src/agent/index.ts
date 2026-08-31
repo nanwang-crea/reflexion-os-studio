@@ -89,6 +89,25 @@ export class ChatAgent {
     return { profile, apiKey, model: resolvedModel }
   }
 
+  /** 模型采样参数：消息级覆盖优先，缺省用 Provider 配置。 */
+  private resolveSampling(
+    profile: ProviderProfile,
+    overrides: { temperature?: number; maxTokens?: number },
+  ): { temperature?: number; maxTokens?: number } {
+    const resolved: { temperature?: number; maxTokens?: number } = {}
+    if (overrides.temperature !== undefined) {
+      resolved.temperature = overrides.temperature
+    } else if (profile.temperature !== null) {
+      resolved.temperature = profile.temperature
+    }
+    if (overrides.maxTokens !== undefined) {
+      resolved.maxTokens = overrides.maxTokens
+    } else if (profile.maxTokens !== null) {
+      resolved.maxTokens = profile.maxTokens
+    }
+    return resolved
+  }
+
   private requireSession(sessionId: string): Session {
     const session = this.store.sessions.get(sessionId)
     if (!session) {
@@ -121,6 +140,7 @@ export class ChatAgent {
       params.providerId,
       params.model,
     )
+    const sampling = this.resolveSampling(profile, params)
     this.requireIdleSession(params.sessionId)
 
     const run = this.store.runs.create({
@@ -153,6 +173,7 @@ export class ChatAgent {
       profile,
       apiKey,
       model,
+      sampling,
       permissionMode: params.permissionMode,
       skill,
       assistantMessage,
@@ -208,6 +229,7 @@ export class ChatAgent {
       profile,
       apiKey,
       model,
+      sampling: this.resolveSampling(profile, {}),
       permissionMode: undefined,
       skill:
         original.skillId === null ? null : builtinSkills.get(original.skillId),
@@ -248,19 +270,32 @@ export class ChatAgent {
     profile: ProviderProfile
     apiKey: string
     model: string
+    sampling: { temperature?: number; maxTokens?: number }
     permissionMode: ChatCommand['permissionMode']
     skill: SkillDefinition | null
     assistantMessage: Message
     emitter: RunEventEmitter
   }): void {
-    const { run, session, profile, apiKey, model, assistantMessage, emitter } =
-      input
+    const {
+      run,
+      session,
+      profile,
+      apiKey,
+      model,
+      sampling,
+      assistantMessage,
+      emitter,
+    } = input
     const controller = new AbortController()
     this.streams.set(run.id, { controller })
     const provider: ProviderRuntimeConfig = {
       baseUrl: profile.baseUrl,
       apiKey,
       model,
+      ...sampling,
+      ...(profile.contextWindow !== null
+        ? { contextWindow: profile.contextWindow }
+        : {}),
     }
     const sessionId = run.sessionId
     const workspaceRoot = this.resolveWorkspaceRoot(session)

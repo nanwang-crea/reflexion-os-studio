@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS runs (
   agent_id TEXT,
   parent_run_id TEXT,
   delegation_id TEXT,
-  skill_id TEXT
+  skill_id TEXT,
+  usage_json TEXT
 );
 CREATE TABLE IF NOT EXISTS tool_calls (
   id TEXT PRIMARY KEY,
@@ -67,6 +68,9 @@ CREATE TABLE IF NOT EXISTS provider_profiles (
   capabilities TEXT NOT NULL DEFAULT '["chat"]',
   secret_ref TEXT NOT NULL,
   enabled INTEGER NOT NULL,
+  temperature REAL,
+  max_tokens INTEGER,
+  context_window INTEGER,
   updated_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS memories (
@@ -122,7 +126,7 @@ CREATE TABLE IF NOT EXISTS workspace_index (
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 7
+export const LATEST_SCHEMA_VERSION = 9
 
 const SESSIONS_TABLE_V1 = `
 CREATE TABLE sessions (
@@ -313,6 +317,33 @@ export function runMigrations(db: DatabaseSync): void {
     }
     // v7：workspace_index 表为纯新增（SCHEMA CREATE TABLE IF NOT EXISTS
     // 已覆盖新库与旧库），迁移只需推进版本号。
+    if (version < 8) {
+      const providerColumns = tableColumns(db, 'provider_profiles').map(
+        (column) => column.name,
+      )
+      if (!providerColumns.includes('temperature')) {
+        db.exec('ALTER TABLE provider_profiles ADD COLUMN temperature REAL')
+      }
+      if (!providerColumns.includes('max_tokens')) {
+        db.exec('ALTER TABLE provider_profiles ADD COLUMN max_tokens INTEGER')
+      }
+      if (
+        !tableColumns(db, 'runs').some((column) => column.name === 'usage_json')
+      ) {
+        db.exec('ALTER TABLE runs ADD COLUMN usage_json TEXT')
+      }
+    }
+    if (version < 9) {
+      if (
+        !tableColumns(db, 'provider_profiles').some(
+          (column) => column.name === 'context_window',
+        )
+      ) {
+        db.exec(
+          'ALTER TABLE provider_profiles ADD COLUMN context_window INTEGER',
+        )
+      }
+    }
     db.exec('COMMIT')
     // 迁移全部执行完毕才推进版本号；否则下次启动会重复进入迁移分支。
     version = LATEST_SCHEMA_VERSION

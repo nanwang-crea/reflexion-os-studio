@@ -290,6 +290,10 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
                   streamingText={props.streaming[message.id]}
                   streamingReasoning={props.streamingReasoning[message.id]}
                   runDurationMs={computeRunDurationMs(runs, message)}
+                  runUsage={
+                    runs.find((entry) => entry.id === message.runId)?.usage ??
+                    null
+                  }
                   canRetry={
                     lastRetryableRun !== undefined &&
                     lastRetryableRun.id === message.runId

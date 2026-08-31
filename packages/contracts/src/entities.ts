@@ -103,6 +103,13 @@ export const RunStatusSchema = z.enum([
 ])
 export type RunStatus = z.infer<typeof RunStatusSchema>
 
+/** 一次模型调用的 token 用量（Run/事件共用；历史 Run 可为 null）。 */
+export const UsageSchema = z.object({
+  promptTokens: z.number().int().nonnegative(),
+  completionTokens: z.number().int().nonnegative(),
+})
+export type Usage = z.infer<typeof UsageSchema>
+
 export const RunSchema = z.object({
   id: z.string().min(1),
   sessionId: z.string().min(1),
@@ -119,6 +126,8 @@ export const RunSchema = z.object({
   delegationId: z.string().min(1).nullable(),
   // 本次 Run 激活的 Skill（斜杠命令或显式传入）；未激活为 null。
   skillId: z.string().min(1).nullable(),
+  // 全轮合计 token 用量（各模型轮累加）；进行中/旧数据为 null。
+  usage: UsageSchema.nullable(),
 })
 export type Run = z.infer<typeof RunSchema>
 
@@ -208,6 +217,11 @@ export const ProviderProfileSchema = z.object({
   capabilities: z.array(ProviderCapabilitySchema),
   secretRef: z.string().min(1),
   enabled: z.boolean(),
+  // 对话默认采样参数；null 表示未配置（沿用服务端默认）。
+  temperature: z.number().min(0).max(2).nullable(),
+  maxTokens: z.number().int().positive().nullable(),
+  // 模型上下文窗口（token 数）；null 表示未知，Runtime 用保守默认预算。
+  contextWindow: z.number().int().positive().nullable(),
   updatedAt: IsoDateTimeSchema,
 })
 export type ProviderProfile = z.infer<typeof ProviderProfileSchema>

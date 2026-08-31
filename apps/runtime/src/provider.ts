@@ -61,6 +61,8 @@ export interface StreamChatOptions {
   timeoutMs?: number
   /** 传入时限制补全长度（连接测试用 1，避免无谓消耗）。 */
   maxTokens?: number
+  /** 采样温度；缺省由服务端决定。 */
+  temperature?: number
   /** 请求建立阶段失败自动重试次数；连接测试等场景传 0 快速失败。 */
   maxRetries?: number
   /** Agent 侧 canonical 工具声明；适配层投影为 OpenAI function 格式。 */
@@ -178,6 +180,9 @@ export async function streamChatCompletion(
             stream_options: { include_usage: true },
             ...(options.maxTokens !== undefined
               ? { max_tokens: options.maxTokens }
+              : {}),
+            ...(options.temperature !== undefined
+              ? { temperature: options.temperature }
               : {}),
             ...(tools !== undefined ? { tools } : {}),
           }),

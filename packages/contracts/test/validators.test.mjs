@@ -94,10 +94,25 @@ test('RunSchema carries agent delegation fields and awaiting_approval', () => {
     parentRunId: null,
     delegationId: null,
     skillId: null,
+    usage: null,
   }
   assert.equal(RunSchema.safeParse(run).success, true)
   assert.equal(
+    RunSchema.safeParse({
+      ...run,
+      usage: { promptTokens: 10, completionTokens: 5 },
+    }).success,
+    true,
+  )
+  assert.equal(
     RunSchema.safeParse({ ...run, status: 'waiting' }).success,
+    false,
+  )
+  assert.equal(
+    RunSchema.safeParse({
+      ...run,
+      usage: { promptTokens: -1, completionTokens: 0 },
+    }).success,
     false,
   )
   assert.equal(
@@ -165,12 +180,28 @@ test('ProviderProfileSchema requires capability list', () => {
     capabilities: ['chat', 'embedding'],
     secretRef: 'local:a',
     enabled: true,
+    temperature: null,
+    maxTokens: null,
+    contextWindow: null,
     updatedAt: NOW,
   }
   assert.equal(ProviderProfileSchema.safeParse(profile).success, true)
   assert.equal(
     ProviderProfileSchema.safeParse({ ...profile, capabilities: [] }).success,
     true,
+  )
+  assert.equal(
+    ProviderProfileSchema.safeParse({
+      ...profile,
+      temperature: 0.7,
+      maxTokens: 4096,
+      contextWindow: 128000,
+    }).success,
+    true,
+  )
+  assert.equal(
+    ProviderProfileSchema.safeParse({ ...profile, temperature: 2.5 }).success,
+    false,
   )
   assert.equal(
     ProviderProfileSchema.safeParse({ ...profile, capabilities: ['stt'] })

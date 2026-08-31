@@ -323,3 +323,13 @@
 .status-dot.on {
   background: var(--ok);
 }
+
+.sampling-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.sampling-wide {
+  grid-column: 1 / -1;
+}

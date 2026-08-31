@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react'
-import type { Message, ToolCall } from '@reflexion-os-studio/runtime-client'
+import type {
+  Message,
+  ToolCall,
+  Usage,
+} from '@reflexion-os-studio/runtime-client'
 import { CheckIcon, CopyIcon } from '../../ui/icons'
 import { MessageMarkdown } from '../../components/MessageMarkdown'
 import { WorkSummary } from './WorkSummary'
@@ -21,9 +25,18 @@ interface AssistantMessageProps {
   streamingReasoning: string | undefined
   /** 该消息所属 Run 的耗时；未结束或数据缺失时为 null。 */
   runDurationMs: number | null
+  /** 该消息所属 Run 的 token 用量（各模型轮合计）；无数据时为 null。 */
+  runUsage: Usage | null
   /** 该消息属于最近一个可重试的失败 Run 时展示重试入口。 */
   canRetry: boolean
   onRetry: () => void
+}
+
+function formatSeconds(ms: number): string {
+  const seconds = Math.round(ms / 1000)
+  if (seconds < 60) return `${seconds} 秒`
+  const minutes = Math.floor(seconds / 60)
+  return `${minutes} 分 ${seconds % 60} 秒`
 }
 
 /**
@@ -100,6 +113,16 @@ export function AssistantMessage(
             )}
           </div>
         )}
+        {props.message.status === 'completed' &&
+          contentText !== '' &&
+          props.runUsage !== null && (
+            <div className="assistant-usage">
+              {props.runUsage.promptTokens} 输入 ·{' '}
+              {props.runUsage.completionTokens} 输出 tokens
+              {props.runDurationMs !== null &&
+                ` · ${formatSeconds(props.runDurationMs)}`}
+            </div>
+          )}
         {props.message.status === 'completed' && contentText !== '' && (
           <div className="assistant-actions">
             <button

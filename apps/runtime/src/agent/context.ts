@@ -26,6 +26,25 @@ export interface ProviderRuntimeConfig {
   baseUrl: string
   apiKey: string
   model: string
+  /** 缺省由服务端决定。 */
+  temperature?: number
+  maxTokens?: number
+  /** 模型上下文窗口（token 数）；未知时用保守默认预算。 */
+  contextWindow?: number
+}
+
+/**
+ * 上下文预算：已知窗口时取 min(保守默认, 窗口 × 0.75 − maxTokens 预留)，
+ * 为输出留足空间；下限 1024 防止小配置把预算压死。
+ */
+export function contextBudgetFor(provider: ProviderRuntimeConfig): number {
+  const window = provider.contextWindow
+  if (window === undefined || window === null || window <= 0) {
+    return CONTEXT_TOKEN_BUDGET
+  }
+  const outputReserve = provider.maxTokens ?? 0
+  const windowBudget = Math.floor(window * 0.75) - outputReserve
+  return Math.max(1024, Math.min(CONTEXT_TOKEN_BUDGET, windowBudget))
 }
 
 /** 会话历史的重建与压缩；Run 启动时由 runner 调用一次。 */
@@ -52,7 +71,7 @@ export class ContextBuilder {
     try {
       const { messages } = await compactMessages({
         messages: history,
-        budgetTokens: CONTEXT_TOKEN_BUDGET,
+        budgetTokens: contextBudgetFor(provider),
         keepRecent: KEEP_RECENT_MESSAGES,
         summarize: (oldMessages) =>
           this.summarize(oldMessages, provider, signal),

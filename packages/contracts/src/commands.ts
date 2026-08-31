@@ -27,6 +27,9 @@ export const MessageSendParamsSchema = z.object({
   // 不传则使用启用的 Provider 及其第一个模型。
   providerId: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
+  // 本次回复的模型采样参数；缺省用 Provider 配置的默认值。
+  temperature: z.number().min(0).max(2).optional(),
+  maxTokens: z.number().int().positive().optional(),
   // 本次会话执行的工具权限 Profile；缺省 workspace。
   permissionMode: z.enum(['workspace', 'read-only']).optional(),
   // 显式激活的 Skill；内容以 /<skillId> 开头时也可隐式激活（显式优先）。
@@ -166,6 +169,11 @@ export const CommandSchemaRegistry = {
       secretRef: z.string().min(1).optional(),
       // 供应商能力类型；省略时编辑保留原值、新建为 ['chat']。
       capabilities: z.array(ProviderCapabilitySchema).optional(),
+      // 对话默认采样参数；省略=保留原值，null=清空回未配置。
+      temperature: z.number().min(0).max(2).nullable().optional(),
+      maxTokens: z.number().int().positive().nullable().optional(),
+      // 模型上下文窗口（token 数）；省略=保留原值，null=清空。
+      contextWindow: z.number().int().positive().nullable().optional(),
       enabled: z.boolean().optional(),
     }),
     result: z.object({ profile: ProviderProfileSchema }),

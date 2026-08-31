@@ -71,13 +71,22 @@ export function WorkspacePanel(props: WorkspacePanelProps): React.JSX.Element {
 
   useEffect(() => {
     if (projectId === null) return
-    return onWorkspaceIndexEvent((event) => {
-      // 进度/完成/失败都重查状态（含 UI 与事件计数同步）。
-      void refreshStatus()
+    // 进度事件约 400ms 一次：状态查询防抖，避免持续打 runtime。
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const unlisten = onWorkspaceIndexEvent((event) => {
+      if (timer !== null) clearTimeout(timer)
+      timer = setTimeout(() => {
+        timer = null
+        void refreshStatus()
+      }, 300)
       if (event.type === 'workspace.index.failed') {
         setError(event.error)
       }
     })
+    return () => {
+      unlisten()
+      if (timer !== null) clearTimeout(timer)
+    }
   }, [projectId, refreshStatus])
 
   useEffect(() => {

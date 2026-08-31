@@ -15,6 +15,7 @@ export type {
   Session,
   SkillManifest,
   ToolCall,
+  Usage,
   WorkspaceEntry,
   WorkspaceExtStats,
   WorkspaceIndexSnapshot,

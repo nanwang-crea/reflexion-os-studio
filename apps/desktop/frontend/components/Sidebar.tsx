@@ -148,39 +148,6 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
           onClick={() => props.onSelectView('settings')}
         />
       </footer>
-
-      {/* <nav className="sidebar-nav" aria-label="页面导航">
-        <NavItem
-          label="工作区"
-          icon={<FolderIcon />}
-          active={props.view === 'workspace'}
-          onClick={() => props.onSelectView('workspace')}
-        />
-        <NavItem
-          label="技能"
-          icon={<SparkIcon size={15} />}
-          active={props.view === 'skills'}
-          onClick={() => props.onSelectView('skills')}
-        />
-        <NavItem
-          label="自动化"
-          icon={<BoxIcon size={15} />}
-          active={props.view === 'automations'}
-          onClick={() => props.onSelectView('automations')}
-        />
-        <NavItem
-          label="记忆"
-          icon={<ArchiveIcon size={15} />}
-          active={props.view === 'memories'}
-          onClick={() => props.onSelectView('memories')}
-        />
-        <NavItem
-          label="设置"
-          icon={<GearIcon size={15} />}
-          active={props.view === 'settings'}
-          onClick={() => props.onSelectView('settings')}
-        />
-      </nav> */}
     </aside>
   )
 }

@@ -17,7 +17,7 @@ import {
 import { RunEventEmitter } from '../events.js'
 import { ProviderError, streamChatCompletion } from '../provider.js'
 import type { Store } from '../store/index.js'
-import { CONTEXT_TOKEN_BUDGET, type ProviderRuntimeConfig } from './context.js'
+import { contextBudgetFor, type ProviderRuntimeConfig } from './context.js'
 import type { MemoryService } from './memory/service.js'
 import type { ApprovalGateway, PermissionGate } from './permissions.js'
 import { isToolOperation } from './permissions.js'
@@ -64,6 +64,34 @@ interface RunExecutionState {
 export class RunRunner {
   constructor(private readonly store: Store) {}
 
+  /** 工具调用行收尾的统一出口：清 in-flight 记录 → 落库 → 事件。 */
+  private finalizeToolCall(
+    state: RunExecutionState,
+    emitter: RunEventEmitter,
+    rowId: string,
+    status: 'completed' | 'failed' | 'cancelled',
+    errorCode: string | null,
+    result?: JsonValue,
+  ): void {
+    state.toolCallRowIds.delete(rowId)
+    if (status === 'completed') {
+      this.store.toolCalls.finalize(rowId, 'completed', result)
+    } else {
+      this.store.toolCalls.finalize(
+        rowId,
+        status,
+        undefined,
+        errorCode ?? undefined,
+      )
+    }
+    emitter.next({
+      type: 'tool.completed',
+      toolCallId: rowId,
+      status,
+      errorCode,
+    })
+  }
+
   async execute(input: RunStreamInput): Promise<void> {
     const { run, controller, emitter, registry } = input
     const state: RunExecutionState = {
@@ -74,13 +102,7 @@ export class RunRunner {
 
     const cancelInFlightToolCalls = (): void => {
       for (const rowId of state.toolCallRowIds) {
-        this.store.toolCalls.finalize(rowId, 'cancelled')
-        emitter.next({
-          type: 'tool.completed',
-          toolCallId: rowId,
-          status: 'cancelled',
-          errorCode: null,
-        })
+        this.finalizeToolCall(state, emitter, rowId, 'cancelled', null)
       }
       state.toolCallRowIds.clear()
     }
@@ -132,7 +154,10 @@ export class RunRunner {
             this.store.messages.markStreaming(draft.id)
           }
 
-          const bounded = boundMessagesForModel(messages, CONTEXT_TOKEN_BUDGET)
+          const bounded = boundMessagesForModel(
+            messages,
+            contextBudgetFor(input.provider),
+          )
           const result = await streamChatCompletion(
             {
               baseUrl: input.provider.baseUrl,
@@ -140,6 +165,12 @@ export class RunRunner {
               model: input.provider.model,
               messages: bounded,
               tools: registry.specs(),
+              ...(input.provider.temperature !== undefined
+                ? { temperature: input.provider.temperature }
+                : {}),
+              ...(input.provider.maxTokens !== undefined
+                ? { maxTokens: input.provider.maxTokens }
+                : {}),
               signal,
             },
             (delta) => {
@@ -177,6 +208,9 @@ export class RunRunner {
             finishReason: result.finishReason,
             usage: result.usage,
           })
+          if (result.usage) {
+            this.store.runs.addUsage(run.id, result.usage)
+          }
           state.turn = null
           return {
             content: result.content,
@@ -205,18 +239,13 @@ export class RunRunner {
               toolName: request.name,
               args,
             })
-            this.store.toolCalls.finalize(
+            this.finalizeToolCall(
+              state,
+              emitter,
               row.id,
               'failed',
-              undefined,
               'permission_denied',
             )
-            emitter.next({
-              type: 'tool.completed',
-              toolCallId: row.id,
-              status: 'failed',
-              errorCode: 'permission_denied',
-            })
             return {
               content: `权限策略拒绝了 ${request.name}（当前 Profile 不允许该操作）`,
               isError: true,
@@ -268,19 +297,13 @@ export class RunRunner {
               }
             }
             if (verdict === 'denied') {
-              state.toolCallRowIds.delete(row.id)
-              this.store.toolCalls.finalize(
+              this.finalizeToolCall(
+                state,
+                emitter,
                 row.id,
                 'failed',
-                undefined,
                 'permission_denied',
               )
-              emitter.next({
-                type: 'tool.completed',
-                toolCallId: row.id,
-                status: 'failed',
-                errorCode: 'permission_denied',
-              })
               return {
                 content: `用户拒绝了本次 ${request.name} 操作`,
                 isError: true,
@@ -303,30 +326,16 @@ export class RunRunner {
           }
           if (result.isError) {
             const errorCode = result.code ?? 'tool_error'
-            this.store.toolCalls.finalize(
-              row.id,
-              'failed',
-              undefined,
-              errorCode,
-            )
-            emitter.next({
-              type: 'tool.completed',
-              toolCallId: row.id,
-              status: 'failed',
-              errorCode,
-            })
+            this.finalizeToolCall(state, emitter, row.id, 'failed', errorCode)
           } else {
-            this.store.toolCalls.finalize(
+            this.finalizeToolCall(
+              state,
+              emitter,
               row.id,
               'completed',
+              null,
               parseToolResultPayload(result.content),
             )
-            emitter.next({
-              type: 'tool.completed',
-              toolCallId: row.id,
-              status: 'completed',
-              errorCode: null,
-            })
           }
           return modelResult
         },

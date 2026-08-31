@@ -6,10 +6,13 @@ import {
   RunSchema,
   SessionSchema,
   ToolOperationSchema,
+  UsageSchema,
   WorkspaceIndexSnapshotSchema,
 } from './entities.js'
 import { RuntimeErrorSchema } from './errors.js'
 import { RuntimeStatusSchema } from './handshake.js'
+
+export type { Usage } from './entities.js'
 
 export const FinishReasonSchema = z.enum([
   'stop',
@@ -20,12 +23,6 @@ export const FinishReasonSchema = z.enum([
   'cancelled',
 ])
 export type FinishReason = z.infer<typeof FinishReasonSchema>
-
-export const UsageSchema = z.object({
-  promptTokens: z.number().int().nonnegative(),
-  completionTokens: z.number().int().nonnegative(),
-})
-export type Usage = z.infer<typeof UsageSchema>
 
 export const RuntimeEventEnvelopeSchema = z.object({
   protocolVersion: z.string(),

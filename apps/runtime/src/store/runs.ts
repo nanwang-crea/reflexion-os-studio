@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
-import type { Run, RunStatus } from '@reflexion-os-studio/contracts'
+import type { Run, RunStatus, Usage } from '@reflexion-os-studio/contracts'
 import { nowIso, type Row } from './shared.js'
 
 /** Run 领域：一次回复的执行生命周期。 */
@@ -41,6 +41,7 @@ export class RunStore {
       parentRunId: input.parentRunId ?? null,
       delegationId: input.delegationId ?? null,
       skillId: input.skillId ?? null,
+      usage: null,
     }
     this.db
       .prepare(
@@ -89,6 +90,17 @@ export class RunStore {
       .run(status, id)
   }
 
+  /** 累加模型调用的 token 用量（各模型轮次汇总）。 */
+  addUsage(id: string, usage: Usage): void {
+    const current = this.get(id)?.usage
+    const promptTokens = (current?.promptTokens ?? 0) + usage.promptTokens
+    const completionTokens =
+      (current?.completionTokens ?? 0) + usage.completionTokens
+    this.db
+      .prepare('UPDATE runs SET usage_json = ? WHERE id = ?')
+      .run(JSON.stringify({ promptTokens, completionTokens }), id)
+  }
+
   activeForSession(sessionId: string): Run | null {
     const row = this.db
       .prepare(
@@ -126,6 +138,29 @@ export class RunStore {
       delegationId:
         row.delegation_id == null ? null : String(row.delegation_id),
       skillId: row.skill_id == null ? null : String(row.skill_id),
+      usage: parseUsage(row.usage_json),
     }
   }
+}
+
+function parseUsage(value: unknown): Usage | null {
+  if (value == null) return null
+  try {
+    const parsed = JSON.parse(String(value)) as {
+      promptTokens?: unknown
+      completionTokens?: unknown
+    }
+    if (
+      typeof parsed.promptTokens === 'number' &&
+      typeof parsed.completionTokens === 'number'
+    ) {
+      return {
+        promptTokens: parsed.promptTokens,
+        completionTokens: parsed.completionTokens,
+      }
+    }
+  } catch {
+    // 非法数据按未记录处理。
+  }
+  return null
 }

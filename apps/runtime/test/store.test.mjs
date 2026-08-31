@@ -323,3 +323,64 @@ test('v3 schema migrates in place: parts backfill and new columns', () => {
   assert.equal(store.toolCalls.get(toolCall.id).toolName, 'file.list')
   store.close()
 })
+
+test('provider sampling params: set, keep on omitted, clear on null', () => {
+  const store = freshStore()
+  const created = store.providers.upsert({
+    name: 'p',
+    baseUrl: 'https://api.example.com/v1',
+    models: ['m1'],
+    secretRef: 'local:a',
+    enabled: true,
+    temperature: 0.7,
+    maxTokens: 4096,
+    contextWindow: 128000,
+  })
+  assert.equal(created.temperature, 0.7)
+  assert.equal(created.contextWindow, 128000)
+
+  // 省略参数：保留原值。
+  const kept = store.providers.upsert({
+    id: created.id,
+    name: 'p',
+    baseUrl: 'https://api.example.com/v1',
+    models: ['m1'],
+    secretRef: 'local:a',
+    enabled: true,
+  })
+  assert.equal(kept.temperature, 0.7)
+  assert.equal(kept.maxTokens, 4096)
+  assert.equal(kept.contextWindow, 128000)
+
+  // 显式 null：清空回未配置。
+  const cleared = store.providers.upsert({
+    id: created.id,
+    name: 'p',
+    baseUrl: 'https://api.example.com/v1',
+    models: ['m1'],
+    secretRef: 'local:a',
+    enabled: true,
+    temperature: null,
+    maxTokens: null,
+    contextWindow: null,
+  })
+  assert.equal(cleared.temperature, null)
+  assert.equal(cleared.maxTokens, null)
+  assert.equal(cleared.contextWindow, null)
+  store.close()
+})
+
+test('run usage accumulates across turns', () => {
+  const store = freshStore()
+  const session = store.sessions.create(null)
+  const run = store.runs.create({
+    sessionId: session.id,
+    providerId: null,
+    model: null,
+  })
+  store.runs.addUsage(run.id, { promptTokens: 10, completionTokens: 5 })
+  store.runs.addUsage(run.id, { promptTokens: 20, completionTokens: 8 })
+  const usage = store.runs.get(run.id).usage
+  assert.deepEqual(usage, { promptTokens: 30, completionTokens: 13 })
+  store.close()
+})
