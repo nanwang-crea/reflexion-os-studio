@@ -25,8 +25,9 @@ Rust File/Shell Service、Workspace 边界、read-only/workspace Profile、Chat 
 
 ## Phase 1B：Workspace Surfaces（进行中）
 
-- **已完成第一阶段（2026-08-31）**：异步 Workspace Indexer（纯 TS worker、progress/cancel/stale/failed 状态、忽略目录与符号链接、快照落库+版本号）、文件树（按需懒加载，经 Rust 侧 workspace 边界）、文件/文档查看器（行号、复制、跳转行、分段加载、Markdown/JSON 预览）、Git 变更面（`git.status`/`git.diff`：文件状态列表 + 单文件 diff 预览，只读查看与定位）、`workspace.*` 命令与白名单、工作区页面 UI。**第二阶段**（Asset/Artifact Card、ResourceLink、Browser Surface）不阻塞 Chat。
-- **待完成**：Asset/Artifact Card、ResourceLink（消息内点击定位文件/资产）、安全 URL 系统浏览器打开和可选只读内嵌 Browser。（编辑、暂存、提交等 Git 写操作不在第一阶段,后续须经明确命令与权限策略。）
+- **已完成第一阶段（2026-08-31）**：异步 Workspace Indexer（纯 TS worker、progress/cancel/stale/failed 状态、忽略目录与符号链接、快照落库+版本号）、文件树（按需懒加载，经 Rust 侧 workspace 边界）、文件/文档查看器（行号、复制、跳转行、分段加载、Markdown/JSON 预览）、Git 变更面（`git.status`/`git.diff`：文件状态列表 + 单文件 diff 预览，只读查看与定位）、`workspace.*` 命令与白名单、工作区页面 UI。
+- **已完成第二阶段（2026-08-31）**：Asset Store（数据目录隔离、sha256 元数据、导入/列表/预览/删除/复制引用，`asset.*` 命令）、ResourceLink（消息内 `workspace://`/`asset://`/https 引用渲染与点击分发——查看器定位行列、资产预览、系统浏览器安全打开）、Artifact 卡（Run 回复引用聚合展示）；导出/下载/系统应用打开留后续阶段（需权限）。
+- **待完成**：安全 URL 系统浏览器打开（已就位，剩余只读内嵌 Browser 评估）。编辑、暂存、提交等 Git 写操作不在第一阶段,后续须经明确命令与权限策略。
 
 ## Phase 2：Agent Platform（进行中）
 

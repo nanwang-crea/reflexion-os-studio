@@ -14,6 +14,7 @@ import {
 } from './command-utils.js'
 import { memoryCommandHandlers } from './handlers-memory.js'
 import { workspaceCommandHandlers } from './handlers-workspace.js'
+import { assetCommandHandlers } from './handlers-assets.js'
 import { builtinSkills } from './skills/index.js'
 
 /**
@@ -232,6 +233,7 @@ const handlers: Record<string, CommandHandler> = {
 
 Object.assign(handlers, memoryCommandHandlers)
 Object.assign(handlers, workspaceCommandHandlers)
+Object.assign(handlers, assetCommandHandlers)
 
 export async function dispatchCommand(
   method: string,

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   Message,
+  ResourceLink,
   Run,
   SkillManifest,
   ToolCall,
@@ -36,6 +37,8 @@ interface ChatViewProps {
     decision: 'approved' | 'denied',
     scope: 'once' | 'session',
   ) => void
+  /** 资源引用（工作区文件/资产/外链）点击后按类型分发。 */
+  onResourceClick?: (link: ResourceLink) => void
 }
 
 /** 距底部小于该值视为“贴底”，流式期间继续跟随滚动。 */
@@ -306,6 +309,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
                     lastRetryableRun.id === message.runId
                   }
                   onRetry={() => void props.onRetry()}
+                  onResourceClick={props.onResourceClick}
                 />
               )
             }

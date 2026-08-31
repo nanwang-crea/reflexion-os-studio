@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import type { ResourceLink } from '@reflexion-os-studio/runtime-client'
 
 /**
  * 轻量 Markdown 渲染：覆盖对话常见结构（标题 / 列表 / 引用 / 围栏代码 /
@@ -28,7 +29,11 @@ const INLINE_RE =
   /(`[^`]+`)|(\*\*[^*]+?\*\*)|(\*[^*\n]+?\*)|(~~[^~]+?~~)|(\[[^\]]*\]\([^)\s]*\))/g
 const ALIGN_CELL_RE = /^:?-+:?$/
 
-function renderInline(text: string, keyBase: string): ReactNode[] {
+function renderInline(
+  text: string,
+  keyBase: string,
+  onResourceClick?: (link: ResourceLink) => void,
+): ReactNode[] {
   const nodes: ReactNode[] = []
   let last = 0
   let key = 0
@@ -45,26 +50,55 @@ function renderInline(text: string, keyBase: string): ReactNode[] {
       )
     } else if (token.startsWith('**')) {
       nodes.push(
-        <strong key={id}>{renderInline(token.slice(2, -2), id)}</strong>,
+        <strong key={id}>
+          {renderInline(token.slice(2, -2), id, onResourceClick)}
+        </strong>,
       )
     } else if (token.startsWith('~~')) {
-      nodes.push(<del key={id}>{renderInline(token.slice(2, -2), id)}</del>)
+      nodes.push(
+        <del key={id}>
+          {renderInline(token.slice(2, -2), id, onResourceClick)}
+        </del>,
+      )
     } else if (token.startsWith('*')) {
-      nodes.push(<em key={id}>{renderInline(token.slice(1, -1), id)}</em>)
+      nodes.push(
+        <em key={id}>
+          {renderInline(token.slice(1, -1), id, onResourceClick)}
+        </em>,
+      )
     } else {
       const link = LINK_RE.exec(token)
       if (link) {
-        nodes.push(
-          <a
-            key={id}
-            className="md-link"
-            href={link[2]}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {link[1] === '' ? link[2] : link[1]}
-          </a>,
-        )
+        const resource =
+          onResourceClick !== undefined ? parseResourceLink(link[2]) : null
+        if (resource !== null && onResourceClick !== undefined) {
+          const handler = onResourceClick
+          // 资源引用渲染为受控按钮：点击经宿主按类型分发
+          // （查看器定位 / Asset 预览 / 系统浏览器），不直接导航。
+          nodes.push(
+            <button
+              key={id}
+              type="button"
+              className={`md-resource md-resource-${resource.kind}`}
+              title={resource.uri}
+              onClick={() => handler(resource)}
+            >
+              {link[1] === '' ? displayNameOf(resource) : link[1]}
+            </button>,
+          )
+        } else {
+          nodes.push(
+            <a
+              key={id}
+              className="md-link"
+              href={link[2]}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {link[1] === '' ? link[2] : link[1]}
+            </a>,
+          )
+        }
       } else {
         nodes.push(token)
       }
@@ -73,6 +107,57 @@ function renderInline(text: string, keyBase: string): ReactNode[] {
   }
   if (last < text.length) nodes.push(text.slice(last))
   return nodes
+}
+
+/** 从消息正文提取全部资源链接（供 Artifact 聚合卡与内联渲染共用）。 */
+export function extractResourceLinks(text: string): ResourceLink[] {
+  const links: ResourceLink[] = []
+  for (const match of text.matchAll(LINK_RE_GLOBAL)) {
+    const parsed = parseResourceLink(match[2])
+    if (parsed !== null) links.push(parsed)
+  }
+  return links
+}
+
+const LINK_RE_GLOBAL = /\[([^\]]*)\]\(([^)\s]*)\)/g
+
+/** workspace:// 与 asset:// 引用显示名：无标题文本时用最短有意义的片段。 */
+function displayNameOf(link: ResourceLink): string {
+  if (link.kind === 'workspaceFile') return link.path
+  if (link.kind === 'asset') return link.assetId.slice(0, 8)
+  return link.uri
+}
+
+/** 解析消息内资源引用协议；非资源协议（http 等）返回 null 保持普通链接。 */
+function parseResourceLink(href: string): ResourceLink | null {
+  if (href.startsWith('workspace://')) {
+    const rest = href.slice('workspace://'.length)
+    const fragmentMatch = rest.match(/^(.*?)(?:#L(\d+))?$/)
+    if (fragmentMatch === null) return null
+    const raw = fragmentMatch[1]
+    const line = fragmentMatch[2]
+    const slash = raw.indexOf('/')
+    if (slash <= 0) return null
+    const projectId = raw.slice(0, slash)
+    const path = raw.slice(slash + 1)
+    if (projectId === '' || path === '') return null
+    return {
+      kind: 'workspaceFile',
+      uri: href,
+      projectId,
+      path,
+      line: line === undefined ? undefined : Number.parseInt(line, 10),
+    }
+  }
+  if (href.startsWith('asset://')) {
+    const assetId = href.slice('asset://'.length)
+    if (assetId === '') return null
+    return { kind: 'asset', uri: href, assetId }
+  }
+  if (href.startsWith('https://')) {
+    return { kind: 'externalUrl', uri: href }
+  }
+  return null
 }
 
 /** 拆一行表格行：容忍首尾竖线缺失，`\|` 转义为字面竖线。 */
@@ -255,7 +340,12 @@ function parseBlocks(source: string): Block[] {
   return blocks
 }
 
-function renderBlock(block: Block, key: string, withCaret: boolean): ReactNode {
+function renderBlock(
+  block: Block,
+  key: string,
+  withCaret: boolean,
+  onResourceClick?: (link: ResourceLink) => void,
+): ReactNode {
   const caret = withCaret ? (
     <span className="stream-caret" aria-hidden="true" />
   ) : null
@@ -263,7 +353,7 @@ function renderBlock(block: Block, key: string, withCaret: boolean): ReactNode {
     case 'p':
       return (
         <p key={key} className="md-p">
-          {renderInline(block.text, key)}
+          {renderInline(block.text, key, onResourceClick)}
           {caret}
         </p>
       )
@@ -271,7 +361,7 @@ function renderBlock(block: Block, key: string, withCaret: boolean): ReactNode {
       const Tag = `h${block.level}` as 'h1' | 'h2' | 'h3' | 'h4'
       return (
         <Tag key={key} className={`md-h md-h${block.level}`}>
-          {renderInline(block.text, key)}
+          {renderInline(block.text, key, onResourceClick)}
           {caret}
         </Tag>
       )
@@ -289,7 +379,7 @@ function renderBlock(block: Block, key: string, withCaret: boolean): ReactNode {
         <Tag key={key} className="md-list">
           {block.items.map((item, index) => (
             <li key={`${key}-${index}`}>
-              {renderInline(item, `${key}-${index}`)}
+              {renderInline(item, `${key}-${index}`, onResourceClick)}
               {index === block.items.length - 1 && caret}
             </li>
           ))}
@@ -299,7 +389,7 @@ function renderBlock(block: Block, key: string, withCaret: boolean): ReactNode {
     case 'quote':
       return (
         <blockquote key={key} className="md-quote">
-          {renderInline(block.text, key)}
+          {renderInline(block.text, key, onResourceClick)}
           {caret}
         </blockquote>
       )
@@ -320,7 +410,11 @@ function renderBlock(block: Block, key: string, withCaret: boolean): ReactNode {
               <tr>
                 {head.map((cell, cellIndex) => (
                   <th key={cellIndex} style={{ textAlign: alignOf(cellIndex) }}>
-                    {renderInline(cell, `${key}-h-${cellIndex}`)}
+                    {renderInline(
+                      cell,
+                      `${key}-h-${cellIndex}`,
+                      onResourceClick,
+                    )}
                   </th>
                 ))}
               </tr>
@@ -335,7 +429,11 @@ function renderBlock(block: Block, key: string, withCaret: boolean): ReactNode {
                         key={cellIndex}
                         style={{ textAlign: alignOf(cellIndex) }}
                       >
-                        {renderInline(cell, `${key}-${rowIndex}-${cellIndex}`)}
+                        {renderInline(
+                          cell,
+                          `${key}-${rowIndex}-${cellIndex}`,
+                          onResourceClick,
+                        )}
                       </td>
                     ))}
                   </tr>
@@ -356,6 +454,8 @@ interface MessageMarkdownProps {
   text: string
   /** 流式进行中：在最后一个块尾追加闪烁光标。 */
   caret?: boolean
+  /** 资源链接（workspace:// asset:// https://）点击回调；宿主按类型分发。 */
+  onResourceClick?: (link: ResourceLink) => void
 }
 
 export function MessageMarkdown(
@@ -367,7 +467,12 @@ export function MessageMarkdown(
   return (
     <div className="md">
       {blocks.map((block, index) =>
-        renderBlock(block, `b${index}`, caret && index === lastIndex),
+        renderBlock(
+          block,
+          `b${index}`,
+          caret && index === lastIndex,
+          props.onResourceClick,
+        ),
       )}
       {blocks.length === 0 && caret && (
         <p className="md-p">

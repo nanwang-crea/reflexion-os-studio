@@ -355,6 +355,76 @@ export const GitChangeEntrySchema = z.object({
 })
 export type GitChangeEntry = z.infer<typeof GitChangeEntrySchema>
 
+// ---------------- Asset / Artifact / ResourceLink（Phase 1B 第二阶段） ----------------
+
+/** Asset 内容类别；mime 未知时归 file。 */
+export const AssetKindSchema = z.enum([
+  'image',
+  'text',
+  'audio',
+  'video',
+  'file',
+])
+export type AssetKind = z.infer<typeof AssetKindSchema>
+
+/**
+ * Asset 引用与元数据：内容存受控 Asset Store（数据目录 assets/<projectId>/，
+ * 按项目隔离），库与事件只保存引用与元数据；大文件不进协议。
+ */
+export const AssetRefSchema = z.object({
+  assetId: z.string().min(1),
+  projectId: z.string().min(1),
+  uri: z.string().min(1),
+  kind: AssetKindSchema,
+  mimeType: z.string().min(1),
+  size: z.number().int().nonnegative(),
+  hash: z.string().min(1),
+  fileName: z.string().min(1),
+  /** 导入时无 Run；Run 产出的 Asset 挂其 id。 */
+  runId: z.string().nullable(),
+  /** 多 Agent 阶段预留；当前恒 null。 */
+  nodeRunId: z.string().nullable(),
+  createdBy: z.enum(['user', 'agent']),
+  createdAt: IsoDateTimeSchema,
+  metadata: z.record(z.string(), z.unknown()),
+  preview: z.enum(['ready', 'unsupported', 'failed']),
+})
+export type AssetRef = z.infer<typeof AssetRefSchema>
+
+/**
+ * 消息内资源导航引用（kind 判别联合）：不拥有内容，渲染为可点击卡片；
+ * 目标类型决定分发——workspaceFile 进查看器定位行列、asset 进预览、
+ * externalUrl 仅 https 进系统浏览器。
+ */
+export const ResourceLinkSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('workspaceFile'),
+    uri: z.string().min(1),
+    projectId: z.string().min(1),
+    path: z.string().min(1),
+    line: z.number().int().positive().optional(),
+  }),
+  z.object({
+    kind: z.literal('asset'),
+    uri: z.string().min(1),
+    assetId: z.string().min(1),
+  }),
+  z.object({
+    kind: z.literal('externalUrl'),
+    uri: z.string().min(1),
+  }),
+])
+export type ResourceLink = z.infer<typeof ResourceLinkSchema>
+
+/** 一次 Run 的面向用户成果卡：聚合该 Run 消息中出现的资源引用。 */
+export const ArtifactSchema = z.object({
+  runId: z.string().min(1),
+  title: z.string().min(1),
+  links: z.array(ResourceLinkSchema),
+  createdAt: IsoDateTimeSchema,
+})
+export type Artifact = z.infer<typeof ArtifactSchema>
+
 /** 会话发送队列项：等待上一条回复结束时按 FIFO 自动发送。 */
 export const QueueEntrySchema = z.object({
   id: z.string().min(1),

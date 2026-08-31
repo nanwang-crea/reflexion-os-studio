@@ -20,3 +20,8 @@
 ## 生命周期与安全
 
 Asset：`created → indexed → previewed → opened/exported → archived/deleted`。Phase 1B 只支持预览、定位和复制引用；导出到 Workspace、下载和系统应用打开需要后续明确权限。Asset Store 按 Project/Workspace 隔离；ResourceLink 是短期导航对象，不改变目标资源所有权或生命周期。
+
+## 落地状态（2026-08-31，Phase 1B）
+
+- 已落地：Asset Store（数据目录 `assets/<projectId>/` 隔离、sha256、`asset.*` 命令：导入/列表/读取/删除）、ResourceLink（`workspace://<projectId>/<path>#L<行号>`、`asset://<assetId>`、https 三种引用的消息内渲染与点击分发）、Artifact 卡（Run 回复引用聚合展示）。
+- 边界：仅预览、定位与复制引用；导出到 Workspace、下载、系统应用打开、媒体内嵌预览（音频/视频）留后续阶段（需权限）。nodeRunId 字段当前恒 null（多 Agent 阶段填充）。

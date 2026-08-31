@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ProviderProfile,
   Project,
+  ResourceLink,
   Session,
   SkillManifest,
 } from '@reflexion-os-studio/runtime-client'
@@ -12,6 +13,7 @@ import { listProviders } from './api/providers'
 import { listProjects } from './api/projects'
 import { resolveApproval } from './api/chat'
 import { listSkills } from './api/skills'
+import { openExternalUrl } from './api/system'
 import { getSessionData, listSessions, type SessionData } from './api/sessions'
 import {
   ConfirmDialog,
@@ -23,7 +25,10 @@ import { MemoryView } from './features/memories/MemoryView'
 import { Sidebar } from './components/Sidebar'
 import { SkillsView } from './features/skills/SkillsView'
 import { AutomationsView } from './features/automations/AutomationsView'
-import { WorkspacePanel } from './features/workspace/WorkspacePanel'
+import {
+  WorkspacePanel,
+  type WorkspaceOpenRequest,
+} from './features/workspace/WorkspacePanel'
 import { SettingsView } from './features/settings/SettingsView'
 import { useSessionActions } from './hooks/useSessionActions'
 import { DoubleChevronIcon, FolderIcon } from './ui/icons'
@@ -63,6 +68,9 @@ export default function App() {
   const [workspaceOpen, setWorkspaceOpen] = useState(
     () => localStorage.getItem('reflexion.workspacePanel') !== '0',
   )
+  // 资源链接点击产生的面板定位请求；nonce 区分每次点击。
+  const [workspaceRequest, setWorkspaceRequest] =
+    useState<WorkspaceOpenRequest | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [confirmState, setConfirmState] = useState<ConfirmDialogState | null>(
     null,
@@ -259,6 +267,34 @@ export default function App() {
 
   const activeProject =
     projects.find((project) => project.id === activeProjectId) ?? null
+
+  /** 资源链接点击分发：文件→面板定位，资产→面板预览，外链→系统浏览器。 */
+  const handleResourceClick = useCallback((link: ResourceLink): void => {
+    if (link.kind === 'externalUrl') {
+      void openExternalUrl(link.uri).catch((error: unknown) => {
+        console.error(`open external failed: ${String(error)}`)
+      })
+      return
+    }
+    // workspace/asset 定位只对当前激活项目生效（面板绑定激活项目）。
+    if (link.kind === 'workspaceFile') {
+      if (link.projectId !== activeProjectRef.current) return
+      setWorkspaceRequest({
+        nonce: Date.now(),
+        kind: 'file',
+        path: link.path,
+        line: link.line,
+      })
+      setWorkspaceOpen(true)
+      return
+    }
+    setWorkspaceRequest({
+      nonce: Date.now(),
+      kind: 'asset',
+      assetId: link.assetId,
+    })
+    setWorkspaceOpen(true)
+  }, [])
   const contextTitle =
     view === 'settings'
       ? '设置'
@@ -395,6 +431,7 @@ export default function App() {
                 }}
                 pendingApprovals={pendingApprovals}
                 onResolveApproval={handleResolveApproval}
+                onResourceClick={handleResourceClick}
               />
             ) : (
               <LandingView
@@ -423,6 +460,7 @@ export default function App() {
             <WorkspacePanel
               project={activeProject}
               systemReady={bootstrap?.systemReady ?? false}
+              openRequest={workspaceRequest}
             />
           )}
         </div>

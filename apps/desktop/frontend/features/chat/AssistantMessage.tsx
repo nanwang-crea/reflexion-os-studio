@@ -1,11 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type {
   Message,
+  ResourceLink,
   ToolCall,
   Usage,
 } from '@reflexion-os-studio/runtime-client'
 import { CheckIcon, CopyIcon } from '../../ui/icons'
-import { MessageMarkdown } from '../../components/MessageMarkdown'
+import {
+  extractResourceLinks,
+  MessageMarkdown,
+} from '../../components/MessageMarkdown'
 import { WorkSummary } from './WorkSummary'
 
 const MESSAGE_STATUS_LABELS: Record<string, string> = {
@@ -30,6 +34,8 @@ interface AssistantMessageProps {
   /** 该消息属于最近一个可重试的失败 Run 时展示重试入口。 */
   canRetry: boolean
   onRetry: () => void
+  /** 资源引用（工作区文件/资产/外链）点击后按类型分发。 */
+  onResourceClick?: (link: ResourceLink) => void
 }
 
 function formatSeconds(ms: number): string {
@@ -79,6 +85,16 @@ export function AssistantMessage(
 
   const statusLabel = MESSAGE_STATUS_LABELS[props.message.status]
 
+  // Artifact 卡：聚合该回复正文里的资源引用（按 uri 去重），点击同样分发。
+  const resources = useMemo(() => {
+    const seen = new Set<string>()
+    return extractResourceLinks(contentText).filter((link) => {
+      if (seen.has(link.uri)) return false
+      seen.add(link.uri)
+      return true
+    })
+  }, [contentText])
+
   return (
     <div className="msg-assistant">
       <div className="assistant-main">
@@ -100,7 +116,39 @@ export function AssistantMessage(
         )}
         {contentText !== '' && (
           <div className="assistant-content">
-            <MessageMarkdown text={contentText} caret={answerStreaming} />
+            <MessageMarkdown
+              text={contentText}
+              caret={answerStreaming}
+              onResourceClick={props.onResourceClick}
+            />
+          </div>
+        )}
+        {resources.length > 0 && (
+          <div className="artifact-links">
+            {resources.map((link) => (
+              <button
+                key={link.uri}
+                type="button"
+                className="artifact-chip"
+                title={link.uri}
+                onClick={() => props.onResourceClick?.(link)}
+              >
+                <span className="artifact-kind">
+                  {link.kind === 'workspaceFile'
+                    ? '文件'
+                    : link.kind === 'asset'
+                      ? '资产'
+                      : '链接'}
+                </span>
+                <span className="artifact-target">
+                  {link.kind === 'workspaceFile'
+                    ? link.path
+                    : link.kind === 'asset'
+                      ? link.assetId.slice(0, 8)
+                      : link.uri}
+                </span>
+              </button>
+            ))}
           </div>
         )}
         {statusLabel && (

@@ -321,6 +321,50 @@ fn bootstrap_get_state(
         .map_err(|_| "bootstrap state lock poisoned".to_string())
 }
 
+/// 外部 URL 安全打开：仅允许 https，经系统默认浏览器打开（三平台显式分支，
+/// 与 WebView 内导航隔离，永不内嵌）。
+#[tauri::command]
+fn open_external(url: String) -> Result<(), String> {
+    let trimmed = url.trim();
+    if !trimmed.starts_with("https://") {
+        return Err("only https external URLs allowed".to_string());
+    }
+    open_with_system_browser(trimmed).map_err(|error| format!("failed to open: {error}"))
+}
+
+#[cfg(target_os = "macos")]
+fn open_with_system_browser(
+    url: &str,
+) -> std::io::Result<std::process::ExitStatus> {
+    std::process::Command::new("open").arg(url).status()
+}
+
+#[cfg(target_os = "windows")]
+fn open_with_system_browser(
+    url: &str,
+) -> std::io::Result<std::process::ExitStatus> {
+    std::process::Command::new("cmd")
+        .args(["/C", "start", "", url])
+        .status()
+}
+
+#[cfg(target_os = "linux")]
+fn open_with_system_browser(
+    url: &str,
+) -> std::io::Result<std::process::ExitStatus> {
+    std::process::Command::new("xdg-open").arg(url).status()
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+fn open_with_system_browser(
+    _url: &str,
+) -> std::io::Result<std::process::ExitStatus> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "unsupported platform",
+    ))
+}
+
 /// 前端访问 Runtime 的唯一通道：白名单方法 + 分配 JSON-RPC id。
 /// 响应经 bootstrap:message 事件透传，由前端按 id 关联。
 #[tauri::command]
@@ -329,7 +373,7 @@ fn runtime_request(
     method: String,
     params: serde_json::Value,
 ) -> Result<u64, String> {
-    const RUNTIME_METHODS: [&str; 38] = [
+    const RUNTIME_METHODS: [&str; 44] = [
         "runtime.get_status",
         "system.ping",
         "project.list",
@@ -368,6 +412,12 @@ fn runtime_request(
         "workspace.index.status",
         "workspace.list_dir",
         "workspace.read_file",
+        "workspace.git_status",
+        "workspace.git_diff",
+        "asset.import",
+        "asset.list",
+        "asset.read",
+        "asset.delete",
     ];
     if !RUNTIME_METHODS.contains(&method.as_str()) {
         return Err(format!("method not allowed: {method}"));
@@ -493,7 +543,8 @@ pub fn run() {
         .manage(state)
         .invoke_handler(tauri::generate_handler![
             bootstrap_get_state,
-            runtime_request
+            runtime_request,
+            open_external
         ])
         .setup(move |app| {
             start_sidecars(app.handle(), state_for_setup.clone());

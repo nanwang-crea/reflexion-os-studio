@@ -16,6 +16,7 @@ import { resolveDataDir, Store } from './store/index.js'
 import { resolveSystemRuntimeBinary, SystemRuntimeClient } from './system.js'
 import { McpManager } from './mcp/manager.js'
 import { WorkspaceIndexer } from './workspace/indexer.js'
+import { AssetService } from './assets/service.js'
 
 const RUNTIME_VERSION = '0.1.0'
 
@@ -93,6 +94,7 @@ const store = new Store(resolveDataDir())
 const mcpManager = new McpManager(store, notify)
 const agent = new ChatAgent(store, notify, systemRuntime, mcpManager)
 const workspaceIndexer = new WorkspaceIndexer(store, notify)
+const assetService = new AssetService(store, resolveDataDir())
 const commandContext = {
   store,
   agent,
@@ -100,6 +102,7 @@ const commandContext = {
   workspace: workspaceIndexer,
   system: systemRuntime,
   mcp: mcpManager,
+  assets: assetService,
 }
 
 systemRuntime.start()

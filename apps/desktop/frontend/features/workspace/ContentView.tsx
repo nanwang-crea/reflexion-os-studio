@@ -9,6 +9,8 @@ const LINE_HEIGHT_PX = 20
 interface ContentViewProps {
   projectId: string
   path: string
+  /** 打开后定位到的行号（ResourceLink 跳转）；缺省不滚动。 */
+  initialLine?: number
   onClose: () => void
 }
 
@@ -115,6 +117,13 @@ export function ContentView(props: ContentViewProps): React.JSX.Element {
     const el = scrollRef.current
     if (el) el.scrollTop = (line - 1) * LINE_HEIGHT_PX
   }
+
+  // ResourceLink 定位:内容渲染完成后按目标行滚动(仅首次加载生效)。
+  useEffect(() => {
+    if (props.initialLine === undefined) return
+    const el = scrollRef.current
+    if (el) el.scrollTop = Math.max(0, (props.initialLine - 1) * LINE_HEIGHT_PX)
+  }, [props.initialLine, doc.lines.length])
 
   const fileName = props.path.split('/').pop() ?? props.path
   const contentText = doc.lines.join('\n')

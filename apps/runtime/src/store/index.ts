@@ -12,6 +12,7 @@ import { runMigrations, SCHEMA } from './migrations.js'
 import { SessionStore } from './sessions.js'
 import { ToolCallStore } from './toolCalls.js'
 import { WorkspaceIndexStore } from './workspaceIndex.js'
+import { AssetStore } from './assets.js'
 
 export { DEFAULT_SESSION_TITLE, resolveDataDir } from './shared.js'
 
@@ -29,6 +30,7 @@ export class Store {
   readonly providers: ProviderStore
   readonly memories: MemoryStore
   readonly workspaceIndex: WorkspaceIndexStore
+  readonly assetStore: AssetStore
   readonly agentSettings: AgentSettingsStore
   readonly mcpServers: McpServerStore
 
@@ -51,6 +53,7 @@ export class Store {
     this.providers = new ProviderStore(this.db)
     this.memories = new MemoryStore(this.db)
     this.workspaceIndex = new WorkspaceIndexStore(this.db)
+    this.assetStore = new AssetStore(this.db)
     this.agentSettings = new AgentSettingsStore(this.db)
     this.mcpServers = new McpServerStore(this.db)
 

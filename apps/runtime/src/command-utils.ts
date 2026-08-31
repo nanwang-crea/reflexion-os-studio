@@ -5,6 +5,7 @@ import type { Store } from './store/index.js'
 import type { SystemRuntimeClient } from './system.js'
 import type { McpManager } from './mcp/manager.js'
 import type { WorkspaceIndexer } from './workspace/indexer.js'
+import type { AssetService } from './assets/service.js'
 
 export type CommandResult = Record<string, unknown>
 
@@ -18,6 +19,8 @@ export interface CommandContext {
   system: SystemRuntimeClient
   /** MCP 管理服务(mcp.* 命令与工具桥)。 */
   mcp: McpManager | null
+  /** Asset Store 服务（asset.* 命令；内容在数据目录，按项目隔离）。 */
+  assets: AssetService
 }
 
 export type CommandHandler = (

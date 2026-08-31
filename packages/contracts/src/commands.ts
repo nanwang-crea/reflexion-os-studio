@@ -15,6 +15,7 @@ import {
   WorkspaceIndexSnapshotSchema,
   WorkspaceReadResultSchema,
   GitChangeEntrySchema,
+  AssetRefSchema,
   QueueEntrySchema,
   AgentSettingsSchema,
   McpServerSchema,
@@ -393,6 +394,42 @@ export const CommandSchemaRegistry = {
       diff: z.string(),
       truncated: z.boolean(),
     }),
+  },
+  // ---------- Asset（Phase 1B 第二阶段）：内容入 Store，引用与元数据落库 ----------
+  'asset.import': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+      // 工作区相对路径（与 file.read 同一安全边界：相对、无 ..）。
+      path: z.string().min(1),
+    }),
+    result: z.object({ asset: AssetRefSchema }),
+  },
+  'asset.list': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+    }),
+    result: z.object({ assets: z.array(AssetRefSchema) }),
+  },
+  'asset.read': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      assetId: z.string().min(1),
+    }),
+    // 文本类直返文本；图片返回 base64；不支持预览的 kind 两者皆 null。
+    result: z.object({
+      asset: AssetRefSchema,
+      text: z.string().nullable(),
+      base64: z.string().nullable(),
+    }),
+  },
+  'asset.delete': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      assetId: z.string().min(1),
+    }),
+    result: z.object({ removed: z.boolean() }),
   },
 } satisfies Record<string, { params: z.ZodType; result: z.ZodType }>
 

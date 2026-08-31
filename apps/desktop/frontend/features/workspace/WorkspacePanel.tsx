@@ -13,12 +13,20 @@ import { FolderIcon, RefreshIcon } from '../../ui/icons'
 import { FileTree } from './FileTree'
 import { ContentView } from './ContentView'
 import { GitChanges } from './GitChanges'
+import { AssetsPanel } from './AssetsPanel'
+
+/** 外部资源点击进入面板的定位请求（App 级发起，nonce 使重复点击生效）。 */
+export type WorkspaceOpenRequest =
+  | { nonce: number; kind: 'file'; path: string; line?: number }
+  | { nonce: number; kind: 'asset'; assetId: string }
 
 interface WorkspacePanelProps {
   /** 当前激活项目；null 时展示占位提示。 */
   project: Project | null
   /** Rust System Runtime 可用性：文件树/查看器依赖它，索引器不依赖。 */
   systemReady: boolean
+  /** 资源链接点击后的定位请求；null 表示无待处理请求。 */
+  openRequest: WorkspaceOpenRequest | null
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -48,7 +56,24 @@ export function WorkspacePanel(props: WorkspacePanelProps): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [activePath, setActivePath] = useState<string | null>(null)
   const [treeEpoch, setTreeEpoch] = useState(0)
-  const [view, setView] = useState<'files' | 'git'>('files')
+  const [view, setView] = useState<'files' | 'git' | 'assets'>('files')
+  const [previewLine, setPreviewLine] = useState<number | undefined>(undefined)
+  const [focusAssetId, setFocusAssetId] = useState<string | null>(null)
+
+  // 外部定位请求（消息里的资源链接）：切到对应页签并触发定位/聚焦。
+  useEffect(() => {
+    const request = props.openRequest
+    if (request === null) return
+    if (request.kind === 'file') {
+      setView('files')
+      setActivePath(request.path)
+      setPreviewLine(request.line)
+    } else {
+      setView('assets')
+      setFocusAssetId(request.assetId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.openRequest?.nonce])
 
   const refreshStatus = useCallback(async (): Promise<void> => {
     if (projectId === null) {
@@ -195,6 +220,13 @@ export function WorkspacePanel(props: WorkspacePanelProps): React.JSX.Element {
             >
               Git 变更
             </button>
+            <button
+              type="button"
+              className={`workspace-tab${view === 'assets' ? ' active' : ''}`}
+              onClick={() => setView('assets')}
+            >
+              资产
+            </button>
           </div>
           {view === 'files' ? (
             <FileTree
@@ -205,11 +237,17 @@ export function WorkspacePanel(props: WorkspacePanelProps): React.JSX.Element {
               onOpenFile={setActivePath}
               onRefresh={() => setTreeEpoch((epoch) => epoch + 1)}
             />
-          ) : (
+          ) : view === 'git' ? (
             <GitChanges
               projectId={project.id}
               systemReady={props.systemReady}
               onOpenFile={setActivePath}
+            />
+          ) : (
+            <AssetsPanel
+              projectId={project.id}
+              focusAssetId={focusAssetId}
+              onFocusConsumed={() => setFocusAssetId(null)}
             />
           )}
         </>
@@ -219,6 +257,7 @@ export function WorkspacePanel(props: WorkspacePanelProps): React.JSX.Element {
             key={activePath}
             projectId={project.id}
             path={activePath}
+            initialLine={previewLine}
             onClose={() => setActivePath(null)}
           />
         </div>

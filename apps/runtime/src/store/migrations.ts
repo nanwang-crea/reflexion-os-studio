@@ -143,10 +143,28 @@ CREATE TABLE IF NOT EXISTS workspace_index (
   truncated INTEGER NOT NULL DEFAULT 0,
   error TEXT
 );
+-- Phase 1B：Asset 元数据与引用(内容在数据目录 assets/<projectId>/,
+-- 按项目隔离);run_id 产出来源,node_run_id 多 Agent 阶段预留。
+CREATE TABLE IF NOT EXISTS assets (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  run_id TEXT,
+  node_run_id TEXT,
+  file_name TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  hash TEXT NOT NULL,
+  uri TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  preview_status TEXT NOT NULL DEFAULT 'ready',
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
+);
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 12
+export const LATEST_SCHEMA_VERSION = 13
 
 const SESSIONS_TABLE_V1 = `
 CREATE TABLE sessions (
