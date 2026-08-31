@@ -351,7 +351,9 @@ export function runMigrations(db: DatabaseSync): void {
           (column) => column.name === 'context_budget',
         )
       ) {
-        db.exec('ALTER TABLE provider_profiles ADD COLUMN context_budget INTEGER')
+        db.exec(
+          'ALTER TABLE provider_profiles ADD COLUMN context_budget INTEGER',
+        )
       }
     }
     db.exec('COMMIT')
