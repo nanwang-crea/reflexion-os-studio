@@ -20,6 +20,8 @@ export type {
   WorkspaceExtStats,
   WorkspaceIndexSnapshot,
   WorkspaceReadResult,
+  GitChangeEntry,
+  GitChangeStatus,
   QueueEntry,
   AgentSettings,
   McpServer,

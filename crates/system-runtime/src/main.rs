@@ -3,6 +3,7 @@
 //! 边界职责：workspace-relative 路径规范化、`..`/绝对路径/符号链接逃逸拒绝、
 //! 体量与超时上限、进程树回收、写/执行类操作的 grant 存在性检查。
 mod files;
+mod git;
 mod glob;
 mod mutate;
 mod params;
@@ -18,8 +19,8 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 use params::{
-    EditParams, GlobParams, GrantPathParams, GrepParams, ListParams, MoveParams, ReadParams,
-    ShellParams, WriteParams,
+    EditParams, GitDiffParams, GitStatusParams, GlobParams, GrantPathParams, GrepParams,
+    ListParams, MoveParams, ReadParams, ShellParams, WriteParams,
 };
 
 const PROTOCOL_VERSION: &str = "1.0";
@@ -210,6 +211,48 @@ fn handle_file_mkdir(params: Value) -> Result<Value, OpError> {
     Ok(json!({ "path": outcome.path }))
 }
 
+/// git 只读查询（status/diff）：异步执行避免大仓库阻塞主循环，
+/// 结果与错误照常 emit；进程级超时与收集在 git 模块内完成。
+fn handle_git_status(id: Value, params: Value) -> Result<(Value, bool), OpError> {
+    let params: GitStatusParams = serde_json::from_value(params)
+        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
+    let root = workspace_root(&params.workspace_root)?;
+    std::thread::spawn(move || match git::status(&root) {
+        Ok(outcome) => emit(ok_response(
+            id,
+            serde_json::to_value(&outcome).unwrap_or(Value::Null),
+        )),
+        Err(error) => emit(error_response(
+            id,
+            -32000,
+            &error.message,
+            Some(json!({ "code": error.code })),
+        )),
+    });
+    Ok((Value::Null, false))
+}
+
+fn handle_git_diff(id: Value, params: Value) -> Result<(Value, bool), OpError> {
+    let params: GitDiffParams = serde_json::from_value(params)
+        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
+    let root = workspace_root(&params.workspace_root)?;
+    let path = params.path;
+    let staged = params.staged.unwrap_or(false);
+    std::thread::spawn(move || match git::diff(&root, &path, staged) {
+        Ok(outcome) => emit(ok_response(
+            id,
+            serde_json::to_value(&outcome).unwrap_or(Value::Null),
+        )),
+        Err(error) => emit(error_response(
+            id,
+            -32000,
+            &error.message,
+            Some(json!({ "code": error.code })),
+        )),
+    });
+    Ok((Value::Null, false))
+}
+
 fn handle_shell_execute(id: Value, params: Value) -> Result<(Value, bool), OpError> {
     let params: ShellParams = serde_json::from_value(params)
         .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
@@ -288,6 +331,8 @@ fn handle_request(request: &Value) -> (Value, bool) {
         Some("file.move") => finish(id, handle_file_move(params)),
         Some("file.mkdir") => finish(id, handle_file_mkdir(params)),
         Some("shell.execute") => handle_shell_execute(id, params),
+        Some("git.status") => handle_git_status(id, params),
+        Some("git.diff") => handle_git_diff(id, params),
         Some(name) => Err(OpError::new(
             "method_not_found",
             format!("Method not found: {name}"),

@@ -66,6 +66,42 @@ export const workspaceCommandHandlers: Record<string, CommandHandler> = {
       unknown
     >
   },
+  'workspace.git_status': async (p, { store, system }) => {
+    const project = requireWorkspaceProject(
+      store,
+      requireString(p, 'projectId'),
+    )
+    const result = (await requestSystem(system, 'git.status', {
+      workspaceRoot: project.folderPath,
+    })) as { repo: boolean; entries?: unknown[]; truncated?: boolean }
+    return {
+      repo: result.repo,
+      entries: result.entries ?? [],
+      truncated: result.truncated ?? false,
+    }
+  },
+  'workspace.git_diff': async (p, { store, system }) => {
+    const project = requireWorkspaceProject(
+      store,
+      requireString(p, 'projectId'),
+    )
+    const path = assertRelativePath(requireString(p, 'path'))
+    const params: Record<string, unknown> = {
+      workspaceRoot: project.folderPath,
+      path,
+    }
+    if (typeof p.staged === 'boolean') params.staged = p.staged
+    const result = (await requestSystem(system, 'git.diff', params)) as {
+      repo: boolean
+      diff?: string
+      truncated?: boolean
+    }
+    return {
+      repo: result.repo,
+      diff: result.diff ?? '',
+      truncated: result.truncated ?? false,
+    }
+  },
 }
 
 function requireWorkspaceProject(

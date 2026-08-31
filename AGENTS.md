@@ -16,9 +16,9 @@ React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
   - **Skills**：内置 code-review / web-research / workspace-report；斜杠命令激活 + skill.use 工具加载全文；
   - **Memory**：Run 结束后自动提取-合并（会话/项目级，user 级待确认流程落地前不产出候选项）、记忆管理页、上下文召回注入；
   - **MCP**：stdio 协议 client（握手/tools/list/call、严格超时）+ 管理服务（配置/启停/重连/工具清单）、工具桥注册为 `serverId/toolName`、默认 ask 审批、设置页 MCP 面板、mcp_servers 表；
-  - **Workspace（Phase 1B 第一部分）**：异步 Indexer（progress/cancel/stale/failed、忽略目录与符号链接、快照落库）、文件树按需加载、只读代码/文档查看器（行号/复制/跳转行/分段加载/Markdown·JSON 预览），全部经 Rust 侧 workspace 边界；
+  - **Workspace（Phase 1B 第一部分）**：异步 Indexer（progress/cancel/stale/failed、忽略目录与符号链接、快照落库）、文件树按需加载、只读代码/文档查看器（行号/复制/跳转行/分段加载/Markdown·JSON 预览）、**Git 变更（状态列表 + 单文件 diff 预览，只读查看与定位，编辑/暂存/提交不在第一阶段）**，全部经 Rust 侧 workspace 边界；
   - **存储**：`node:sqlite`（WAL、外键、启动把未完成 Run/Message 恢复为 interrupted、终态单事务、workspace_index 快照表）。
-- **尚未实现、不得提前实现**：Phase 1B 剩余（Git Diff、Asset/Artifact Card、ResourceLink、Browser Surface）、Phase 2 剩余（Provider/Tool 插件、Browser 工具、user 级记忆写入确认）、Phase 3 多 Agent、Phase 4 Workflow、Phase 5 多模态、Phase 6 硬化与激活码许可。
+- **尚未实现、不得提前实现**：Phase 1B 剩余（Asset/Artifact Card、ResourceLink、Browser Surface）、Phase 2 剩余（Provider/Tool 插件、Browser 工具、user 级记忆写入确认）、Phase 3 多 Agent、Phase 4 Workflow、Phase 5 多模态、Phase 6 硬化与激活码许可。
 - 现有页面与占位边界：聊天区、落地页、技能页、记忆管理页、设置页（Provider）均为独立页面；工作区（索引状态+文件树+查看器）是对话区的**右侧可开合面板**（顶栏文件夹按钮切换，局部状态记忆），不是独立页；Automations 页是 Phase 4 占位（文案如实标注"尚未开放"），不要在占位页假装能力存在。
 
 ## 2. 目录结构与职责

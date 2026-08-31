@@ -12,6 +12,7 @@ import {
 import { FolderIcon, RefreshIcon } from '../../ui/icons'
 import { FileTree } from './FileTree'
 import { ContentView } from './ContentView'
+import { GitChanges } from './GitChanges'
 
 interface WorkspacePanelProps {
   /** 当前激活项目；null 时展示占位提示。 */
@@ -47,6 +48,7 @@ export function WorkspacePanel(props: WorkspacePanelProps): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [activePath, setActivePath] = useState<string | null>(null)
   const [treeEpoch, setTreeEpoch] = useState(0)
+  const [view, setView] = useState<'files' | 'git'>('files')
 
   const refreshStatus = useCallback(async (): Promise<void> => {
     if (projectId === null) {
@@ -177,14 +179,40 @@ export function WorkspacePanel(props: WorkspacePanelProps): React.JSX.Element {
       )}
 
       {activePath === null ? (
-        <FileTree
-          key={`${project.id}-${treeEpoch}`}
-          projectId={project.id}
-          systemReady={props.systemReady}
-          activePath={activePath}
-          onOpenFile={setActivePath}
-          onRefresh={() => setTreeEpoch((epoch) => epoch + 1)}
-        />
+        <>
+          <div className="workspace-tabs">
+            <button
+              type="button"
+              className={`workspace-tab${view === 'files' ? ' active' : ''}`}
+              onClick={() => setView('files')}
+            >
+              文件
+            </button>
+            <button
+              type="button"
+              className={`workspace-tab${view === 'git' ? ' active' : ''}`}
+              onClick={() => setView('git')}
+            >
+              Git 变更
+            </button>
+          </div>
+          {view === 'files' ? (
+            <FileTree
+              key={`${project.id}-${treeEpoch}`}
+              projectId={project.id}
+              systemReady={props.systemReady}
+              activePath={activePath}
+              onOpenFile={setActivePath}
+              onRefresh={() => setTreeEpoch((epoch) => epoch + 1)}
+            />
+          ) : (
+            <GitChanges
+              projectId={project.id}
+              systemReady={props.systemReady}
+              onOpenFile={setActivePath}
+            />
+          )}
+        </>
       ) : (
         <div className="workspace-preview">
           <ContentView

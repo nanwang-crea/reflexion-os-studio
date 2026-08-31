@@ -1,4 +1,5 @@
 import type {
+  GitChangeEntry,
   RuntimeEvent,
   WorkspaceEntry,
   WorkspaceIndexSnapshot,
@@ -50,6 +51,29 @@ export function readFile(
     ...(offset !== undefined ? { offset } : {}),
     ...(limit !== undefined ? { limit } : {}),
   })
+}
+
+/** Git 变更列表（porcelain 状态聚合）；repo=false 表示不是 Git 仓库。 */
+export function gitStatus(
+  projectId: string,
+): Promise<{ repo: boolean; entries: GitChangeEntry[]; truncated: boolean }> {
+  return request<{
+    repo: boolean
+    entries: GitChangeEntry[]
+    truncated: boolean
+  }>('workspace.git_status', { projectId })
+}
+
+/** 单文件 diff；staged=true 取索引（已暂存）版本，缺省工作树。 */
+export function gitDiff(
+  projectId: string,
+  path: string,
+  staged = false,
+): Promise<{ repo: boolean; diff: string; truncated: boolean }> {
+  return request<{ repo: boolean; diff: string; truncated: boolean }>(
+    'workspace.git_diff',
+    { projectId, path, staged },
+  )
 }
 
 export type WorkspaceIndexEvent = Extract<

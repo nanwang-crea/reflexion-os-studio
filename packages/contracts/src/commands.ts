@@ -14,6 +14,7 @@ import {
   WorkspaceEntrySchema,
   WorkspaceIndexSnapshotSchema,
   WorkspaceReadResultSchema,
+  GitChangeEntrySchema,
   QueueEntrySchema,
   AgentSettingsSchema,
   McpServerSchema,
@@ -366,6 +367,32 @@ export const CommandSchemaRegistry = {
       limit: z.number().int().nonnegative().optional(),
     }),
     result: WorkspaceReadResultSchema,
+  },
+  'workspace.git_status': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+    }),
+    // repo=false 表示目录不是 Git 仓库（前端展示提示而非错误）。
+    result: z.object({
+      repo: z.boolean(),
+      entries: z.array(GitChangeEntrySchema),
+      truncated: z.boolean(),
+    }),
+  },
+  'workspace.git_diff': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+      path: z.string().min(1),
+      // 缺省为工作树 diff；true 取索引（已暂存）版本。
+      staged: z.boolean().optional(),
+    }),
+    result: z.object({
+      repo: z.boolean(),
+      diff: z.string(),
+      truncated: z.boolean(),
+    }),
   },
 } satisfies Record<string, { params: z.ZodType; result: z.ZodType }>
 

@@ -86,3 +86,17 @@ pub struct ShellParams {
     pub grant: String,
     pub timeout_ms: Option<u64>,
 }
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GitStatusParams {
+    pub workspace_root: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GitDiffParams {
+    pub workspace_root: String,
+    pub path: String,
+    pub staged: Option<bool>,
+}
