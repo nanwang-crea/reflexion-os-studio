@@ -3,6 +3,7 @@ import { CommandError } from './agent/index.js'
 import type { ApprovalGateway } from './agent/permissions.js'
 import type { Store } from './store/index.js'
 import type { SystemRuntimeClient } from './system.js'
+import type { McpManager } from './mcp/manager.js'
 import type { WorkspaceIndexer } from './workspace/indexer.js'
 
 export type CommandResult = Record<string, unknown>
@@ -15,6 +16,8 @@ export interface CommandContext {
   workspace: WorkspaceIndexer
   /** Rust System Runtime 通道（文件树/查看器的执行后端）。 */
   system: SystemRuntimeClient
+  /** MCP 管理服务(mcp.* 命令与工具桥)。 */
+  mcp: McpManager | null
 }
 
 export type CommandHandler = (

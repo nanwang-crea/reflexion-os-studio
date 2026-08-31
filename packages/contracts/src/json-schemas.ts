@@ -15,6 +15,8 @@ import {
   WorkspaceReadResultSchema,
   QueueEntrySchema,
   AgentSettingsSchema,
+  McpServerSchema,
+  McpToolSchema,
 } from './entities.js'
 import { RuntimeErrorSchema } from './errors.js'
 import { JsonRpcMessageSchema } from './jsonrpc.js'
@@ -41,6 +43,8 @@ export const jsonSchemas: Readonly<Record<string, unknown>> = Object.freeze(
     toJSONSchema('WorkspaceReadResult', WorkspaceReadResultSchema),
     toJSONSchema('QueueEntry', QueueEntrySchema),
     toJSONSchema('AgentSettings', AgentSettingsSchema),
+    toJSONSchema('McpServer', McpServerSchema),
+    toJSONSchema('McpTool', McpToolSchema),
     toJSONSchema('RuntimeError', RuntimeErrorSchema),
     toJSONSchema('RuntimeEvent', RuntimeEventSchema),
     ...Object.entries(CommandSchemaRegistry).map(([method, entry]) =>

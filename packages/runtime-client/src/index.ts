@@ -22,6 +22,8 @@ export type {
   WorkspaceReadResult,
   QueueEntry,
   AgentSettings,
+  McpServer,
+  McpTool,
 } from '@reflexion-os-studio/contracts'
 
 export {

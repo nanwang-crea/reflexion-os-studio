@@ -16,6 +16,8 @@ import {
   WorkspaceReadResultSchema,
   QueueEntrySchema,
   AgentSettingsSchema,
+  McpServerSchema,
+  McpToolSchema,
 } from './entities.js'
 import { RuntimeStatusSchema } from './handshake.js'
 
@@ -186,6 +188,42 @@ export const CommandSchemaRegistry = {
       settings: AgentSettingsSchema,
     }),
     result: z.object({ settings: AgentSettingsSchema }),
+  },
+  'mcp.list': {
+    params: z.object({ requestId: RequestIdSchema }),
+    result: z.object({
+      servers: z.array(McpServerSchema),
+      tools: z.array(McpToolSchema),
+    }),
+  },
+  'mcp.add': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      name: z.string().min(1),
+      command: z.string().min(1),
+      args: z.array(z.string()),
+      env: z.array(z.object({ key: z.string().min(1), value: z.string() })),
+    }),
+    result: z.object({ server: McpServerSchema }),
+  },
+  'mcp.remove': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      serverId: z.string().min(1),
+    }),
+    result: z.object({ removed: z.boolean() }),
+  },
+  'mcp.toggle': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      serverId: z.string().min(1),
+    }),
+    result: z.object({ server: McpServerSchema }),
+  },
+  'mcp.reload': {
+    // 重新握手全部已启用的 server(配置变更/修复失败后手动重连)。
+    params: z.object({ requestId: RequestIdSchema }),
+    result: z.object({ servers: z.array(McpServerSchema) }),
   },
   'run.cancel': {
     params: RunCancelParamsSchema,

@@ -329,7 +329,7 @@ fn runtime_request(
     method: String,
     params: serde_json::Value,
 ) -> Result<u64, String> {
-    const RUNTIME_METHODS: [&str; 33] = [
+    const RUNTIME_METHODS: [&str; 38] = [
         "runtime.get_status",
         "system.ping",
         "project.list",
@@ -347,6 +347,11 @@ fn runtime_request(
         "queue.send_now",
         "agent_settings.get",
         "agent_settings.update",
+        "mcp.list",
+        "mcp.add",
+        "mcp.remove",
+        "mcp.toggle",
+        "mcp.reload",
         "run.cancel",
         "run.retry",
         "approval.resolve",

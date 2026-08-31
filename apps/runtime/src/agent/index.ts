@@ -19,6 +19,7 @@ import type { SkillDefinition } from '../skills/index.js'
 import { DEFAULT_SESSION_TITLE, type Store } from '../store/index.js'
 import type { SystemRuntimeClient } from '../system.js'
 import { ContextBuilder, type ProviderRuntimeConfig } from './context.js'
+import type { McpManager } from '../mcp/manager.js'
 import { CommandError } from './errors.js'
 import { MemoryService } from './memory/service.js'
 import { ApprovalGateway, PermissionGate } from './permissions.js'
@@ -51,6 +52,7 @@ export class ChatAgent {
     private readonly store: Store,
     private readonly notifier: EventNotifier,
     private readonly system: SystemRuntimeClient | null,
+    private readonly mcp: McpManager | null = null,
   ) {
     this.contextBuilder = new ContextBuilder(store)
     this.runner = new RunRunner(store)
@@ -425,6 +427,7 @@ export class ChatAgent {
       system: this.system,
       workspaceRoot,
       skills: builtinSkills,
+      mcp: this.mcp,
     })
     const gate = new PermissionGate(
       input.permissionMode ?? 'workspace',

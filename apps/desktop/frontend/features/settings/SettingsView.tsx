@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { ProviderProfile } from '@reflexion-os-studio/runtime-client'
 import { RefreshIcon } from '../../ui/icons'
 import { AgentRuntimePanel } from './AgentRuntimePanel'
+import { McpPanel } from './McpPanel'
 import { ProviderEditor } from './ProviderEditor'
 import { ProviderList } from './ProviderList'
 
@@ -72,6 +73,7 @@ export function SettingsView(props: SettingsViewProps): React.JSX.Element {
       </div>
 
       <AgentRuntimePanel />
+      <McpPanel />
     </div>
   )
 }

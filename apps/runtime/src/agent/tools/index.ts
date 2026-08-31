@@ -20,6 +20,7 @@ import { createSkillUseTool } from './skills.js'
 import type { ToolContext } from './shared.js'
 import { createCurrentTimeTool } from './time.js'
 import { createWebFetchTool } from './web.js'
+import { createMcpTool } from './mcp.js'
 
 export type { ToolContext } from './shared.js'
 
@@ -30,6 +31,9 @@ export type { ToolContext } from './shared.js'
 export function createToolRegistry(ctx: ToolContext): ToolRegistry {
   const registry = new ToolRegistry()
   for (const tool of alwaysAvailableTools(ctx)) {
+    registry.register(tool)
+  }
+  for (const tool of mcpTools(ctx)) {
     registry.register(tool)
   }
   if (
@@ -52,6 +56,14 @@ function alwaysAvailableTools(ctx: ToolContext): ToolDefinition[] {
     createWebFetchTool(),
     createSkillUseTool(ctx.skills),
   ]
+}
+
+function mcpTools(ctx: ToolContext): ToolDefinition[] {
+  const manager = ctx.mcp
+  if (manager === null) return []
+  return manager
+    .allTools()
+    .map((tool) => createMcpTool(manager, tool.serverId, tool.spec))
 }
 
 function workspaceTools(

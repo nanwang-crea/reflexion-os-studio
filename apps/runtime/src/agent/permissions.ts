@@ -32,6 +32,13 @@ const READ_ONLY_POLICY: Record<ToolOperation, DecisionMode> = {
 
 const TOOL_OPERATIONS = new Set<string>(Object.keys(WORKSPACE_POLICY))
 
+/** 非操作类的内置纯计算工具:无需审批。 */
+const AUTOMATIC_OTHER_TOOLS = new Set([
+  'get_current_time',
+  'web.fetch',
+  'skill.use',
+])
+
 export function policyFor(
   mode: PermissionMode,
 ): Record<ToolOperation, DecisionMode> {
@@ -53,7 +60,10 @@ export class PermissionGate {
   ) {}
 
   decisionFor(toolName: string): DecisionMode {
-    if (!isToolOperation(toolName)) return 'automatic'
+    if (!isToolOperation(toolName)) {
+      // MCP 与其它未知工具默认 ask(需用户审批),内置纯计算工具白名单放行。
+      return AUTOMATIC_OTHER_TOOLS.has(toolName) ? 'automatic' : 'ask'
+    }
     if (!this.hasWorkspace) return 'denied'
     return policyFor(this.mode)[toolName]
   }

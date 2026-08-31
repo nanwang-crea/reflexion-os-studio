@@ -7,13 +7,13 @@ ReflexionOS 的下一代桌面 Agent 与可视化工作流平台。它不是现�
 当前仓库已完成 **Phase 1A**（Bootstrap → Chat Core → System Tools）、**Phase 1B 第一部分（Workspace Surface）** 与 **Phase 2 的 Skills / Memory 子集**：
 
 - **Chat**：OpenAI-compatible Provider 配置与本地密钥存储，Project/Session/Message/Run，SSE 流式回复（含思考过程）、Stop / Retry、**发送队列**（回复中自动排队，可修改/删除/立即发送）、SQLite 持久化与重启恢复；
-- **工具**：文件读写/搜索（经 Rust System Runtime）与 Shell、网络抓取、计时器；workspace / read-only 权限 Profile、工具审批（允许一次 / 本会话允许 / 拒绝）、工具轨迹聚合展示；
+- **工具**：文件读写/搜索（经 Rust System Runtime）与 Shell、网络抓取、计时器、**MCP 服务器工具**（设置页管理、使用前审批）；workspace / read-only 权限 Profile、工具审批（允许一次 / 本会话允许 / 拒绝）、工具轨迹聚合展示；
 - **Skills**：内置 code-review、web-research、workspace-report，斜杠命令（`/code-review …`）与 skill.use 激活；
 - **Memory**：Run 结束后自动提取与合并、记忆管理页、上下文召回注入；
 - **Workspace**：按项目异步索引（进度/取消/过期状态与统计）、文件树按需加载、只读代码/文档查看器（行号、复制、跳转行、Markdown/JSON 预览），文件访问经 Rust 侧 workspace 边界；
 - **UI**：项目/会话侧栏、聊天区（含右侧可开合的工作区面板）、落地页、技能页、记忆管理页、Provider 设置页。
 
-尚未实现（见 `docs/ROADMAP.md`）：Phase 1B 剩余（Git Diff、Asset Card、ResourceLink、内嵌浏览器）、MCP 与插件、Browser 工具、多 Agent、Workflow Engine、多模态、激活码许可。
+尚未实现（见 `docs/ROADMAP.md`）：Phase 1B 剩余（Git Diff、Asset Card、ResourceLink、内嵌浏览器）、Provider/Tool 插件与 Browser 工具、多 Agent、Workflow Engine、多模态、激活码许可。
 
 ## 常用命令
 

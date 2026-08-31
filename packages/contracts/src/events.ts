@@ -9,6 +9,7 @@ import {
   UsageSchema,
   WorkspaceIndexSnapshotSchema,
   QueueEntrySchema,
+  McpServerSchema,
 } from './entities.js'
 import { RuntimeErrorSchema } from './errors.js'
 import { RuntimeStatusSchema } from './handshake.js'
@@ -133,6 +134,12 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     type: z.literal('queue.changed'),
     sessionId: z.string().min(1),
     items: z.array(QueueEntrySchema),
+  }),
+  // MCP server 状态变化(ready/failed/removed),envelope.runId=serverId。
+  RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('mcp.changed'),
+    serverId: z.string().min(1),
+    server: McpServerSchema,
   }),
 ])
 export type RuntimeEvent = z.infer<typeof RuntimeEventSchema>

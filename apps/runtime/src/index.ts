@@ -14,6 +14,7 @@ import { RunEventEmitter } from './events.js'
 import { dispatchCommand, testProviderConnection } from './handlers.js'
 import { resolveDataDir, Store } from './store/index.js'
 import { resolveSystemRuntimeBinary, SystemRuntimeClient } from './system.js'
+import { McpManager } from './mcp/manager.js'
 import { WorkspaceIndexer } from './workspace/indexer.js'
 
 const RUNTIME_VERSION = '0.1.0'
@@ -89,7 +90,8 @@ function summarizeZodIssues(error: {
 }
 
 const store = new Store(resolveDataDir())
-const agent = new ChatAgent(store, notify, systemRuntime)
+const mcpManager = new McpManager(store, notify)
+const agent = new ChatAgent(store, notify, systemRuntime, mcpManager)
 const workspaceIndexer = new WorkspaceIndexer(store, notify)
 const commandContext = {
   store,
@@ -97,9 +99,14 @@ const commandContext = {
   approvals: agent.approvals,
   workspace: workspaceIndexer,
   system: systemRuntime,
+  mcp: mcpManager,
 }
 
 systemRuntime.start()
+// MCP:按配置连接全部已启用 server(失败标记 failed,不阻塞 Chat)。
+void mcpManager.reload().catch((error: unknown) => {
+  process.stderr.write(`[runtime] mcp reload failed: ${String(error)}\n`)
+})
 // 初始状态上报：让 Host/前端立即拿到 systemAvailable 基线（后续变化走回调）。
 statusEmitter.next({ type: 'runtime.status', status: getStatus() })
 
@@ -124,7 +131,10 @@ async function handleRequestAsync(request: JsonRpcRequest): Promise<void> {
   if (request.method === 'runtime.shutdown') {
     // 先协议关停 Rust 子进程，再退出自身；宿主侧另有进程树兜底收割。
     sendResponse(request.id, { ok: true }, () => {
-      void systemRuntime.shutdown().finally(() => process.exit(0))
+      void systemRuntime.shutdown().finally(() => {
+        mcpManager.dispose()
+        process.exit(0)
+      })
     })
     return
   }

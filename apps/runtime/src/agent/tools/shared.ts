@@ -1,6 +1,7 @@
 import type { ToolResult } from '@reflexion-os-studio/agent-core'
 import type { JsonValue } from '@reflexion-os-studio/contracts'
 import type { SkillRegistry } from '../../skills/index.js'
+import type { McpManager } from '../../mcp/manager.js'
 import type { SystemRuntimeClient } from '../../system.js'
 
 export interface ToolContext {
@@ -9,6 +10,8 @@ export interface ToolContext {
   workspaceRoot: string | null
   /** Skill 注册表：skill.use 工具的数据源。 */
   skills: SkillRegistry
+  /** MCP 管理服务：非空时把可用 server 工具注册进 Run(默认 ask 审批)。 */
+  mcp: McpManager | null
 }
 
 const SYSTEM_REQUEST_TIMEOUT_MS = 130_000

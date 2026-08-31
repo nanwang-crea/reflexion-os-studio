@@ -75,7 +75,11 @@
 - **差距**:无 temperature 传递,maxTokens 仅测试用。
 - **方向**:Provider 配置项增加 temperature/maxTokens,message.send 可选覆盖。
 
-### #10 MCP 接入 ⬜（Phase 2 边界内）
+### #10 MCP 接入 ✅ done（Phase 2 边界内）
+
+- **落地（2026-08-31）**：MCP stdio client(握手/tools/list/tools/call,严格超时) + 管理服务(按配置 spawn、失败标记可重连、mcp.changed 事件);
+  工具桥进 Agent 工具集(serverId 前缀去重),**权限默认 ask(需审批)**;设置页 MCP 面板(添加/启停/删除/重连/工具清单);存储 mcp_servers 表(迁移 v12)。
+- **已知边界**:env 目前空数组(添加 UI 未暴露环境变量),工具权限未按 readOnlyHint 自动区分(保守全 ask);可作为增强项。
 
 - **差距**:工具集完全静态内置,无外部工具生态接入。
 - **方向**:runtime 侧 MCP client + 工具桥,contracts 增加 mcp.* 命令;大改动,单独排期。
@@ -95,3 +99,5 @@
 - 2026-08-31:#3(失败反思:工具失败 ≥2 次自动注入反思消息,`reflectionThreshold` 可配可禁用)、#5(`verify-fix` 技能:验证-修复循环,最多 4 轮)、#6(`task-planner` 技能:计划清单执行与对照总结,计划不落盘)、#7(usage 落库并展示:tokens·耗时)、#9(模型参数:Profile 默认 + send 覆盖,迁移 v8)。#8 评估后暂缓(理由见条目),#10 MCP 列为 Phase 2 独立排期。
 
 - 2026-08-31:新增发送队列——会话忙碌时 message.send 自动入队(FIFO),当前回复结束自动泵出;排队项支持修改(`queue.update`,斜杠技能重解析)/删除(`queue.remove`)/立即发送(`queue.send_now`,移队首);`queue.changed` 事件驱动 UI 队列区(展示/编辑/删除/立即发送),队列存内存、重启即弃(排队窗口短)。
+
+- 2026-08-31:MCP 接入完成(见 #10)——协议 client、管理服务、工具桥(默认 ask 审批)、设置页面板、mock server 测试(runtime 65/65)。

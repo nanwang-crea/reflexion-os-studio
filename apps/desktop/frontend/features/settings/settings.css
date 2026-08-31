@@ -357,3 +357,98 @@
 .agent-runtime .field-hint {
   display: block;
 }
+
+.mcp-panel {
+  margin-top: 20px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 16px;
+}
+
+.mcp-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mcp-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.mcp-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mcp-name {
+  font-weight: 600;
+}
+
+.mcp-command {
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcp-status {
+  font-size: 12px;
+  color: var(--ok);
+}
+
+.mcp-status.bad {
+  color: var(--danger);
+}
+
+.mcp-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.mcp-add {
+  display: grid;
+  grid-template-columns: 1fr 1fr 2fr auto;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.mcp-add input {
+  padding: 6px 8px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.mcp-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.mcp-tool {
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+
+.mcp-more {
+  font-size: 12px;
+  color: var(--text-muted);
+}

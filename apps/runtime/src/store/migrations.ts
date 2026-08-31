@@ -109,6 +109,19 @@ CREATE TRIGGER IF NOT EXISTS memories_fts_au AFTER UPDATE OF content ON memories
   VALUES ('delete', old.rowid, old.content);
   INSERT INTO memories_fts(rowid, content) VALUES (new.rowid, new.content);
 END;
+-- MCP server 配置与最后运行状态(工具清单在运行时内存)。
+CREATE TABLE IF NOT EXISTS mcp_servers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  command TEXT NOT NULL,
+  args_json TEXT NOT NULL DEFAULT '[]',
+  env_json TEXT NOT NULL DEFAULT '[]',
+  enabled INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'disabled',
+  tool_count INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  updated_at TEXT NOT NULL
+);
 -- Agent 运行时全局设置(单行 JSON,id 恒为 1)。
 CREATE TABLE IF NOT EXISTS agent_settings (
   id INTEGER PRIMARY KEY,
@@ -133,7 +146,7 @@ CREATE TABLE IF NOT EXISTS workspace_index (
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 11
+export const LATEST_SCHEMA_VERSION = 12
 
 const SESSIONS_TABLE_V1 = `
 CREATE TABLE sessions (
