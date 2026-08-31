@@ -96,7 +96,9 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
     }
     setDraft(draftFromProfile(profile))
     setTestState(null)
-  }, [profile?.id, isNew, props.profiles])
+    // 只跟随选中项重置草稿：profiles 引用变化(如保存后外部刷新)
+    // 不重置,避免把用户的编辑冲掉。
+  }, [profile?.id, isNew])
 
   const updateDraft = (patch: Partial<Draft>): void => {
     setDraft((current) => (current ? { ...current, ...patch } : current))

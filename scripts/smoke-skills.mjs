@@ -270,7 +270,7 @@ async function main() {
       .all()
       .map((column) => column.name)
     after.close()
-    check('user_version 推进到 8', Number(version) === 8, `got ${version}`)
+    check('user_version 推进到 9', Number(version) === 9, `got ${version}`)
     check(
       'runs 表新增 skill_id 列',
       columns.includes('skill_id'),
