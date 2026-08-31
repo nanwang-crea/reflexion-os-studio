@@ -82,7 +82,12 @@ export function GitChanges(props: GitChangesProps): React.JSX.Element {
         error: null,
       })
       try {
-        const result = await gitDiff(props.projectId, entry.path, staged)
+        // 先取工作树 diff；为空且索引有变更（如已 add 的文件、仅暂存的修改）
+        // 时自动回退索引 diff，覆盖 "MM" 与 "A " 两类形态。
+        let result = await gitDiff(props.projectId, entry.path, false)
+        if (result.diff === '' && staged && result.repo && !result.truncated) {
+          result = await gitDiff(props.projectId, entry.path, true)
+        }
         setDiff((state) =>
           state === null || state.path !== entry.path
             ? state
