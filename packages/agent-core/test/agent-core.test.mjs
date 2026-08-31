@@ -412,3 +412,27 @@ test('reflectionThreshold=0 disables reflection injection', async () => {
     )
   }
 })
+
+test('estimateMessageTokens includes assistant tool call arguments', () => {
+  const argsText = JSON.stringify({
+    content: '编辑内容很长，' + '很长'.repeat(100),
+  })
+  const messages = [
+    {
+      role: 'assistant',
+      content: '',
+      toolCalls: [{ id: 'c1', name: 'file.edit', arguments: argsText }],
+    },
+    { role: 'tool', toolCallId: 'c1', content: '', isError: false },
+  ]
+  // tool 消息 content 为空时,估算也应覆盖 arguments 文本。
+  assert.equal(estimateMessageTokens(messages), estimateTokens(argsText))
+  // content 与 arguments 都计入:两条相同文本叠加。
+  assert.equal(
+    estimateMessageTokens([
+      { role: 'user', content: '文本' },
+      { role: 'assistant', content: '文本', toolCalls: [] },
+    ]),
+    estimateTokens('文本') * 2,
+  )
+})

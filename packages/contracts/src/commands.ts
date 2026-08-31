@@ -15,6 +15,7 @@ import {
   WorkspaceIndexSnapshotSchema,
   WorkspaceReadResultSchema,
   QueueEntrySchema,
+  AgentSettingsSchema,
 } from './entities.js'
 import { RuntimeStatusSchema } from './handshake.js'
 
@@ -173,6 +174,18 @@ export const CommandSchemaRegistry = {
       queueId: z.string().min(1),
     }),
     result: z.object({ accepted: z.boolean() }),
+  },
+  'agent_settings.get': {
+    params: z.object({ requestId: RequestIdSchema }),
+    result: z.object({ settings: AgentSettingsSchema }),
+  },
+  'agent_settings.update': {
+    // 全量覆盖:未提供的字段置 null(回默认),前端草稿整体提交。
+    params: z.object({
+      requestId: RequestIdSchema,
+      settings: AgentSettingsSchema,
+    }),
+    result: z.object({ settings: AgentSettingsSchema }),
   },
   'run.cancel': {
     params: RunCancelParamsSchema,

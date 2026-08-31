@@ -18,10 +18,18 @@ export function estimateTokens(text: string): number {
 }
 
 export function estimateMessageTokens(messages: ModelMessage[]): number {
-  return messages.reduce(
-    (total, message) => total + estimateTokens(message.content),
-    0,
-  )
+  return messages.reduce((total, message) => {
+    // assistant 的工具调用参数(如 file.edit 的 content)可能很长,
+    // 不计入会严重低估实际载荷。
+    const toolArgs =
+      message.role === 'assistant'
+        ? message.toolCalls.reduce(
+            (sum, call) => sum + estimateTokens(call.arguments),
+            0,
+          )
+        : 0
+    return total + estimateTokens(message.content) + toolArgs
+  }, 0)
 }
 
 export interface CompactOptions {

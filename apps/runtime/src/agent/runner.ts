@@ -1,5 +1,4 @@
 import {
-  DEFAULT_MAX_TURNS,
   runAgentLoop,
   type AgentLoopOutcome,
   type ModelMessage,
@@ -8,10 +7,12 @@ import {
 } from '@reflexion-os-studio/agent-core'
 import {
   JsonValueSchema,
+  type AgentSettings,
   type JsonValue,
   type Message,
   type Run,
 } from '@reflexion-os-studio/contracts'
+import { DEFAULT_MAX_TURNS } from '@reflexion-os-studio/agent-core'
 import { RunEventEmitter } from '../events.js'
 import { ProviderError, streamChatCompletion } from '../provider.js'
 import type { Store } from '../store/index.js'
@@ -30,6 +31,8 @@ interface RunStreamInput {
   /** 权限闸门：automatic / ask / denied（workspace 或 read-only Profile）。 */
   gate: PermissionGate
   approvals: ApprovalGateway
+  /** 本轮运行使用的 Agent 全局设置快照。 */
+  settings: AgentSettings
   /** A2 Memory 写侧管线；null 表示禁用（不影响主流程）。 */
   memory: MemoryService | null
   controller: AbortController
@@ -122,7 +125,8 @@ export class RunRunner {
       const outcome: AgentLoopOutcome = await runAgentLoop({
         history,
         signal: controller.signal,
-        maxTurns: DEFAULT_MAX_TURNS,
+        maxTurns: input.settings.maxTurns ?? DEFAULT_MAX_TURNS,
+        reflectionThreshold: input.settings.reflectionThreshold ?? undefined,
         callModel: async (messages, signal) => {
           const reuseFirst = state.lastAssistantMessageId === null
           const assistantMessage = reuseFirst
@@ -165,6 +169,12 @@ export class RunRunner {
                 : {}),
               ...(input.provider.maxTokens !== undefined
                 ? { maxTokens: input.provider.maxTokens }
+                : {}),
+              ...(input.provider.maxRetries !== undefined
+                ? { maxRetries: input.provider.maxRetries }
+                : {}),
+              ...(input.provider.timeoutMs !== undefined
+                ? { timeoutMs: input.provider.timeoutMs }
                 : {}),
               signal,
             },

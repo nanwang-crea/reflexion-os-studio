@@ -21,6 +21,7 @@ export type {
   WorkspaceIndexSnapshot,
   WorkspaceReadResult,
   QueueEntry,
+  AgentSettings,
 } from '@reflexion-os-studio/contracts'
 
 export {

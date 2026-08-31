@@ -6,6 +6,7 @@ import { MemoryStore } from './memories.js'
 import { ProviderStore } from './providers.js'
 import { ProjectStore } from './projects.js'
 import { RunStore } from './runs.js'
+import { AgentSettingsStore } from './agentSettings.js'
 import { runMigrations, SCHEMA } from './migrations.js'
 import { SessionStore } from './sessions.js'
 import { ToolCallStore } from './toolCalls.js'
@@ -27,6 +28,7 @@ export class Store {
   readonly providers: ProviderStore
   readonly memories: MemoryStore
   readonly workspaceIndex: WorkspaceIndexStore
+  readonly agentSettings: AgentSettingsStore
 
   constructor(dir: string) {
     mkdirSync(dir, { recursive: true })
@@ -47,6 +49,7 @@ export class Store {
     this.providers = new ProviderStore(this.db)
     this.memories = new MemoryStore(this.db)
     this.workspaceIndex = new WorkspaceIndexStore(this.db)
+    this.agentSettings = new AgentSettingsStore(this.db)
 
     // 启动恢复：上次进程未走完的生命周期统一落为 interrupted/cancelled。
     this.runs.recoverInterrupted()

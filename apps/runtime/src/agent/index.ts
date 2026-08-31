@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type {
+  AgentSettings,
   ChatCommand,
   Message,
   ProviderProfile,
@@ -208,6 +209,14 @@ export class ChatAgent {
     this.queues.removeSession(sessionId)
   }
 
+  getSettings() {
+    return { settings: this.store.agentSettings.get() }
+  }
+
+  updateSettings(settings: AgentSettings) {
+    return { settings: this.store.agentSettings.upsert(settings) }
+  }
+
   /** 立即发送：移到队首;空闲则立刻 pump(否则等当前结束)。 */
   sendNow(sessionId: string, queueId: string) {
     const accepted = this.queues.moveToFront(sessionId, queueId)
@@ -391,6 +400,7 @@ export class ChatAgent {
     } = input
     const controller = new AbortController()
     this.streams.set(run.id, { controller })
+    const settings = this.store.agentSettings.get()
     const provider: ProviderRuntimeConfig = {
       baseUrl: profile.baseUrl,
       apiKey,
@@ -401,6 +411,12 @@ export class ChatAgent {
         : {}),
       ...(profile.contextBudget !== null
         ? { contextBudget: profile.contextBudget }
+        : {}),
+      ...(settings.requestRetries !== null
+        ? { maxRetries: settings.requestRetries }
+        : {}),
+      ...(settings.requestTimeoutSec !== null
+        ? { timeoutMs: settings.requestTimeoutSec * 1000 }
         : {}),
     }
     const sessionId = run.sessionId
@@ -432,6 +448,7 @@ export class ChatAgent {
         controller,
         emitter,
         firstAssistantMessage: assistantMessage,
+        settings,
       })
       // runner 自吞全部执行期异常；此处仅保证取消句柄必然清理。
       .catch(() => {})

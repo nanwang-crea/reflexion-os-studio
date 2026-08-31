@@ -109,6 +109,12 @@ CREATE TRIGGER IF NOT EXISTS memories_fts_au AFTER UPDATE OF content ON memories
   VALUES ('delete', old.rowid, old.content);
   INSERT INTO memories_fts(rowid, content) VALUES (new.rowid, new.content);
 END;
+-- Agent 运行时全局设置(单行 JSON,id 恒为 1)。
+CREATE TABLE IF NOT EXISTS agent_settings (
+  id INTEGER PRIMARY KEY,
+  settings_json TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 -- Phase 1B：每项目一份 Workspace 索引快照；项目删除级联清掉。
 CREATE TABLE IF NOT EXISTS workspace_index (
   project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
@@ -127,7 +133,7 @@ CREATE TABLE IF NOT EXISTS workspace_index (
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 10
+export const LATEST_SCHEMA_VERSION = 11
 
 const SESSIONS_TABLE_V1 = `
 CREATE TABLE sessions (

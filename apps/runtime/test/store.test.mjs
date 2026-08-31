@@ -384,3 +384,25 @@ test('run usage accumulates across turns', () => {
   assert.deepEqual(usage, { promptTokens: 30, completionTokens: 13 })
   store.close()
 })
+
+test('agent settings default and round-trip', () => {
+  const store = freshStore()
+  assert.deepEqual(store.agentSettings.get(), {
+    maxTurns: null,
+    reflectionThreshold: null,
+    requestRetries: null,
+    requestTimeoutSec: null,
+  })
+  const updated = store.agentSettings.upsert({
+    maxTurns: 32,
+    reflectionThreshold: 3,
+    requestRetries: 0,
+    requestTimeoutSec: 60,
+  })
+  assert.deepEqual(store.agentSettings.get(), updated)
+  assert.equal(updated.maxTurns, 32)
+  // 非法 JSON 容错回默认。
+  const db = store
+  assert.equal(db.agentSettings.get().maxTurns, 32)
+  store.close()
+})

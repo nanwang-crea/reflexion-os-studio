@@ -333,3 +333,27 @@
 .sampling-wide {
   grid-column: 1 / -1;
 }
+
+.agent-runtime {
+  margin-top: 20px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 16px;
+}
+
+.agent-runtime-head h2 {
+  margin: 0 0 4px;
+}
+
+.agent-runtime-head .hint {
+  margin: 0 0 12px;
+}
+
+.agent-runtime-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.agent-runtime .field-hint {
+  display: block;
+}

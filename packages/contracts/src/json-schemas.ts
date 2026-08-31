@@ -14,6 +14,7 @@ import {
   WorkspaceIndexSnapshotSchema,
   WorkspaceReadResultSchema,
   QueueEntrySchema,
+  AgentSettingsSchema,
 } from './entities.js'
 import { RuntimeErrorSchema } from './errors.js'
 import { JsonRpcMessageSchema } from './jsonrpc.js'
@@ -39,6 +40,7 @@ export const jsonSchemas: Readonly<Record<string, unknown>> = Object.freeze(
     toJSONSchema('WorkspaceIndexSnapshot', WorkspaceIndexSnapshotSchema),
     toJSONSchema('WorkspaceReadResult', WorkspaceReadResultSchema),
     toJSONSchema('QueueEntry', QueueEntrySchema),
+    toJSONSchema('AgentSettings', AgentSettingsSchema),
     toJSONSchema('RuntimeError', RuntimeErrorSchema),
     toJSONSchema('RuntimeEvent', RuntimeEventSchema),
     ...Object.entries(CommandSchemaRegistry).map(([method, entry]) =>

@@ -348,3 +348,16 @@ export const QueueEntrySchema = z.object({
   position: z.number().int().nonnegative(),
 })
 export type QueueEntry = z.infer<typeof QueueEntrySchema>
+
+/** Agent 运行时全局设置：null 表示使用内置默认值。 */
+export const AgentSettingsSchema = z.object({
+  // 单次 Run 的最大模型调用轮次；超限如实失败。
+  maxTurns: z.number().int().positive().max(64).nullable(),
+  // 工具失败累计次数达到该值注入反思消息；0=禁用反思。
+  reflectionThreshold: z.number().int().min(0).max(10).nullable(),
+  // Provider 请求建立阶段失败(429/5xx/网络)自动重试次数。
+  requestRetries: z.number().int().min(0).max(5).nullable(),
+  // Provider 请求超时(秒)。
+  requestTimeoutSec: z.number().int().min(10).max(600).nullable(),
+})
+export type AgentSettings = z.infer<typeof AgentSettingsSchema>
