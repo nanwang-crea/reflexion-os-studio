@@ -5,10 +5,7 @@ import type {
   Session,
   SkillManifest,
 } from '@reflexion-os-studio/runtime-client'
-import {
-  useAppBootstrap,
-  type BootstrapSnapshot,
-} from './hooks/useAppBootstrap'
+import { useAppBootstrap } from './hooks/useAppBootstrap'
 import { useModelSelection } from './hooks/useModelSelection'
 import { usePermissionMode } from './hooks/usePermissionMode'
 import { listProviders } from './api/providers'

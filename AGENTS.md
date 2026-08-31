@@ -89,6 +89,7 @@ React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
 
 ```bash
 pnpm format:check          # Prettier
+pnpm lint                  # ESLint(前端 react-hooks 依赖纪律 + TS 基础规则)
 pnpm typecheck             # 根级 tsc --noEmit
 pnpm --filter @reflexion-os-studio/desktop typecheck   # 前端
 pnpm build:packages        # contracts → runtime-client → runtime → 前端

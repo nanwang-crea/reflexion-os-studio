@@ -23,17 +23,18 @@ export function ConfirmDialog(
   props: ConfirmDialogProps,
 ): React.JSX.Element | null {
   const cancelRef = useRef<HTMLButtonElement>(null)
+  const { onCancel } = props
   const open = props.state !== null
 
   useEffect(() => {
     if (!open) return
     cancelRef.current?.focus()
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') props.onCancel()
+      if (event.key === 'Escape') onCancel()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [open, props.onCancel])
+  }, [open, onCancel])
 
   if (!props.state) return null
   const state = props.state

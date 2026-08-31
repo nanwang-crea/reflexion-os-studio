@@ -116,7 +116,6 @@ async function main() {
       skills.length === 5,
       `got ${skills.length}: ${skills.map((s) => s.id).join(',')}`,
     )
-    const byId = new Map(skills.map((skill) => [skill.id, skill]))
     for (const field of [
       'id',
       'name',

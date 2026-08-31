@@ -3,6 +3,7 @@ set -euo pipefail
 
 [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
 
+pnpm lint
 pnpm test:ts
 pnpm --filter @reflexion-os-studio/contracts test
 pnpm --filter @reflexion-os-studio/agent-core test

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ProviderProfile } from '@reflexion-os-studio/runtime-client'
 import {
   configureProvider,
@@ -83,6 +83,13 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
 
   const { profile, isNew } = props
 
+  // 草稿模板只跟随"选中哪个"变化：profile 对象引用变化(保存后外部刷新)
+  // 不重建,避免把用户的未保存编辑冲掉。
+  const snapshot = useMemo(() => {
+    return profile ? draftFromProfile(profile) : null
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 有意只依赖 id
+  }, [profile?.id])
+
   useEffect(() => {
     if (isNew) {
       setDraft({ ...EMPTY_DRAFT, models: [''] })
@@ -90,15 +97,9 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
       setSavedAt(null)
       return
     }
-    if (!profile) {
-      setDraft(null)
-      return
-    }
-    setDraft(draftFromProfile(profile))
+    setDraft(snapshot === null ? null : { ...snapshot })
     setTestState(null)
-    // 只跟随选中项重置草稿：profiles 引用变化(如保存后外部刷新)
-    // 不重置,避免把用户的编辑冲掉。
-  }, [profile?.id, isNew])
+  }, [isNew, snapshot])
 
   const updateDraft = (patch: Partial<Draft>): void => {
     setDraft((current) => (current ? { ...current, ...patch } : current))

@@ -165,10 +165,16 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
   const [pinned, setPinned] = useState(true)
   const sessionId = props.sessionData?.session?.id ?? null
 
-  const messages = props.sessionData?.messages ?? []
-  const runs = props.sessionData?.runs ?? []
-  const toolCalls = props.sessionData?.toolCalls ?? []
-  const runIds = new Set(runs.map((run) => run.id))
+  const messages = useMemo(
+    () => props.sessionData?.messages ?? [],
+    [props.sessionData],
+  )
+  const runs = useMemo(() => props.sessionData?.runs ?? [], [props.sessionData])
+  const toolCalls = useMemo(
+    () => props.sessionData?.toolCalls ?? [],
+    [props.sessionData],
+  )
+  const runIds = useMemo(() => new Set(runs.map((run) => run.id)), [runs])
   // 工具调用按发起消息分组，随助手消息渲染轨迹卡片。
   const toolCallsByMessage = useMemo(() => {
     const groups = new Map<string, ToolCall[]>()

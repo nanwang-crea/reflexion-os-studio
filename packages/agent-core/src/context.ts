@@ -96,7 +96,7 @@ export function boundMessagesForModel(
   // 截断兜底：此时已无任何工具轮引用，截断不会造成悬空 tool_call_id。
   const system = current[0]?.role === 'system' ? current[0] : null
   const body = system !== null ? current.slice(1) : current
-  let bounded: ModelMessage[] = [
+  const bounded: ModelMessage[] = [
     ...(system !== null ? [system] : []),
     { role: 'user', content: '[更早的历史已因上下文超长被截断]' },
     ...body.slice(Math.max(0, body.length - KEEP_RECENT)),

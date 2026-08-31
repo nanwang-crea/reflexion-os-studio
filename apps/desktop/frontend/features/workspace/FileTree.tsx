@@ -55,6 +55,21 @@ export function FileTree(props: FileTreeProps): React.JSX.Element {
     }
   }, [props.projectId, props.systemReady])
 
+  const loadOnce = useCallback(
+    async (path: string): Promise<void> => {
+      if (!props.systemReady) return
+      setDirState((state) => new Map(state).set(path, 'loading'))
+      try {
+        const result = await listDir(props.projectId, path)
+        setEntries((map) => new Map(map).set(path, result.entries))
+        setDirState((state) => new Map(state).set(path, 'loaded'))
+      } catch {
+        setDirState((state) => new Map(state).set(path, 'error'))
+      }
+    },
+    [props.projectId, props.systemReady],
+  )
+
   const toggle = useCallback(
     (path: string): void => {
       setExpanded((current) => {
@@ -67,20 +82,8 @@ export function FileTree(props: FileTreeProps): React.JSX.Element {
         void loadOnce(path)
       }
     },
-    [entries],
+    [entries, loadOnce],
   )
-
-  async function loadOnce(path: string): Promise<void> {
-    if (!props.systemReady) return
-    setDirState((state) => new Map(state).set(path, 'loading'))
-    try {
-      const result = await listDir(props.projectId, path)
-      setEntries((map) => new Map(map).set(path, result.entries))
-      setDirState((state) => new Map(state).set(path, 'loaded'))
-    } catch {
-      setDirState((state) => new Map(state).set(path, 'error'))
-    }
-  }
 
   const renderDir = (path: string, depth: number): React.JSX.Element => {
     const dirEntries = entries.get(path) ?? []

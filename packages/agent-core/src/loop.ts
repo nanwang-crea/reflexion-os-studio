@@ -3,7 +3,6 @@ import {
   type AgentLoopOutcome,
   type AgentLoopOptions,
   type ModelMessage,
-  type ModelTurn,
 } from './types.js'
 
 /** 失败反思阈值：工具调用累计失败达到该次数后，下一轮自动注入反思消息。 */

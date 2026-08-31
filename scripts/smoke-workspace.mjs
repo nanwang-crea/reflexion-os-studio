@@ -34,7 +34,6 @@ function startRuntime(dataDir) {
   )
   const events = []
   const pending = new Map()
-  let seq = 0
   let buffer = ''
   const waitExit = new Promise((resolve) => child.on('exit', resolve))
   child.stdout.setEncoding('utf8')

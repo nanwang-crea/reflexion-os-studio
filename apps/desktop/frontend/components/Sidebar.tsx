@@ -193,17 +193,16 @@ interface ChatsPanelProps {
 function ChatsPanel(props: ChatsPanelProps): React.JSX.Element {
   const [filter, setFilter] = useState('')
   const keyword = filter.trim().toLowerCase()
-  const match = (text: string): boolean =>
-    keyword === '' || text.toLowerCase().includes(keyword)
-  const projects = useMemo(
-    () => props.projects.filter((project) => match(project.name)),
-    // match 是纯函数，依赖 filter/props.projects。
-    [props.projects, keyword],
-  )
-  const standalone = useMemo(
-    () => props.standaloneSessions.filter((session) => match(session.title)),
-    [props.standaloneSessions, keyword],
-  )
+  const projects = useMemo(() => {
+    const match = (text: string): boolean =>
+      keyword === '' || text.toLowerCase().includes(keyword)
+    return props.projects.filter((project) => match(project.name))
+  }, [props.projects, keyword])
+  const standalone = useMemo(() => {
+    const match = (text: string): boolean =>
+      keyword === '' || text.toLowerCase().includes(keyword)
+    return props.standaloneSessions.filter((session) => match(session.title))
+  }, [props.standaloneSessions, keyword])
 
   return (
     <div className="chats-panel">
