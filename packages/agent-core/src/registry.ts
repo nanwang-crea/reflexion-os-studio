@@ -8,8 +8,10 @@ import type {
 
 /**
  * 工具注册表：统一的工具声明与执行入口。
- * 未知工具、非法 JSON 参数都以 isError 结果回传模型（可自纠），
+ * 未知工具、非 JSON 参数都以 isError 结果回传模型（可自纠），
  * 而不是打断整个 Run；工具内部异常同样折叠为错误结果。
+ * 参数只做 JSON 解析（不校验 schema），参数形状的合法性由各工具
+ * execute 自行负责——parameters 仅作模型声明，不在此强制约束。
  */
 export class ToolRegistry {
   private readonly tools = new Map<string, ToolDefinition>()

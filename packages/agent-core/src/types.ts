@@ -29,12 +29,12 @@ export interface ModelTurn {
 export interface ToolCallRequest {
   id: string
   name: string
-  /** 原始 JSON 字符串；注册表负责解析校验后传入 execute 的 args。 */
+  /** 原始 JSON 字符串；注册表解析后传入 execute 的 args。 */
   arguments: string
 }
 
 export interface ToolExecutionArgs {
-  /** 解析校验后的参数；形状由工具的 parameters JSON Schema 描述。 */
+  /** 解析后的参数；形状由工具的 parameters JSON Schema 描述，工具自行校验。 */
   args: JsonValue
   signal: AbortSignal
   /**
@@ -60,12 +60,6 @@ export interface ToolDefinition {
   execute(args: ToolExecutionArgs): Promise<ToolResult> | ToolResult
 }
 
-/** 循环事件：宿主用于持久化与 UI 通知，循环本身不落库。 */
-export type AgentLoopEvent =
-  | { type: 'assistant.turn'; index: number; turn: ModelTurn }
-  | { type: 'tool.started'; call: AssistantToolCall }
-  | { type: 'tool.finished'; call: AssistantToolCall; result: ToolResult }
-
 export interface AgentLoopOptions {
   /** 起始上下文（含 system prompt 与历史）。 */
   history: ModelMessage[]
@@ -74,7 +68,6 @@ export interface AgentLoopOptions {
     request: ToolCallRequest,
     signal: AbortSignal,
   ): Promise<ToolResult> | ToolResult
-  onEvent?: (event: AgentLoopEvent) => Promise<void> | void
   /** 模型调用/工具执行共享的取消信号。 */
   signal: AbortSignal
   /** 最大模型调用轮次；超出即停止，避免无限循环。 */
@@ -88,6 +81,7 @@ export interface AgentLoopOutcome {
   turns: number
   /** status=completed 时的最终回复。 */
   finalTurn: ModelTurn | null
+  /** 完整消息流（含收官 assistant 轮）；含反思消息等运行时注入内容，未持久化。 */
   messages: ModelMessage[]
 }
 

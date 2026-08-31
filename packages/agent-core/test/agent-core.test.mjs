@@ -26,11 +26,9 @@ test('loop completes a task across multiple tool turns', async () => {
     },
     { content: '任务完成', toolCalls: [] },
   ]
-  const events = []
   const executed = []
   const outcome = await runAgentLoop({
     history: [{ role: 'system', content: 'sys' }, userMessage('帮我完成任务')],
-    tools: [],
     signal: new AbortController().signal,
     callModel: async (messages) => {
       // 最后一轮时历史里应包含此前 assistant 工具轮 + tool 结果。
@@ -43,23 +41,20 @@ test('loop completes a task across multiple tool turns', async () => {
       executed.push(request.name)
       return { content: `ok:${request.name}`, isError: false }
     },
-    onEvent: (event) => events.push(event),
   })
 
   assert.equal(outcome.status, 'completed')
   assert.equal(outcome.turns, 3)
   assert.equal(outcome.finalTurn.content, '任务完成')
   assert.deepEqual(executed, ['clock', 'echo'])
+  // messages 是完整消息流：历史 + 每轮 assistant + tool 结果，收官回复也在内。
   assert.deepEqual(
-    events.map((event) => event.type),
-    [
-      'assistant.turn',
-      'tool.started',
-      'tool.finished',
-      'assistant.turn',
-      'tool.started',
-      'tool.finished',
-    ],
+    outcome.messages.map((m) => m.role),
+    ['system', 'user', 'assistant', 'tool', 'assistant', 'tool', 'assistant'],
+  )
+  assert.equal(
+    outcome.messages[outcome.messages.length - 1].content,
+    '任务完成',
   )
   const toolMessages = outcome.messages.filter((m) => m.role === 'tool')
   assert.deepEqual(
@@ -72,7 +67,6 @@ test('loop stops at max turns and reports exhaustion', async () => {
   let calls = 0
   const outcome = await runAgentLoop({
     history: [userMessage('loop forever')],
-    tools: [],
     signal: new AbortController().signal,
     maxTurns: 3,
     callModel: async () => {

@@ -95,6 +95,7 @@ export class RunRunner {
 
   async execute(input: RunStreamInput): Promise<void> {
     const { run, controller, emitter, registry } = input
+    const maxTurns = input.settings.maxTurns ?? DEFAULT_MAX_TURNS
     const state: RunExecutionState = {
       turn: null,
       toolCallRowIds: new Set(),
@@ -125,7 +126,7 @@ export class RunRunner {
       const outcome: AgentLoopOutcome = await runAgentLoop({
         history,
         signal: controller.signal,
-        maxTurns: input.settings.maxTurns ?? DEFAULT_MAX_TURNS,
+        maxTurns,
         reflectionThreshold: input.settings.reflectionThreshold ?? undefined,
         callModel: async (messages, signal) => {
           const reuseFirst = state.lastAssistantMessageId === null
@@ -367,7 +368,7 @@ export class RunRunner {
         type: 'run.failed',
         error: {
           code: 'internal',
-          message: `任务在 ${DEFAULT_MAX_TURNS} 轮内未完成，已停止执行`,
+          message: `任务在 ${maxTurns} 轮内未完成，已停止执行`,
         },
       })
     } catch (error) {

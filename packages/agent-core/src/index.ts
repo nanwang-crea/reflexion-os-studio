@@ -7,7 +7,6 @@ export {
 export { runAgentLoop } from './loop.js'
 export { ToolRegistry } from './registry.js'
 export type {
-  AgentLoopEvent,
   AgentLoopOptions,
   AgentLoopOutcome,
   AssistantToolCall,

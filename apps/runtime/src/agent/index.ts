@@ -359,12 +359,11 @@ export class ChatAgent {
   }
 
   cancel(runId: string): { accepted: boolean } {
+    // 只有确实在运行中（含等待审批）的 Run 才受理；终态或不存在返回 false。
     const stream = this.streams.get(runId)
-    if (stream) {
-      stream.controller.abort()
-      return { accepted: true }
-    }
-    return { accepted: this.store.runs.get(runId) !== null }
+    if (!stream) return { accepted: false }
+    stream.controller.abort()
+    return { accepted: true }
   }
 
   private createAssistantMessage(sessionId: string, run: Run) {

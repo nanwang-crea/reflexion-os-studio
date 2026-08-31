@@ -17,8 +17,10 @@ function buildReflectionMessage(failedTools: string[]): string {
 /**
  * Agent 主循环：模型调用 → 工具调用 → 结果回填 → 继续调用，
  * 直到模型不再请求工具（任务完成）或达到轮次上限。
- * 循环只编排消息流；持久化、事件通知与方言投影全部由注入的回调承担。
- * 工具失败达到阈值时向模型注入反思消息（Reflexion 机制），失败记录随注入重置。
+ * 循环只编排消息流；持久化、事件通知与方言投影全部由注入的
+ * callModel/executeTool 回调承担。工具失败达到阈值时向模型注入反思消息
+ * （Reflexion 机制），失败记录随注入重置；反思消息只存在于本次调用的
+ * 内存消息流中，不落库、不跨 Run 生效，宿主按需持久化其它消息。
  */
 export async function runAgentLoop(
   options: AgentLoopOptions,
@@ -51,6 +53,12 @@ export async function runAgentLoop(
     turns += 1
 
     if (turn.toolCalls.length === 0) {
+      // 收官轮也计入 messages，保证 outcome.messages 始终是完整消息流。
+      messages.push({
+        role: 'assistant',
+        content: turn.content,
+        toolCalls: [],
+      })
       return { status: 'completed', turns, finalTurn: turn, messages }
     }
 
@@ -59,7 +67,6 @@ export async function runAgentLoop(
       content: turn.content,
       toolCalls: turn.toolCalls,
     })
-    await options.onEvent?.({ type: 'assistant.turn', index: turns, turn })
 
     // 同轮多个工具调用并行执行（与主流 Agent 一致），结果按调用顺序回填，
     // 保证回传给模型的 role=tool 消息与 tool_calls 一一对应、顺序稳定。
@@ -68,9 +75,7 @@ export async function runAgentLoop(
         if (signal.aborted) {
           throw new DOMException('The operation was aborted.', 'AbortError')
         }
-        await options.onEvent?.({ type: 'tool.started', call })
         const result = await options.executeTool(call, signal)
-        await options.onEvent?.({ type: 'tool.finished', call, result })
         return { call, result }
       }),
     )
