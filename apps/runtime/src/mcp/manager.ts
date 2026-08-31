@@ -40,13 +40,14 @@ export class McpManager {
     return this.store.mcpServers.list()
   }
 
-  /** 全部就绪工具的协议声明(供 createToolRegistry 注册)。 */
-  allTools(): { serverId: string; spec: ToolSpec }[] {
-    const tools: { serverId: string; spec: ToolSpec }[] = []
+  /** 全部就绪工具的协议声明(供 createToolRegistry 注册);toolName 为服务器原始名。 */
+  allTools(): { serverId: string; toolName: string; spec: ToolSpec }[] {
+    const tools: { serverId: string; toolName: string; spec: ToolSpec }[] = []
     for (const [serverId, connected] of this.clients) {
       for (const tool of connected.tools) {
         tools.push({
           serverId,
+          toolName: tool.name,
           spec: {
             name: `${serverId}/${tool.name}`,
             description:

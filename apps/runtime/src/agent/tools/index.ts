@@ -63,7 +63,9 @@ function mcpTools(ctx: ToolContext): ToolDefinition[] {
   if (manager === null) return []
   return manager
     .allTools()
-    .map((tool) => createMcpTool(manager, tool.serverId, tool.spec))
+    .map((tool) =>
+      createMcpTool(manager, tool.serverId, tool.toolName, tool.spec),
+    )
 }
 
 function workspaceTools(

@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { McpClient } from '../dist/mcp/client.js'
 import { McpManager } from '../dist/mcp/manager.js'
+import { createMcpTool } from '../dist/agent/tools/mcp.js'
 import { Store } from '../dist/store/index.js'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -56,6 +57,11 @@ test('McpManager connects server, exposes tools and handles errors', async () =>
     tools.map((tool) => tool.spec.name),
     [`${created.id}/echo`, `${created.id}/count`],
   )
+  // toolName 保持服务器原始名,供工具桥执行时使用。
+  assert.deepEqual(
+    tools.map((tool) => tool.toolName),
+    ['echo', 'count'],
+  )
 
   const echo = await manager.callTool(created.id, 'echo', { text: 'ok' })
   assert.equal(echo.isError, false)
@@ -66,6 +72,30 @@ test('McpManager connects server, exposes tools and handles errors', async () =>
   assert.match(missing.content, /未连接/)
 
   assert.ok(events.some((event) => event.type === 'mcp.changed'))
+  manager.dispose()
+  store.close()
+})
+
+test('MCP tool bridge registers prefixed name, calls server with raw tool name', async () => {
+  const store = new Store(mkdtempSync(join(tmpdir(), 'reflexion-mcp-')))
+  const manager = new McpManager(store, () => {})
+  store.mcpServers.create({
+    name: 'mock',
+    command: NODE,
+    args: [FIXTURE],
+    env: [],
+  })
+  await manager.reload()
+  const [{ serverId, toolName, spec }] = manager.allTools()
+  const tool = createMcpTool(manager, serverId, toolName, spec)
+  // 注册名与协议声明名一致(serverId/toolName),不出现双重前缀。
+  assert.equal(tool.name, `${serverId}/echo`)
+  const result = await tool.execute({
+    args: { text: '桥测' },
+    signal: new AbortController().signal,
+  })
+  assert.equal(result.isError, false)
+  assert.equal(result.content, 'echo:桥测')
   manager.dispose()
   store.close()
 })

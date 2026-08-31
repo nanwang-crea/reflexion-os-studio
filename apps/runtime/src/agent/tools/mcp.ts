@@ -3,25 +3,25 @@ import type { McpManager } from '../../mcp/manager.js'
 import { argsRecord } from './shared.js'
 
 /**
- * MCP 工具桥:协议层的工具名带 serverId 前缀(serverId/toolName),
- * 执行时拆回两段转交 McpManager;失败折叠为错误结果回传模型。
+ * MCP 工具桥:注册名与协议声明名一致(serverId/toolName,前缀只在声明处拼一次),
+ * 执行时用服务器原始 toolName 转交 McpManager;失败折叠为错误结果回传模型。
  * 权限:非内置操作,PermissionGate 对未知工具走 ask(默认审批)。
  */
 export function createMcpTool(
   manager: McpManager,
   serverId: string,
-  spec: { name: string; description: string; parameters: unknown },
+  toolName: string,
+  spec: { description: string; parameters: unknown },
 ): ToolDefinition {
-  const providerName = spec.name
   return {
-    name: `${serverId}/${providerName}`,
+    name: `${serverId}/${toolName}`,
     description: spec.description,
     parameters: spec.parameters as ToolDefinition['parameters'],
     execute: async ({ args, signal }) => {
       try {
         const result = await manager.callTool(
           serverId,
-          providerName,
+          toolName,
           argsRecord(args),
         )
         if (signal.aborted) {
