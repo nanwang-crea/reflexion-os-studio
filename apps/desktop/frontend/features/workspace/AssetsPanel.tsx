@@ -107,10 +107,11 @@ export function AssetsPanel(props: AssetsPanelProps): React.JSX.Element {
 
   // 外部聚焦请求（点击消息里的 asset:// 链接）：按 id 直接预览（不依赖列表）。
   useEffect(() => {
-    if (props.focusAssetId === null || props.focusAssetId === undefined) return
+    const assetId = props.focusAssetId
+    if (assetId === null || assetId === undefined) return
     void (async () => {
       try {
-        const result = await readAsset(props.focusAssetId as string)
+        const result = await readAsset(assetId)
         setPreview({
           asset: result.asset,
           text: result.text,
@@ -121,14 +122,14 @@ export function AssetsPanel(props: AssetsPanelProps): React.JSX.Element {
       } catch (error_) {
         setPreview({
           asset: {
-            assetId: props.focusAssetId as string,
+            assetId,
             projectId: props.projectId,
-            uri: `asset://${props.focusAssetId}`,
+            uri: `asset://${assetId}`,
             kind: 'file',
             mimeType: '',
             size: 0,
             hash: '',
-            fileName: props.focusAssetId as string,
+            fileName: assetId,
             runId: null,
             nodeRunId: null,
             createdBy: 'user',

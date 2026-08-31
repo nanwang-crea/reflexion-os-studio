@@ -136,11 +136,15 @@ function parseResourceLink(href: string): ResourceLink | null {
     if (fragmentMatch === null) return null
     const raw = fragmentMatch[1]
     const line = fragmentMatch[2]
+    // 两种形态：workspace://<projectId>/<path>（完整）与
+    // workspace:///<path>（projectId 留空，点击时按当前会话项目补全——
+    // 模型在工具结果里拿不到项目 ID，用它保证链接始终可用）。
+    const noProject = raw.startsWith('/')
     const slash = raw.indexOf('/')
-    if (slash <= 0) return null
-    const projectId = raw.slice(0, slash)
-    const path = raw.slice(slash + 1)
-    if (projectId === '' || path === '') return null
+    if (slash <= 0 && !noProject) return null
+    const projectId = noProject ? '' : raw.slice(0, slash)
+    const path = noProject ? raw.slice(1) : raw.slice(slash + 1)
+    if (path === '') return null
     return {
       kind: 'workspaceFile',
       uri: href,

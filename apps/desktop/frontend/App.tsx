@@ -276,9 +276,12 @@ export default function App() {
       })
       return
     }
-    // workspace/asset 定位只对当前激活项目生效（面板绑定激活项目）。
+    // workspace/asset 定位只对当前激活项目生效（面板绑定激活项目）；
+    // workspace:///<path> 省略项目 ID 的形态在这里补全会话当前项目。
     if (link.kind === 'workspaceFile') {
-      if (link.projectId !== activeProjectRef.current) return
+      const projectId =
+        link.projectId === '' ? activeProjectRef.current : link.projectId
+      if (projectId === null || projectId !== activeProjectRef.current) return
       setWorkspaceRequest({
         nonce: Date.now(),
         kind: 'file',

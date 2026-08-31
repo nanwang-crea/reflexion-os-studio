@@ -218,6 +218,7 @@ function tableColumns(db: DatabaseSync, table: string): TableColumn[] {
  * v4 → v5：A2 Memory——memories 表 + FTS5 索引 + 同步触发器由 SCHEMA 创建（全新表，
  *          无历史数据回填；升级只推进版本号）。
  * v5 → v6：runs 增加 skill_id 列（Skill 激活来源记录；加列可直接 ALTER TABLE）。
+ * v12 → v13：assets 表（Phase 1B Asset Store；全新表，由 SCHEMA 创建，升级只推进版本号）。
  * 各步骤带形状检测：SCHEMA 刚建好的新库不会空跑重建。
  */
 export function runMigrations(db: DatabaseSync): void {
