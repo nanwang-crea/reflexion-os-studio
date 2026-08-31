@@ -1,6 +1,6 @@
 // 存储迁移冒烟：构造 v0 schema 数据库（sessions.project_id NOT NULL、projects 无 folder_path），
 // 用新 Store 打开，验证 user_version 升级、旧数据保留、新能力可用。
-// 用法：先 pnpm build:packages，再 node scripts/smoke-store-migration.mjs
+// 用法：先 pnpm build:packages，再 node --disable-warning=ExperimentalWarning scripts/smoke-store-migration.mjs
 import { mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'

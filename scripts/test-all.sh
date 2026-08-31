@@ -11,6 +11,6 @@ pnpm --filter @reflexion-os-studio/desktop typecheck
 cargo test --manifest-path crates/Cargo.toml
 # cargo test 只链测试 harness，不保证产出可执行 bin；冒烟前显式构建。
 cargo build --manifest-path crates/Cargo.toml
-node scripts/smoke-system-channel.mjs
-node scripts/smoke-chat.mjs
-node scripts/smoke-workspace.mjs
+node --disable-warning=ExperimentalWarning scripts/smoke-system-channel.mjs
+node --disable-warning=ExperimentalWarning scripts/smoke-chat.mjs
+node --disable-warning=ExperimentalWarning scripts/smoke-workspace.mjs

@@ -284,7 +284,13 @@ fn start_sidecars(app: &tauri::AppHandle, state: Arc<SupervisorState>) {
         .unwrap_or_default();
 
     let node = PathBuf::from("node");
-    match spawn_sidecar(app, state.clone(), &node, &[runtime_entry], &root, &envs) {
+    // node:sqlite 在 Node 22 仍标 experimental：产品进程抑制该已知警告，
+    // 避免被误读为真正的运行时报错（stderr 仍是日志通道）。
+    let runtime_args = [
+        PathBuf::from("--disable-warning=ExperimentalWarning"),
+        runtime_entry,
+    ];
+    match spawn_sidecar(app, state.clone(), &node, &runtime_args, &root, &envs) {
         Ok(process) => {
             #[cfg(unix)]
             TERMINATED_RUNTIME_PID.store(process.child.id() as usize, Ordering::SeqCst);

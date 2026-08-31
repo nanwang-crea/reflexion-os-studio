@@ -26,10 +26,10 @@ import { MemoryView } from './features/memories/MemoryView'
 import { Sidebar } from './components/Sidebar'
 import { SkillsView } from './features/skills/SkillsView'
 import { AutomationsView } from './features/automations/AutomationsView'
-import { WorkspaceView } from './features/workspace/WorkspaceView'
+import { WorkspacePanel } from './features/workspace/WorkspacePanel'
 import { SettingsView } from './features/settings/SettingsView'
 import { useSessionActions } from './hooks/useSessionActions'
-import { DoubleChevronIcon } from './ui/icons'
+import { DoubleChevronIcon, FolderIcon } from './ui/icons'
 
 const STATUS_LABELS: Record<string, string> = {
   starting: '正在启动本地 Runtime…',
@@ -42,7 +42,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function App() {
   const [view, setView] = useState<
-    'chat' | 'workspace' | 'settings' | 'memories' | 'skills' | 'automations'
+    'chat' | 'settings' | 'memories' | 'skills' | 'automations'
   >('chat')
   const [profiles, setProfiles] = useState<ProviderProfile[]>([])
   const [skills, setSkills] = useState<SkillManifest[]>([])
@@ -62,6 +62,10 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(
     () => localStorage.getItem('reflexion.sidebarOpen') !== '0',
   )
+  // 对话右侧工作区面板（Codex 右侧文件栏式）：默认展开，按用户偏好记忆。
+  const [workspaceOpen, setWorkspaceOpen] = useState(
+    () => localStorage.getItem('reflexion.workspacePanel') !== '0',
+  )
   const [notice, setNotice] = useState<string | null>(null)
   const [confirmState, setConfirmState] = useState<ConfirmDialogState | null>(
     null,
@@ -73,6 +77,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('reflexion.sidebarOpen', sidebarOpen ? '1' : '0')
   }, [sidebarOpen])
+
+  useEffect(() => {
+    localStorage.setItem('reflexion.workspacePanel', workspaceOpen ? '1' : '0')
+  }, [workspaceOpen])
 
   const { permissionMode, changePermissionMode } = usePermissionMode()
   const { modelOptions, selectedModelKey, setSelectedModelKey } =
@@ -317,6 +325,18 @@ export default function App() {
           </button>
           <span className="topbar-title">{contextTitle}</span>
           <span className="spacer" />
+          {view === 'chat' && (
+            <button
+              type="button"
+              className={`topbar-toggle${workspaceOpen ? ' active' : ''}`}
+              title={workspaceOpen ? '收起工作区面板' : '展开工作区面板'}
+              aria-label="工作区面板"
+              aria-pressed={workspaceOpen}
+              onClick={() => setWorkspaceOpen((open) => !open)}
+            >
+              <FolderIcon />
+            </button>
+          )}
           {memoryNotice && (
             <span className="badge badge-memory">{memoryNotice}</span>
           )}
@@ -334,73 +354,81 @@ export default function App() {
           </div>
         )}
 
-        {view === 'settings' ? (
-          <SettingsView profiles={profiles} onSaved={() => refreshProfiles()} />
-        ) : view === 'memories' ? (
-          <MemoryView confirm={confirm} />
-        ) : view === 'skills' ? (
-          <SkillsView
-            onUseSkill={(skillId, sessionId) => {
-              setActiveProjectId(null)
-              setActiveSessionId(sessionId)
-              void refreshSessionData(sessionId)
-              void refreshStandaloneSessions()
-              setComposerPrefill({ skillId, nonce: Date.now() })
-              setView('chat')
-            }}
-          />
-        ) : view === 'automations' ? (
-          <AutomationsView />
-        ) : view === 'workspace' ? (
-          <WorkspaceView
-            project={activeProject}
-            systemReady={bootstrap?.systemReady ?? false}
-          />
-        ) : activeSessionId ? (
-          <ChatView
-            sessionData={sessionData}
-            streaming={streaming}
-            streamingReasoning={streamingReasoning}
-            hasEnabledProvider={hasEnabledProvider}
-            permissionValue={permissionMode}
-            onPermissionChange={changePermissionMode}
-            modelOptions={modelOptions}
-            selectedModelKey={selectedModelKey}
-            onModelChange={setSelectedModelKey}
-            skills={skills}
-            composerPrefill={composerPrefill}
-            onPrefillConsumed={() => setComposerPrefill(null)}
-            onSend={sendMessage}
-            onStop={stopRun}
-            onRetry={retryRun}
-            onGoSettings={() => {
-              setView('settings')
-            }}
-            pendingApprovals={pendingApprovals}
-            onResolveApproval={handleResolveApproval}
-          />
-        ) : (
-          <LandingView
-            project={activeProject}
-            sessions={activeProject ? projectSessions : []}
-            hasEnabledProvider={hasEnabledProvider}
-            permissionValue={permissionMode}
-            onPermissionChange={changePermissionMode}
-            modelOptions={modelOptions}
-            selectedModelKey={selectedModelKey}
-            onModelChange={setSelectedModelKey}
-            skills={skills}
-            composerPrefill={composerPrefill}
-            onPrefillConsumed={() => setComposerPrefill(null)}
-            onSend={sendMessage}
-            onSelectSession={openSession}
-            onRenameSession={renameSession}
-            onDeleteSession={deleteSession}
-            onGoSettings={() => {
-              setView('settings')
-            }}
-          />
-        )}
+        <div className="content-area">
+          <div className="content-main">
+            {view === 'settings' ? (
+              <SettingsView
+                profiles={profiles}
+                onSaved={() => refreshProfiles()}
+              />
+            ) : view === 'memories' ? (
+              <MemoryView confirm={confirm} />
+            ) : view === 'skills' ? (
+              <SkillsView
+                onUseSkill={(skillId, sessionId) => {
+                  setActiveProjectId(null)
+                  setActiveSessionId(sessionId)
+                  void refreshSessionData(sessionId)
+                  void refreshStandaloneSessions()
+                  setComposerPrefill({ skillId, nonce: Date.now() })
+                  setView('chat')
+                }}
+              />
+            ) : view === 'automations' ? (
+              <AutomationsView />
+            ) : activeSessionId ? (
+              <ChatView
+                sessionData={sessionData}
+                streaming={streaming}
+                streamingReasoning={streamingReasoning}
+                hasEnabledProvider={hasEnabledProvider}
+                permissionValue={permissionMode}
+                onPermissionChange={changePermissionMode}
+                modelOptions={modelOptions}
+                selectedModelKey={selectedModelKey}
+                onModelChange={setSelectedModelKey}
+                skills={skills}
+                composerPrefill={composerPrefill}
+                onPrefillConsumed={() => setComposerPrefill(null)}
+                onSend={sendMessage}
+                onStop={stopRun}
+                onRetry={retryRun}
+                onGoSettings={() => {
+                  setView('settings')
+                }}
+                pendingApprovals={pendingApprovals}
+                onResolveApproval={handleResolveApproval}
+              />
+            ) : (
+              <LandingView
+                project={activeProject}
+                sessions={activeProject ? projectSessions : []}
+                hasEnabledProvider={hasEnabledProvider}
+                permissionValue={permissionMode}
+                onPermissionChange={changePermissionMode}
+                modelOptions={modelOptions}
+                selectedModelKey={selectedModelKey}
+                onModelChange={setSelectedModelKey}
+                skills={skills}
+                composerPrefill={composerPrefill}
+                onPrefillConsumed={() => setComposerPrefill(null)}
+                onSend={sendMessage}
+                onSelectSession={openSession}
+                onRenameSession={renameSession}
+                onDeleteSession={deleteSession}
+                onGoSettings={() => {
+                  setView('settings')
+                }}
+              />
+            )}
+          </div>
+          {view === 'chat' && workspaceOpen && (
+            <WorkspacePanel
+              project={activeProject}
+              systemReady={bootstrap?.systemReady ?? false}
+            />
+          )}
+        </div>
       </div>
       <ConfirmDialog
         state={confirmState}

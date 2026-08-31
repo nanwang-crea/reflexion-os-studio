@@ -298,13 +298,21 @@
   line-height: 1.5;
 }
 
-/* ---------- 底部导航：技能 / 自动化 / 记忆 / 设置 ---------- */
+/* ---------- 顶部导航：技能 / 自动化 / 记忆 ---------- */
 
 .sidebar-nav {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  padding: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ---------- 底部固定设置入口（Codex 桌面版式） ---------- */
+
+.sidebar-footer {
+  flex-shrink: 0;
   padding: 8px;
   border-top: 1px solid var(--border-subtle);
 }

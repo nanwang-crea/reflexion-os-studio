@@ -25,15 +25,19 @@ function check(name, condition, detail) {
 }
 
 function startRuntime(dataDir) {
-  const child = spawn(process.execPath, [TS_ENTRY], {
-    env: {
-      ...process.env,
-      REFLEXION_DATA_DIR: dataDir,
-      // 不指向真实二进制：system degraded 不影响 skill 链路。
-      REFLEXION_SYSTEM_RUNTIME_BIN: '/nonexistent/reflexion-system-runtime',
+  const child = spawn(
+    process.execPath,
+    ['--disable-warning=ExperimentalWarning', TS_ENTRY],
+    {
+      env: {
+        ...process.env,
+        REFLEXION_DATA_DIR: dataDir,
+        // 不指向真实二进制：system degraded 不影响 skill 链路。
+        REFLEXION_SYSTEM_RUNTIME_BIN: '/nonexistent/reflexion-system-runtime',
+      },
+      stdio: ['pipe', 'pipe', 'pipe'],
     },
-    stdio: ['pipe', 'pipe', 'pipe'],
-  })
+  )
   const pending = new Map()
   let seq = 0
   let buffer = ''

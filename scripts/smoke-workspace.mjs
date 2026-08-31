@@ -24,10 +24,14 @@ function check(name, condition, detail) {
 }
 
 function startRuntime(dataDir) {
-  const child = spawn(process.execPath, [TS_ENTRY], {
-    env: { ...process.env, REFLEXION_DATA_DIR: dataDir },
-    stdio: ['pipe', 'pipe', 'pipe'],
-  })
+  const child = spawn(
+    process.execPath,
+    ['--disable-warning=ExperimentalWarning', TS_ENTRY],
+    {
+      env: { ...process.env, REFLEXION_DATA_DIR: dataDir },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    },
+  )
   const events = []
   const pending = new Map()
   let seq = 0

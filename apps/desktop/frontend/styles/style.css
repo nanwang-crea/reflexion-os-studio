@@ -143,6 +143,21 @@ textarea:focus-visible {
   background: var(--bg);
 }
 
+/* 主区内容容器：对话/页面与右侧工作区面板并排（Codex 桌面式）。 */
+.content-area {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.content-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 /* ---------- 顶栏 ---------- */
 
 .topbar {
@@ -172,6 +187,11 @@ textarea:focus-visible {
   color: var(--text-muted);
   border-radius: 7px;
   flex-shrink: 0;
+}
+
+.topbar-toggle.active {
+  background: var(--bg-active);
+  color: var(--text);
 }
 
 .topbar-toggle:hover:not(:disabled) {

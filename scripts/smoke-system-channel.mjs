@@ -53,13 +53,17 @@ function countOrphanRustProcesses() {
 
 function startRuntime(env) {
   const dataDir = mkdtempSync(join(tmpdir(), 'reflexion-system-'))
-  const child = spawn(process.execPath, [TS_ENTRY], {
-    // cwd 指向临时数据目录：禁用 TS 的相对路径搜索兜底，
-    // 强制只按 REFLEXION_SYSTEM_RUNTIME_BIN 决定是否可用。
-    cwd: dataDir,
-    env: { ...process.env, REFLEXION_DATA_DIR: dataDir, ...env },
-    stdio: ['pipe', 'pipe', 'pipe'],
-  })
+  const child = spawn(
+    process.execPath,
+    ['--disable-warning=ExperimentalWarning', TS_ENTRY],
+    {
+      // cwd 指向临时数据目录：禁用 TS 的相对路径搜索兜底，
+      // 强制只按 REFLEXION_SYSTEM_RUNTIME_BIN 决定是否可用。
+      cwd: dataDir,
+      env: { ...process.env, REFLEXION_DATA_DIR: dataDir, ...env },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    },
+  )
   const events = []
   const pending = new Map()
   let buffer = ''

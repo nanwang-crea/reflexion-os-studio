@@ -1,24 +1,31 @@
-/* Phase 1B Workspace Surface：索引状态区 + 文件树 + 只读查看器 */
-
-.workspace {
-  display: grid;
-  grid-template-columns: 300px 1fr;
-  flex: 1;
-  min-height: 0;
-  gap: 1px;
-  background: var(--border-subtle);
-}
+/* Phase 1B Workspace Surface：对话右侧面板（索引状态 + 文件树 + 面板内预览） */
 
 .workspace-panel {
-  display: flex;
-  flex-direction: column;
+  width: 340px;
+  flex: none;
   min-width: 0;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   background: var(--bg);
+  border-left: 1px solid var(--border-subtle);
+}
+
+.workspace-panel-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 13px;
 }
 
 .workspace-head {
-  padding: 12px 16px 4px;
+  padding: 12px 14px 4px;
 }
 
 .workspace-title {
@@ -42,7 +49,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
+  margin-top: 8px;
 }
 
 .index-chip {
@@ -79,7 +86,7 @@
 }
 
 .workspace-error {
-  margin: 4px 16px 8px;
+  margin: 4px 14px 4px;
   padding: 6px 10px;
   border-radius: 8px;
   font-size: 12px;
@@ -88,7 +95,7 @@
 }
 
 .workspace-degraded {
-  margin: 4px 16px 8px;
+  margin: 4px 14px 4px;
   padding: 6px 10px;
   border-radius: 8px;
   font-size: 12px;
@@ -110,7 +117,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 16px;
+  padding: 6px 14px;
   font-size: 12px;
   color: var(--text-muted);
 }
@@ -124,10 +131,6 @@
   list-style: none;
   margin: 0;
   padding: 0 0 16px;
-}
-
-.tree-children {
-  list-style: none;
 }
 
 .tree-row {
@@ -199,32 +202,14 @@
   color: var(--danger);
 }
 
-.workspace-empty {
-  grid-column: 1 / -1;
+/* ---------- 面板内预览 ---------- */
+
+.workspace-preview {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  color: var(--text-muted);
-  background: var(--bg);
-}
-
-/* ---------- 查看器 ---------- */
-
-.workspace-viewer {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  background: var(--bg);
-}
-
-.workspace-viewer-empty {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .content-view {
@@ -238,8 +223,8 @@
 .content-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: 6px;
+  padding: 6px 8px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -247,9 +232,12 @@
   padding: 2px 8px;
   font-size: 16px;
   line-height: 1.2;
+  flex: none;
 }
 
 .content-name {
+  flex: 1;
+  min-width: 0;
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
@@ -257,14 +245,9 @@
   text-overflow: ellipsis;
 }
 
-.content-meta {
-  font-size: 12px;
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
 .content-head .ghost {
-  padding: 4px 8px;
+  padding: 4px 6px;
+  flex: none;
 }
 
 .content-head .ghost.active {
@@ -273,8 +256,8 @@
 }
 
 .jump-form input {
-  width: 72px;
-  padding: 4px 8px;
+  width: 52px;
+  padding: 3px 6px;
   font-size: 12px;
   color: var(--text);
   background: var(--bg-inset);
@@ -293,7 +276,7 @@
   margin: 0;
   padding: 8px 0;
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 20px; /* 与 LINE_HEIGHT_PX 对应，跳转行依赖 */
 }
 
@@ -302,7 +285,7 @@
   white-space: pre;
   min-width: 100%;
   width: fit-content;
-  padding-right: 24px;
+  padding-right: 16px;
 }
 
 .content-line:hover {
@@ -310,8 +293,8 @@
 }
 
 .content-no {
-  width: 56px;
-  padding-right: 12px;
+  width: 48px;
+  padding-right: 10px;
   text-align: right;
   color: var(--text-muted);
   flex: none;
@@ -323,7 +306,7 @@
 }
 
 .content-md {
-  padding: 12px 20px;
+  padding: 12px 16px;
   background: var(--bg-inset);
 }
 

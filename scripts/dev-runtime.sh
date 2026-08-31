@@ -2,4 +2,4 @@
 set -euo pipefail
 
 scripts/build-ts.sh
-node apps/runtime/dist/index.js
+node --disable-warning=ExperimentalWarning apps/runtime/dist/index.js

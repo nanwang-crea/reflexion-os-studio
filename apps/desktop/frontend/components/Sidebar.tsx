@@ -4,7 +4,6 @@ import { SessionRow } from './SessionRow'
 import {
   ArchiveIcon,
   BoxIcon,
-  FolderIcon,
   GearIcon,
   PlusIcon,
   SearchIcon,
@@ -13,7 +12,7 @@ import {
 } from '../ui/icons'
 
 export type AppView =
-  'chat' | 'workspace' | 'settings' | 'memories' | 'skills' | 'automations'
+  'chat' | 'settings' | 'memories' | 'skills' | 'automations'
 
 /** 底部导航可打开的页面（chat 由会话行/新建入口进入，不进底部导航）。 */
 type OtherView = Exclude<AppView, 'chat'>
@@ -78,8 +77,9 @@ function groupByTime(sessions: Session[]): [string, Session[]][] {
 
 /**
  * 桌面版 Codex 式单列侧栏：顶部品牌 + 新建对话，搜索框，
- * 下方项目/对话分组列表，底部导航进技能/自动化/记忆/设置。
- * 点底部导航打开对应主区页面；点已激活项回到聊天（与旧图标轨行为一致）。
+ * 下方项目/对话分组列表，顶部导航进技能/自动化/记忆，
+ * 底部固定设置入口。点导航打开对应主区页面；点已激活项回到聊天
+ * （与旧图标轨行为一致）。
  */
 export function Sidebar(props: SidebarProps): React.JSX.Element {
   return (
@@ -104,12 +104,6 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
       </header>
       <nav className="sidebar-nav" aria-label="页面导航">
         <NavItem
-          label="工作区"
-          icon={<FolderIcon />}
-          active={props.view === 'workspace'}
-          onClick={() => props.onSelectView('workspace')}
-        />
-        <NavItem
           label="技能"
           icon={<SparkIcon size={15} />}
           active={props.view === 'skills'}
@@ -126,12 +120,6 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
           icon={<ArchiveIcon size={15} />}
           active={props.view === 'memories'}
           onClick={() => props.onSelectView('memories')}
-        />
-        <NavItem
-          label="设置"
-          icon={<GearIcon size={15} />}
-          active={props.view === 'settings'}
-          onClick={() => props.onSelectView('settings')}
         />
       </nav>
 
@@ -151,6 +139,15 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
         onRenameSession={props.onRenameSession}
         onDeleteSession={props.onDeleteSession}
       />
+
+      <footer className="sidebar-footer">
+        <NavItem
+          label="设置"
+          icon={<GearIcon size={15} />}
+          active={props.view === 'settings'}
+          onClick={() => props.onSelectView('settings')}
+        />
+      </footer>
 
       {/* <nav className="sidebar-nav" aria-label="页面导航">
         <NavItem

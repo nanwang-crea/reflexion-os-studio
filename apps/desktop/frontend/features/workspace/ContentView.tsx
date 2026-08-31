@@ -130,6 +130,9 @@ export function ContentView(props: ContentViewProps): React.JSX.Element {
     }
   }, [contentText, isJson])
   const displayLines = prettyLines ?? doc.lines
+  const headerTitle = `${props.path} · ${doc.sizeBytes} B · ${doc.totalLines} 行${
+    doc.lines.length < doc.totalLines ? `（已加载 ${doc.lines.length} 行）` : ''
+  }`
 
   return (
     <div className="content-view">
@@ -137,19 +140,14 @@ export function ContentView(props: ContentViewProps): React.JSX.Element {
         <button
           className="ghost content-close"
           onClick={props.onClose}
-          aria-label="关闭"
+          aria-label="返回文件树"
+          title="返回文件树"
         >
           ×
         </button>
-        <span className="content-name" title={props.path}>
+        <span className="content-name" title={headerTitle}>
           {fileName}
         </span>
-        <span className="content-meta">
-          {doc.sizeBytes} B · {doc.totalLines} 行
-          {doc.lines.length < doc.totalLines &&
-            `（已加载 ${doc.lines.length} 行）`}
-        </span>
-        <span className="bar-spacer" />
         {isMarkdown && (
           <button
             className={`ghost${showPreview ? ' active' : ''}`}
@@ -172,7 +170,7 @@ export function ContentView(props: ContentViewProps): React.JSX.Element {
             jumpToLine(input.value)
           }}
         >
-          <input name="line" placeholder="跳至行" title="跳转行号（Enter）" />
+          <input name="line" placeholder="行" title="跳转行号（Enter）" />
         </form>
       </header>
       {doc.error !== null ? (

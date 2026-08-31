@@ -13,7 +13,7 @@ import { FolderIcon, RefreshIcon } from '../../ui/icons'
 import { FileTree } from './FileTree'
 import { ContentView } from './ContentView'
 
-interface WorkspaceViewProps {
+interface WorkspacePanelProps {
   /** 当前激活项目；null 时展示占位提示。 */
   project: Project | null
   /** Rust System Runtime 可用性：文件树/查看器依赖它，索引器不依赖。 */
@@ -25,7 +25,7 @@ const STATUS_LABELS: Record<string, string> = {
   scanning: '扫描中',
   completed: '已索引',
   stale: '已过期',
-  failed: '索引失败',
+  failed: '失败',
 }
 
 function formatBytes(bytes: number): string {
@@ -35,11 +35,11 @@ function formatBytes(bytes: number): string {
 }
 
 /**
- * Phase 1B Workspace Surface：项目工作区的索引状态 + 文件树 + 只读查看器。
- * 索引器纯 TS 异步运行（不依赖 Rust）；文件树/查看器经 Rust System Runtime
- * 按需加载（Rust 侧强制 workspace 边界）。
+ * 对话右侧的工作区面板（Codex/ChatGPT 桌面式）：索引状态 + 文件树，
+ * 点击文件在面板内预览；索引器纯 TS 异步运行，文件访问经 Rust 侧
+ * workspace 边界校验。未选项目时提示去左侧选择。
  */
-export function WorkspaceView(props: WorkspaceViewProps): React.JSX.Element {
+export function WorkspacePanel(props: WorkspacePanelProps): React.JSX.Element {
   const project = props.project
   const projectId = project?.id ?? null
   const [snapshot, setSnapshot] = useState<WorkspaceIndexSnapshot | null>(null)
@@ -81,8 +81,7 @@ export function WorkspaceView(props: WorkspaceViewProps): React.JSX.Element {
   }, [projectId, refreshStatus])
 
   useEffect(() => {
-    const scanningNow = snapshot?.status === 'scanning'
-    setScanning(scanningNow)
+    setScanning(snapshot?.status === 'scanning')
   }, [snapshot?.status])
 
   const onIndex = async (): Promise<void> => {
@@ -108,10 +107,10 @@ export function WorkspaceView(props: WorkspaceViewProps): React.JSX.Element {
 
   if (project === null) {
     return (
-      <div className="workspace">
-        <div className="workspace-empty">
+      <div className="workspace-panel">
+        <div className="workspace-panel-empty">
           <FolderIcon />
-          <p>先在左侧选择一个项目，在工作区页面浏览与查看项目文件。</p>
+          <p>在左侧选择项目后，可在这里浏览工作区文件与运行索引。</p>
         </div>
       </div>
     )
@@ -120,17 +119,14 @@ export function WorkspaceView(props: WorkspaceViewProps): React.JSX.Element {
   const status = snapshot?.status ?? 'idle'
 
   return (
-    <div className="workspace">
-      <div className="workspace-panel">
-        <div className="workspace-head">
-          <div className="workspace-title" title={project.folderPath}>
-            {project.name}
-          </div>
-          <div className="workspace-path" title={project.folderPath}>
-            {project.folderPath || '未关联文件夹'}
-          </div>
+    <div className="workspace-panel">
+      <div className="workspace-head">
+        <div className="workspace-title" title={project.folderPath}>
+          {project.name}
         </div>
-
+        <div className="workspace-path" title={project.folderPath}>
+          {project.folderPath || '未关联文件夹'}
+        </div>
         <div className="workspace-index">
           <span className={`index-chip index-${status}`}>
             {STATUS_LABELS[status] ?? status}
@@ -140,11 +136,6 @@ export function WorkspaceView(props: WorkspaceViewProps): React.JSX.Element {
               {snapshot.fileCount} 文件 · {snapshot.dirCount} 目录 ·{' '}
               {formatBytes(snapshot.totalBytes)}
               {snapshot.truncated ? '（已截断）' : ''}
-              {snapshot.extStats.length > 0 &&
-                ` · ${snapshot.extStats
-                  .slice(0, 3)
-                  .map((entry) => `${entry.ext} ${entry.files}`)
-                  .join(' · ')}`}
             </span>
           )}
           <span className="bar-spacer" />
@@ -167,17 +158,16 @@ export function WorkspaceView(props: WorkspaceViewProps): React.JSX.Element {
             </button>
           )}
         </div>
+      </div>
 
-        {error && <div className="workspace-error">{error}</div>}
-        {!props.systemReady && (
-          <div className="workspace-degraded">
-            系统工具 Runtime 不可用：文件树与查看器暂不可用（索引器不受影响）。
-          </div>
-        )}
-        {snapshot?.status === 'failed' && snapshot.error !== null && (
-          <div className="workspace-error">{snapshot.error}</div>
-        )}
+      {error && <div className="workspace-error">{error}</div>}
+      {!props.systemReady && (
+        <div className="workspace-degraded">
+          工具 Runtime 不可用：文件树与预览暂不可用（索引器不受影响）。
+        </div>
+      )}
 
+      {activePath === null ? (
         <FileTree
           key={`${project.id}-${treeEpoch}`}
           projectId={project.id}
@@ -186,21 +176,16 @@ export function WorkspaceView(props: WorkspaceViewProps): React.JSX.Element {
           onOpenFile={setActivePath}
           onRefresh={() => setTreeEpoch((epoch) => epoch + 1)}
         />
-      </div>
-      <div className="workspace-viewer">
-        {activePath === null ? (
-          <div className="workspace-viewer-empty">
-            <p>点击左侧文件查看内容</p>
-          </div>
-        ) : (
+      ) : (
+        <div className="workspace-preview">
           <ContentView
             key={activePath}
             projectId={project.id}
             path={activePath}
             onClose={() => setActivePath(null)}
           />
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

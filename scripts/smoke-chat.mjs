@@ -211,7 +211,10 @@ if (!existsSync(systemBin)) {
 }
 const runtime = spawn(
   process.execPath,
-  [join(ROOT, 'apps/runtime/dist/index.js')],
+  [
+    '--disable-warning=ExperimentalWarning',
+    join(ROOT, 'apps/runtime/dist/index.js'),
+  ],
   {
     env: {
       ...process.env,
