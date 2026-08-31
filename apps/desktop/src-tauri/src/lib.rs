@@ -329,7 +329,9 @@ fn open_external(url: String) -> Result<(), String> {
     if !trimmed.starts_with("https://") {
         return Err("only https external URLs allowed".to_string());
     }
-    open_with_system_browser(trimmed).map_err(|error| format!("failed to open: {error}"))
+    open_with_system_browser(trimmed)
+        .map(|_| ())
+        .map_err(|error| format!("failed to open: {error}"))
 }
 
 #[cfg(target_os = "macos")]
