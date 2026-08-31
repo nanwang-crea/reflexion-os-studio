@@ -334,3 +334,17 @@ export const WorkspaceReadResultSchema = z.object({
   offset: z.number().int().nonnegative(),
 })
 export type WorkspaceReadResult = z.infer<typeof WorkspaceReadResultSchema>
+
+/** 会话发送队列项：等待上一条回复结束时按 FIFO 自动发送。 */
+export const QueueEntrySchema = z.object({
+  id: z.string().min(1),
+  sessionId: z.string().min(1),
+  content: z.string().min(1),
+  providerId: z.string().min(1).nullable(),
+  model: z.string().min(1).nullable(),
+  permissionMode: z.enum(['workspace', 'read-only']).nullable(),
+  skillId: z.string().min(1).nullable(),
+  /** 0 起位置；出队发送时该项即消失。 */
+  position: z.number().int().nonnegative(),
+})
+export type QueueEntry = z.infer<typeof QueueEntrySchema>

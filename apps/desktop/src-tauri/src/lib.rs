@@ -329,7 +329,7 @@ fn runtime_request(
     method: String,
     params: serde_json::Value,
 ) -> Result<u64, String> {
-    const RUNTIME_METHODS: [&str; 27] = [
+    const RUNTIME_METHODS: [&str; 31] = [
         "runtime.get_status",
         "system.ping",
         "project.list",
@@ -341,6 +341,10 @@ fn runtime_request(
         "session.delete",
         "session.get",
         "message.send",
+        "queue.list",
+        "queue.update",
+        "queue.remove",
+        "queue.send_now",
         "run.cancel",
         "run.retry",
         "approval.resolve",

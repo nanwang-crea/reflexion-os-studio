@@ -84,7 +84,8 @@ export function Composer(props: ComposerProps): React.JSX.Element {
 
   const submit = async (): Promise<void> => {
     const content = draft.trim()
-    if (!content || props.disabled || busy || sending) return
+    // busy 时仍允许发送:消息进入会话队列,上一条回复结束后自动发出。
+    if (!content || props.disabled || sending) return
     setDraft('')
     setSlashIndex(0)
     setSlashDismissed(false)

@@ -11,7 +11,7 @@ React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
 
 - 桌面宿主是 **Tauri 2**（已从 Electron 迁移），不是 Electron。任何文档或代码里残留的 Electron 假设都应视为待清理项。
 - 当前已完成 **Phase 1A**（M0 启动骨架 → 1A-1 Chat Core → 1A-2 System Tools）、**Phase 1B 第一部分（Workspace Surface）** 与 **Phase 2 的 Skills / Memory 子集**：
-  - **Chat**：Provider 配置与密钥存储、Project/Session/Message/Run、SSE 流式（正文+思考）、Stop/Retry/错误恢复、重启后历史仍在；
+  - **Chat**：Provider 配置与密钥存储、Project/Session/Message/Run、SSE 流式（正文+思考）、Stop/Retry/错误恢复、发送队列（回复中自动排队，可修改/删除/立即发送）、重启后历史仍在；
   - **Tools**：纯 TS 工具（时间 / web.fetch / skill.use）+ Rust 工具（file.read/list/glob/grep/write/edit/delete/move/mkdir、shell.execute），workspace / read-only 权限 Profile、审批卡（once / session）、会话级授权、工具轨迹聚合展示；
   - **Skills**：内置 code-review / web-research / workspace-report；斜杠命令激活 + skill.use 工具加载全文；
   - **Memory**：Run 结束后自动提取-合并（会话/项目级，user 级待确认流程落地前不产出候选项）、记忆管理页、上下文召回注入；

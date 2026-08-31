@@ -138,8 +138,22 @@ const handlers: Record<string, CommandHandler> = {
       }),
     }
   },
-  'message.send': (p, { agent }) =>
-    agent.startSend(p as unknown as ChatCommand),
+  'message.send': (p, { agent }) => agent.send(p as unknown as ChatCommand),
+  'queue.list': (p, { agent }) =>
+    agent.listQueue(requireString(p, 'sessionId')),
+  'queue.update': (p, { agent }) =>
+    agent.updateQueue(
+      requireString(p, 'sessionId'),
+      requireString(p, 'queueId'),
+      requireString(p, 'content'),
+    ),
+  'queue.remove': (p, { agent }) =>
+    agent.removeQueue(
+      requireString(p, 'sessionId'),
+      requireString(p, 'queueId'),
+    ),
+  'queue.send_now': (p, { agent }) =>
+    agent.sendNow(requireString(p, 'sessionId'), requireString(p, 'queueId')),
   'run.cancel': (p, { agent }) => agent.cancel(requireString(p, 'runId')),
   'run.retry': (p, { agent }) =>
     agent.startRetry({

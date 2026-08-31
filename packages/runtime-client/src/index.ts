@@ -20,6 +20,7 @@ export type {
   WorkspaceExtStats,
   WorkspaceIndexSnapshot,
   WorkspaceReadResult,
+  QueueEntry,
 } from '@reflexion-os-studio/contracts'
 
 export {

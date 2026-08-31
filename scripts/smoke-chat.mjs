@@ -302,6 +302,38 @@ function request(id, method, params) {
   })
 }
 
+function waitForQueueSettled(sessionId, expectedCount, timeoutMs = 20_000) {
+  return new Promise((resolve) => {
+    const started = Date.now()
+    const timer = setInterval(async () => {
+      try {
+        const detail = await request(-1, 'session.get', {
+          requestId: randomUUID(),
+          sessionId,
+        })
+        const runs = detail?.runs ?? []
+        const settled =
+          runs.length >= expectedCount &&
+          runs.every(
+            (run) =>
+              !['created', 'running', 'awaiting_approval'].includes(run.status),
+          )
+        if (settled) {
+          clearInterval(timer)
+          resolve(detail)
+          return
+        }
+      } catch {
+        // 重试
+      }
+      if (Date.now() - started > timeoutMs) {
+        clearInterval(timer)
+        resolve(null)
+      }
+    }, 100)
+  })
+}
+
 function waitForEvent(match, timeoutMs = 15_000, fromIndex = 0, description) {
   const predicate =
     typeof match === 'string' ? (event) => event.type === match : match
@@ -719,6 +751,88 @@ try {
     'duplicate approval.resolve is a no-op',
     duplicateResolve?.accepted === false,
   )
+
+  // ---------- 发送队列:忙时排队,上一条结束自动发送;可修改/删除/立即发送 ----------
+  const queueSession = await request(48, 'session.create', {
+    requestId: randomUUID(),
+    projectId: project.id,
+  })
+  const firstSend = await request(49, 'message.send', {
+    requestId: randomUUID(),
+    sessionId: queueSession.session.id,
+    content: '第一条',
+  })
+  check(
+    'first message starts immediately (not queued)',
+    firstSend?.queued === false && typeof firstSend?.runId === 'string',
+    JSON.stringify(firstSend),
+  )
+  const secondSend = await request(50, 'message.send', {
+    requestId: randomUUID(),
+    sessionId: queueSession.session.id,
+    content: '第二条',
+  })
+  check(
+    'second message queues while first running',
+    secondSend?.queued === true && typeof secondSend?.queueId === 'string',
+    JSON.stringify(secondSend),
+  )
+  const thirdSend = await request(51, 'message.send', {
+    requestId: randomUUID(),
+    sessionId: queueSession.session.id,
+    content: '第三条',
+  })
+  check('third message also queues', thirdSend?.queued === true)
+
+  const queueList = await request(52, 'queue.list', {
+    requestId: randomUUID(),
+    sessionId: queueSession.session.id,
+  })
+  check(
+    'queue lists pending messages in FIFO order',
+    queueList?.items?.length === 2 &&
+      queueList.items[0].content === '第二条' &&
+      queueList.items[1].content === '第三条',
+    JSON.stringify(queueList),
+  )
+  const edited = await request(53, 'queue.update', {
+    requestId: randomUUID(),
+    sessionId: queueSession.session.id,
+    queueId: secondSend.queueId,
+    content: '第二条-已修改',
+  })
+  check(
+    'queued message editable',
+    edited?.item?.content === '第二条-已修改',
+    JSON.stringify(edited),
+  )
+  const sentNow = await request(54, 'queue.send_now', {
+    requestId: randomUUID(),
+    sessionId: queueSession.session.id,
+    queueId: thirdSend.queueId,
+  })
+  check('send_now accepted', sentNow?.accepted === true)
+
+  // 第一条回复结束 → 队首("第三条")自动发出,依次泵出修改后的"第二条";
+  // 等到全部 Run 终态再断言(事件消费不可靠,直接轮询 DB 状态)。
+  const finalDetail = await waitForQueueSettled(queueSession.session.id, 3)
+  const finalUsers = (finalDetail?.messages ?? [])
+    .filter((message) => message.role === 'user')
+    .map((message) => message.content)
+  check(
+    'queued messages all auto-sent with edited content',
+    finalUsers.includes('第一条') &&
+      finalUsers.includes('第三条') &&
+      finalUsers.includes('第二条-已修改'),
+    finalDetail === null
+      ? 'settled=null'
+      : `users=${JSON.stringify(finalUsers)} runs=${finalDetail.runs.length} statuses=${finalDetail.runs.map((r) => r.status).join(',')}`,
+  )
+  const drained = await request(55, 'queue.list', {
+    requestId: randomUUID(),
+    sessionId: queueSession.session.id,
+  })
+  check('queue drained after all sent', drained?.items?.length === 0)
 
   const cancelled = await request(6, 'run.cancel', {
     requestId: randomUUID(),

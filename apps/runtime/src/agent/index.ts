@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import type {
   ChatCommand,
   Message,
@@ -21,6 +22,7 @@ import { CommandError } from './errors.js'
 import { MemoryService } from './memory/service.js'
 import { ApprovalGateway, PermissionGate } from './permissions.js'
 import { PRIMARY_AGENT_SYSTEM_PROMPT } from './prompts/index.js'
+import { QueueService } from './queue.js'
 import { RunRunner } from './runner.js'
 import { createToolRegistry } from './tools/index.js'
 import { deriveSessionTitle } from './title.js'
@@ -40,6 +42,7 @@ export class ChatAgent {
   private readonly contextBuilder: ContextBuilder
   private readonly runner: RunRunner
   private readonly memory: MemoryService
+  private readonly queues: QueueService
   /** 审批网关跨 Run 共享（pending 以 toolCallId 为键；会话级授权存内存）。 */
   readonly approvals = new ApprovalGateway()
 
@@ -51,6 +54,7 @@ export class ChatAgent {
     this.contextBuilder = new ContextBuilder(store)
     this.runner = new RunRunner(store)
     this.memory = new MemoryService(store)
+    this.queues = new QueueService(notifier)
   }
 
   /** 解析本次对话使用的 Provider 与模型；不指定时回退到启用的 Provider 第一个模型。 */
@@ -124,6 +128,96 @@ export class ChatAgent {
       throw new CommandError(
         'invalid_request',
         '该会话有正在进行的回复，请等待完成或先停止',
+      )
+    }
+  }
+
+  /**
+   * 发送入口：会话空闲 → 立即开始(startSend)；忙碌 → 自动入队(FIFO)，
+   * 当前回复结束由 pumpQueue 自动出队发送。排队期间可修改/删除/立即发送。
+   */
+  send(params: ChatCommand): {
+    queued: boolean
+    messageId: string | null
+    runId: string | null
+    queueId: string | null
+    position: number | null
+  } {
+    this.requireSession(params.sessionId)
+    // 入队前先校验技能与 Provider/模型配置,参数错误当场反馈。
+    this.resolveSkillInvocation(params.content, params.skillId)
+    this.resolveProvider(params.providerId, params.model)
+    if (this.store.runs.activeForSession(params.sessionId) === null) {
+      const started = this.startSend(params)
+      return { queued: false, ...started, queueId: null, position: null }
+    }
+    const rest: Omit<ChatCommand, 'requestId' | 'sessionId'> = {
+      content: params.content,
+      providerId: params.providerId,
+      model: params.model,
+      temperature: params.temperature,
+      maxTokens: params.maxTokens,
+      permissionMode: params.permissionMode,
+      skillId: params.skillId,
+    }
+    const entry = this.queues.enqueue(params.sessionId, rest)
+    const snapshot = this.queues.list(params.sessionId)
+    const position =
+      snapshot.find((item) => item.id === entry.id)?.position ?? null
+    return {
+      queued: true,
+      messageId: null,
+      runId: null,
+      queueId: entry.id,
+      position,
+    }
+  }
+
+  /** 队列快照。 */
+  listQueue(sessionId: string) {
+    return { items: this.queues.list(sessionId) }
+  }
+
+  /** 修改排队内容：优先沿用显式 skillId,否则按新内容重新解析斜杠。 */
+  updateQueue(sessionId: string, queueId: string, content: string) {
+    const existing = this.queues.get(sessionId, queueId)
+    if (!existing) return { item: null }
+    const explicitSkillId = existing.params.skillId
+    this.resolveSkillInvocation(content, explicitSkillId)
+    const updated = this.queues.update(sessionId, queueId, {
+      ...existing.params,
+      content,
+      skillId: explicitSkillId,
+    })
+    if (!updated) return { item: null }
+    const item =
+      this.queues.list(sessionId).find((entry) => entry.id === queueId) ?? null
+    return { item }
+  }
+
+  removeQueue(sessionId: string, queueId: string) {
+    return { removed: this.queues.remove(sessionId, queueId) }
+  }
+
+  /** 立即发送：移到队首;空闲则立刻 pump(否则等当前结束)。 */
+  sendNow(sessionId: string, queueId: string) {
+    const accepted = this.queues.moveToFront(sessionId, queueId)
+    if (accepted) this.pumpQueue(sessionId)
+    return { accepted }
+  }
+
+  /** 当前回复结束后自动发送队首(FIFO)。 */
+  private pumpQueue(sessionId: string): void {
+    if (this.queues.list(sessionId).length === 0) return
+    if (this.store.runs.activeForSession(sessionId) !== null) return
+    const entry = this.queues.dequeue(sessionId)
+    if (!entry) return
+    try {
+      this.startSend({ requestId: randomUUID(), sessionId, ...entry.params })
+    } catch (error) {
+      // 出队后执行失败(配置被改等):写 stderr,前端经 queue.changed 看到该项已移除。
+      process.stderr.write(
+        `[runtime] queued message send failed: ${error instanceof Error ? error.message : String(error)}\n`,
       )
     }
   }
@@ -334,6 +428,8 @@ export class ChatAgent {
       .catch(() => {})
       .finally(() => {
         this.streams.delete(run.id)
+        // Run 结束(完成/失败/取消):自动出队发送排队中的下一条。
+        this.pumpQueue(run.sessionId)
       })
   }
 

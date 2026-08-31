@@ -14,6 +14,7 @@ import {
   WorkspaceEntrySchema,
   WorkspaceIndexSnapshotSchema,
   WorkspaceReadResultSchema,
+  QueueEntrySchema,
 } from './entities.js'
 import { RuntimeStatusSchema } from './handshake.js'
 
@@ -129,10 +130,49 @@ export const CommandSchemaRegistry = {
   },
   'message.send': {
     params: MessageSendParamsSchema,
+    // 会话空闲时立即发送(queued=false,带 messageId/runId);
+    // 会话忙碌时自动入队(queued=true,带 queueId/position)。
     result: z.object({
-      messageId: z.string().min(1),
-      runId: z.string().min(1),
+      queued: z.boolean(),
+      messageId: z.string().min(1).nullable(),
+      runId: z.string().min(1).nullable(),
+      queueId: z.string().min(1).nullable(),
+      position: z.number().int().nonnegative().nullable(),
     }),
+  },
+  'queue.list': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      sessionId: z.string().min(1),
+    }),
+    result: z.object({ items: z.array(QueueEntrySchema) }),
+  },
+  'queue.update': {
+    // 修改排队中消息的内容(斜杠技能随新内容重新解析)。
+    params: z.object({
+      requestId: RequestIdSchema,
+      sessionId: z.string().min(1),
+      queueId: z.string().min(1),
+      content: z.string().min(1),
+    }),
+    result: z.object({ item: QueueEntrySchema.nullable() }),
+  },
+  'queue.remove': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      sessionId: z.string().min(1),
+      queueId: z.string().min(1),
+    }),
+    result: z.object({ removed: z.boolean() }),
+  },
+  'queue.send_now': {
+    // 立即发送:移该项到队首,当前空闲则立刻开始执行。
+    params: z.object({
+      requestId: RequestIdSchema,
+      sessionId: z.string().min(1),
+      queueId: z.string().min(1),
+    }),
+    result: z.object({ accepted: z.boolean() }),
   },
   'run.cancel': {
     params: RunCancelParamsSchema,

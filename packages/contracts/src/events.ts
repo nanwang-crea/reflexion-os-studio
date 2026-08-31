@@ -8,6 +8,7 @@ import {
   ToolOperationSchema,
   UsageSchema,
   WorkspaceIndexSnapshotSchema,
+  QueueEntrySchema,
 } from './entities.js'
 import { RuntimeErrorSchema } from './errors.js'
 import { RuntimeStatusSchema } from './handshake.js'
@@ -126,6 +127,12 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     type: z.literal('workspace.index.failed'),
     projectId: z.string().min(1),
     error: z.string(),
+  }),
+  // 会话发送队列快照：入队/修改/删除/立即发送/出队时广播(envelope.runId=sessionId)。
+  RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('queue.changed'),
+    sessionId: z.string().min(1),
+    items: z.array(QueueEntrySchema),
   }),
 ])
 export type RuntimeEvent = z.infer<typeof RuntimeEventSchema>

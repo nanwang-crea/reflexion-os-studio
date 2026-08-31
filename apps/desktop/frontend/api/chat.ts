@@ -1,5 +1,14 @@
 import { request } from './client'
 
+/** 发送结果：会话空闲时立即开始(queued=false)；忙碌时自动入队(queued=true)。 */
+export interface SendMessageResult {
+  queued: boolean
+  messageId: string | null
+  runId: string | null
+  queueId: string | null
+  position: number | null
+}
+
 /** 发送消息并启动一次回复；providerId/model 缺省时由 Runtime 回退默认配置。 */
 export function sendMessage(input: {
   sessionId: string
@@ -8,8 +17,8 @@ export function sendMessage(input: {
   model?: string
   /** 工具权限 Profile；缺省 workspace（Runtime 侧默认）。 */
   permissionMode?: 'workspace' | 'read-only'
-}): Promise<{ messageId: string; runId: string }> {
-  return request<{ messageId: string; runId: string }>('message.send', input)
+}): Promise<SendMessageResult> {
+  return request<SendMessageResult>('message.send', input)
 }
 
 export function cancelRun(runId: string): Promise<{ accepted: boolean }> {

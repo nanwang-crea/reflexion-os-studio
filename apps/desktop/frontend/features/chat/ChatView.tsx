@@ -9,6 +9,7 @@ import { Composer, type ComposerModelOption } from '../../components/Composer'
 import { ArrowDownIcon, SparkIcon } from '../../ui/icons'
 import { ApprovalCard } from './ApprovalCard'
 import { AssistantMessage } from './AssistantMessage'
+import { QueueBar } from './QueueBar'
 import type { SessionData } from '../../api/sessions'
 import type { PendingApproval } from '../../hooks/useAppBootstrap'
 
@@ -328,6 +329,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
         </div>
       )}
 
+      {sessionId !== null && <QueueBar sessionId={sessionId} />}
       <div className="composer-wrap">
         {sessionApprovals.map((approval) => (
           <ApprovalCard
@@ -349,7 +351,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
         <Composer
           placeholder={
             runActive
-              ? '正在回复，可点击右侧停止…'
+              ? '正在回复，可继续输入排队发送…'
               : !props.hasEnabledProvider
                 ? '请先在设置中配置 API Key…'
                 : '输入消息，Enter 发送；/ 使用技能'

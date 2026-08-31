@@ -6,7 +6,7 @@ ReflexionOS 的下一代桌面 Agent 与可视化工作流平台。它不是现�
 
 当前仓库已完成 **Phase 1A**（Bootstrap → Chat Core → System Tools）、**Phase 1B 第一部分（Workspace Surface）** 与 **Phase 2 的 Skills / Memory 子集**：
 
-- **Chat**：OpenAI-compatible Provider 配置与本地密钥存储，Project/Session/Message/Run，SSE 流式回复（含思考过程）、Stop / Retry、SQLite 持久化与重启恢复；
+- **Chat**：OpenAI-compatible Provider 配置与本地密钥存储，Project/Session/Message/Run，SSE 流式回复（含思考过程）、Stop / Retry、**发送队列**（回复中自动排队，可修改/删除/立即发送）、SQLite 持久化与重启恢复；
 - **工具**：文件读写/搜索（经 Rust System Runtime）与 Shell、网络抓取、计时器；workspace / read-only 权限 Profile、工具审批（允许一次 / 本会话允许 / 拒绝）、工具轨迹聚合展示；
 - **Skills**：内置 code-review、web-research、workspace-report，斜杠命令（`/code-review …`）与 skill.use 激活；
 - **Memory**：Run 结束后自动提取与合并、记忆管理页、上下文召回注入；
