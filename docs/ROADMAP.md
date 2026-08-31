@@ -1,9 +1,9 @@
 # ReflexionOS Studio 分阶段路线图
 
-## 当前状态（2026-08-30）
+## 当前状态（2026-08-31）
 
-Phase 1A 全部完成；Phase 2 的技能（Skills）与记忆（Memory，会话/项目级）子集已完成，其余待办如下：
-工具（`file.*`/`shell.execute`）、审批与权限 Profile、技能斜杠激活、记忆提取-合并-召回均已接入对话链路与 UI。
+Phase 1A 全部完成；Phase 2 的技能（Skills）、记忆（Memory，会话/项目级）与 MCP 子集已完成，其余待办如下：
+工具（`file.*`/`shell.execute`）、审批与权限 Profile、技能斜杠激活、记忆提取-合并-召回、MCP 工具桥（stdio,默认 ask 审批）均已接入对话链路与 UI。
 
 ## Phase 0：Architecture Foundation（已完成）
 
@@ -30,8 +30,8 @@ Rust File/Shell Service、Workspace 边界、read-only/workspace Profile、Chat 
 
 ## Phase 2：Agent Platform（进行中）
 
-- **已完成子集**：Skills（内置技能注册表、斜杠激活、skill.use）、Memory（提取 → 合并 → 落库 → 召回注入、记忆管理页）。
-- **待完成**：MCP、Provider/Tool Plugins、Browser Tool、user 级记忆写入确认流程、更完整的资产检索。
+- **已完成子集**：Skills（内置技能注册表、斜杠激活、skill.use）、Memory（提取 → 合并 → 落库 → 召回注入、记忆管理页）、MCP（stdio 协议 client、管理服务、工具桥默认 ask 审批、设置页面板）。
+- **待完成**：Provider/Tool Plugins、Browser Tool、user 级记忆写入确认流程、更完整的资产检索。
 
 ## Phase 3：Multi-Agent Orchestration（未开始）
 
