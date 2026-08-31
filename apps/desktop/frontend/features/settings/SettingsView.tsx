@@ -19,9 +19,13 @@ export function SettingsView(props: SettingsViewProps): React.JSX.Element {
     ? (props.profiles.find((profile) => profile.id === selectedKey) ?? null)
     : null
 
-  // 选中项失效（外部删除/列表刷新）时回退到第一个供应商。
+  // 列表异步到达后自动选中第一个；选中项失效（外部删除/列表刷新）时回退。
   useEffect(() => {
-    if (selectedKey === null || selectedKey === 'new') return
+    if (selectedKey === 'new') return
+    if (selectedKey === null) {
+      if (props.profiles.length > 0) setSelectedKey(props.profiles[0].id)
+      return
+    }
     if (!props.profiles.some((profile) => profile.id === selectedKey)) {
       setSelectedKey(props.profiles[0]?.id ?? null)
     }
