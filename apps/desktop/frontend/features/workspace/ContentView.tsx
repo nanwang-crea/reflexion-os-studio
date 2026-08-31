@@ -194,9 +194,12 @@ export function ContentView(props: ContentViewProps): React.JSX.Element {
           )}
         </div>
       )}
+      {/* JSON 美化成功后全文已在 textContent 中(prettyLines 基于全文)，
+          续页拼装会导致行号漂移,此时隐藏"加载更多"。 */}
       {doc.loading === false &&
         doc.lines.length < doc.totalLines &&
-        doc.error === null && (
+        doc.error === null &&
+        prettyLines === null && (
           <div className="content-more">
             <button className="ghost" onClick={() => void loadMore()}>
               加载更多（还有 {doc.totalLines - doc.lines.length} 行）

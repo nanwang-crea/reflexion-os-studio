@@ -1,13 +1,6 @@
 //! 工具方法请求参数：JSON-RPC params 的 Deserialize 定义（camelCase、未知字段拒绝）。
 use serde::Deserialize;
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct PathParams {
-    pub workspace_root: String,
-    pub path: String,
-}
-
 /// 带授权引用的单路径写类操作（delete / mkdir）。
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

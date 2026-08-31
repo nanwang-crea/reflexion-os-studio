@@ -7,6 +7,33 @@ import type {
 import type { ModelMessage } from '@reflexion-os-studio/agent-core'
 
 const DEFAULT_TIMEOUT_MS = 120_000
+/** 请求建立阶段失败(网络/限流/服务端短暂故障)的自动重试次数与退避。 */
+const DEFAULT_MAX_RETRIES = 2
+const RETRY_BACKOFF_MS = [1_000, 2_500]
+
+/** 429 限流与 5xx 短暂故障可重试；认证/配置类错误重试无意义。 */
+function shouldRetryStatus(code: number): boolean {
+  return code === 429 || code >= 500
+}
+
+/** 可取消的等待；signal 已中止时立即抛 AbortError。 */
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException('The operation was aborted.', 'AbortError'))
+      return
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    const onAbort = (): void => {
+      clearTimeout(timer)
+      reject(new DOMException('The operation was aborted.', 'AbortError'))
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+}
 
 export class ProviderError extends Error {
   readonly code: RuntimeErrorCode
@@ -34,6 +61,8 @@ export interface StreamChatOptions {
   timeoutMs?: number
   /** 传入时限制补全长度（连接测试用 1，避免无谓消耗）。 */
   maxTokens?: number
+  /** 请求建立阶段失败自动重试次数；连接测试等场景传 0 快速失败。 */
+  maxRetries?: number
   /** Agent 侧 canonical 工具声明；适配层投影为 OpenAI function 格式。 */
   tools?: ToolSpec[]
 }
@@ -115,51 +144,72 @@ export async function streamChatCompletion(
   const timeout = AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
   const signal = AbortSignal.any([options.signal, timeout])
 
+  // 请求建立阶段的重试:网络错误、429、5xx。流读取开始后不重试
+  // (已吐出的 delta 无法回滚),避免 UI 文本重复。
+  const maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES
+  let attempt = 0
   let response: Response
-  try {
-    // canonical 工具声明投影为 OpenAI function calling 方言。
-    const tools =
-      options.tools && options.tools.length > 0
-        ? options.tools.map((tool) => ({
-            type: 'function',
-            function: {
-              name: tool.name,
-              description: tool.description,
-              parameters: tool.parameters,
-            },
-          }))
-        : undefined
-    response = await fetch(
-      `${options.baseUrl.replace(/\/$/, '')}/chat/completions`,
-      {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          authorization: `Bearer ${options.apiKey}`,
+  for (;;) {
+    try {
+      // canonical 工具声明投影为 OpenAI function calling 方言。
+      const tools =
+        options.tools && options.tools.length > 0
+          ? options.tools.map((tool) => ({
+              type: 'function',
+              function: {
+                name: tool.name,
+                description: tool.description,
+                parameters: tool.parameters,
+              },
+            }))
+          : undefined
+      response = await fetch(
+        `${options.baseUrl.replace(/\/$/, '')}/chat/completions`,
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: `Bearer ${options.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: options.model,
+            messages: options.messages.map(toProviderMessage),
+            stream: true,
+            stream_options: { include_usage: true },
+            ...(options.maxTokens !== undefined
+              ? { max_tokens: options.maxTokens }
+              : {}),
+            ...(tools !== undefined ? { tools } : {}),
+          }),
+          signal,
         },
-        body: JSON.stringify({
-          model: options.model,
-          messages: options.messages.map(toProviderMessage),
-          stream: true,
-          stream_options: { include_usage: true },
-          ...(options.maxTokens !== undefined
-            ? { max_tokens: options.maxTokens }
-            : {}),
-          ...(tools !== undefined ? { tools } : {}),
-        }),
-        signal,
-      },
-    )
-  } catch (error) {
-    if (isAbort(error)) throw error
-    throw new ProviderError(
-      'network',
-      `provider request failed: ${String(error)}`,
-    )
-  }
+      )
+    } catch (error) {
+      if (isAbort(error)) throw error
+      if (attempt < maxRetries) {
+        attempt += 1
+        await sleep(
+          RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)],
+          signal,
+        )
+        continue
+      }
+      throw new ProviderError(
+        'network',
+        `provider request failed: ${String(error)}`,
+      )
+    }
 
-  if (!response.ok) {
+    if (response.ok) break
     const detail = await response.text().catch(() => '')
+    if (shouldRetryStatus(response.status) && attempt < maxRetries) {
+      attempt += 1
+      await sleep(
+        RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)],
+        signal,
+      )
+      continue
+    }
     throw new ProviderError(
       mapHttpStatus(response.status),
       `provider responded ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`,

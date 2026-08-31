@@ -74,3 +74,89 @@ export async function compactMessages(
       : [summaryMessage, ...recentMessages]
   return { messages: compactedMessages, compacted: true, summary }
 }
+
+/**
+ * 轮内消息预算约束（不额外调用模型）：超预算时优先折叠最老的
+ * "assistant 工具轮 + 其 tool 结果"为一句话（成对删除，保证 provider
+ * 对 tool_call_id 的配对要求），全部折叠完仍超则退化为最近窗口截断。
+ * 返回的新数组可安全发给 provider；原数组不被修改。
+ */
+export function boundMessagesForModel(
+  messages: ModelMessage[],
+  budgetTokens: number,
+): ModelMessage[] {
+  let current = [...messages]
+  if (estimateMessageTokens(current) <= budgetTokens) return current
+  let folded = foldOldestToolRound(current)
+  while (folded !== null) {
+    current = folded
+    if (estimateMessageTokens(current) <= budgetTokens) return current
+    folded = foldOldestToolRound(current)
+  }
+  // 截断兜底：此时已无任何工具轮引用，截断不会造成悬空 tool_call_id。
+  const system = current[0]?.role === 'system' ? current[0] : null
+  const body = system !== null ? current.slice(1) : current
+  let bounded: ModelMessage[] = [
+    ...(system !== null ? [system] : []),
+    { role: 'user', content: '[更早的历史已因上下文超长被截断]' },
+    ...body.slice(Math.max(0, body.length - KEEP_RECENT)),
+  ]
+  // 最终手段（窗口内单条消息本身超预算，如粘贴巨文）：每次收缩当前最长的
+  // 非 system 消息内容（几何收敛最快），直到满足预算或无法再缩。
+  let shrinkPasses = 0
+  while (estimateMessageTokens(bounded) > budgetTokens && shrinkPasses < 48) {
+    shrinkPasses += 1
+    let targetIndex = -1
+    let targetLength = 0
+    for (let i = 1; i < bounded.length; i += 1) {
+      const message = bounded[i]
+      if (message.role === 'system') continue
+      if (message.content.length > targetLength) {
+        targetIndex = i
+        targetLength = message.content.length
+      }
+    }
+    if (targetIndex < 0 || targetLength < 32) break
+    const message = bounded[targetIndex]
+    bounded[targetIndex] = {
+      ...message,
+      content: `${message.content.slice(0, Math.floor(targetLength / 2))}…（因上下文超长被截断）`,
+    }
+  }
+  return bounded
+}
+
+/** 截断兜底时保留的最近消息条数。 */
+const KEEP_RECENT = 12
+
+/**
+ * 折叠最老的一对工具轮：assistant 的 toolCalls 置空并追加省略说明，
+ * 其对应的 role=tool 结果消息全部删除。找不到可折叠对返回 null。
+ */
+function foldOldestToolRound(messages: ModelMessage[]): ModelMessage[] | null {
+  for (let i = 0; i < messages.length; i += 1) {
+    const message = messages[i]
+    if (message.role !== 'assistant' || message.toolCalls.length === 0) {
+      continue
+    }
+    const ids = new Set(message.toolCalls.map((call) => call.id))
+    const kept: ModelMessage[] = []
+    let folded = false
+    for (let j = 0; j < messages.length; j += 1) {
+      const current = messages[j]
+      if (j > i && current.role === 'tool' && ids.has(current.toolCallId)) {
+        folded = true
+        continue
+      }
+      kept.push(current)
+    }
+    const prefix = message.content === '' ? '' : `${message.content}\n`
+    kept[i] = {
+      role: 'assistant',
+      content: `${prefix}[此前的 ${message.toolCalls.length} 个工具调用及其结果已因上下文过长省略]`,
+      toolCalls: [],
+    }
+    return folded ? kept : null
+  }
+  return null
+}

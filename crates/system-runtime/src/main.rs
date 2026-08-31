@@ -18,8 +18,8 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 use params::{
-    EditParams, GlobParams, GrantPathParams, GrepParams, ListParams, MoveParams, PathParams,
-    ReadParams, ShellParams, WriteParams,
+    EditParams, GlobParams, GrantPathParams, GrepParams, ListParams, MoveParams, ReadParams,
+    ShellParams, WriteParams,
 };
 
 const PROTOCOL_VERSION: &str = "1.0";

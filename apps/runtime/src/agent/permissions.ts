@@ -60,6 +60,7 @@ export class PermissionGate {
 }
 
 interface PendingApproval {
+  runId: string
   resolve: (decision: 'approved' | 'denied', scope: 'once' | 'session') => void
 }
 
@@ -92,6 +93,7 @@ export class ApprovalGateway {
       }
       signal.addEventListener('abort', onAbort, { once: true })
       this.pending.set(toolCallId, {
+        runId: emitter.runId,
         resolve: (decision, scope) => {
           signal.removeEventListener('abort', onAbort)
           this.pending.delete(toolCallId)
@@ -124,5 +126,13 @@ export class ApprovalGateway {
 
   hasSessionGrant(operation: ToolOperation): boolean {
     return this.sessionGrants.has(operation)
+  }
+
+  /** 该 Run 是否仍有待审批调用：并行工具轮次据此维持 awaiting_approval。 */
+  hasPendingRun(runId: string): boolean {
+    for (const entry of this.pending.values()) {
+      if (entry.runId === runId) return true
+    }
+    return false
   }
 }

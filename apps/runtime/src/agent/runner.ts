@@ -1,5 +1,6 @@
 import {
   DEFAULT_MAX_TURNS,
+  boundMessagesForModel,
   runAgentLoop,
   type AgentLoopOutcome,
   type ModelMessage,
@@ -16,7 +17,7 @@ import {
 import { RunEventEmitter } from '../events.js'
 import { ProviderError, streamChatCompletion } from '../provider.js'
 import type { Store } from '../store/index.js'
-import type { ProviderRuntimeConfig } from './context.js'
+import { CONTEXT_TOKEN_BUDGET, type ProviderRuntimeConfig } from './context.js'
 import type { MemoryService } from './memory/service.js'
 import type { ApprovalGateway, PermissionGate } from './permissions.js'
 import { isToolOperation } from './permissions.js'
@@ -49,8 +50,8 @@ interface TurnDraft {
 interface RunExecutionState {
   /** 流式中断/失败时未落终态的当前轮次草稿。 */
   turn: TurnDraft | null
-  /** 进行中未落终态的工具调用行。 */
-  toolCallRowId: string | null
+  /** 进行中未落终态的工具调用行（同轮并行时可能多个）。 */
+  toolCallRowIds: Set<string>
   /** 最近一条 assistant 消息（工具调用行的关联消息）。 */
   lastAssistantMessageId: string | null
 }
@@ -67,21 +68,21 @@ export class RunRunner {
     const { run, controller, emitter, registry } = input
     const state: RunExecutionState = {
       turn: null,
-      toolCallRowId: null,
+      toolCallRowIds: new Set(),
       lastAssistantMessageId: null,
     }
 
-    const cancelInFlightToolCall = (): void => {
-      if (!state.toolCallRowId) return
-      const rowId = state.toolCallRowId
-      state.toolCallRowId = null
-      this.store.toolCalls.finalize(rowId, 'cancelled')
-      emitter.next({
-        type: 'tool.completed',
-        toolCallId: rowId,
-        status: 'cancelled',
-        errorCode: null,
-      })
+    const cancelInFlightToolCalls = (): void => {
+      for (const rowId of state.toolCallRowIds) {
+        this.store.toolCalls.finalize(rowId, 'cancelled')
+        emitter.next({
+          type: 'tool.completed',
+          toolCallId: rowId,
+          status: 'cancelled',
+          errorCode: null,
+        })
+      }
+      state.toolCallRowIds.clear()
     }
 
     const finalizePendingTurn = (status: 'interrupted' | 'failed'): void => {
@@ -131,12 +132,13 @@ export class RunRunner {
             this.store.messages.markStreaming(draft.id)
           }
 
+          const bounded = boundMessagesForModel(messages, CONTEXT_TOKEN_BUDGET)
           const result = await streamChatCompletion(
             {
               baseUrl: input.provider.baseUrl,
               apiKey: input.provider.apiKey,
               model: input.provider.model,
-              messages,
+              messages: bounded,
               tools: registry.specs(),
               signal,
             },
@@ -235,7 +237,7 @@ export class RunRunner {
             args,
             status: askNeeded ? 'awaiting_approval' : 'running',
           })
-          state.toolCallRowId = row.id
+          state.toolCallRowIds.add(row.id)
           emitter.next({
             type: 'tool.requested',
             toolCallId: row.id,
@@ -259,10 +261,14 @@ export class RunRunner {
                 signal,
               })
             } finally {
-              this.store.runs.setIntermediateStatus(run.id, 'running')
+              // 并行工具轮次:还有其它调用在等审批时保持 awaiting_approval,
+              // 否则才回置 running,避免 Run 状态错报。
+              if (!input.approvals.hasPendingRun(run.id)) {
+                this.store.runs.setIntermediateStatus(run.id, 'running')
+              }
             }
             if (verdict === 'denied') {
-              state.toolCallRowId = null
+              state.toolCallRowIds.delete(row.id)
               this.store.toolCalls.finalize(
                 row.id,
                 'failed',
@@ -289,7 +295,7 @@ export class RunRunner {
           }
 
           const result = await registry.call(request, signal, grant)
-          state.toolCallRowId = null
+          state.toolCallRowIds.delete(row.id)
           // 持久化保存完整结果（审计不做盲区），回填模型前只取截断副本。
           const modelResult: ToolResult = {
             ...result,
@@ -352,7 +358,7 @@ export class RunRunner {
       })
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
-        cancelInFlightToolCall()
+        cancelInFlightToolCalls()
         finalizePendingTurn('interrupted')
         this.store.runs.finalize(run.id, 'cancelled')
         emitter.next({ type: 'run.cancelled' })
@@ -363,7 +369,7 @@ export class RunRunner {
       const message = error instanceof Error ? error.message : 'unknown failure'
       // Provider/工具循环异常只经事件与 stderr 暴露，不进 stdout 协议通道。
       process.stderr.write(`[runtime] run failed (${code}): ${message}\n`)
-      cancelInFlightToolCall()
+      cancelInFlightToolCalls()
       finalizePendingTurn('failed')
       this.store.runs.finalize(run.id, 'failed', code)
       emitter.next({ type: 'run.failed', error: { code, message } })

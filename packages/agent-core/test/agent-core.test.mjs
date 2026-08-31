@@ -2,7 +2,9 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   ToolRegistry,
+  boundMessagesForModel,
   compactMessages,
+  estimateMessageTokens,
   estimateTokens,
   runAgentLoop,
 } from '../dist/index.js'
@@ -212,4 +214,132 @@ test('compactMessages summarizes old turns only when over budget', async () => {
 test('estimateTokens counts CJK and ascii differently', () => {
   assert.equal(estimateTokens('一二三四'), 4)
   assert.equal(estimateTokens('abcdefgh'), 2)
+})
+
+test('loop executes parallel tool calls and preserves result order', async () => {
+  const turn = {
+    content: '',
+    toolCalls: [
+      { id: 'c1', name: 'slow', arguments: '{"ms":80,"tag":"first"}' },
+      { id: 'c2', name: 'fast', arguments: '{"ms":5,"tag":"second"}' },
+    ],
+  }
+  const active = new Set()
+  const overlaps = []
+  let firstCall = true
+  const outcome = await runAgentLoop({
+    history: [userMessage('并行执行')],
+    signal: new AbortController().signal,
+    callModel: async () => {
+      if (firstCall) {
+        firstCall = false
+        return turn
+      }
+      return { content: '完成', toolCalls: [] }
+    },
+    executeTool: async (request) => {
+      const args = JSON.parse(request.arguments)
+      if (active.size > 0) overlaps.push([...active])
+      active.add(request.name)
+      await new Promise((resolve) => setTimeout(resolve, args.ms))
+      active.delete(request.name)
+      return { content: `ok:${request.id}`, isError: false }
+    },
+  })
+
+  assert.equal(outcome.status, 'completed')
+  // 两个工具真实并行（慢工具执行期间另一个工具已在运行），
+  // 且结果消息按原始调用顺序回填。
+  assert.equal(overlaps.length > 0, true)
+  const toolMessages = outcome.messages.filter((m) => m.role === 'tool')
+  assert.deepEqual(
+    toolMessages.map((m) => m.content),
+    ['ok:c1', 'ok:c2'],
+  )
+})
+
+test('boundMessagesForModel folds oldest tool rounds to fit budget', () => {
+  const system = { role: 'system', content: 'sys' }
+  const messages = [
+    system,
+    userMessage('帮我读两个文件'),
+    {
+      role: 'assistant',
+      content: '',
+      toolCalls: [
+        { id: 'c1', name: 'read', arguments: '{}' },
+        { id: 'c2', name: 'read', arguments: '{}' },
+      ],
+    },
+    {
+      role: 'tool',
+      toolCallId: 'c1',
+      content: 'x'.repeat(4000),
+      isError: false,
+    },
+    {
+      role: 'tool',
+      toolCallId: 'c2',
+      content: 'y'.repeat(4000),
+      isError: false,
+    },
+    userMessage('继续'),
+  ]
+  const bounded = boundMessagesForModel(messages, 2000)
+  // 折叠发生：tool 消息消失，assistant 工具轮变为说明文本。
+  assert.equal(
+    bounded.some((m) => m.role === 'tool'),
+    false,
+  )
+  const folded = bounded.find(
+    (m) => m.role === 'assistant' && m.toolCalls.length === 0,
+  )
+  assert.ok(folded !== undefined)
+  assert.match(folded.content, /已因上下文过长省略/)
+  // 剩余消息仍以 system 开头、以最后一条 user 结尾。
+  assert.equal(bounded[0], system)
+  assert.equal(bounded[bounded.length - 1], messages[messages.length - 1])
+  // 发给 provider 的序列合法：不存在悬空 tool 消息。
+  assert.ok(estimateMessageTokens(bounded) <= 2000)
+})
+
+test('boundMessagesForModel truncates as last resort without dangling tools', () => {
+  // 大量正文轮 + 一对最老的工具轮：预算极小时先折叠工具对，再截断正文。
+  const messages = [
+    { role: 'system', content: 'sys' },
+    userMessage('介绍项目'),
+    {
+      role: 'assistant',
+      content: '我看看。',
+      toolCalls: [{ id: 'z1', name: 'read', arguments: '{}' }],
+    },
+    {
+      role: 'tool',
+      toolCallId: 'z1',
+      content: 'z'.repeat(3000),
+      isError: false,
+    },
+  ]
+  for (let i = 0; i < 20; i += 1) {
+    messages.push(userMessage(`补充${i}：${'长'.repeat(300)}`))
+    messages.push({
+      role: 'assistant',
+      content: `回复${i}`,
+      toolCalls: [],
+    })
+  }
+  const bounded = boundMessagesForModel(messages, 500)
+  // 序列合法：每条 tool 消息都必须能匹配到前面保留的 assistant.toolCalls。
+  const toolIds = new Set()
+  for (const message of bounded) {
+    if (message.role === 'assistant') {
+      for (const call of message.toolCalls) toolIds.add(call.id)
+    }
+  }
+  for (const message of bounded) {
+    if (message.role === 'tool') {
+      assert.equal(toolIds.has(message.toolCallId), true)
+    }
+  }
+  assert.ok(estimateMessageTokens(bounded) <= 500)
 })

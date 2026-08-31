@@ -1,4 +1,5 @@
 export {
+  boundMessagesForModel,
   compactMessages,
   estimateMessageTokens,
   estimateTokens,

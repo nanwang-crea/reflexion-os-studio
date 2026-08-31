@@ -37,13 +37,20 @@ export async function runAgentLoop(
     })
     await options.onEvent?.({ type: 'assistant.turn', index: turns, turn })
 
-    for (const call of turn.toolCalls) {
-      if (signal.aborted) {
-        throw new DOMException('The operation was aborted.', 'AbortError')
-      }
-      await options.onEvent?.({ type: 'tool.started', call })
-      const result = await options.executeTool(call, signal)
-      await options.onEvent?.({ type: 'tool.finished', call, result })
+    // 同轮多个工具调用并行执行（与主流 Agent 一致），结果按调用顺序回填，
+    // 保证回传给模型的 role=tool 消息与 tool_calls 一一对应、顺序稳定。
+    const results = await Promise.all(
+      turn.toolCalls.map(async (call) => {
+        if (signal.aborted) {
+          throw new DOMException('The operation was aborted.', 'AbortError')
+        }
+        await options.onEvent?.({ type: 'tool.started', call })
+        const result = await options.executeTool(call, signal)
+        await options.onEvent?.({ type: 'tool.finished', call, result })
+        return { call, result }
+      }),
+    )
+    for (const { call, result } of results) {
       messages.push({
         role: 'tool',
         toolCallId: call.id,

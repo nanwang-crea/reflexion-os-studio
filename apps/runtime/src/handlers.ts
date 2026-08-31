@@ -262,6 +262,8 @@ export async function testProviderConnection(
         messages: [{ role: 'user', content: 'ping' }],
         maxTokens: 1,
         timeoutMs: 15_000,
+        // 连接测试要快速给出结论,不做限流/网络重试。
+        maxRetries: 0,
         signal: new AbortController().signal,
       },
       () => {},

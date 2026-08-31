@@ -294,3 +294,83 @@ test('tool_calls finish reason and accumulated calls surface together', async ()
   assert.equal(result.finishReason, 'tool_calls')
   assert.deepEqual(result.usage, { promptTokens: 5, completionTokens: 1 })
 })
+
+test('retries request establishment on 429 then succeeds', async () => {
+  let calls = 0
+  const server = await startServer((request, response) => {
+    calls += 1
+    if (calls === 1) {
+      response.writeHead(429, { 'content-type': 'application/json' })
+      response.end('{"error":"rate limited"}')
+      return
+    }
+    response.writeHead(200, { 'content-type': 'text/event-stream' })
+    response.end(sseBody())
+  })
+  const port = server.address().port
+  const result = await streamChatCompletion(
+    {
+      baseUrl: `http://127.0.0.1:${port}/v1`,
+      apiKey: 'sk-test',
+      model: 'mock-model',
+      messages: [{ role: 'user', content: 'hi' }],
+      signal: new AbortController().signal,
+    },
+    () => {},
+  )
+  server.close()
+  assert.equal(calls, 2)
+  assert.equal(result.content, 'Hello')
+})
+
+test('maxRetries=0 fails fast on 429', async () => {
+  let calls = 0
+  const server = await startServer((request, response) => {
+    calls += 1
+    response.writeHead(429, { 'content-type': 'application/json' })
+    response.end('{"error":"rate limited"}')
+  })
+  const port = server.address().port
+  await assert.rejects(
+    streamChatCompletion(
+      {
+        baseUrl: `http://127.0.0.1:${port}/v1`,
+        apiKey: 'sk-test',
+        model: 'mock-model',
+        messages: [{ role: 'user', content: 'hi' }],
+        signal: new AbortController().signal,
+        maxRetries: 0,
+      },
+      () => {},
+    ),
+    (error) => error instanceof ProviderError && error.code === 'rate_limit',
+  )
+  server.close()
+  assert.equal(calls, 1)
+})
+
+test('does not retry authentication errors', async () => {
+  let calls = 0
+  const server = await startServer((request, response) => {
+    calls += 1
+    response.writeHead(401, { 'content-type': 'application/json' })
+    response.end('{"error":"bad key"}')
+  })
+  const port = server.address().port
+  await assert.rejects(
+    streamChatCompletion(
+      {
+        baseUrl: `http://127.0.0.1:${port}/v1`,
+        apiKey: 'sk-wrong',
+        model: 'mock-model',
+        messages: [{ role: 'user', content: 'hi' }],
+        signal: new AbortController().signal,
+      },
+      () => {},
+    ),
+    (error) =>
+      error instanceof ProviderError && error.code === 'authentication',
+  )
+  server.close()
+  assert.equal(calls, 1)
+})
