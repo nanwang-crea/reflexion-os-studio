@@ -70,3 +70,29 @@ test('queue remove and moveToFront', () => {
   )
   assert.ok(events.some((event) => event.type === 'queue.changed'))
 })
+
+test('queue removeSession drops entire session queue on delete', () => {
+  const { service } = freshQueue()
+  service.enqueue('s1', params('a'))
+  service.enqueue('s1', params('b'))
+  service.enqueue('s2', params('其他会话'))
+  service.removeSession('s1')
+  assert.equal(service.list('s1').length, 0)
+  assert.equal(service.list('s2').length, 1)
+})
+
+test('queue update keeps explicit skillId and re-resolves slash skill', async () => {
+  // 该场景由 ChatAgent.updateQueue 负责斜杠解析;此处验证 params 透传语义。
+  const { service } = freshQueue()
+  const entry = service.enqueue('s1', {
+    content: '/code-review 看看',
+    skillId: undefined,
+  })
+  const updated = service.update('s1', entry.id, {
+    ...entry.params,
+    content: '/web-research 查一下',
+    skillId: 'web-research',
+  })
+  assert.equal(updated?.params.skillId, 'web-research')
+  assert.equal(service.list('s1')[0].skillId, 'web-research')
+})

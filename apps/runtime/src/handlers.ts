@@ -95,7 +95,7 @@ const handlers: Record<string, CommandHandler> = {
     store.sessions.rename(sessionId, title)
     return { session: store.sessions.get(sessionId) }
   },
-  'session.delete': (p, { store }) => {
+  'session.delete': (p, { store, agent }) => {
     const sessionId = requireString(p, 'sessionId')
     // 有进行中的 Run 时拒绝删除，避免流式写入悬空会话。
     if (store.runs.activeForSession(sessionId)) {
@@ -108,12 +108,15 @@ const handlers: Record<string, CommandHandler> = {
       removed: store.transaction(() => {
         const removed = store.sessions.delete(sessionId)
         // memories.scope_id 无外键级联：会话删除时一并清理其记忆。
-        if (removed) store.memories.removeByScope('session', sessionId)
+        if (removed) {
+          store.memories.removeByScope('session', sessionId)
+          agent.clearQueue(sessionId)
+        }
         return removed
       }),
     }
   },
-  'project.delete': (p, { store }) => {
+  'project.delete': (p, { store, agent }) => {
     const projectId = requireString(p, 'projectId')
     const sessions = store.sessions.list(projectId)
     for (const session of sessions) {
@@ -132,6 +135,7 @@ const handlers: Record<string, CommandHandler> = {
           store.memories.removeByScope('project', projectId)
           for (const session of sessions) {
             store.memories.removeByScope('session', session.id)
+            agent.clearQueue(session.id)
           }
         }
         return removed

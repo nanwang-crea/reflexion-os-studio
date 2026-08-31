@@ -183,11 +183,15 @@ export class ChatAgent {
     const existing = this.queues.get(sessionId, queueId)
     if (!existing) return { item: null }
     const explicitSkillId = existing.params.skillId
-    this.resolveSkillInvocation(content, explicitSkillId)
+    // 重解析并记录"生效的技能"：展示与出队执行口径一致
+    // (显式 skillId 优先,否则按新内容识别斜杠)。
+    const resolvedSkillId =
+      this.resolveSkillInvocation(content, explicitSkillId).skill?.manifest
+        .id ?? explicitSkillId
     const updated = this.queues.update(sessionId, queueId, {
       ...existing.params,
       content,
-      skillId: explicitSkillId,
+      skillId: resolvedSkillId,
     })
     if (!updated) return { item: null }
     const item =
@@ -197,6 +201,11 @@ export class ChatAgent {
 
   removeQueue(sessionId: string, queueId: string) {
     return { removed: this.queues.remove(sessionId, queueId) }
+  }
+
+  /** 会话删除时丢弃其排队项(避免无主残留)。 */
+  clearQueue(sessionId: string): void {
+    this.queues.removeSession(sessionId)
   }
 
   /** 立即发送：移到队首;空闲则立刻 pump(否则等当前结束)。 */

@@ -55,6 +55,11 @@ export class QueueService {
     return entry
   }
 
+  /** 会话删除时清空其队列(残留项永无发送机会)。 */
+  removeSession(sessionId: string): void {
+    this.queues.delete(sessionId)
+  }
+
   remove(sessionId: string, queueId: string): boolean {
     const queue = this.queues.get(sessionId)
     if (!queue) return false
