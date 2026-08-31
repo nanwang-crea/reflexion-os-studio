@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS provider_profiles (
   temperature REAL,
   max_tokens INTEGER,
   context_window INTEGER,
+  context_budget INTEGER,
   updated_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS memories (
@@ -126,7 +127,7 @@ CREATE TABLE IF NOT EXISTS workspace_index (
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 9
+export const LATEST_SCHEMA_VERSION = 10
 
 const SESSIONS_TABLE_V1 = `
 CREATE TABLE sessions (
@@ -342,6 +343,15 @@ export function runMigrations(db: DatabaseSync): void {
         db.exec(
           'ALTER TABLE provider_profiles ADD COLUMN context_window INTEGER',
         )
+      }
+    }
+    if (version < 10) {
+      if (
+        !tableColumns(db, 'provider_profiles').some(
+          (column) => column.name === 'context_budget',
+        )
+      ) {
+        db.exec('ALTER TABLE provider_profiles ADD COLUMN context_budget INTEGER')
       }
     }
     db.exec('COMMIT')

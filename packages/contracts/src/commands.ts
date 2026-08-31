@@ -174,6 +174,8 @@ export const CommandSchemaRegistry = {
       maxTokens: z.number().int().positive().nullable().optional(),
       // 模型上下文窗口（token 数）；省略=保留原值，null=清空。
       contextWindow: z.number().int().positive().nullable().optional(),
+      // 上下文预算上限（token 数）；省略=保留原值，null=清空(默认 64k)。
+      contextBudget: z.number().int().positive().nullable().optional(),
       enabled: z.boolean().optional(),
     }),
     result: z.object({ profile: ProviderProfileSchema }),

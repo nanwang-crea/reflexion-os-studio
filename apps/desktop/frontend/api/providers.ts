@@ -19,6 +19,8 @@ export interface ConfigureProviderPayload {
   maxTokens?: number | null
   /** 模型上下文窗口（token 数）；Runtime 据此动态计算上下文预算。 */
   contextWindow?: number | null
+  /** 上下文预算上限（token 数）；缺省 64k。 */
+  contextBudget?: number | null
   enabled?: boolean
 }
 

@@ -3,6 +3,7 @@ import type {
   ModelMessage,
 } from '@reflexion-os-studio/agent-core'
 import {
+  boundMessagesForModel,
   compactMessages,
   estimateMessageTokens,
 } from '@reflexion-os-studio/agent-core'
@@ -14,13 +15,13 @@ import { HISTORY_COMPACTOR_SYSTEM_PROMPT } from './prompts/index.js'
 import { capToolResultForModel } from './toolResults.js'
 
 /**
- * 上下文 token 预算：超过即触发摘要压缩。
- * A2 接入模型元数据（contextWindow）后按所选模型动态取值。
+ * 上下文预算上限（token 数）：超过即触发摘要压缩。
+ * 模型窗口更大时仍以该值为上限；可在 Provider 设置中按供应商标定。
  */
-export const CONTEXT_TOKEN_BUDGET = 24_000
+export const DEFAULT_CONTEXT_BUDGET_LIMIT = 64_000
 
 /** 压缩时始终原样保留的最近消息条数（含工具结果轮次）。 */
-const KEEP_RECENT_MESSAGES = 12
+export const KEEP_RECENT_MESSAGES = 12
 
 export interface ProviderRuntimeConfig {
   baseUrl: string
@@ -29,22 +30,85 @@ export interface ProviderRuntimeConfig {
   /** 缺省由服务端决定。 */
   temperature?: number
   maxTokens?: number
-  /** 模型上下文窗口（token 数）；未知时用保守默认预算。 */
+  /** 模型上下文窗口（token 数）；未知时用预算上限。 */
   contextWindow?: number
+  /** 上下文预算上限（token 数）；缺省 DEFAULT_CONTEXT_BUDGET_LIMIT。 */
+  contextBudget?: number
 }
 
 /**
- * 上下文预算：已知窗口时取 min(保守默认, 窗口 × 0.75 − maxTokens 预留)，
- * 为输出留足空间；下限 1024 防止小配置把预算压死。
+ * 上下文预算：min(预算上限, 窗口 × 0.75 − maxTokens 预留),为输出留足空间;
+ * 下限 1024 防止小配置把预算压死。窗口未知时直接用预算上限。
  */
 export function contextBudgetFor(provider: ProviderRuntimeConfig): number {
+  const limit = provider.contextBudget ?? DEFAULT_CONTEXT_BUDGET_LIMIT
   const window = provider.contextWindow
   if (window === undefined || window === null || window <= 0) {
-    return CONTEXT_TOKEN_BUDGET
+    return limit
   }
   const outputReserve = provider.maxTokens ?? 0
   const windowBudget = Math.floor(window * 0.75) - outputReserve
-  return Math.max(1024, Math.min(CONTEXT_TOKEN_BUDGET, windowBudget))
+  return Math.max(1024, Math.min(limit, windowBudget))
+}
+
+/**
+ * 一组消息的模型摘要（启动压缩与轮内压缩共用）：
+ * HISTORY_COMPACTOR_SYSTEM_PROMPT + transcript,一次补全调用。
+ */
+export function summarizeMessages(
+  provider: ProviderRuntimeConfig,
+  oldMessages: ModelMessage[],
+  signal: AbortSignal,
+): Promise<string> {
+  const transcript = oldMessages
+    .map((message) => `${message.role}: ${message.content}`)
+    .join('\n')
+  return streamChatCompletion(
+    {
+      baseUrl: provider.baseUrl,
+      apiKey: provider.apiKey,
+      model: provider.model,
+      messages: [
+        { role: 'system', content: HISTORY_COMPACTOR_SYSTEM_PROMPT },
+        { role: 'user', content: transcript },
+      ],
+      signal,
+      timeoutMs: 60_000,
+    },
+    () => {},
+  ).then((result) => result.content)
+}
+
+/**
+ * 轮内压缩管线：超预算 → 模型摘要压缩窗口外轮次（信息保留优先）；
+ * 摘要失败或仍超 → 零成本裁剪兜底（折叠工具对/截断/收缩）。
+ * 每轮最多一次摘要调用；任何失败写 stderr 并降级，绝不阻塞对话。
+ */
+export async function compactInRun(
+  messages: ModelMessage[],
+  provider: ProviderRuntimeConfig,
+  signal: AbortSignal,
+): Promise<ModelMessage[]> {
+  const budget = contextBudgetFor(provider)
+  let payload = messages
+  if (estimateMessageTokens(payload) > budget) {
+    try {
+      const { messages: compacted } = await compactMessages({
+        messages: payload,
+        budgetTokens: budget,
+        keepRecent: KEEP_RECENT_MESSAGES,
+        summarize: (oldMessages) =>
+          summarizeMessages(provider, oldMessages, signal),
+      })
+      payload = compacted
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') throw error
+      process.stderr.write(
+        `[runtime] in-run compaction failed, falling back to trimming: ${String(error)}\n`,
+      )
+    }
+  }
+  return boundMessagesForModel(payload, budget)
 }
 
 /** 会话历史的重建与压缩；Run 启动时由 runner 调用一次。 */
@@ -74,7 +138,7 @@ export class ContextBuilder {
         budgetTokens: contextBudgetFor(provider),
         keepRecent: KEEP_RECENT_MESSAGES,
         summarize: (oldMessages) =>
-          this.summarize(oldMessages, provider, signal),
+          summarizeMessages(provider, oldMessages, signal),
       })
       return messages
     } catch (error) {
@@ -131,33 +195,7 @@ export class ContextBuilder {
     }
     return messages
   }
-
-  private async summarize(
-    oldMessages: ModelMessage[],
-    provider: ProviderRuntimeConfig,
-    signal: AbortSignal,
-  ): Promise<string> {
-    const transcript = oldMessages
-      .map((message) => `${message.role}: ${message.content}`)
-      .join('\n')
-    const result = await streamChatCompletion(
-      {
-        baseUrl: provider.baseUrl,
-        apiKey: provider.apiKey,
-        model: provider.model,
-        messages: [
-          { role: 'system', content: HISTORY_COMPACTOR_SYSTEM_PROMPT },
-          { role: 'user', content: transcript },
-        ],
-        signal,
-        timeoutMs: 60_000,
-      },
-      () => {},
-    )
-    return result.content
-  }
 }
-
 function toAssistantToolCall(row: ToolCall): AssistantToolCall {
   return {
     id: row.id,

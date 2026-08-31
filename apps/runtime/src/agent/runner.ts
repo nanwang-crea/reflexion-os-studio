@@ -1,6 +1,5 @@
 import {
   DEFAULT_MAX_TURNS,
-  boundMessagesForModel,
   runAgentLoop,
   type AgentLoopOutcome,
   type ModelMessage,
@@ -16,7 +15,7 @@ import {
 import { RunEventEmitter } from '../events.js'
 import { ProviderError, streamChatCompletion } from '../provider.js'
 import type { Store } from '../store/index.js'
-import { contextBudgetFor, type ProviderRuntimeConfig } from './context.js'
+import { compactInRun, type ProviderRuntimeConfig } from './context.js'
 import type { MemoryService } from './memory/service.js'
 import type { ApprovalGateway, PermissionGate } from './permissions.js'
 import { isToolOperation } from './permissions.js'
@@ -153,10 +152,7 @@ export class RunRunner {
             this.store.messages.markStreaming(draft.id)
           }
 
-          const bounded = boundMessagesForModel(
-            messages,
-            contextBudgetFor(input.provider),
-          )
+          const bounded = await compactInRun(messages, input.provider, signal)
           const result = await streamChatCompletion(
             {
               baseUrl: input.provider.baseUrl,

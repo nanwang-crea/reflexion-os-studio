@@ -32,6 +32,8 @@ interface Draft {
   maxTokens: string
   /** 模型上下文窗口（token 数）；空串表示未知（Runtime 用保守默认）。 */
   contextWindow: string
+  /** 上下文预算上限（token 数）；空串表示默认 64k。 */
+  contextBudget: string
 }
 
 const EMPTY_DRAFT: Draft = {
@@ -45,6 +47,7 @@ const EMPTY_DRAFT: Draft = {
   temperature: '',
   maxTokens: '',
   contextWindow: '',
+  contextBudget: '',
 }
 
 function draftFromProfile(profile: ProviderProfile): Draft {
@@ -60,6 +63,8 @@ function draftFromProfile(profile: ProviderProfile): Draft {
     maxTokens: profile.maxTokens == null ? '' : String(profile.maxTokens),
     contextWindow:
       profile.contextWindow == null ? '' : String(profile.contextWindow),
+    contextBudget:
+      profile.contextBudget == null ? '' : String(profile.contextBudget),
   }
 }
 
@@ -118,7 +123,11 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
         draft.maxTokens !==
           (profile.maxTokens == null ? '' : String(profile.maxTokens)) ||
         draft.contextWindow !==
-          (profile.contextWindow == null ? '' : String(profile.contextWindow))
+          (profile.contextWindow == null
+            ? ''
+            : String(profile.contextWindow)) ||
+        draft.contextBudget !==
+          (profile.contextBudget == null ? '' : String(profile.contextBudget))
       : draft.name.trim() !== '' ||
         draft.baseUrl.trim() !== '' ||
         draft.secret.trim() !== '' ||
@@ -145,6 +154,7 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
       const temperature = parseNumber(draft.temperature, false)
       const maxTokens = parseNumber(draft.maxTokens, true)
       const contextWindow = parseNumber(draft.contextWindow, true)
+      const contextBudget = parseNumber(draft.contextBudget, true)
       const result = await configureProvider({
         id: draft.id ?? undefined,
         name: draft.name.trim(),
@@ -159,6 +169,7 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
         temperature,
         maxTokens,
         contextWindow,
+        contextBudget,
       })
       // 新建后外层选中创建出的供应商，避免停留在空白的新建表单。
       if (!draft.id) props.onCreated(result.profile.id)
@@ -409,6 +420,19 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
             placeholder="例如 128000"
             onChange={(event) =>
               updateDraft({ contextWindow: event.target.value })
+            }
+          />
+        </label>
+        <label className="field sampling-wide">
+          上下文预算上限 tokens（留空默认 64000）
+          <input
+            type="number"
+            min={1}
+            step={1}
+            value={draft.contextBudget}
+            placeholder="例如 64000"
+            onChange={(event) =>
+              updateDraft({ contextBudget: event.target.value })
             }
           />
         </label>

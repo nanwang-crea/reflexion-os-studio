@@ -183,6 +183,7 @@ test('ProviderProfileSchema requires capability list', () => {
     temperature: null,
     maxTokens: null,
     contextWindow: null,
+    contextBudget: null,
     updatedAt: NOW,
   }
   assert.equal(ProviderProfileSchema.safeParse(profile).success, true)
@@ -196,6 +197,7 @@ test('ProviderProfileSchema requires capability list', () => {
       temperature: 0.7,
       maxTokens: 4096,
       contextWindow: 128000,
+      contextBudget: 64000,
     }).success,
     true,
   )

@@ -222,6 +222,8 @@ export const ProviderProfileSchema = z.object({
   maxTokens: z.number().int().positive().nullable(),
   // 模型上下文窗口（token 数）；null 表示未知，Runtime 用保守默认预算。
   contextWindow: z.number().int().positive().nullable(),
+  // 上下文预算上限（token 数）；null 表示用默认(64k)。
+  contextBudget: z.number().int().positive().nullable(),
   updatedAt: IsoDateTimeSchema,
 })
 export type ProviderProfile = z.infer<typeof ProviderProfileSchema>

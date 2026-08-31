@@ -46,6 +46,7 @@ export class ProviderStore {
     temperature?: number | null
     maxTokens?: number | null
     contextWindow?: number | null
+    contextBudget?: number | null
   }): ProviderProfile {
     const id = input.id ?? randomUUID()
     // capabilities 省略时：编辑保留原值，新建缺省 ['chat']。
@@ -69,11 +70,15 @@ export class ProviderStore {
       input.contextWindow === undefined
         ? (existing?.contextWindow ?? null)
         : input.contextWindow
+    const contextBudget =
+      input.contextBudget === undefined
+        ? (existing?.contextBudget ?? null)
+        : input.contextBudget
     const updatedAt = nowIso()
     this.db
       .prepare(
-        `INSERT INTO provider_profiles (id, name, base_url, models, capabilities, secret_ref, enabled, temperature, max_tokens, context_window, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO provider_profiles (id, name, base_url, models, capabilities, secret_ref, enabled, temperature, max_tokens, context_window, context_budget, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            base_url = excluded.base_url,
@@ -84,6 +89,7 @@ export class ProviderStore {
            temperature = excluded.temperature,
            max_tokens = excluded.max_tokens,
            context_window = excluded.context_window,
+           context_budget = excluded.context_budget,
            updated_at = excluded.updated_at`,
       )
       .run(
@@ -97,6 +103,7 @@ export class ProviderStore {
         temperature,
         maxTokens,
         contextWindow,
+        contextBudget,
         updatedAt,
       )
     const row = this.db
@@ -138,6 +145,8 @@ export class ProviderStore {
       maxTokens: row.max_tokens == null ? null : Number(row.max_tokens),
       contextWindow:
         row.context_window == null ? null : Number(row.context_window),
+      contextBudget:
+        row.context_budget == null ? null : Number(row.context_budget),
       updatedAt: String(row.updated_at),
     }
   }

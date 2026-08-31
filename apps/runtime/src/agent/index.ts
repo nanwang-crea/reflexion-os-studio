@@ -296,6 +296,9 @@ export class ChatAgent {
       ...(profile.contextWindow !== null
         ? { contextWindow: profile.contextWindow }
         : {}),
+      ...(profile.contextBudget !== null
+        ? { contextBudget: profile.contextBudget }
+        : {}),
     }
     const sessionId = run.sessionId
     const workspaceRoot = this.resolveWorkspaceRoot(session)
