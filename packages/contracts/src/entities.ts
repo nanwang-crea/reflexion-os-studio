@@ -56,6 +56,8 @@ export const SessionSchema = z.object({
   id: z.string().min(1),
   // null 表示不关联任何项目的独立会话。
   projectId: z.string().min(1).nullable(),
+  // 项目 Git 会话绑定的本地分支；独立会话或旧数据为 null。
+  gitBranch: z.string().min(1).nullable(),
   title: z.string().min(1),
   status: SessionStatusSchema,
   createdAt: IsoDateTimeSchema,

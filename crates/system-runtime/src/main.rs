@@ -19,8 +19,8 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 use params::{
-    EditParams, GitDiffParams, GitStatusParams, GlobParams, GrantPathParams, GrepParams,
-    ListParams, MoveParams, ReadParams, ShellParams, WriteParams,
+    EditParams, GitBranchesParams, GitDiffParams, GitStatusParams, GlobParams, GrantPathParams,
+    GrepParams, ListParams, MoveParams, ReadParams, ShellParams, WriteParams,
 };
 
 const PROTOCOL_VERSION: &str = "1.0";
@@ -253,6 +253,26 @@ fn handle_git_diff(id: Value, params: Value) -> Result<(Value, bool), OpError> {
     Ok((Value::Null, false))
 }
 
+/// git 本地分支只读查询（新建对话项目/分支选择用）；异步执行避免阻塞主循环。
+fn handle_git_branches(id: Value, params: Value) -> Result<(Value, bool), OpError> {
+    let params: GitBranchesParams = serde_json::from_value(params)
+        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
+    let root = workspace_root(&params.workspace_root)?;
+    std::thread::spawn(move || match git::branches(&root) {
+        Ok(outcome) => emit(ok_response(
+            id,
+            serde_json::to_value(&outcome).unwrap_or(Value::Null),
+        )),
+        Err(error) => emit(error_response(
+            id,
+            -32000,
+            &error.message,
+            Some(json!({ "code": error.code })),
+        )),
+    });
+    Ok((Value::Null, false))
+}
+
 fn handle_shell_execute(id: Value, params: Value) -> Result<(Value, bool), OpError> {
     let params: ShellParams = serde_json::from_value(params)
         .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
@@ -333,6 +353,7 @@ fn handle_request(request: &Value) -> (Value, bool) {
         Some("shell.execute") => handle_shell_execute(id, params),
         Some("git.status") => handle_git_status(id, params),
         Some("git.diff") => handle_git_diff(id, params),
+        Some("git.branches") => handle_git_branches(id, params),
         Some(name) => Err(OpError::new(
             "method_not_found",
             format!("Method not found: {name}"),

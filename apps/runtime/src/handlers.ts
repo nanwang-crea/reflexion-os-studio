@@ -65,10 +65,17 @@ const handlers: Record<string, CommandHandler> = {
         `project not found: ${projectId}`,
       )
     }
+    const gitBranch =
+      projectId !== null &&
+      typeof p.gitBranch === 'string' &&
+      p.gitBranch !== ''
+        ? p.gitBranch
+        : null
     return {
       session: store.sessions.create(
         projectId,
         typeof p.title === 'string' && p.title !== '' ? p.title : undefined,
+        gitBranch,
       ),
     }
   },

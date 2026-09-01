@@ -23,10 +23,16 @@ export function listSessions(
   return requestList<{ sessions: Session[] }>('session.list', { projectId })
 }
 
-export function createSession(projectId: string | null): Promise<{
+export function createSession(
+  projectId: string | null,
+  gitBranch: string | null = null,
+): Promise<{
   session: Session
 }> {
-  return request<{ session: Session }>('session.create', { projectId })
+  return request<{ session: Session }>('session.create', {
+    projectId,
+    ...(gitBranch !== null ? { gitBranch } : {}),
+  })
 }
 
 export function getSessionData(sessionId: string): Promise<SessionData> {

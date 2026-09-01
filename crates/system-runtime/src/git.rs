@@ -55,6 +55,16 @@ pub struct DiffOutcome {
     pub truncated: bool,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchesOutcome {
+    pub repo: bool,
+    /// 当前所在分支；HEAD detached 或无分支时返回 None。
+    pub current: Option<String>,
+    /// 本地分支名列表（refs/heads/*），按名称排序。
+    pub branches: Vec<String>,
+}
+
 struct GitOutput {
     exit_code: Option<i32>,
     stdout: String,
@@ -210,6 +220,67 @@ fn classify_xy(x: u8, y: u8) -> (&'static str, bool) {
         return ("added", x == b'A');
     }
     return ("modified", x != b' ');
+}
+
+/// 本地分支列表（refs/heads/*）与当前分支；非仓库返回 repo=false，HEAD detached
+/// 视为"无当前分支"（dialog 下可能发生在切换 commit 时）。
+pub fn branches(workspace_root: &Path) -> Result<BranchesOutcome, GitError> {
+    let current_output = run_git(workspace_root, &["--no-pager", "branch", "--show-current"])?;
+    if current_output.timed_out {
+        return Err(GitError::new(
+            "git_failed",
+            "git branch timed out".to_string(),
+        ));
+    }
+    // 非仓库：branch 也报 fatal(exit 128,小写"not a git repository")。
+    let not_a_repo = |output: &GitOutput| {
+        output
+            .stderr
+            .to_lowercase()
+            .contains("not a git repository")
+    };
+    if current_output.exit_code.map_or(false, |code| code != 0) && not_a_repo(&current_output) {
+        return Ok(BranchesOutcome {
+            repo: false,
+            current: None,
+            branches: Vec::new(),
+        });
+    }
+    let current = match current_output.exit_code {
+        Some(0) => trim_to_none(&current_output.stdout),
+        _ => None,
+    };
+    let list_output = run_git(
+        workspace_root,
+        &[
+            "--no-pager",
+            "for-each-ref",
+            "--format=%(refname:short)",
+            "refs/heads",
+        ],
+    )?;
+    let branches = list_output
+        .stdout
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(str::to_string)
+        .collect();
+    Ok(BranchesOutcome {
+        repo: true,
+        current,
+        branches,
+    })
+}
+
+/// inner trim 后非空则返回，空串 → None（用于 --show-current 的输出）。
+fn trim_to_none(text: &str) -> Option<String> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
 }
 
 fn first_line(text: &str) -> &str {

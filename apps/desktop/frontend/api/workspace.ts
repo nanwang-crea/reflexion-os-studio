@@ -76,6 +76,16 @@ export function gitDiff(
   )
 }
 
+/** 本地 Git 分支列表；repo=false 表示不是 Git 仓库，current=null 为 HEAD detached。 */
+export function gitBranches(
+  projectId: string,
+): Promise<{ repo: boolean; current: string | null; branches: string[] }> {
+  return request<{ repo: boolean; current: string | null; branches: string[] }>(
+    'workspace.git_branches',
+    { projectId },
+  )
+}
+
 export type WorkspaceIndexEvent = Extract<
   RuntimeEvent,
   { type: `workspace.index.${string}` }

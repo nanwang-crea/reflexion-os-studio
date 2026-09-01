@@ -94,6 +94,8 @@ export const CommandSchemaRegistry = {
       // null / 省略 → 独立会话（不关联项目）。
       projectId: z.union([z.string().min(1), z.null()]).optional(),
       title: z.string().min(1).optional(),
+      // 项目 Git 会话绑定的本地分支；仅 projectId 非空时有效，可空。
+      gitBranch: z.string().min(1).nullable().optional(),
     }),
     result: z.object({ session: SessionSchema }),
   },
@@ -393,6 +395,17 @@ export const CommandSchemaRegistry = {
       repo: z.boolean(),
       diff: z.string(),
       truncated: z.boolean(),
+    }),
+  },
+  'workspace.git_branches': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+    }),
+    result: z.object({
+      repo: z.boolean(),
+      current: z.string().min(1).nullable(),
+      branches: z.array(z.string().min(1)),
     }),
   },
   // ---------- Asset（Phase 1B 第二阶段）：内容入 Store，引用与元数据落库 ----------

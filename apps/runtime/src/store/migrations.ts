@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS projects (
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  git_branch TEXT,
   title TEXT NOT NULL,
   status TEXT NOT NULL,
   created_at TEXT NOT NULL,
@@ -164,12 +165,13 @@ CREATE TABLE IF NOT EXISTS assets (
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 13
+export const LATEST_SCHEMA_VERSION = 14
 
 const SESSIONS_TABLE_V1 = `
 CREATE TABLE sessions (
   id TEXT PRIMARY KEY,
   project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  git_branch TEXT,
   title TEXT NOT NULL,
   status TEXT NOT NULL,
   created_at TEXT NOT NULL,
@@ -392,6 +394,16 @@ export function runMigrations(db: DatabaseSync): void {
         db.exec(
           'ALTER TABLE provider_profiles ADD COLUMN context_budget INTEGER',
         )
+      }
+    }
+    if (version < 14) {
+      // v14：sessions 增加 git_branch（项目 Git 会话绑定分支；独立会话为 NULL）。
+      if (
+        !tableColumns(db, 'sessions').some(
+          (column) => column.name === 'git_branch',
+        )
+      ) {
+        db.exec('ALTER TABLE sessions ADD COLUMN git_branch TEXT')
       }
     }
     db.exec('COMMIT')

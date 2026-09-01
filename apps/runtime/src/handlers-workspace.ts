@@ -102,6 +102,20 @@ export const workspaceCommandHandlers: Record<string, CommandHandler> = {
       truncated: result.truncated ?? false,
     }
   },
+  'workspace.git_branches': async (p, { store, system }) => {
+    const project = requireWorkspaceProject(
+      store,
+      requireString(p, 'projectId'),
+    )
+    const result = (await requestSystem(system, 'git.branches', {
+      workspaceRoot: project.folderPath,
+    })) as { repo: boolean; current?: string | null; branches?: string[] }
+    return {
+      repo: result.repo,
+      current: result.current ?? null,
+      branches: result.branches ?? [],
+    }
+  },
 }
 
 function requireWorkspaceProject(

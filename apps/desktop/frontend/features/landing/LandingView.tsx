@@ -9,6 +9,13 @@ import { SessionRow } from '../../components/SessionRow'
 interface LandingViewProps {
   /** 当前选中的项目；null 表示独立对话模式。 */
   project: Project | null
+  projects: Project[]
+  selectedProjectId: string | null
+  onProjectChange: (projectId: string | null) => void
+  gitBranches: string[]
+  selectedGitBranch: string | null
+  gitBranchesLoading: boolean
+  onGitBranchChange: (branch: string | null) => void
   /** 选中项目时展示该项目下的历史会话。 */
   sessions: Session[]
   hasEnabledProvider: boolean
@@ -81,6 +88,46 @@ export function LandingView(props: LandingViewProps): React.JSX.Element {
               </button>
             </div>
           )}
+          <div className="landing-context-selectors">
+            <label className="composer-select" title="新会话项目">
+              <span>项目</span>
+              <select
+                value={props.selectedProjectId ?? ''}
+                onChange={(event) =>
+                  props.onProjectChange(event.target.value || null)
+                }
+              >
+                <option value="">独立对话</option>
+                {props.projects.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+              <span>⌄</span>
+            </label>
+            {props.selectedProjectId !== null &&
+              (props.gitBranchesLoading ? (
+                <span className="landing-branch-hint">正在读取分支…</span>
+              ) : props.gitBranches.length > 0 ? (
+                <label className="composer-select" title="新会话分支">
+                  <span>分支</span>
+                  <select
+                    value={props.selectedGitBranch ?? ''}
+                    onChange={(event) =>
+                      props.onGitBranchChange(event.target.value || null)
+                    }
+                  >
+                    {props.gitBranches.map((branch) => (
+                      <option key={branch} value={branch}>
+                        {branch}
+                      </option>
+                    ))}
+                  </select>
+                  <span>⌄</span>
+                </label>
+              ) : null)}
+          </div>
           <Composer
             autoFocus
             placeholder={

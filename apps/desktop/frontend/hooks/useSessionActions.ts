@@ -15,6 +15,7 @@ interface SessionActionsDeps {
   projects: Project[]
   activeSessionId: string | null
   activeProjectId: string | null
+  selectedGitBranch: string | null
   selectedModelKey: string | null
   sessionData: SessionData | null
   /** 工具权限 Profile（随 message.send 传给 Runtime）。 */
@@ -159,7 +160,10 @@ export function useSessionActions(deps: SessionActionsDeps): {
       let sessionId = deps.activeSessionId
       if (!sessionId) {
         // 落地页直接发言：选中项目则在项目内建会话，否则建独立会话。
-        const created = await sessionsApi.createSession(deps.activeProjectId)
+        const created = await sessionsApi.createSession(
+          deps.activeProjectId,
+          deps.selectedGitBranch,
+        )
         await chatApi.sendMessage({
           sessionId: created.session.id,
           content,
