@@ -236,6 +236,9 @@ const handlers: Record<string, CommandHandler> = {
     return { removed }
   },
   'skill.list': () => ({ skills: builtinSkills.list() }),
+  'agent_settings.get': (_p, { agent }) => agent.getSettings(),
+  'agent_settings.update': (p, { agent }) =>
+    agent.updateSettings(p as Parameters<typeof agent.updateSettings>[0]),
 }
 
 Object.assign(handlers, memoryCommandHandlers)
