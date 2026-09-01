@@ -1,20 +1,29 @@
 /* ---------- 设置 ---------- */
 
 .settings-view {
+  --settings-surface: rgba(255, 255, 255, 0.035);
+  --settings-surface-strong: rgba(255, 255, 255, 0.06);
+  --settings-border: rgba(255, 255, 255, 0.1);
+  --settings-accent: #8b9cff;
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  padding: 24px 32px;
+  padding: clamp(20px, 4vw, 44px);
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 28px;
+  max-width: 1280px;
+  width: 100%;
+  margin: 0 auto;
 }
 
 .settings-head {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   flex-shrink: 0;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--settings-border);
 }
 
 .settings-head > div {
@@ -22,8 +31,9 @@
 }
 
 .settings-head h2 {
-  margin: 0 0 4px;
-  font-size: 22px;
+  margin: 0 0 5px;
+  font-size: clamp(22px, 2.2vw, 28px);
+  letter-spacing: -0.03em;
 }
 
 .back-to-chat {
@@ -42,19 +52,20 @@
   display: flex;
   flex: 1;
   min-height: 0;
-  gap: 20px;
+  gap: 28px;
 }
 
 .settings-nav {
-  width: 210px;
+  width: 220px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 8px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  background: var(--surface-translucent);
+  gap: 5px;
+  padding: 6px;
+  border: 1px solid var(--settings-border);
+  border-radius: 14px;
+  background: var(--settings-surface);
+  align-self: flex-start;
 }
 
 .settings-nav-item {
@@ -78,8 +89,9 @@
 }
 
 .settings-nav-item.active {
-  background: var(--bg-elevated);
+  background: var(--settings-surface-strong);
   color: var(--text);
+  box-shadow: inset 3px 0 0 var(--settings-accent);
 }
 
 .settings-nav-item svg {
@@ -96,6 +108,7 @@
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
+  padding-right: 4px;
 }
 
 .settings-panel-title {
@@ -124,10 +137,11 @@
   flex: 1;
   min-height: 320px;
   display: flex;
-  border: 1px solid var(--border-subtle);
-  border-radius: 14px;
-  background: var(--surface-overlay);
+  border: 1px solid var(--settings-border);
+  border-radius: 16px;
+  background: var(--settings-surface);
   overflow: hidden;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.12);
 }
 
 .provider-list {
@@ -271,7 +285,7 @@
   background: rgba(248, 113, 113, 0.1);
 }
 
-.field {
+.settings-view .field {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -279,7 +293,7 @@
   color: var(--text-secondary);
 }
 
-.field select {
+.settings-view .field select {
   appearance: none;
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
@@ -290,7 +304,7 @@
   cursor: pointer;
 }
 
-.field select:focus-visible {
+.settings-view .field select:focus-visible {
   outline: 1px solid var(--border);
 }
 
@@ -366,7 +380,33 @@
 }
 
 /* 窄窗口：供应商管理器改为上下堆叠，列表横向滚动 */
-@media (max-width: 1000px) {
+@media (max-width: 900px) {
+  .settings-layout {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .settings-nav {
+    width: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+  }
+
+  .settings-nav-item {
+    width: auto;
+    flex: 1 0 auto;
+    white-space: nowrap;
+    justify-content: center;
+  }
+
+  .settings-nav-item.active {
+    box-shadow: inset 0 -3px 0 var(--settings-accent);
+  }
+
+  .settings-content {
+    overflow-y: visible;
+  }
+
   .provider-manager {
     flex-direction: column;
   }
@@ -428,23 +468,43 @@
 }
 
 .agent-runtime {
-  margin-top: 20px;
-  border-top: 1px solid var(--border-subtle);
-  padding-top: 16px;
+  margin-top: 0;
+  padding: 24px;
+  border: 1px solid var(--settings-border);
+  border-radius: 16px;
+  background: var(--settings-surface);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.12);
 }
 
-.agent-runtime-head h2 {
-  margin: 0 0 4px;
+.settings-section-heading {
+  margin-bottom: 24px;
 }
 
-.agent-runtime-head .hint {
-  margin: 0 0 12px;
+.settings-eyebrow {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--settings-accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.settings-section-heading h3 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+
+.settings-section-heading .hint {
+  max-width: 620px;
+  line-height: 1.6;
 }
 
 .agent-runtime-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
 }
 
 .agent-runtime .field-hint {

@@ -139,24 +139,8 @@ export function SettingsView(props: SettingsViewProps): React.JSX.Element {
               </div>
             </>
           )}
-          {section === 'runtime' && (
-            <>
-              <h3 className="settings-panel-title">Agent 运行时</h3>
-              <p className="hint">
-                控制回复的轮次上限、失败反思与请求重试。留空使用内置默认。
-              </p>
-              <AgentRuntimePanel />
-            </>
-          )}
-          {section === 'mcp' && (
-            <>
-              <h3 className="settings-panel-title">MCP 服务器</h3>
-              <p className="hint">
-                添加 MCP 服务器后，其工具自动进入 Agent 工具集。
-              </p>
-              <McpPanel confirm={props.confirm} />
-            </>
-          )}
+          {section === 'runtime' && <AgentRuntimePanel />}
+          {section === 'mcp' && <McpPanel confirm={props.confirm} />}
         </div>
       </div>
     </div>

@@ -100,11 +100,11 @@ export function AgentRuntimePanel(): React.JSX.Element {
 
   return (
     <div className="agent-runtime">
-      <div className="agent-runtime-head">
-        <h2>Agent 运行时</h2>
+      <div className="settings-section-heading">
+        <span className="settings-eyebrow">Agent 运行时</span>
+        <h3>让回复过程更符合你的工作节奏</h3>
         <p className="hint">
-          全局生效的循环参数；留空表示内置默认（64k 预算/16 轮/2 次反思/5
-          次重试/120s 超时可在 Provider 设置中单独配置）。
+          调整循环、反思和网络请求参数；留空时使用推荐默认值。
         </p>
       </div>
       <div className="agent-runtime-grid">
@@ -130,7 +130,11 @@ export function AgentRuntimePanel(): React.JSX.Element {
         ))}
       </div>
       <div className="form-actions">
-        <button disabled={busy || !dirty} onClick={() => void save()}>
+        <button
+          className="primary"
+          disabled={busy || !dirty}
+          onClick={() => void save()}
+        >
           {busy ? '保存中…' : '保存设置'}
         </button>
         {savedAt && <span className="saved">已保存 {savedAt}</span>}
