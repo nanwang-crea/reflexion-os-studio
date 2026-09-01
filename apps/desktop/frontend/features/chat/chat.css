@@ -136,9 +136,14 @@ button.link {
   font-size: 12px;
 }
 
-/* ---------- 工作摘要（思考 + 工具聚合折叠） ---------- */
+/* ---------- Run 过程折叠与思考摘要 ---------- */
+.run-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 
-.work-summary-toggle {
+.run-process-toggle {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -150,12 +155,12 @@ button.link {
   font-size: 12.5px;
 }
 
-.work-summary-toggle:hover:not(:disabled) {
+.run-process-toggle:hover:not(:disabled) {
   background: var(--bg-hover);
   color: var(--text-secondary);
 }
 
-.work-summary-label.shimmer {
+.run-process-label.shimmer {
   background: linear-gradient(
     90deg,
     var(--text-muted) 30%,
@@ -169,48 +174,81 @@ button.link {
   animation: work-summary-shimmer 1.6s linear infinite;
 }
 
-@keyframes work-summary-shimmer {
-  from {
-    background-position: 200% 0;
-  }
-  to {
-    background-position: -200% 0;
-  }
-}
-
-.work-summary-chevron {
+.run-process-chevron {
   display: inline-flex;
   color: var(--text-muted);
   transition: transform 0.18s ease;
 }
 
-.work-summary-chevron.open {
+.run-process-chevron.open {
   transform: rotate(180deg);
 }
 
-.work-summary-body {
+.run-process-body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: 10px;
+  margin-top: 2px;
   padding-left: 4px;
 }
 
-.work-thinking-label {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-bottom: 4px;
+.run-process-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.work-thinking-text {
+.run-process-part {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.run-process-text {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.reasoning-block {
+  min-width: 0;
+}
+
+.reasoning-toggle {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  text-align: left;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.reasoning-label {
+  flex: none;
+  font-size: 12px;
+}
+
+.reasoning-preview {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reasoning-full {
+  margin: 4px 0 0 28px;
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 200px;
+  max-height: 220px;
   overflow-y: auto;
-  overscroll-behavior: contain;
 }
 
 /* ---------- 流式状态指示 ---------- */

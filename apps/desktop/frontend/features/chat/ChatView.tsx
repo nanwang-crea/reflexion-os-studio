@@ -10,6 +10,8 @@ import { Composer, type ComposerModelOption } from '../../components/Composer'
 import { ArrowDownIcon, SparkIcon } from '../../ui/icons'
 import { ApprovalCard } from './ApprovalCard'
 import { AssistantMessage } from './AssistantMessage'
+import { RunBlock } from './RunBlock'
+import type { ProcessItem } from './RunProcess'
 import { QueueBar } from './QueueBar'
 import type { SessionData } from '../../api/sessions'
 import type { PendingApproval, RunActivity } from '../../hooks/useAppBootstrap'
@@ -58,20 +60,66 @@ function computeRunDurationMs(runs: Run[], message: Message): number | null {
   return end - start
 }
 
-interface DisplayItem {
-  message: Message
-  toolCalls: ToolCall[]
-}
+type DisplayItem = ProcessItem
+type ChatBlock =
+  | { kind: 'plain'; item: DisplayItem }
+  | {
+      kind: 'run'
+      runId: string
+      processItems: DisplayItem[]
+      finalItem: DisplayItem | null
+    }
 
-/** 按消息顺序构造 Run 时间线，保留每个模型轮次自身的过程内容。 */
-function buildDisplayItems(
+/** 按 Run 分组：过程轮次进入一个整体折叠块，最后无工具轮作为最终回复。 */
+function buildChatBlocks(
   messages: Message[],
   toolCallsByMessage: Map<string, ToolCall[]>,
-): DisplayItem[] {
-  return messages.map((message) => ({
-    message,
-    toolCalls: toolCallsByMessage.get(message.id) ?? [],
-  }))
+): ChatBlock[] {
+  const blocks: ChatBlock[] = []
+  let runId: string | null = null
+  let runMessages: DisplayItem[] = []
+
+  const flushRun = (): void => {
+    if (runId === null || runMessages.length === 0) return
+    let finalIndex = -1
+    for (let index = runMessages.length - 1; index >= 0; index -= 1) {
+      if (runMessages[index].toolCalls.length === 0) {
+        finalIndex = index
+        break
+      }
+    }
+    const finalItem = finalIndex >= 0 ? runMessages[finalIndex] : null
+    blocks.push({
+      kind: 'run',
+      runId,
+      processItems:
+        finalIndex >= 0
+          ? runMessages.filter((_, index) => index !== finalIndex)
+          : runMessages,
+      finalItem,
+    })
+    runId = null
+    runMessages = []
+  }
+
+  for (const message of messages) {
+    if (message.role === 'assistant' && message.runId !== null) {
+      if (runId !== null && runId !== message.runId) flushRun()
+      runId = message.runId
+      runMessages.push({
+        message,
+        toolCalls: toolCallsByMessage.get(message.id) ?? [],
+      })
+      continue
+    }
+    flushRun()
+    blocks.push({
+      kind: 'plain',
+      item: { message, toolCalls: toolCallsByMessage.get(message.id) ?? [] },
+    })
+  }
+  flushRun()
+  return blocks
 }
 
 export function ChatView(props: ChatViewProps): React.JSX.Element {
@@ -126,9 +174,8 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
     for (const runId of Object.keys(props.runActivities)) ids.add(runId)
     return ids
   }, [runs, props.runActivities])
-  // 按消息创建顺序展示每个模型轮次，工具调用归属发起它的消息。
-  const displayItems = useMemo(
-    () => buildDisplayItems(messages, toolCallsByMessage),
+  const chatBlocks = useMemo(
+    () => buildChatBlocks(messages, toolCallsByMessage),
     [messages, toolCallsByMessage],
   )
   const lastRetryableRun = [...runs]
@@ -186,15 +233,44 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
               发送第一条消息开始对话。输入 / 可选用技能。
             </div>
           )}
-          {displayItems.map((item) => {
-            const message = item.message
-            // 既无正文/思考也无工具调用的占位消息不渲染。
+          {chatBlocks.map((block) => {
+            if (block.kind === 'run') {
+              const run = runs.find((entry) => entry.id === block.runId) ?? null
+              const finalMessage =
+                block.finalItem?.message ??
+                block.processItems[block.processItems.length - 1]?.message
+              return (
+                <RunBlock
+                  key={block.runId}
+                  processItems={block.processItems}
+                  finalItem={block.finalItem}
+                  runActive={activeRunIds.has(block.runId)}
+                  runActivity={props.runActivities[block.runId]}
+                  streaming={props.streaming}
+                  streamingReasoning={props.streamingReasoning}
+                  runDurationMs={
+                    finalMessage
+                      ? computeRunDurationMs(runs, finalMessage)
+                      : null
+                  }
+                  runUsage={run?.usage ?? null}
+                  canRetry={
+                    lastRetryableRun !== undefined &&
+                    lastRetryableRun.id === block.runId
+                  }
+                  onRetry={handleRetry}
+                  onResourceClick={props.onResourceClick}
+                />
+              )
+            }
+
+            const { message, toolCalls } = block.item
             if (
               message.role === 'assistant' &&
               message.status === 'completed' &&
               message.content === '' &&
               message.reasoning === '' &&
-              item.toolCalls.length === 0
+              toolCalls.length === 0
             ) {
               return null
             }
@@ -210,10 +286,8 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
                 <AssistantMessage
                   key={message.id}
                   message={message}
-                  toolCalls={item.toolCalls}
-                  runActive={
-                    message.runId !== null && activeRunIds.has(message.runId)
-                  }
+                  toolCalls={toolCalls}
+                  runActive={activeRunIds.has(message.runId ?? '')}
                   runActivity={
                     message.runId !== null
                       ? props.runActivities[message.runId]
@@ -221,15 +295,9 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
                   }
                   streamingText={props.streaming[message.id]}
                   streamingReasoning={props.streamingReasoning[message.id]}
-                  runDurationMs={computeRunDurationMs(runs, message)}
-                  runUsage={
-                    runs.find((entry) => entry.id === message.runId)?.usage ??
-                    null
-                  }
-                  canRetry={
-                    lastRetryableRun !== undefined &&
-                    lastRetryableRun.id === message.runId
-                  }
+                  runDurationMs={null}
+                  runUsage={null}
+                  canRetry={false}
                   onRetry={handleRetry}
                   onResourceClick={props.onResourceClick}
                 />

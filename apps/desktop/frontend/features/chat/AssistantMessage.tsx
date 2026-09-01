@@ -10,7 +10,8 @@ import {
   extractResourceLinks,
   MessageMarkdown,
 } from '../../components/MessageMarkdown'
-import { WorkSummary } from './WorkSummary'
+import { ReasoningBlock } from './ReasoningBlock'
+import { ToolTrace } from './ToolTrace'
 import type { RunActivity } from '../../hooks/useAppBootstrap'
 
 const MESSAGE_STATUS_LABELS: Record<string, string> = {
@@ -26,6 +27,8 @@ interface AssistantMessageProps {
   runActive: boolean
   /** Run 级事件驱动活动阶段；undefined 表示 Run 已结束或暂无活动。 */
   runActivity?: RunActivity
+  /** reasoning 已在 Run 过程时间线中展示时隐藏，最终消息只保留正文。 */
+  hideReasoning?: boolean
   /** 该消息的流式正文增量缓存；undefined 表示不在本次流式窗口内。 */
   streamingText: string | undefined
   /** 该消息的流式思考增量缓存。 */
@@ -49,7 +52,7 @@ function formatSeconds(ms: number): string {
 }
 
 /**
- * 助手消息：工作摘要（思考+工具聚合折叠，有过程内容时）+ 正文 + 状态/操作。
+ * 助手消息：思考、工具轨迹、正文与状态/操作。
  * 阶段推导：等待（无任何增量）→ 思考中 → 作答（流式光标）→ 完成。
  */
 function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
@@ -59,7 +62,6 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
   // 正文流式光标：只看该消息是否仍在流式增量（不参与阶段判断）。
   const answerStreaming = props.runActive && props.streamingText !== undefined
   // Run 级阶段由事件驱动（runActivity），不再靠内容有无猜测阶段。
-  const phase = props.runActivity?.phase
   // 连接 Provider 后首个增量到达前的空窗：用呼吸点告知“没有卡住”。
   const waiting =
     props.runActive &&
@@ -98,15 +100,10 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
   return (
     <div className="msg-assistant">
       <div className="assistant-main">
-        {(reasoningText !== '' || props.toolCalls.length > 0) && (
-          <WorkSummary
-            reasoningText={reasoningText}
-            phase={phase}
-            toolCalls={props.toolCalls}
-            runActive={props.runActive}
-            runDurationMs={props.runDurationMs}
-          />
+        {reasoningText !== '' && !props.hideReasoning && (
+          <ReasoningBlock text={reasoningText} />
         )}
+        <ToolTrace calls={props.toolCalls} runActive={props.runActive} />
         {waiting && (
           <div className="typing-dots" role="status" aria-label="正在思考">
             <span />
