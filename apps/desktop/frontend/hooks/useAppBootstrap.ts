@@ -20,6 +20,14 @@ export interface PendingApproval {
   summary: string
 }
 
+/** Run 级活动阶段：由事件驱动，对齐 Codex——不靠“内容长什么样”猜状态。 */
+export type RunPhase = 'thinking' | 'answering' | 'tool'
+export interface RunActivity {
+  phase: RunPhase
+  /** phase === 'tool' 时正在执行的工具名。 */
+  toolName?: string
+}
+
 /** Run 结束类事件：触发会话数据与列表刷新（标题可能已被自动命名）。 */
 const EVENT_TYPES_TRIGGERING_REFRESH = new Set([
   'message.completed',
@@ -47,6 +55,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
   bootstrap: BootstrapSnapshot | null
   streaming: Record<string, string>
   streamingReasoning: Record<string, string>
+  runActivities: Record<string, RunActivity>
   resetStreaming: () => void
   pendingApprovals: PendingApproval[]
   clearPendingApprovals: (runId: string) => void
@@ -93,11 +102,35 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     [deps],
   )
 
+  // Run 级活动阶段（对齐 Codex）：由事件驱动，终态才清除（锁存）。
+  // 用 ref 承载当前值，避免事件回调里的闭包读到过期 state。
+  const [runActivities, setRunActivities] = useState<
+    Record<string, RunActivity>
+  >({})
+  const runActivitiesRef = useRef<Record<string, RunActivity>>({})
+  const setRunActivity = useCallback((runId: string, activity: RunActivity) => {
+    const next = {
+      ...runActivitiesRef.current,
+      [runId]: activity,
+    }
+    runActivitiesRef.current = next
+    setRunActivities(next)
+  }, [])
+  const clearRunActivity = useCallback((runId: string) => {
+    if (!(runId in runActivitiesRef.current)) return
+    const next = { ...runActivitiesRef.current }
+    delete next[runId]
+    runActivitiesRef.current = next
+    setRunActivities(next)
+  }, [])
+
   const resetStreaming = useCallback((): void => {
     streamingRef.current = {}
     setStreaming({})
     streamingReasoningRef.current = {}
     setStreamingReasoning({})
+    runActivitiesRef.current = {}
+    setRunActivities({})
   }, [])
 
   /** Run 终态时清理该 Run 遗留的审批等待（取消/失败路径的兜底）。 */
@@ -179,6 +212,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
       await transport.attach()
       unlistenEvents = transport.onEvent((event: RuntimeEvent) => {
         if (event.type === 'message.delta') {
+          setRunActivity(event.runId, { phase: 'answering' })
           streamingRef.current = {
             ...streamingRef.current,
             [event.messageId]:
@@ -188,6 +222,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           return
         }
         if (event.type === 'message.reasoning_delta') {
+          setRunActivity(event.runId, { phase: 'thinking' })
           streamingReasoningRef.current = {
             ...streamingReasoningRef.current,
             [event.messageId]:
@@ -195,6 +230,18 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
               event.delta,
           }
           setStreamingReasoning(streamingReasoningRef.current)
+          return
+        }
+        if (event.type === 'run.started') {
+          setRunActivity(event.runId, { phase: 'thinking' })
+          return
+        }
+        if (event.type === 'tool.requested') {
+          setRunActivity(event.runId, {
+            phase: 'tool',
+            toolName: event.toolName,
+          })
+          scheduleToolRefresh()
           return
         }
         if (event.type === 'approval.required') {
@@ -216,10 +263,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           return
         }
         // 工具调用事件：防抖刷新当前会话，轨迹卡在 Run 进行中也能推进状态。
-        if (
-          event.type === 'tool.requested' ||
-          event.type === 'tool.completed'
-        ) {
+        if (event.type === 'tool.completed') {
           scheduleToolRefresh()
           return
         }
@@ -231,6 +275,13 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           return
         }
         if (EVENT_TYPES_TRIGGERING_REFRESH.has(event.type)) {
+          if (
+            event.type === 'run.completed' ||
+            event.type === 'run.failed' ||
+            event.type === 'run.cancelled'
+          ) {
+            clearRunActivity(event.runId)
+          }
           if (event.type === 'message.completed') {
             // 最终正文先落缓存占位，等刷新落地后再由 prune 清理，避免闪空。
             streamingRef.current = {
@@ -286,7 +337,9 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     loadInitialData,
     refreshAndPrune,
     clearPendingApprovals,
+    clearRunActivity,
     scheduleToolRefresh,
+    setRunActivity,
     showMemoryNotice,
   ])
 
@@ -294,6 +347,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     bootstrap,
     streaming,
     streamingReasoning,
+    runActivities,
     resetStreaming,
     pendingApprovals,
     clearPendingApprovals,

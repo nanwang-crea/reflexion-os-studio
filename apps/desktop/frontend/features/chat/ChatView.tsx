@@ -12,12 +12,14 @@ import { ApprovalCard } from './ApprovalCard'
 import { AssistantMessage } from './AssistantMessage'
 import { QueueBar } from './QueueBar'
 import type { SessionData } from '../../api/sessions'
-import type { PendingApproval } from '../../hooks/useAppBootstrap'
+import type { PendingApproval, RunActivity } from '../../hooks/useAppBootstrap'
 
 interface ChatViewProps {
   sessionData: SessionData | null
   streaming: Record<string, string>
   streamingReasoning: Record<string, string>
+  /** Run 级活动阶段（事件驱动，对齐 Codex）：决定状态行文案与折叠。 */
+  runActivities: Record<string, RunActivity>
   hasEnabledProvider: boolean
   permissionValue: string
   onPermissionChange: (value: string) => void
@@ -297,6 +299,11 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
                   message={message}
                   toolCalls={item.toolCalls}
                   runActive={runActive}
+                  runActivity={
+                    message.runId !== null
+                      ? props.runActivities[message.runId]
+                      : undefined
+                  }
                   streamingText={props.streaming[message.id]}
                   streamingReasoning={props.streamingReasoning[message.id]}
                   runDurationMs={computeRunDurationMs(runs, message)}
@@ -323,11 +330,11 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
       </div>
 
       {!props.hasEnabledProvider && (
-        <div className="inline-banner">
+        <div className="inline-banner" role="status" aria-live="polite">
           <span>
             尚未配置模型 Provider：请先在设置中填写 API Key 后再开始对话。
           </span>
-          <button className="ghost" onClick={props.onGoSettings}>
+          <button type="button" className="ghost" onClick={props.onGoSettings}>
             去配置
           </button>
         </div>

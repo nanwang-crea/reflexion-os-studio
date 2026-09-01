@@ -27,23 +27,26 @@ export function FileTree(props: FileTreeProps): React.JSX.Element {
   const [expanded, setExpanded] = useState<Set<string>>(new Set(['.']))
   const [rootError, setRootError] = useState<string | null>(null)
   const inFlight = useRef(new Set<string>())
+  // 项目代次：切项目/刷新时自增，旧的异步响应据此丢弃，避免污染新项目。
+  const generationRef = useRef(0)
 
   useEffect(() => {
-    let disposed = false
+    const generation = ++generationRef.current
+    inFlight.current.clear()
     void loadDir('.')
     async function loadDir(path: string): Promise<void> {
-      if (disposed || !props.systemReady) return
+      if (generation !== generationRef.current || !props.systemReady) return
       if (inFlight.current.has(path)) return
       inFlight.current.add(path)
       setRootError(null)
       setDirState((state) => new Map(state).set(path, 'loading'))
       try {
         const result = await listDir(props.projectId, path)
-        if (disposed) return
+        if (generation !== generationRef.current) return
         setEntries((map) => new Map(map).set(path, result.entries))
         setDirState((state) => new Map(state).set(path, 'loaded'))
       } catch (error) {
-        if (disposed) return
+        if (generation !== generationRef.current) return
         setDirState((state) => new Map(state).set(path, 'error'))
         setRootError(error instanceof Error ? error.message : String(error))
       } finally {
@@ -51,20 +54,27 @@ export function FileTree(props: FileTreeProps): React.JSX.Element {
       }
     }
     return () => {
-      disposed = true
+      // 不在此处自增：unmount 后停止即可，但切项目时是一般 effect 重新执行，
+      // 上面的代码路径会先自增 generation，因此旧的 loadDir/loadOnce 会自然失效。
     }
   }, [props.projectId, props.systemReady])
 
   const loadOnce = useCallback(
     async (path: string): Promise<void> => {
-      if (!props.systemReady) return
+      const generation = generationRef.current
+      if (!props.systemReady || inFlight.current.has(path)) return
+      inFlight.current.add(path)
       setDirState((state) => new Map(state).set(path, 'loading'))
       try {
         const result = await listDir(props.projectId, path)
+        if (generation !== generationRef.current) return
         setEntries((map) => new Map(map).set(path, result.entries))
         setDirState((state) => new Map(state).set(path, 'loaded'))
       } catch {
+        if (generation !== generationRef.current) return
         setDirState((state) => new Map(state).set(path, 'error'))
+      } finally {
+        inFlight.current.delete(path)
       }
     },
     [props.projectId, props.systemReady],

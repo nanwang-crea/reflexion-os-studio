@@ -1,18 +1,51 @@
 import { useEffect, useState } from 'react'
 import type { ProviderProfile } from '@reflexion-os-studio/runtime-client'
-import { RefreshIcon } from '../../ui/icons'
+import type { ConfirmDialogState } from '../../components/ConfirmDialog'
+import { BoxIcon, GearIcon, RefreshIcon, SparkIcon } from '../../ui/icons'
 import { AgentRuntimePanel } from './AgentRuntimePanel'
 import { McpPanel } from './McpPanel'
 import { ProviderEditor } from './ProviderEditor'
 import { ProviderList } from './ProviderList'
 
+type SettingsSection = 'models' | 'runtime' | 'mcp'
+
+const SECTIONS: {
+  id: SettingsSection
+  label: string
+  hint: string
+  icon: React.ReactNode
+}[] = [
+  {
+    id: 'models',
+    label: '模型供应商',
+    hint: '管理自定义模型供应商',
+    icon: <GearIcon size={15} />,
+  },
+  {
+    id: 'runtime',
+    label: 'Agent 运行时',
+    hint: '轮次、反思与重试等全局参数',
+    icon: <SparkIcon size={15} />,
+  },
+  {
+    id: 'mcp',
+    label: 'MCP 服务器',
+    hint: '接入外部工具服务',
+    icon: <BoxIcon size={15} />,
+  },
+]
+
 interface SettingsViewProps {
   profiles: ProviderProfile[]
   onSaved: () => Promise<void>
+  /** 顶部“返回对话”入口：点击回到聊天主视图。 */
+  onBackToChat: () => void
+  confirm: (state: ConfirmDialogState) => Promise<boolean>
 }
 
-/** 模型设置页：左栏供应商列表 + 右侧编辑器（拆分后的壳层）。 */
+/** 设置页：左侧分类导航 + 右侧对应面板；顶部提供返回对话入口。 */
 export function SettingsView(props: SettingsViewProps): React.JSX.Element {
+  const [section, setSection] = useState<SettingsSection>('models')
   const [selectedKey, setSelectedKey] = useState<string | null>(
     props.profiles[0]?.id ?? null,
   )
@@ -36,44 +69,96 @@ export function SettingsView(props: SettingsViewProps): React.JSX.Element {
   return (
     <div className="settings-view">
       <div className="settings-head">
+        <button
+          type="button"
+          className="ghost back-to-chat"
+          onClick={props.onBackToChat}
+        >
+          <span className="back-arrow" aria-hidden>
+            ←
+          </span>
+          返回对话
+        </button>
         <div>
-          <h2>模型设置</h2>
-          <p className="hint">
-            管理自定义模型供应商，配置后可在聊天时选择使用。
-          </p>
+          <h2>设置</h2>
+          <p className="hint">配置模型、Agent 运行时与外部工具</p>
         </div>
         <button
+          type="button"
           className="ghost"
           title="刷新列表"
+          aria-label="刷新模型供应商列表"
           onClick={() => void props.onSaved()}
         >
           <RefreshIcon />
         </button>
       </div>
 
-      <div className="provider-manager">
-        <ProviderList
-          profiles={props.profiles}
-          selectedKey={selectedKey}
-          onSelect={setSelectedKey}
-          creating={false}
-          onCreate={() => setSelectedKey('new')}
-        />
+      <div className="settings-layout">
+        <nav className="settings-nav" aria-label="设置分类">
+          {SECTIONS.map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              className={`settings-nav-item${
+                section === entry.id ? ' active' : ''
+              }`}
+              onClick={() => setSection(entry.id)}
+            >
+              {entry.icon}
+              <span className="settings-nav-label">{entry.label}</span>
+            </button>
+          ))}
+        </nav>
 
-        <section className="provider-detail">
-          <ProviderEditor
-            profile={selected}
-            isNew={selectedKey === 'new'}
-            profiles={props.profiles}
-            onSaved={props.onSaved}
-            onCreated={(id) => setSelectedKey(id)}
-            onDeleted={() => setSelectedKey(null)}
-          />
-        </section>
+        <div className="settings-content">
+          {section === 'models' && (
+            <>
+              <h3 className="settings-panel-title">模型供应商</h3>
+              <p className="hint">
+                管理自定义模型供应商，配置后可在聊天时选择使用。
+              </p>
+              <div className="provider-manager">
+                <ProviderList
+                  profiles={props.profiles}
+                  selectedKey={selectedKey}
+                  onSelect={setSelectedKey}
+                  creating={false}
+                  onCreate={() => setSelectedKey('new')}
+                />
+                <section className="provider-detail">
+                  <ProviderEditor
+                    profile={selected}
+                    isNew={selectedKey === 'new'}
+                    profiles={props.profiles}
+                    onSaved={props.onSaved}
+                    onCreated={(id) => setSelectedKey(id)}
+                    onDeleted={() => setSelectedKey(null)}
+                  />
+                </section>
+              </div>
+            </>
+          )}
+          {section === 'runtime' && (
+            <>
+              <h3 className="settings-panel-title">Agent 运行时</h3>
+              <p className="hint">
+                控制回复的轮次上限、失败反思与请求重试。留空使用内置默认。
+              </p>
+              <AgentRuntimePanel />
+            </>
+          )}
+          {section === 'mcp' && (
+            <>
+              <h3 className="settings-panel-title">MCP 服务器</h3>
+              <p className="hint">
+                添加 MCP 服务器后，其工具自动进入 Agent 工具集。
+              </p>
+              <McpPanel confirm={props.confirm} />
+            </>
+          )}
+        </div>
       </div>
-
-      <AgentRuntimePanel />
-      <McpPanel />
     </div>
   )
 }

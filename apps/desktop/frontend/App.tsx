@@ -78,6 +78,7 @@ export default function App() {
   const confirmResolverRef = useRef<((ok: boolean) => void) | null>(null)
   const activeProjectRef = useRef<string | null>(null)
   const activeSessionRef = useRef<string | null>(null)
+  const sessionRequestRef = useRef(0)
 
   useEffect(() => {
     localStorage.setItem('reflexion.sidebarOpen', sidebarOpen ? '1' : '0')
@@ -92,8 +93,10 @@ export default function App() {
     useModelSelection(profiles, sessionData, activeSessionId)
 
   const refreshSessionData = useCallback(async (sessionId: string) => {
+    const requestId = ++sessionRequestRef.current
     const result = await getSessionData(sessionId)
-    setSessionData(result)
+    // 请求期间可能已切换到其他会话：丢弃过期响应，避免旧会话覆盖当前页。
+    if (requestId === sessionRequestRef.current) setSessionData(result)
   }, [])
 
   const refreshProfiles = useCallback(async () => {
@@ -145,6 +148,7 @@ export default function App() {
     bootstrap,
     streaming,
     streamingReasoning,
+    runActivities,
     resetStreaming,
     pendingApprovals,
     memoryNotice,
@@ -382,9 +386,13 @@ export default function App() {
         </header>
 
         {notice && (
-          <div className="notice">
+          <div className="notice" role="alert" aria-live="assertive">
             <span>{notice}</span>
-            <button className="ghost" onClick={() => setNotice(null)}>
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => setNotice(null)}
+            >
               关闭
             </button>
           </div>
@@ -396,6 +404,8 @@ export default function App() {
               <SettingsView
                 profiles={profiles}
                 onSaved={() => refreshProfiles()}
+                onBackToChat={() => setView('chat')}
+                confirm={confirm}
               />
             ) : view === 'memories' ? (
               <MemoryView confirm={confirm} />
@@ -417,6 +427,7 @@ export default function App() {
                 sessionData={sessionData}
                 streaming={streaming}
                 streamingReasoning={streamingReasoning}
+                runActivities={runActivities}
                 hasEnabledProvider={hasEnabledProvider}
                 permissionValue={permissionMode}
                 onPermissionChange={changePermissionMode}

@@ -3,23 +3,116 @@
 .settings-view {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
   padding: 24px 32px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
 }
 
 .settings-head {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.settings-head > div {
+  flex: 1;
 }
 
 .settings-head h2 {
-  margin: 0 0 6px;
+  margin: 0 0 4px;
   font-size: 22px;
+}
+
+.back-to-chat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.back-arrow {
+  font-size: 17px;
+  line-height: 1;
+}
+
+.settings-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 20px;
+}
+
+.settings-nav {
+  width: 210px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: rgba(23, 23, 23, 0.35);
+}
+
+.settings-nav-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: 100%;
+  padding: 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  text-align: left;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.settings-nav-item:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.settings-nav-item.active {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.settings-nav-item svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.settings-nav-label {
+  min-width: 0;
+}
+
+.settings-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.settings-panel-title {
+  margin: 2px 0 4px;
+  font-size: 18px;
+}
+
+.settings-content > .hint {
+  margin: 0 0 14px;
+}
+
+/* 各面板现在独占一节，去掉旧版“同页上下堆叠”时的分隔线/外边距。 */
+.settings-content .agent-runtime,
+.settings-content .mcp-panel {
+  margin-top: 0;
+  border-top: none;
+  padding-top: 0;
 }
 
 .settings-view .hint {
@@ -409,6 +502,16 @@
 
 .mcp-status.bad {
   color: var(--danger);
+}
+
+.mcp-error {
+  display: block;
+  max-width: 560px;
+  margin-top: 2px;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .mcp-empty {

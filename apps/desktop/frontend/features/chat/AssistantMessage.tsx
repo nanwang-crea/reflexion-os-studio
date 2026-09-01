@@ -11,6 +11,7 @@ import {
   MessageMarkdown,
 } from '../../components/MessageMarkdown'
 import { WorkSummary } from './WorkSummary'
+import type { RunActivity } from '../../hooks/useAppBootstrap'
 
 const MESSAGE_STATUS_LABELS: Record<string, string> = {
   interrupted: '已中断',
@@ -23,6 +24,8 @@ interface AssistantMessageProps {
   toolCalls: ToolCall[]
   /** 会话内是否有进行中的 Run；配合流式缓存区分等待/思考/作答阶段。 */
   runActive: boolean
+  /** Run 级事件驱动活动阶段；undefined 表示 Run 已结束或暂无活动。 */
+  runActivity?: RunActivity
   /** 该消息的流式正文增量缓存；undefined 表示不在本次流式窗口内。 */
   streamingText: string | undefined
   /** 该消息的流式思考增量缓存。 */
@@ -55,11 +58,10 @@ export function AssistantMessage(
   const [copied, setCopied] = useState(false)
   const contentText = props.streamingText ?? props.message.content
   const reasoningText = props.streamingReasoning ?? props.message.reasoning
+  // 正文流式光标：只看该消息是否仍在流式增量（不参与阶段判断）。
   const answerStreaming = props.runActive && props.streamingText !== undefined
-  const thinkingStreaming =
-    props.runActive &&
-    props.streamingReasoning !== undefined &&
-    props.streamingText === undefined
+  // Run 级阶段由事件驱动（runActivity），不再靠内容有无猜测阶段。
+  const phase = props.runActivity?.phase
   // 连接 Provider 后首个增量到达前的空窗：用呼吸点告知“没有卡住”。
   const waiting =
     props.runActive &&
@@ -101,7 +103,7 @@ export function AssistantMessage(
         {(reasoningText !== '' || props.toolCalls.length > 0) && (
           <WorkSummary
             reasoningText={reasoningText}
-            thinkingStreaming={thinkingStreaming}
+            phase={phase}
             toolCalls={props.toolCalls}
             runActive={props.runActive}
             runDurationMs={props.runDurationMs}

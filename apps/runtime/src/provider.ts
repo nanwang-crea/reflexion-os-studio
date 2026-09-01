@@ -107,10 +107,28 @@ function isAbort(error: unknown): boolean {
 }
 
 /**
+ * 部分 Provider(如某些聚合/中转服务)只接受 a-z A-Z 0-9 _ - 的工具名，
+ * 而内部 canonical 名含点号(web.fetch)或斜杠(MCP 的 serverId/toolName)。
+ * 在 Provider 方言边界做一次确定性清洗，并维护 清洗名 ⇄ 原始名 双向映射：
+ * 发送给模型用清洗名，模型回传的工具调用再映射回原始名交给 ToolRegistry，
+ * 从而不污染内部/MCP 原始协议名。
+ */
+const SAFE_NAME_RE = /[^a-zA-Z0-9_-]/g
+const MAX_SAFE_NAME_LEN = 64
+
+function sanitizeToolName(name: string): string {
+  const cleaned = name.replace(SAFE_NAME_RE, '_')
+  return (cleaned === '' ? '_' : cleaned).slice(0, MAX_SAFE_NAME_LEN)
+}
+
+/**
  * canonical ModelMessage 投影为 OpenAI chat 方言：
  * assistant 的工具调用回到 tool_calls 数组，工具结果走 role=tool + tool_call_id。
  */
-function toProviderMessage(message: ModelMessage): Record<string, unknown> {
+function toProviderMessage(
+  message: ModelMessage,
+  canonicalToProvider: ReadonlyMap<string, string>,
+): Record<string, unknown> {
   switch (message.role) {
     case 'system':
     case 'user':
@@ -124,7 +142,10 @@ function toProviderMessage(message: ModelMessage): Record<string, unknown> {
               tool_calls: message.toolCalls.map((call) => ({
                 id: call.id,
                 type: 'function',
-                function: { name: call.name, arguments: call.arguments },
+                function: {
+                  name: canonicalToProvider.get(call.name) ?? call.name,
+                  arguments: call.arguments,
+                },
               })),
             }
           : {}),
@@ -149,17 +170,35 @@ export async function streamChatCompletion(
   // 请求建立阶段的重试:网络错误、429、5xx。流读取开始后不重试
   // (已吐出的 delta 无法回滚),避免 UI 文本重复。
   const maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES
+
+  // canonical 名 ⇄ Provider 清洗名的双向映射：同一请求内固定，只构建一次。
+  // 清洗后可能重名(canonical 点号/斜杠不同但清洗结果相同)，冲突时追加数字后缀。
+  const canonicalToProvider = new Map<string, string>()
+  const providerToCanonical = new Map<string, string>()
+  const usedNames = new Set<string>()
+  for (const tool of options.tools ?? []) {
+    let safeName = sanitizeToolName(tool.name)
+    let suffix = 2
+    while (usedNames.has(safeName)) {
+      safeName = `${sanitizeToolName(tool.name)}_${suffix}`
+      suffix += 1
+    }
+    usedNames.add(safeName)
+    canonicalToProvider.set(tool.name, safeName)
+    providerToCanonical.set(safeName, tool.name)
+  }
+
   let attempt = 0
   let response: Response
   for (;;) {
     try {
-      // canonical 工具声明投影为 OpenAI function calling 方言。
+      // canonical 工具声明投影为 OpenAI function calling 方言，名称用清洗后的合法名。
       const tools =
         options.tools && options.tools.length > 0
           ? options.tools.map((tool) => ({
               type: 'function',
               function: {
-                name: tool.name,
+                name: canonicalToProvider.get(tool.name) ?? tool.name,
                 description: tool.description,
                 parameters: tool.parameters,
               },
@@ -175,7 +214,9 @@ export async function streamChatCompletion(
           },
           body: JSON.stringify({
             model: options.model,
-            messages: options.messages.map(toProviderMessage),
+            messages: options.messages.map((message) =>
+              toProviderMessage(message, canonicalToProvider),
+            ),
             stream: true,
             stream_options: { include_usage: true },
             ...(options.maxTokens !== undefined
@@ -322,7 +363,10 @@ export async function streamChatCompletion(
 
   const toolCalls = [...toolCallByIndex.entries()]
     .sort(([a], [b]) => a - b)
-    .map(([, toolCall]) => toolCall)
+    .map(([, toolCall]) => ({
+      ...toolCall,
+      name: providerToCanonical.get(toolCall.name) ?? toolCall.name,
+    }))
 
   return { content, reasoning, finishReason, usage, toolCalls }
 }

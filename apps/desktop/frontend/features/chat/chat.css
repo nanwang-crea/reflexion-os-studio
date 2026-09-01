@@ -708,44 +708,45 @@ button.link {
   }
 }
 
-/* ---------- 工具轨迹明细 ---------- */
+/* ---------- 工具轨迹明细（Codex 风格：紧凑单行，点开看细节） ---------- */
 
 .tool-trace {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 1px;
 }
 
 .tool-trace-item {
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: var(--bg-inset);
-  overflow: hidden;
+  border-radius: 6px;
 }
 
-.tool-trace-item > summary {
+.tool-trace-item:hover {
+  background: var(--bg-hover);
+}
+
+.tool-trace-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 10px;
+  width: 100%;
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+  border-radius: 6px;
   font-size: 12.5px;
   color: var(--text-secondary);
+  text-align: left;
   cursor: pointer;
-  list-style: none;
   user-select: none;
 }
 
-.tool-trace-item > summary::-webkit-details-marker {
-  display: none;
-}
-
-.tool-trace-item > summary:hover {
+.tool-trace-row:hover {
   color: var(--text);
 }
 
 .trace-dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   flex-shrink: 0;
   border-radius: 50%;
   background: var(--text-muted);
@@ -786,6 +787,7 @@ button.link {
   white-space: nowrap;
   color: var(--text-muted);
   font-family: var(--mono);
+  font-size: 12px;
 }
 
 .trace-status {
@@ -800,8 +802,7 @@ button.link {
 
 .trace-detail {
   margin: 0;
-  padding: 8px 12px 10px;
-  border-top: 1px solid var(--border-subtle);
+  padding: 4px 8px 8px 22px;
   font-family: var(--mono);
   font-size: 12px;
   line-height: 1.6;
