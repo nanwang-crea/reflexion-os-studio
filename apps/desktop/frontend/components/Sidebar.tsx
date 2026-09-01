@@ -76,8 +76,8 @@ function groupByTime(sessions: Session[]): [string, Session[]][] {
 }
 
 /**
- * 桌面版 Codex 式单列侧栏：顶部品牌 + 新建对话，搜索框，
- * 下方项目/对话分组列表，顶部导航进技能/自动化/记忆，
+ * 桌面版 Codex 式单列侧栏：顶部品牌，导航区提供新建对话入口，
+ * 下方项目/对话分组列表，导航区进入技能/自动化/记忆，
  * 底部固定设置入口。点导航打开对应主区页面；点已激活项回到聊天
  * （与旧图标轨行为一致）。
  */
@@ -92,17 +92,20 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
           R
         </span>
         <span className="brand-name">ReflexionOS</span>
-        <button
-          type="button"
-          className="icon-btn"
-          title="新建对话"
-          aria-label="新建对话"
-          onClick={props.onNewChat}
-        >
-          <PlusIcon />
-        </button>
       </header>
       <nav className="sidebar-nav" aria-label="页面导航">
+        <NavItem
+          label="新建对话"
+          icon={<PlusIcon />}
+          active={false}
+          onClick={() => {
+            if (props.activeProjectId) {
+              props.onNewSessionInProject(props.activeProjectId)
+            } else {
+              props.onNewChat()
+            }
+          }}
+        />
         <NavItem
           label="技能"
           icon={<SparkIcon size={15} />}
