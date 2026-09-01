@@ -176,16 +176,26 @@ export async function streamChatCompletion(
   const canonicalToProvider = new Map<string, string>()
   const providerToCanonical = new Map<string, string>()
   const usedNames = new Set<string>()
-  for (const tool of options.tools ?? []) {
-    let safeName = sanitizeToolName(tool.name)
+  const canonicalNames = new Set((options.tools ?? []).map((tool) => tool.name))
+  for (const message of options.messages) {
+    if (message.role !== 'assistant') continue
+    for (const call of message.toolCalls) canonicalNames.add(call.name)
+  }
+  for (const canonicalName of canonicalNames) {
+    let safeName = sanitizeToolName(canonicalName)
     let suffix = 2
     while (usedNames.has(safeName)) {
-      safeName = `${sanitizeToolName(tool.name)}_${suffix}`
+      const suffixText = `_${suffix}`
+      const base = sanitizeToolName(canonicalName).slice(
+        0,
+        MAX_SAFE_NAME_LEN - suffixText.length,
+      )
+      safeName = `${base}${suffixText}`
       suffix += 1
     }
     usedNames.add(safeName)
-    canonicalToProvider.set(tool.name, safeName)
-    providerToCanonical.set(safeName, tool.name)
+    canonicalToProvider.set(canonicalName, safeName)
+    providerToCanonical.set(safeName, canonicalName)
   }
 
   let attempt = 0

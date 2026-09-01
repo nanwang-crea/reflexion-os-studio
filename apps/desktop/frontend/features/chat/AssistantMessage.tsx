@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import type {
   Message,
   ResourceLink,
@@ -52,9 +52,7 @@ function formatSeconds(ms: number): string {
  * 助手消息：工作摘要（思考+工具聚合折叠，有过程内容时）+ 正文 + 状态/操作。
  * 阶段推导：等待（无任何增量）→ 思考中 → 作答（流式光标）→ 完成。
  */
-export function AssistantMessage(
-  props: AssistantMessageProps,
-): React.JSX.Element {
+function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
   const [copied, setCopied] = useState(false)
   const contentText = props.streamingText ?? props.message.content
   const reasoningText = props.streamingReasoning ?? props.message.reasoning
@@ -189,3 +187,5 @@ export function AssistantMessage(
     </div>
   )
 }
+
+export const AssistantMessage = memo(AssistantMessageView)

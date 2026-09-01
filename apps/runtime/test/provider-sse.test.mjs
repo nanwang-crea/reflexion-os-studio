@@ -154,7 +154,7 @@ test('canonical ToolSpec is projected into OpenAI function tools', async () => {
     {
       type: 'function',
       function: {
-        name: 'file.read',
+        name: 'file_read',
         description: '读取文件',
         parameters: {
           type: 'object',
@@ -192,6 +192,14 @@ test('streamChatCompletion accumulates tool_call deltas by index', async () => {
       model: 'mock-model',
       messages: [{ role: 'user', content: 'hi' }],
       signal: new AbortController().signal,
+      tools: [
+        { name: 'file.read', description: '', parameters: { type: 'object' } },
+        {
+          name: 'shell.execute',
+          description: '',
+          parameters: { type: 'object' },
+        },
+      ],
     },
     () => {},
   )
@@ -202,6 +210,51 @@ test('streamChatCompletion accumulates tool_call deltas by index', async () => {
     { id: 'call-a', name: 'file.read', arguments: '{"path":"a.ts"}' },
     { id: 'call-b', name: 'shell.execute', arguments: '{"command":"ls"}' },
   ])
+})
+
+test('sanitized tool names reverse-map streamed calls and stay within 64 chars', async () => {
+  let requestBody = null
+  const server = await startServer((request, response) => {
+    let raw = ''
+    request.on('data', (chunk) => (raw += chunk))
+    request.on('end', () => {
+      requestBody = JSON.parse(raw)
+      response.writeHead(200, { 'content-type': 'text/event-stream' })
+      response.end(
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c","function":{"name":"file_read_2","arguments":"{}"}}]},"finish_reason":"tool_calls"}]}\n\ndata: [DONE]\n\n',
+      )
+    })
+  })
+  const result = await streamChatCompletion(
+    {
+      baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
+      apiKey: 'sk-test',
+      model: 'mock-model',
+      messages: [{ role: 'user', content: 'hi' }],
+      signal: new AbortController().signal,
+      tools: [
+        { name: 'file.read', description: '', parameters: { type: 'object' } },
+        { name: 'file/read', description: '', parameters: { type: 'object' } },
+        {
+          name: 'a'.repeat(64),
+          description: '',
+          parameters: { type: 'object' },
+        },
+        {
+          name: 'a'.repeat(64) + '.',
+          description: '',
+          parameters: { type: 'object' },
+        },
+      ],
+    },
+    () => {},
+  )
+  server.close()
+  assert.deepEqual(
+    requestBody.tools.map((tool) => tool.function.name),
+    ['file_read', 'file_read_2', 'a'.repeat(64), 'a'.repeat(62) + '_2'],
+  )
+  assert.equal(result.toolCalls[0].name, 'file/read')
 })
 
 test('canonical ModelMessage projects to OpenAI wire dialect', async () => {
@@ -224,6 +277,13 @@ test('canonical ModelMessage projects to OpenAI wire dialect', async () => {
       apiKey: 'sk-test',
       model: 'mock-model',
       signal: new AbortController().signal,
+      tools: [
+        {
+          name: 'file.read',
+          description: '读取文件',
+          parameters: { type: 'object' },
+        },
+      ],
       messages: [
         { role: 'system', content: 'sys' },
         { role: 'user', content: 'hi' },
@@ -255,7 +315,7 @@ test('canonical ModelMessage projects to OpenAI wire dialect', async () => {
         {
           id: 'call-9',
           type: 'function',
-          function: { name: 'file.read', arguments: '{"path":"a.ts"}' },
+          function: { name: 'file_read', arguments: '{"path":"a.ts"}' },
         },
       ],
     },

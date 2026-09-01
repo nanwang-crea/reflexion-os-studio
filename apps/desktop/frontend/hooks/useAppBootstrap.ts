@@ -68,12 +68,28 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     Record<string, string>
   >({})
   const streamingReasoningRef = useRef<Record<string, string>>({})
+  const streamRunRef = useRef<Record<string, string>>({})
+  const streamingFlushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const streamingFlushPending = useRef(false)
+  const flushStreaming = useCallback((): void => {
+    streamingFlushTimer.current = null
+    if (!streamingFlushPending.current) return
+    streamingFlushPending.current = false
+    setStreaming({ ...streamingRef.current })
+    setStreamingReasoning({ ...streamingReasoningRef.current })
+  }, [])
+  const scheduleStreamingFlush = useCallback((): void => {
+    streamingFlushPending.current = true
+    if (streamingFlushTimer.current !== null) return
+    streamingFlushTimer.current = setTimeout(flushStreaming, 16)
+  }, [flushStreaming])
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>(
     [],
   )
   // A2 Memory：非打断式写入提示（顶栏角标，自动消失），不用弹窗。
   const [memoryNotice, setMemoryNotice] = useState<string | null>(null)
   const memoryNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const initialRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const showMemoryNotice = useCallback((text: string): void => {
     if (memoryNoticeTimer.current) clearTimeout(memoryNoticeTimer.current)
     setMemoryNotice(text)
@@ -129,6 +145,12 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     setStreaming({})
     streamingReasoningRef.current = {}
     setStreamingReasoning({})
+    streamRunRef.current = {}
+    if (streamingFlushTimer.current !== null) {
+      clearTimeout(streamingFlushTimer.current)
+      streamingFlushTimer.current = null
+    }
+    streamingFlushPending.current = false
     runActivitiesRef.current = {}
     setRunActivities({})
   }, [])
@@ -146,35 +168,48 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
    * 会先把最终正文写入缓存），避免刷新落地前消息闪空；刷新完成后仅移除
    * 刷新开始时已存在的键，不会误伤期间新启动 Run 的 delta。
    */
-  const refreshAndPrune = useCallback((): void => {
-    const staleContent = Object.keys(streamingRef.current)
-    const staleReasoning = Object.keys(streamingReasoningRef.current)
-    const sessionId = deps.activeSessionRef.current
-    const refresh =
-      sessionId !== null
-        ? deps.refreshSessionData(sessionId).catch(() => undefined)
-        : Promise.resolve()
-    void refresh.finally(() => {
-      if (staleContent.length === 0 && staleReasoning.length === 0) return
-      let contentChanged = false
-      for (const id of staleContent) {
-        if (id in streamingRef.current) {
-          delete streamingRef.current[id]
-          contentChanged = true
+  const refreshAndPrune = useCallback(
+    (runId: string, messageId?: string): void => {
+      const belongsToScope = (id: string): boolean =>
+        messageId !== undefined
+          ? id === messageId
+          : streamRunRef.current[id] === runId
+      const staleContent = Object.keys(streamingRef.current).filter(
+        belongsToScope,
+      )
+      const staleReasoning = Object.keys(streamingReasoningRef.current).filter(
+        belongsToScope,
+      )
+      const sessionId = deps.activeSessionRef.current
+      const refresh =
+        sessionId !== null
+          ? deps.refreshSessionData(sessionId).catch(() => undefined)
+          : Promise.resolve()
+      void refresh.finally(() => {
+        if (messageId === undefined) clearRunActivity(runId)
+        let contentChanged = false
+        for (const id of staleContent) {
+          if (id in streamingRef.current && belongsToScope(id)) {
+            delete streamingRef.current[id]
+            delete streamRunRef.current[id]
+            contentChanged = true
+          }
         }
-      }
-      let reasoningChanged = false
-      for (const id of staleReasoning) {
-        if (id in streamingReasoningRef.current) {
-          delete streamingReasoningRef.current[id]
-          reasoningChanged = true
+        let reasoningChanged = false
+        for (const id of staleReasoning) {
+          if (id in streamingReasoningRef.current && belongsToScope(id)) {
+            delete streamingReasoningRef.current[id]
+            delete streamRunRef.current[id]
+            reasoningChanged = true
+          }
         }
-      }
-      if (contentChanged) setStreaming({ ...streamingRef.current })
-      if (reasoningChanged)
-        setStreamingReasoning({ ...streamingReasoningRef.current })
-    })
-  }, [deps])
+        if (contentChanged) setStreaming({ ...streamingRef.current })
+        if (reasoningChanged)
+          setStreamingReasoning({ ...streamingReasoningRef.current })
+      })
+    },
+    [deps, clearRunActivity],
+  )
 
   /** 启动期初始数据：并行拉取，失败自动重试一次后降级为通知（非致命）。 */
   const loadInitialData = useCallback(
@@ -195,7 +230,12 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
       let failure = findFailure(await fetchAll())
       if (failure && retry) {
         // sidecar 就绪竞态等瞬时错误：稍等后自动重试一次
-        await new Promise((resolve) => setTimeout(resolve, 2000))
+        await new Promise<void>((resolve) => {
+          initialRetryTimer.current = setTimeout(() => {
+            initialRetryTimer.current = null
+            resolve()
+          }, 2000)
+        })
         failure = findFailure(await fetchAll())
       }
       if (failure) fail(failure.reason)
@@ -210,26 +250,30 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
 
     const start = async (): Promise<void> => {
       await transport.attach()
+      if (disposed) return
       unlistenEvents = transport.onEvent((event: RuntimeEvent) => {
+        if (disposed) return
         if (event.type === 'message.delta') {
           setRunActivity(event.runId, { phase: 'answering' })
+          streamRunRef.current[event.messageId] = event.runId
           streamingRef.current = {
             ...streamingRef.current,
             [event.messageId]:
               (streamingRef.current[event.messageId] ?? '') + event.delta,
           }
-          setStreaming(streamingRef.current)
+          scheduleStreamingFlush()
           return
         }
         if (event.type === 'message.reasoning_delta') {
           setRunActivity(event.runId, { phase: 'thinking' })
+          streamRunRef.current[event.messageId] = event.runId
           streamingReasoningRef.current = {
             ...streamingReasoningRef.current,
             [event.messageId]:
               (streamingReasoningRef.current[event.messageId] ?? '') +
               event.delta,
           }
-          setStreamingReasoning(streamingReasoningRef.current)
+          scheduleStreamingFlush()
           return
         }
         if (event.type === 'run.started') {
@@ -275,20 +319,14 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           return
         }
         if (EVENT_TYPES_TRIGGERING_REFRESH.has(event.type)) {
-          if (
-            event.type === 'run.completed' ||
-            event.type === 'run.failed' ||
-            event.type === 'run.cancelled'
-          ) {
-            clearRunActivity(event.runId)
-          }
           if (event.type === 'message.completed') {
             // 最终正文先落缓存占位，等刷新落地后再由 prune 清理，避免闪空。
+            streamRunRef.current[event.messageId] = event.runId
             streamingRef.current = {
               ...streamingRef.current,
               [event.messageId]: event.content,
             }
-            setStreaming(streamingRef.current)
+            scheduleStreamingFlush()
           }
           // Provider/网络等失败原因必须可见：直接进顶部通知条。
           if (event.type === 'run.failed') {
@@ -299,7 +337,10 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           const projectId = deps.activeProjectRef.current
           if (projectId) void deps.refreshProjectSessions(projectId)
           clearPendingApprovals(event.runId)
-          refreshAndPrune()
+          refreshAndPrune(
+            event.runId,
+            event.type === 'message.completed' ? event.messageId : undefined,
+          )
         }
       })
       unlistenState = await listen<BootstrapSnapshot>(
@@ -308,14 +349,21 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           if (!disposed) setBootstrap(event.payload)
         },
       )
+      if (disposed) {
+        unlistenState()
+        unlistenEvents?.()
+        return
+      }
+      const snapshot = await invoke<BootstrapSnapshot>('bootstrap_get_state')
       if (disposed) return
-      setBootstrap(await invoke<BootstrapSnapshot>('bootstrap_get_state'))
+      setBootstrap(snapshot)
       // 启动期数据拉取不属于引导本身：失败只降级为通知并自动重试一次，
       // 不把整个应用打成启动失败（sidecar 就绪竞态、瞬时错误都能自愈）。
       void loadInitialData()
     }
 
     void start().catch((error: unknown) => {
+      if (disposed) return
       setBootstrap({
         state: 'error',
         runtimeReady: false,
@@ -328,6 +376,15 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
       disposed = true
       if (toolRefreshTimer.current) clearTimeout(toolRefreshTimer.current)
       if (memoryNoticeTimer.current) clearTimeout(memoryNoticeTimer.current)
+      if (streamingFlushTimer.current) {
+        clearTimeout(streamingFlushTimer.current)
+        streamingFlushTimer.current = null
+      }
+      streamingFlushPending.current = false
+      if (initialRetryTimer.current) {
+        clearTimeout(initialRetryTimer.current)
+        initialRetryTimer.current = null
+      }
       unlistenState?.()
       unlistenEvents?.()
     }
@@ -339,6 +396,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     clearPendingApprovals,
     clearRunActivity,
     scheduleToolRefresh,
+    scheduleStreamingFlush,
     setRunActivity,
     showMemoryNotice,
   ])

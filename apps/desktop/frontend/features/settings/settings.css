@@ -54,7 +54,7 @@
   padding: 8px;
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
-  background: rgba(23, 23, 23, 0.35);
+  background: var(--surface-translucent);
 }
 
 .settings-nav-item {
@@ -126,7 +126,7 @@
   display: flex;
   border: 1px solid var(--border-subtle);
   border-radius: 14px;
-  background: rgba(23, 23, 23, 0.55);
+  background: var(--surface-overlay);
   overflow: hidden;
 }
 

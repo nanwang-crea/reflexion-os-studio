@@ -210,6 +210,7 @@ button.link {
   word-break: break-word;
   max-height: 200px;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* ---------- 流式状态指示 ---------- */
@@ -599,7 +600,7 @@ button.link {
 
 .composer-send:hover:not(:disabled),
 .composer-stop:hover:not(:disabled) {
-  background: #ffffff;
+  background: var(--text);
 }
 
 .composer-send:disabled {
@@ -811,6 +812,7 @@ button.link {
   word-break: break-word;
   max-height: 220px;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* ---------- 工具审批卡 ---------- */

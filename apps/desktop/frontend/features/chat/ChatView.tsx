@@ -204,20 +204,20 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
         run.status === 'running' ||
         run.status === 'awaiting_approval',
     )
-  const activeRunIds = useMemo(
-    () =>
-      new Set(
-        runs
-          .filter(
-            (run) =>
-              run.status === 'created' ||
-              run.status === 'running' ||
-              run.status === 'awaiting_approval',
-          )
-          .map((run) => run.id),
-      ),
-    [runs],
-  )
+  const activeRunIds = useMemo(() => {
+    const ids = new Set(
+      runs
+        .filter(
+          (run) =>
+            run.status === 'created' ||
+            run.status === 'running' ||
+            run.status === 'awaiting_approval',
+        )
+        .map((run) => run.id),
+    )
+    for (const runId of Object.keys(props.runActivities)) ids.add(runId)
+    return ids
+  }, [runs, props.runActivities])
   // 过程轮次吸附到最终回答：每条工具/思考消息不再各自显示折叠行。
   const displayItems = useMemo(
     () => buildDisplayItems(messages, toolCallsByMessage, activeRunIds),
@@ -253,6 +253,11 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
     const el = scrollRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [messages.length, props.streaming, props.streamingReasoning, pinned])
+
+  const { onRetry } = props
+  const handleRetry = useCallback((): void => {
+    void onRetry()
+  }, [onRetry])
 
   const scrollToBottom = (): void => {
     const el = scrollRef.current
@@ -298,7 +303,9 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
                   key={message.id}
                   message={message}
                   toolCalls={item.toolCalls}
-                  runActive={runActive}
+                  runActive={
+                    message.runId !== null && activeRunIds.has(message.runId)
+                  }
                   runActivity={
                     message.runId !== null
                       ? props.runActivities[message.runId]
@@ -315,7 +322,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
                     lastRetryableRun !== undefined &&
                     lastRetryableRun.id === message.runId
                   }
-                  onRetry={() => void props.onRetry()}
+                  onRetry={handleRetry}
                   onResourceClick={props.onResourceClick}
                 />
               )
