@@ -10,6 +10,8 @@ import {
   WorkspaceIndexSnapshotSchema,
   QueueEntrySchema,
   McpServerSchema,
+  PlanSchema,
+  PlanStepSchema,
 } from './entities.js'
 import { RuntimeErrorSchema } from './errors.js'
 import { RuntimeStatusSchema } from './handshake.js'
@@ -88,6 +90,19 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     type: z.literal('run.cancelled'),
   }),
   // 工具调用与审批事件（Agent Core 阶段开始发出；A0 先固定契约）。
+  RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('plan.created'),
+    plan: PlanSchema,
+  }),
+  RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('plan.step.updated'),
+    planId: z.string().min(1),
+    step: PlanStepSchema,
+  }),
+  RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('plan.updated'),
+    plan: PlanSchema,
+  }),
   RuntimeEventEnvelopeSchema.extend({
     type: z.literal('tool.requested'),
     toolCallId: z.string().min(1),

@@ -46,8 +46,33 @@ CREATE TABLE IF NOT EXISTS runs (
   parent_run_id TEXT,
   delegation_id TEXT,
   skill_id TEXT,
-  usage_json TEXT
+  usage_json TEXT,
+  plan_id TEXT REFERENCES plans(id) ON DELETE SET NULL,
+  plan_step_id TEXT REFERENCES plan_steps(id) ON DELETE SET NULL
 );
+CREATE TABLE IF NOT EXISTS plans (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
+  goal TEXT NOT NULL,
+  status TEXT NOT NULL,
+  summary TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  completed_at TEXT
+);
+CREATE TABLE IF NOT EXISTS plan_steps (
+  id TEXT PRIMARY KEY,
+  plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  status TEXT NOT NULL,
+  note TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_plans_session ON plans(session_id, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_plans_one_active_session ON plans(session_id) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_plan_steps_plan ON plan_steps(plan_id, created_at);
 CREATE TABLE IF NOT EXISTS tool_calls (
   id TEXT PRIMARY KEY,
   run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
@@ -165,7 +190,7 @@ CREATE TABLE IF NOT EXISTS assets (
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 14
+export const LATEST_SCHEMA_VERSION = 15
 
 const SESSIONS_TABLE_V1 = `
 CREATE TABLE sessions (
@@ -405,6 +430,13 @@ export function runMigrations(db: DatabaseSync): void {
       ) {
         db.exec('ALTER TABLE sessions ADD COLUMN git_branch TEXT')
       }
+    }
+    if (version < 15) {
+      const runColumns = tableColumns(db, 'runs').map((column) => column.name)
+      if (!runColumns.includes('plan_id'))
+        db.exec('ALTER TABLE runs ADD COLUMN plan_id TEXT')
+      if (!runColumns.includes('plan_step_id'))
+        db.exec('ALTER TABLE runs ADD COLUMN plan_step_id TEXT')
     }
     db.exec('COMMIT')
     // 迁移全部执行完毕才推进版本号；否则下次启动会重复进入迁移分支。

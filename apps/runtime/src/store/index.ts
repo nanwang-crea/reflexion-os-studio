@@ -13,6 +13,7 @@ import { SessionStore } from './sessions.js'
 import { ToolCallStore } from './toolCalls.js'
 import { WorkspaceIndexStore } from './workspaceIndex.js'
 import { AssetStore } from './assets.js'
+import { PlanStore } from './plans.js'
 
 export { DEFAULT_SESSION_TITLE, resolveDataDir } from './shared.js'
 
@@ -33,6 +34,7 @@ export class Store {
   readonly assetStore: AssetStore
   readonly agentSettings: AgentSettingsStore
   readonly mcpServers: McpServerStore
+  readonly plans: PlanStore
 
   constructor(dir: string) {
     mkdirSync(dir, { recursive: true })
@@ -56,6 +58,7 @@ export class Store {
     this.assetStore = new AssetStore(this.db)
     this.agentSettings = new AgentSettingsStore(this.db)
     this.mcpServers = new McpServerStore(this.db)
+    this.plans = new PlanStore(this.db)
 
     // 启动恢复：上次进程未走完的生命周期统一落为 interrupted/cancelled。
     this.runs.recoverInterrupted()

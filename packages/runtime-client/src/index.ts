@@ -29,6 +29,9 @@ export type {
   AgentSettings,
   McpServer,
   McpTool,
+  Plan,
+  PlanStep,
+  PlanStepStatus,
 } from '@reflexion-os-studio/contracts'
 
 export {

@@ -36,6 +36,9 @@ const EVENT_TYPES_TRIGGERING_REFRESH = new Set([
   'run.completed',
   'run.failed',
   'run.cancelled',
+  'plan.created',
+  'plan.step.updated',
+  'plan.updated',
 ])
 
 interface AppBootstrapDeps {

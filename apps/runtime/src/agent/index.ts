@@ -327,6 +327,8 @@ export class ChatAgent {
       model,
       retryOfRunId: original.id,
       skillId: original.skillId,
+      planId: original.planId,
+      planStepId: original.planStepId,
     })
     this.store.sessions.touch(original.sessionId)
     const assistantMessage = this.createAssistantMessage(
@@ -423,6 +425,11 @@ export class ChatAgent {
     const sessionId = run.sessionId
     const workspaceRoot = this.resolveWorkspaceRoot(session)
     const registry = createToolRegistry({
+      store: this.store,
+      sessionId,
+      messageId: assistantMessage.id,
+      runId: run.id,
+      emitter,
       system: this.system,
       workspaceRoot,
       skills: builtinSkills,

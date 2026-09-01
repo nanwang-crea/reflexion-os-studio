@@ -26,6 +26,8 @@ export class RunStore {
     parentRunId?: string | null
     delegationId?: string | null
     skillId?: string | null
+    planId?: string | null
+    planStepId?: string | null
   }): Run {
     const run: Run = {
       id: randomUUID(),
@@ -41,11 +43,13 @@ export class RunStore {
       parentRunId: input.parentRunId ?? null,
       delegationId: input.delegationId ?? null,
       skillId: input.skillId ?? null,
+      planId: input.planId ?? null,
+      planStepId: input.planStepId ?? null,
       usage: null,
     }
     this.db
       .prepare(
-        'INSERT INTO runs (id, session_id, status, provider_id, model, started_at, completed_at, error_code, retry_of_run_id, agent_id, parent_run_id, delegation_id, skill_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO runs (id, session_id, status, provider_id, model, started_at, completed_at, error_code, retry_of_run_id, agent_id, parent_run_id, delegation_id, skill_id, plan_id, plan_step_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .run(
         run.id,
@@ -61,8 +65,16 @@ export class RunStore {
         run.parentRunId,
         run.delegationId,
         run.skillId,
+        run.planId,
+        run.planStepId,
       )
     return run
+  }
+
+  attachPlan(id: string, planId: string, planStepId: string): void {
+    this.db
+      .prepare('UPDATE runs SET plan_id = ?, plan_step_id = ? WHERE id = ?')
+      .run(planId, planStepId, id)
   }
 
   get(id: string): Run | null {
@@ -138,6 +150,8 @@ export class RunStore {
       delegationId:
         row.delegation_id == null ? null : String(row.delegation_id),
       skillId: row.skill_id == null ? null : String(row.skill_id),
+      planId: row.plan_id == null ? null : String(row.plan_id),
+      planStepId: row.plan_step_id == null ? null : String(row.plan_step_id),
       usage: parseUsage(row.usage_json),
     }
   }

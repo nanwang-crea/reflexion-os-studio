@@ -3,8 +3,15 @@ import type { JsonValue } from '@reflexion-os-studio/contracts'
 import type { SkillRegistry } from '../../skills/index.js'
 import type { McpManager } from '../../mcp/manager.js'
 import type { SystemRuntimeClient } from '../../system.js'
+import type { Store } from '../../store/index.js'
+import type { RunEventEmitter } from '../../events.js'
 
 export interface ToolContext {
+  store: Store
+  sessionId: string
+  messageId: string
+  runId: string
+  emitter: RunEventEmitter
   system: SystemRuntimeClient | null
   /** 会话关联项目的 folderPath；独立会话为 null（文件/Shell 工具不注册）。 */
   workspaceRoot: string | null

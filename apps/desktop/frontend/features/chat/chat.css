@@ -136,6 +136,49 @@ button.link {
   font-size: 12px;
 }
 
+/* ---------- Task plan ---------- */
+.plan-card {
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: var(--bg-elevated);
+}
+.plan-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text);
+}
+.plan-card-header span,
+.plan-card-summary,
+.plan-step small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.plan-card-steps {
+  margin: 10px 0 0;
+  padding-left: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+.plan-step {
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+}
+.plan-step-completed {
+  color: var(--text);
+}
+.plan-step-failed {
+  color: var(--danger, #c44);
+}
+.plan-card-summary {
+  margin: 10px 0 0;
+}
+
 /* ---------- Run 过程折叠与思考摘要 ---------- */
 .run-block {
   display: flex;

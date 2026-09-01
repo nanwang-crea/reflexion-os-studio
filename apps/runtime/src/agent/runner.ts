@@ -65,6 +65,25 @@ interface RunExecutionState {
 export class RunRunner {
   constructor(private readonly store: Store) {}
 
+  private finishPlan(
+    run: Run,
+    emitter: RunEventEmitter,
+    status: 'failed' | 'cancelled',
+    summary: string,
+  ): void {
+    if (!run.planId) return
+    try {
+      const plan =
+        status === 'failed'
+          ? this.store.plans.fail(run.planId, summary)
+          : this.store.plans.cancel(run.planId, summary)
+      // Plan 事件使用当前 Run 的 emitter，在调用点单独发出。
+      emitter.next({ type: 'plan.updated', plan })
+    } catch {
+      // 计划收敛失败不应掩盖 Run 的真实终态。
+    }
+  }
+
   /** 工具调用行收尾的统一出口：清 in-flight 记录 → 落库 → 事件。 */
   private finalizeToolCall(
     state: RunExecutionState,
@@ -372,6 +391,7 @@ export class RunRunner {
       }
       // 达到轮次上限：任务未完成，如实失败而不是装作结束。
       this.store.runs.finalize(run.id, 'failed', 'max_turns')
+      this.finishPlan(run, emitter, 'failed', 'Run 达到轮次上限')
       emitter.next({
         type: 'run.failed',
         error: {
@@ -384,6 +404,7 @@ export class RunRunner {
         cancelInFlightToolCalls()
         finalizePendingTurn('interrupted')
         this.store.runs.finalize(run.id, 'cancelled')
+        this.finishPlan(run, emitter, 'cancelled', 'Run 已被取消')
         emitter.next({ type: 'run.cancelled' })
         return
       }
@@ -395,6 +416,7 @@ export class RunRunner {
       cancelInFlightToolCalls()
       finalizePendingTurn('failed')
       this.store.runs.finalize(run.id, 'failed', code)
+      this.finishPlan(run, emitter, 'failed', message)
       emitter.next({ type: 'run.failed', error: { code, message } })
     }
   }

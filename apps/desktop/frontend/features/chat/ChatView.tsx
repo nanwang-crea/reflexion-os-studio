@@ -13,6 +13,7 @@ import { AssistantMessage } from './AssistantMessage'
 import { RunBlock } from './RunBlock'
 import type { ProcessItem } from './RunProcess'
 import { QueueBar } from './QueueBar'
+import { PlanCard } from './PlanCard'
 import type { SessionData } from '../../api/sessions'
 import type { PendingApproval, RunActivity } from '../../hooks/useAppBootstrap'
 
@@ -225,6 +226,9 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
     <div className="chat-view">
       <div className="chat-scroll" ref={scrollRef} onScroll={handleScroll}>
         <div className="transcript">
+          {props.sessionData?.plans?.map((plan) => (
+            <PlanCard key={plan.id} plan={plan} />
+          ))}
           {messages.length === 0 && (
             <div className="chat-empty">
               <div className="chat-empty-icon" aria-hidden="true">
