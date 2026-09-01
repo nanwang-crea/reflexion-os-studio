@@ -75,6 +75,12 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     type: z.literal('run.completed'),
   }),
   RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('run.retrying'),
+    attempt: z.number().int().positive(),
+    maxRetries: z.number().int().nonnegative(),
+    reason: z.string(),
+  }),
+  RuntimeEventEnvelopeSchema.extend({
     type: z.literal('run.failed'),
     error: RuntimeErrorSchema,
   }),

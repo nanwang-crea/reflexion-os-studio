@@ -8,8 +8,8 @@ import type { ModelMessage } from '@reflexion-os-studio/agent-core'
 
 const DEFAULT_TIMEOUT_MS = 120_000
 /** 请求建立阶段失败(网络/限流/服务端短暂故障)的自动重试次数与退避。 */
-const DEFAULT_MAX_RETRIES = 2
-const RETRY_BACKOFF_MS = [1_000, 2_500]
+const DEFAULT_MAX_RETRIES = 5
+const RETRY_BACKOFF_MS = [1_000, 2_500, 5_000, 10_000, 20_000]
 
 /** 429 限流与 5xx 短暂故障可重试；认证/配置类错误重试无意义。 */
 function shouldRetryStatus(code: number): boolean {
@@ -65,6 +65,12 @@ export interface StreamChatOptions {
   temperature?: number
   /** 请求建立阶段失败自动重试次数；连接测试等场景传 0 快速失败。 */
   maxRetries?: number
+  /** 每次请求即将重试时调用；attempt 从 1 开始。 */
+  onRetry?: (input: {
+    attempt: number
+    maxRetries: number
+    reason: string
+  }) => void
   /** Agent 侧 canonical 工具声明；适配层投影为 OpenAI function 格式。 */
   tools?: ToolSpec[]
 }
@@ -244,6 +250,11 @@ export async function streamChatCompletion(
       if (isAbort(error)) throw error
       if (attempt < maxRetries) {
         attempt += 1
+        options.onRetry?.({
+          attempt,
+          maxRetries,
+          reason: `network: ${String(error)}`,
+        })
         await sleep(
           RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)],
           signal,
@@ -260,6 +271,11 @@ export async function streamChatCompletion(
     const detail = await response.text().catch(() => '')
     if (shouldRetryStatus(response.status) && attempt < maxRetries) {
       attempt += 1
+      options.onRetry?.({
+        attempt,
+        maxRetries,
+        reason: `HTTP ${response.status}`,
+      })
       await sleep(
         RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)],
         signal,

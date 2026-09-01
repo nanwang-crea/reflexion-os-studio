@@ -177,6 +177,14 @@ export class RunRunner {
               ...(input.provider.timeoutMs !== undefined
                 ? { timeoutMs: input.provider.timeoutMs }
                 : {}),
+              onRetry: ({ attempt, maxRetries, reason }) => {
+                emitter.next({
+                  type: 'run.retrying',
+                  attempt,
+                  maxRetries,
+                  reason,
+                })
+              },
               signal,
             },
             (delta) => {

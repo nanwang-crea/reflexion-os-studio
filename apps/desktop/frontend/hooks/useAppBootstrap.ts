@@ -26,6 +26,8 @@ export interface RunActivity {
   phase: RunPhase
   /** phase === 'tool' 时正在执行的工具名。 */
   toolName?: string
+  /** 当前正在进行的 Provider 重试。 */
+  retry?: { attempt: number; maxRetries: number; reason: string }
 }
 
 /** Run 结束类事件：触发会话数据与列表刷新（标题可能已被自动命名）。 */
@@ -278,6 +280,17 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
         }
         if (event.type === 'run.started') {
           setRunActivity(event.runId, { phase: 'thinking' })
+          return
+        }
+        if (event.type === 'run.retrying') {
+          setRunActivity(event.runId, {
+            phase: 'thinking',
+            retry: {
+              attempt: event.attempt,
+              maxRetries: event.maxRetries,
+              reason: event.reason,
+            },
+          })
           return
         }
         if (event.type === 'tool.requested') {

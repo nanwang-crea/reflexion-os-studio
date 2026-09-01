@@ -368,6 +368,7 @@ test('retries request establishment on 429 then succeeds', async () => {
     response.end(sseBody())
   })
   const port = server.address().port
+  const retries = []
   const result = await streamChatCompletion(
     {
       baseUrl: `http://127.0.0.1:${port}/v1`,
@@ -375,11 +376,13 @@ test('retries request establishment on 429 then succeeds', async () => {
       model: 'mock-model',
       messages: [{ role: 'user', content: 'hi' }],
       signal: new AbortController().signal,
+      onRetry: (retry) => retries.push(retry),
     },
     () => {},
   )
   server.close()
   assert.equal(calls, 2)
+  assert.deepEqual(retries, [{ attempt: 1, maxRetries: 5, reason: 'HTTP 429' }])
   assert.equal(result.content, 'Hello')
 })
 

@@ -47,7 +47,9 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
   }, [props.runActive])
 
   const label = props.runActive
-    ? '正在处理…'
+    ? props.runActivity?.retry !== undefined
+      ? `正在重试（第 ${props.runActivity.retry.attempt}/${props.runActivity.retry.maxRetries} 次）…`
+      : '正在处理…'
     : props.runDurationMs !== null
       ? `工作了 ${formatDuration(props.runDurationMs)}`
       : '处理完成'

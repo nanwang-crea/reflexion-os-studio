@@ -34,7 +34,7 @@ export interface ProviderRuntimeConfig {
   contextWindow?: number
   /** 上下文预算上限（token 数）；缺省 DEFAULT_CONTEXT_BUDGET_LIMIT。 */
   contextBudget?: number
-  /** 请求建立阶段重试次数；缺省 provider 内置(2)。 */
+  /** 请求建立阶段重试次数；缺省 provider 内置(5)。 */
   maxRetries?: number
   /** 请求超时(毫秒)；缺省 provider 内置(120s)。 */
   timeoutMs?: number

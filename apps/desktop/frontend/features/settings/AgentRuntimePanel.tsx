@@ -103,7 +103,7 @@ export function AgentRuntimePanel(): React.JSX.Element {
       <div className="agent-runtime-head">
         <h2>Agent 运行时</h2>
         <p className="hint">
-          全局生效的循环参数；留空表示内置默认（64k 预算/16 轮/2 次反思/2
+          全局生效的循环参数；留空表示内置默认（64k 预算/16 轮/2 次反思/5
           次重试/120s 超时可在 Provider 设置中单独配置）。
         </p>
       </div>
