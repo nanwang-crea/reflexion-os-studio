@@ -63,107 +63,15 @@ interface DisplayItem {
   toolCalls: ToolCall[]
 }
 
-/**
- * 组装展示单元：一个 Run 只产出一条最终回答单元，其余模型轮次（工具调用
- * 轮、中途文本）吸附到它上面——最终回答消息上的 WorkSummary 聚合全部
- * 工具明细与思考，中间轮次的模型文本不展示为正文（与 ChatGPT 桌面版一致：
- * 工具执行过程中的 content 属于过程，不当作消息展示）。
- *
- * 最终回答按 Run 判定：优先取 run 内最后一条无工具调用的消息（纯文本轮）；
- * run 进行中且全为工具轮（final 未出现）时聚合为实时过程单元；终态 run
- * 全工具（如 max_turns 失败）降级取最后一条。
- */
+/** 按消息顺序构造 Run 时间线，保留每个模型轮次自身的过程内容。 */
 function buildDisplayItems(
   messages: Message[],
   toolCallsByMessage: Map<string, ToolCall[]>,
-  activeRunIds: Set<string>,
 ): DisplayItem[] {
-  // 预扫描：每个 run 的最终回答在 messages 中的下标。最终回答 = run 内
-  // 最后一条无工具调用的消息（纯文本轮）；进行中且全为工具轮时无最终回答，
-  // 终态 run 全工具（如 max_turns 失败）降级取最后一条。
-  const finalIndexByRun = new Map<string, number>()
-  {
-    const lastIndexByRun = new Map<string, number>()
-    messages.forEach((message, index) => {
-      if (message.role !== 'assistant' || message.runId === null) return
-      // 覆盖式记录：遍历结束后即为该 run 的最后一条 assistant 消息。
-      lastIndexByRun.set(message.runId, index)
-    })
-    for (const [runId, lastIndex] of lastIndexByRun) {
-      const lastMessage = messages[lastIndex]
-      const lastHasTools =
-        (toolCallsByMessage.get(lastMessage.id) ?? []).length > 0
-      if (!lastHasTools || !activeRunIds.has(runId)) {
-        finalIndexByRun.set(runId, lastIndex)
-      }
-    }
-  }
-
-  const items: DisplayItem[] = []
-  let pending: Message[] = []
-
-  // 未吸收的过程轮次按 Run 聚合成一条单元输出；runId 为 null 的各自独立。
-  const emitPending = (): void => {
-    if (pending.length === 0) return
-    const groups = new Map<string, Message[]>()
-    for (const m of pending) {
-      const key = m.runId ?? `none-${m.id}`
-      const group = groups.get(key)
-      if (group) group.push(m)
-      else groups.set(key, [m])
-    }
-    for (const group of groups.values()) {
-      const last = group[group.length - 1]
-      const reasoning = joinReasonings(group)
-      items.push({
-        message: reasoning !== last.reasoning ? { ...last, reasoning } : last,
-        toolCalls: group.flatMap((m) => toolCallsByMessage.get(m.id) ?? []),
-      })
-    }
-    pending = []
-  }
-
-  const pushPlain = (message: Message): void => {
-    items.push({ message, toolCalls: toolCallsByMessage.get(message.id) ?? [] })
-  }
-
-  messages.forEach((message, index) => {
-    if (message.role === 'assistant' && message.runId !== null) {
-      const finalIndex = finalIndexByRun.get(message.runId)
-      if (finalIndex === undefined || index !== finalIndex) {
-        // 过程轮次：工具/思考归入最终回答，content（中途文本）不展示。
-        pending.push(message)
-        return
-      }
-      // 最终回答：吸收同 Run 的过程轮次后作为唯一单元输出。
-      const consumed = pending.filter((m) => m.runId === message.runId)
-      pending = pending.filter((m) => m.runId !== message.runId)
-      emitPending()
-      const reasoning = joinReasonings([...consumed, message])
-      items.push({
-        message:
-          reasoning !== message.reasoning ? { ...message, reasoning } : message,
-        toolCalls: [
-          ...consumed.flatMap((m) => toolCallsByMessage.get(m.id) ?? []),
-          ...(toolCallsByMessage.get(message.id) ?? []),
-        ],
-      })
-      return
-    }
-    // user/system：未吸收的过程轮次先聚合并输出，保持时间顺序。
-    emitPending()
-    pushPlain(message)
-  })
-  emitPending()
-  return items
-}
-
-/** 按序拼接非空思考文本，作为聚合消息的 reasoning。 */
-function joinReasonings(messages: Message[]): string {
-  return messages
-    .map((message) => message.reasoning)
-    .filter((text) => text !== '')
-    .join('\n')
+  return messages.map((message) => ({
+    message,
+    toolCalls: toolCallsByMessage.get(message.id) ?? [],
+  }))
 }
 
 export function ChatView(props: ChatViewProps): React.JSX.Element {
@@ -218,10 +126,10 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
     for (const runId of Object.keys(props.runActivities)) ids.add(runId)
     return ids
   }, [runs, props.runActivities])
-  // 过程轮次吸附到最终回答：每条工具/思考消息不再各自显示折叠行。
+  // 按消息创建顺序展示每个模型轮次，工具调用归属发起它的消息。
   const displayItems = useMemo(
-    () => buildDisplayItems(messages, toolCallsByMessage, activeRunIds),
-    [messages, toolCallsByMessage, activeRunIds],
+    () => buildDisplayItems(messages, toolCallsByMessage),
+    [messages, toolCallsByMessage],
   )
   const lastRetryableRun = [...runs]
     .reverse()
