@@ -1,5 +1,5 @@
 import type { Message, ToolCall } from '@reflexion-os-studio/runtime-client'
-import { MessageMarkdown } from '../../components/MessageMarkdown'
+import { MessageMarkdown } from '../../components/markdown/MessageMarkdown'
 import { ReasoningBlock } from './ReasoningBlock'
 import { ToolTrace } from './ToolTrace'
 

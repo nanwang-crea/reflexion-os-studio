@@ -129,7 +129,7 @@ function displayNameOf(link: ResourceLink): string {
 }
 
 /** 解析消息内资源引用协议；非资源协议（http 等）返回 null 保持普通链接。 */
-function parseResourceLink(href: string): ResourceLink | null {
+export function parseResourceLink(href: string): ResourceLink | null {
   if (href.startsWith('workspace://')) {
     const rest = href.slice('workspace://'.length)
     const fragmentMatch = rest.match(/^(.*?)(?:#L(\d+))?$/)

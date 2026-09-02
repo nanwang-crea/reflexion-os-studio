@@ -7,6 +7,7 @@ import {
   SessionSchema,
   ToolOperationSchema,
   UsageSchema,
+  ContentPartSchema,
   WorkspaceIndexSnapshotSchema,
   QueueEntrySchema,
   McpServerSchema,
@@ -68,6 +69,7 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     content: z.string(),
     finishReason: FinishReasonSchema,
     usage: UsageSchema.optional(),
+    parts: z.array(ContentPartSchema).optional(),
   }),
   RuntimeEventEnvelopeSchema.extend({
     type: z.literal('run.started'),

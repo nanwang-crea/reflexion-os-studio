@@ -6,7 +6,7 @@ MVP 采用 SQLite 单 Runtime 写入，不实现 outbox；实现使用 Node 内�
 
 - `projects(id, name, folder_path, created_at, updated_at)`
 - `sessions(id, project_id, title, status, created_at, updated_at)`
-- `messages(id, session_id, run_id, role, content, parts_json, reasoning, status, created_at, completed_at)`，`parts_json` 为 canonical 内容块数组（`text | image`；image 以 `assetId` 引用 Asset，不内联数据），`content` 是其中 text 块拼接的纯文本投影，仅供 UI 显示
+- `messages(id, session_id, run_id, role, content, parts_json, reasoning, status, created_at, completed_at)`，`parts_json` 为 canonical 内容块数组（`text | image | resource_link`；image 以 `assetId` 引用 Asset，不内联数据，resource_link 只保存受控资源引用），`content` 保留 Provider 原始 Markdown，供复制、历史上下文和降级显示
 - `runs(id, session_id, status, provider_id, model, started_at, completed_at, error_code, retry_of_run_id, agent_id, parent_run_id, delegation_id)`，后三列为 Agent/委派链路预留，Primary Agent 时为 NULL
 - `tool_calls(id, run_id, message_id, tool_name, args_json, result_json, status, error_code, approval_grant_id, created_at, completed_at)`，工具调用的 canonical 记录（消息块中不重复保存 tool_use/tool_result）
 - `memories(id, scope, scope_id, kind, content, source_run_id, confidence, embedding, embedding_model, status, created_at, updated_at, expires_at)`，A2 记忆表（mem0 式管线）：`scope` 为 `session|project|user`（user 的 `scope_id` 为 NULL，session/project 必填），`kind` 为 `fact|preference|procedure`，`embedding` 为 Float32 小端 BLOB（仅内部召回使用，不进协议），附带 FTS5 trigram 虚拟表 `memories_fts` 与同步触发器；`status` 为 `active|pinned|archived`（archived 为被取代的历史版本，管理页不展示）

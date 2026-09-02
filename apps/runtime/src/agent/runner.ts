@@ -14,6 +14,7 @@ import {
 } from '@reflexion-os-studio/contracts'
 import { DEFAULT_MAX_TURNS } from '@reflexion-os-studio/agent-core'
 import { RunEventEmitter } from '../events.js'
+import { normalizeContent } from '../resources/resource-link-normalizer.js'
 import { ProviderError, streamChatCompletion } from '../provider.js'
 import type { Store } from '../store/index.js'
 import { compactInRun, type ProviderRuntimeConfig } from './context.js'
@@ -228,11 +229,16 @@ export class RunRunner {
             },
           )
 
+          const session = this.store.sessions.get(run.sessionId)
+          const normalized = session
+            ? normalizeContent(result.content, session, this.store)
+            : { content: result.content, parts: [] }
           this.store.messages.finalize(
             draft.id,
-            result.content,
+            normalized.content,
             'completed',
             result.reasoning,
+            normalized.parts,
           )
           emitter.next({
             type: 'message.completed',
@@ -240,6 +246,7 @@ export class RunRunner {
             content: result.content,
             finishReason: result.finishReason,
             usage: result.usage,
+            parts: normalized.parts,
           })
           if (result.usage) {
             this.store.runs.addUsage(run.id, result.usage)

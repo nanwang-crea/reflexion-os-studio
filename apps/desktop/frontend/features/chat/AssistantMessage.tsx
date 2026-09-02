@@ -5,11 +5,22 @@ import type {
   ToolCall,
   Usage,
 } from '@reflexion-os-studio/runtime-client'
+
+/** 新协议字段为 label/link；旧历史数据仍可能使用 resource_link。 */
+type ResourcePart =
+  | { type: 'resource_link'; label: string; link: ResourceLink }
+  | { type: 'resource_link'; resource_link: ResourceLink }
+
+type MessagePart = { type: 'text'; text: string } | ResourcePart
+
+function resourceFromPart(part: ResourcePart): ResourceLink {
+  return 'link' in part ? part.link : part.resource_link
+}
 import { CheckIcon, CopyIcon } from '../../ui/icons'
 import {
   extractResourceLinks,
   MessageMarkdown,
-} from '../../components/MessageMarkdown'
+} from '../../components/markdown/MessageMarkdown'
 import { ReasoningBlock } from './ReasoningBlock'
 import { ToolTrace } from './ToolTrace'
 import type { RunActivity } from '../../hooks/useAppBootstrap'
@@ -58,6 +69,21 @@ function formatSeconds(ms: number): string {
 function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
   const [copied, setCopied] = useState(false)
   const contentText = props.streamingText ?? props.message.content
+  // Runtime 可能返回新协议 { label, link }，历史消息仍兼容 { resource_link }。
+  const structuredParts = useMemo<MessagePart[]>(
+    () =>
+      props.streamingText === undefined
+        ? (props.message.parts as unknown as MessagePart[])
+        : [],
+    [props.message.parts, props.streamingText],
+  )
+  const structuredText = structuredParts
+    .map((part) =>
+      part.type === 'text'
+        ? part.text
+        : `[${'label' in part ? part.label : resourceFromPart(part).uri}](${resourceFromPart(part).uri})`,
+    )
+    .join('')
   const reasoningText = props.streamingReasoning ?? props.message.reasoning
   // 正文流式光标：只看该消息是否仍在流式增量（不参与阶段判断）。
   const answerStreaming = props.runActive && props.streamingText !== undefined
@@ -90,12 +116,15 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
   // Artifact 卡：聚合该回复正文里的资源引用（按 uri 去重），点击同样分发。
   const resources = useMemo(() => {
     const seen = new Set<string>()
-    return extractResourceLinks(contentText).filter((link) => {
+    const links = structuredParts
+      .filter((part): part is ResourcePart => part.type === 'resource_link')
+      .map(resourceFromPart)
+    return [...links, ...extractResourceLinks(contentText)].filter((link) => {
       if (seen.has(link.uri)) return false
       seen.add(link.uri)
       return true
     })
-  }, [contentText])
+  }, [contentText, structuredParts])
 
   return (
     <div className="msg-assistant">
@@ -114,7 +143,7 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
         {contentText !== '' && (
           <div className="assistant-content">
             <MessageMarkdown
-              text={contentText}
+              text={structuredParts.length > 0 ? structuredText : contentText}
               caret={answerStreaming}
               onResourceClick={props.onResourceClick}
             />

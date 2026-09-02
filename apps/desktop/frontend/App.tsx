@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ProviderProfile,
   Project,
-  ResourceLink,
   Session,
   SkillManifest,
 } from '@reflexion-os-studio/runtime-client'
@@ -14,7 +13,6 @@ import { listProjects } from './api/projects'
 import { gitBranches } from './api/workspace'
 import { resolveApproval } from './api/chat'
 import { listSkills } from './api/skills'
-import { openExternalUrl } from './api/system'
 import { getSessionData, listSessions, type SessionData } from './api/sessions'
 import {
   ConfirmDialog,
@@ -32,6 +30,7 @@ import {
 } from './features/workspace/WorkspacePanel'
 import { SettingsView } from './features/settings/SettingsView'
 import { useSessionActions } from './hooks/useSessionActions'
+import { useResourceRouter } from './hooks/useResourceRouter'
 import { DoubleChevronIcon, FolderIcon } from './ui/icons'
 
 const STATUS_LABELS: Record<string, string> = {
@@ -338,36 +337,12 @@ export default function App() {
   const activeProject =
     projects.find((project) => project.id === activeProjectId) ?? null
 
-  /** 资源链接点击分发：文件→面板定位，资产→面板预览，外链→系统浏览器。 */
-  const handleResourceClick = useCallback((link: ResourceLink): void => {
-    if (link.kind === 'externalUrl') {
-      void openExternalUrl(link.uri).catch((error: unknown) => {
-        console.error(`open external failed: ${String(error)}`)
-      })
-      return
-    }
-    // workspace/asset 定位只对当前激活项目生效（面板绑定激活项目）；
-    // workspace:///<path> 省略项目 ID 的形态在这里补全会话当前项目。
-    if (link.kind === 'workspaceFile') {
-      const projectId =
-        link.projectId === '' ? activeProjectRef.current : link.projectId
-      if (projectId === null || projectId !== activeProjectRef.current) return
-      setWorkspaceRequest({
-        nonce: Date.now(),
-        kind: 'file',
-        path: link.path,
-        line: link.line,
-      })
-      setWorkspaceOpen(true)
-      return
-    }
-    setWorkspaceRequest({
-      nonce: Date.now(),
-      kind: 'asset',
-      assetId: link.assetId,
-    })
-    setWorkspaceOpen(true)
-  }, [])
+  const handleResourceClick = useResourceRouter({
+    activeProjectRef,
+    setWorkspaceRequest,
+    setWorkspaceOpen,
+    setNotice,
+  })
   const contextTitle =
     view === 'settings'
       ? '设置'

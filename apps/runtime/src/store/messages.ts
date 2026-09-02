@@ -74,6 +74,7 @@ export class MessageStore {
     content: string,
     status: MessageStatus,
     reasoning: string,
+    parts?: ContentPart[],
   ): void {
     this.db
       .prepare(
@@ -81,7 +82,7 @@ export class MessageStore {
       )
       .run(
         content,
-        JSON.stringify(textParts(content)),
+        JSON.stringify(parts ?? textParts(content)),
         reasoning,
         status,
         nowIso(),

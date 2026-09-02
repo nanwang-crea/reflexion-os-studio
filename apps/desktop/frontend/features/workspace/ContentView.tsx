@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { readFile } from '../../api/workspace'
 import { CheckIcon, CopyIcon, EyeIcon } from '../../ui/icons'
-import { MessageMarkdown } from '../../components/MessageMarkdown'
+import { MessageMarkdown } from '../../components/markdown/MessageMarkdown'
 
 const PAGE_LINES = 2000
 const LINE_HEIGHT_PX = 20
