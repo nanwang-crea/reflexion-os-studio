@@ -694,26 +694,30 @@ button.link {
 .landing-context-selectors {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   flex-wrap: wrap;
-  margin: 0 0 -14px 8px;
+  margin: -8px 0 -20px 4px;
   position: relative;
   z-index: 1;
 }
 
 .landing-context-selectors .composer-select {
-  min-height: 28px;
-  padding: 3px 8px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  background: var(--bg-elevated);
-  color: var(--text-secondary);
+  min-height: 20px;
+  padding: 1px 2px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
 .landing-context-selectors .composer-select:hover {
   background: var(--bg-hover);
   color: var(--text);
+}
+
+.landing-context-selectors .composer-select:has(select:disabled) {
+  opacity: 0.78;
 }
 
 .landing-context-selectors .composer-select select {
