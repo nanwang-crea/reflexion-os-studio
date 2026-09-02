@@ -15,6 +15,7 @@ import {
 import { memoryCommandHandlers } from './handlers-memory.js'
 import { workspaceCommandHandlers } from './handlers-workspace.js'
 import { assetCommandHandlers } from './handlers-assets.js'
+import { mcpCommandHandlers } from './handlers-mcp.js'
 import { builtinSkills } from './skills/index.js'
 
 /**
@@ -22,7 +23,7 @@ import { builtinSkills } from './skills/index.js'
  * 返回值即 JSON-RPC result；抛出 CommandError 转为业务错误响应。
  * memory.* 命令独立在 handlers-memory.ts，此处合并注册。
  */
-const handlers: Record<string, CommandHandler> = {
+export const commandHandlers: Record<string, CommandHandler> = {
   'project.list': (_params, { store }) => ({
     projects: store.projects.list(),
   }),
@@ -65,17 +66,21 @@ const handlers: Record<string, CommandHandler> = {
         `project not found: ${projectId}`,
       )
     }
-    const gitBranch =
-      projectId !== null &&
-      typeof p.gitBranch === 'string' &&
-      p.gitBranch !== ''
-        ? p.gitBranch
-        : null
+    // Branch selection is intentionally unsupported: sessions inherit the
+    // repository state without claiming that a branch was switched. Keep the
+    // stored column for compatibility with historical sessions, but reject
+    // new writes from legacy clients instead of silently creating misleading
+    // metadata.
+    if (Object.prototype.hasOwnProperty.call(p, 'gitBranch')) {
+      throw new CommandError(
+        'invalid_request',
+        'session.create 不支持 gitBranch；不会切换或绑定分支',
+      )
+    }
     return {
       session: store.sessions.create(
         projectId,
         typeof p.title === 'string' && p.title !== '' ? p.title : undefined,
-        gitBranch,
       ),
     }
   },
@@ -220,6 +225,11 @@ const handlers: Record<string, CommandHandler> = {
         : undefined,
       secretRef,
       enabled: p.enabled === undefined ? true : p.enabled === true,
+      // Keep the three-state semantics: omitted=preserve, null=clear, value=set.
+      temperature: p.temperature as number | null | undefined,
+      maxTokens: p.maxTokens as number | null | undefined,
+      contextWindow: p.contextWindow as number | null | undefined,
+      contextBudget: p.contextBudget as number | null | undefined,
     })
     // 换 Key 后清理被替换的旧密钥，secrets.json 不留孤儿条目。
     if (existing && existing.secretRef !== profile.secretRef) {
@@ -239,19 +249,22 @@ const handlers: Record<string, CommandHandler> = {
   'skill.list': () => ({ skills: builtinSkills.list() }),
   'agent_settings.get': (_p, { agent }) => agent.getSettings(),
   'agent_settings.update': (p, { agent }) =>
-    agent.updateSettings(p as Parameters<typeof agent.updateSettings>[0]),
+    agent.updateSettings(
+      p.settings as Parameters<typeof agent.updateSettings>[0],
+    ),
 }
 
-Object.assign(handlers, memoryCommandHandlers)
-Object.assign(handlers, workspaceCommandHandlers)
-Object.assign(handlers, assetCommandHandlers)
+Object.assign(commandHandlers, memoryCommandHandlers)
+Object.assign(commandHandlers, workspaceCommandHandlers)
+Object.assign(commandHandlers, assetCommandHandlers)
+Object.assign(commandHandlers, mcpCommandHandlers)
 
 export async function dispatchCommand(
   method: string,
   params: Record<string, unknown>,
   ctx: CommandContext,
 ): Promise<CommandResult> {
-  const handler = handlers[method]
+  const handler = commandHandlers[method]
   if (!handler) {
     throw new CommandError('unsupported', `unsupported command: ${method}`)
   }

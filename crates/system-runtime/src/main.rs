@@ -12,11 +12,13 @@ mod search;
 mod shell;
 mod walk;
 
+use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use params::{
     EditParams, GitBranchesParams, GitDiffParams, GitStatusParams, GlobParams, GrantPathParams,
@@ -85,11 +87,45 @@ fn workspace_root(value: &str) -> Result<PathBuf, OpError> {
     Ok(PathBuf::from(value))
 }
 
-fn require_grant(grant: &str) -> Result<(), OpError> {
-    if grant.trim().is_empty() {
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ApprovalGrant {
+    grant_id: String,
+    request_id: String,
+    session_id: String,
+    workspace_id: String,
+    operation: String,
+    scope: String,
+    expires_at: u64,
+}
+
+fn require_grant(grant: &str, workspace_root: &str, operation: &str) -> Result<(), OpError> {
+    let grant: ApprovalGrant = serde_json::from_str(grant).map_err(|_| {
+        OpError::new(
+            "invalid_grant",
+            "write/execute operations require a valid approval grant".to_string(),
+        )
+    })?;
+    if grant.grant_id.trim().is_empty()
+        || grant.request_id.trim().is_empty()
+        || grant.session_id.trim().is_empty()
+        || grant.workspace_id != workspace_root
+        || grant.operation != operation
+        || !matches!(grant.scope.as_str(), "once" | "session")
+    {
         return Err(OpError::new(
-            "grant_required",
-            "write/execute operations require an approval grant".to_string(),
+            "invalid_grant",
+            "approval grant does not match this request".to_string(),
+        ));
+    }
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| OpError::new("invalid_grant", "invalid system clock".to_string()))?
+        .as_millis() as u64;
+    if grant.expires_at <= now {
+        return Err(OpError::new(
+            "grant_expired",
+            "approval grant has expired".to_string(),
         ));
     }
     Ok(())
@@ -155,7 +191,7 @@ fn handle_file_grep(params: Value) -> Result<Value, OpError> {
 fn handle_file_write(params: Value) -> Result<Value, OpError> {
     let params: WriteParams = serde_json::from_value(params)
         .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    require_grant(&params.grant)?;
+    require_grant(&params.grant, &params.workspace_root, "file.write")?;
     let root = workspace_root(&params.workspace_root)?;
     let written = files::write(&root, &params.path, &params.content)
         .map_err(|message| OpError::new("file_error", message))?;
@@ -165,7 +201,7 @@ fn handle_file_write(params: Value) -> Result<Value, OpError> {
 fn handle_file_edit(params: Value) -> Result<Value, OpError> {
     let params: EditParams = serde_json::from_value(params)
         .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    require_grant(&params.grant)?;
+    require_grant(&params.grant, &params.workspace_root, "file.edit")?;
     let root = workspace_root(&params.workspace_root)?;
     let outcome = mutate::edit(
         &root,
@@ -184,7 +220,7 @@ fn handle_file_edit(params: Value) -> Result<Value, OpError> {
 fn handle_file_delete(params: Value) -> Result<Value, OpError> {
     let params: GrantPathParams = serde_json::from_value(params)
         .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    require_grant(&params.grant)?;
+    require_grant(&params.grant, &params.workspace_root, "file.delete")?;
     let root = workspace_root(&params.workspace_root)?;
     let outcome = mutate::delete(&root, &params.path)
         .map_err(|message| OpError::new("file_error", message))?;
@@ -194,7 +230,7 @@ fn handle_file_delete(params: Value) -> Result<Value, OpError> {
 fn handle_file_move(params: Value) -> Result<Value, OpError> {
     let params: MoveParams = serde_json::from_value(params)
         .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    require_grant(&params.grant)?;
+    require_grant(&params.grant, &params.workspace_root, "file.move")?;
     let root = workspace_root(&params.workspace_root)?;
     let outcome = mutate::move_path(&root, &params.from, &params.to)
         .map_err(|message| OpError::new("file_error", message))?;
@@ -204,7 +240,7 @@ fn handle_file_move(params: Value) -> Result<Value, OpError> {
 fn handle_file_mkdir(params: Value) -> Result<Value, OpError> {
     let params: GrantPathParams = serde_json::from_value(params)
         .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    require_grant(&params.grant)?;
+    require_grant(&params.grant, &params.workspace_root, "file.mkdir")?;
     let root = workspace_root(&params.workspace_root)?;
     let outcome = mutate::mkdir(&root, &params.path)
         .map_err(|message| OpError::new("file_error", message))?;
@@ -276,7 +312,7 @@ fn handle_git_branches(id: Value, params: Value) -> Result<(Value, bool), OpErro
 fn handle_shell_execute(id: Value, params: Value) -> Result<(Value, bool), OpError> {
     let params: ShellParams = serde_json::from_value(params)
         .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    require_grant(&params.grant)?;
+    require_grant(&params.grant, &params.workspace_root, "shell.execute")?;
     let root = workspace_root(&params.workspace_root)?;
     let cwd_relative = params.cwd.as_deref().unwrap_or(".");
     let cwd = paths::resolve_in_workspace(&root, cwd_relative)
@@ -387,6 +423,82 @@ fn ok_response(id: Value, result: Value) -> Value {
 /// 工具操作结果的统一回包：成功包 result，失败转 OpError。
 fn finish(id: Value, result: Result<Value, OpError>) -> Result<(Value, bool), OpError> {
     result.map(|value| (ok_response(id, value), false))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn grant(workspace: &str, operation: &str, expires_at: u64) -> String {
+        json!({
+            "grantId": "grant-1", "requestId": "request-1", "sessionId": "session-1",
+            "workspaceId": workspace, "operation": operation, "scope": "once",
+            "expiresAt": expires_at,
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn validates_grant_binding_and_expiry() {
+        let future = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64
+            + 60_000;
+        assert!(require_grant(
+            &grant("/workspace", "file.write", future),
+            "/workspace",
+            "file.write"
+        )
+        .is_ok());
+        assert_eq!(
+            require_grant(
+                &grant("/other", "file.write", future),
+                "/workspace",
+                "file.write"
+            )
+            .unwrap_err()
+            .code,
+            "invalid_grant"
+        );
+        assert_eq!(
+            require_grant(
+                &grant("/workspace", "shell.execute", future),
+                "/workspace",
+                "file.write"
+            )
+            .unwrap_err()
+            .code,
+            "invalid_grant"
+        );
+        assert_eq!(
+            require_grant(
+                &grant("/workspace", "file.write", 0),
+                "/workspace",
+                "file.write"
+            )
+            .unwrap_err()
+            .code,
+            "grant_expired"
+        );
+    }
+
+    #[test]
+    fn rejects_malformed_and_incomplete_grants() {
+        assert_eq!(
+            require_grant("grant-1", "/workspace", "file.write")
+                .unwrap_err()
+                .code,
+            "invalid_grant"
+        );
+        let value = json!({ "grantId": "g", "requestId": "r", "sessionId": "", "workspaceId": "/workspace", "operation": "file.write", "scope": "once", "expiresAt": u64::MAX });
+        assert_eq!(
+            require_grant(&value.to_string(), "/workspace", "file.write")
+                .unwrap_err()
+                .code,
+            "invalid_grant"
+        );
+    }
 }
 
 fn main() {

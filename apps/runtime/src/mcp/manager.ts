@@ -7,6 +7,7 @@ import {
 import { RunEventEmitter, type EventNotifier } from '../events.js'
 import type { Store } from '../store/index.js'
 import { McpClient, type McpServerConfig } from './client.js'
+import { loadSecret } from '../secrets.js'
 
 interface ConnectedServer {
   server: McpServer
@@ -26,6 +27,48 @@ export class McpManager {
     private readonly store: Store,
     private readonly notifier: EventNotifier,
   ) {}
+
+  list(): McpServer[] {
+    return this.store.mcpServers.list()
+  }
+
+  add(input: {
+    name: string
+    command: string
+    args: string[]
+    env: { key: string; secretRef: string }[]
+  }): McpServer {
+    return this.store.mcpServers.create(input)
+  }
+
+  remove(id: string): boolean {
+    const connected = this.clients.get(id)
+    connected?.client.dispose()
+    this.clients.delete(id)
+    return this.store.mcpServers.remove(id)
+  }
+
+  async toggle(id: string): Promise<McpServer | null> {
+    const current = this.store.mcpServers.get(id)
+    if (!current) return null
+    const server = this.store.mcpServers.toggle(id)
+    if (!server) return null
+    const connected = this.clients.get(id)
+    connected?.client.dispose()
+    this.clients.delete(id)
+    if (server.enabled) {
+      await this.connect(server)
+    } else {
+      this.emitChanged(
+        this.store.mcpServers.updateRuntime(id, {
+          status: 'disabled',
+          toolCount: 0,
+          lastError: null,
+        }),
+      )
+    }
+    return this.store.mcpServers.get(id)
+  }
 
   async reload(): Promise<McpServer[]> {
     // 先断开全部旧连接。
@@ -105,15 +148,19 @@ export class McpManager {
       )
       return
     }
-    const config: McpServerConfig = {
-      command: server.command,
-      args: server.args,
-      env: Object.fromEntries(
-        server.env.map((entry) => [entry.key, entry.value]),
-      ),
-    }
-    const client = new McpClient(config)
+    let client: McpClient | null = null
     try {
+      const config: McpServerConfig = {
+        command: server.command,
+        args: server.args,
+        env: Object.fromEntries(
+          server.env.flatMap((entry) => {
+            const value = loadSecret(entry.secretRef)
+            return value === undefined ? [] : [[entry.key, value]]
+          }),
+        ),
+      }
+      client = new McpClient(config)
       await client.connect()
       const specs = await client.listTools()
       const tools: McpTool[] = specs.map((spec) => ({
@@ -133,7 +180,7 @@ export class McpManager {
         }),
       )
     } catch (error) {
-      client.dispose()
+      client?.dispose()
       const message = error instanceof Error ? error.message : String(error)
       this.emitChanged(
         this.store.mcpServers.updateRuntime(server.id, {

@@ -8,6 +8,7 @@ import {
   MessageSendParamsSchema,
   MessageStatusSchema,
   MessageSchema,
+  PlanSchema,
   ProjectSchema,
   ProviderProfileSchema,
   RunSchema,
@@ -309,8 +310,11 @@ test('JsonRpcMessageSchema separates requests, responses and garbage', () => {
 
 test('jsonSchemas registry exports JSON Schema for entities and commands', () => {
   assert.ok(jsonSchemas['Project'])
-  assert.ok(jsonSchemas['message.send.params'])
   assert.ok(jsonSchemas['JsonRpcMessage'])
+  for (const method of Object.keys(CommandSchemaRegistry)) {
+    assert.ok(jsonSchemas[`${method}.params`], `${method} params schema`)
+    assert.ok(jsonSchemas[`${method}.result`], `${method} result schema`)
+  }
 })
 
 test('provider.configure accepts models and optional capabilities', () => {
@@ -346,11 +350,16 @@ test('provider.configure accepts models and optional capabilities', () => {
   assert.equal(params.safeParse({ ...base }).success, false)
 })
 
-test('session.get result carries session, messages, runs and toolCalls', () => {
+test('session.get result carries session, messages, runs, toolCalls and plans', () => {
   const result = CommandSchemaRegistry['session.get'].result
   assert.equal(
-    result.safeParse({ session: null, messages: [], runs: [], toolCalls: [] })
-      .success,
+    result.safeParse({
+      session: null,
+      messages: [],
+      runs: [],
+      toolCalls: [],
+      plans: [],
+    }).success,
     true,
   )
   assert.equal(result.safeParse({ session: null }).success, false)
@@ -360,6 +369,51 @@ test('session.get result carries session, messages, runs and toolCalls', () => {
     result.safeParse({ session: null, messages: [], runs: [] }).success,
     false,
   )
+  // plans 为必填：无计划时是空数组，而不是缺字段。
+  assert.equal(
+    result.safeParse({
+      session: null,
+      messages: [],
+      runs: [],
+      toolCalls: [],
+    }).success,
+    false,
+  )
+  // 计划项通过 PlanSchema 校验（含步骤）。
+  const plan = {
+    id: 'pl1',
+    sessionId: 's1',
+    messageId: 'm1',
+    goal: '重构模块 A',
+    status: 'active',
+    summary: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+    completedAt: null,
+    steps: [
+      {
+        id: 'st1',
+        planId: 'pl1',
+        title: '第一步',
+        status: 'pending',
+        note: null,
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+    ],
+  }
+  assert.equal(PlanSchema.safeParse(plan).success, true)
+  assert.equal(
+    result.safeParse({
+      session: null,
+      messages: [],
+      runs: [],
+      toolCalls: [],
+      plans: [plan],
+    }).success,
+    true,
+  )
+  assert.equal(PlanSchema.safeParse({ ...plan, status: 'done' }).success, false)
 })
 
 test('tool and approval events validate envelope payloads', () => {

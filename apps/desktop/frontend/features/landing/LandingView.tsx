@@ -12,12 +12,6 @@ interface LandingViewProps {
   projects: Project[]
   selectedProjectId: string | null
   onProjectChange: (projectId: string | null) => void
-  gitBranches: string[]
-  gitRepo: boolean | null
-  gitBranchesError: string | null
-  selectedGitBranch: string | null
-  gitBranchesLoading: boolean
-  onGitBranchChange: (branch: string | null) => void
   /** 选中项目时展示该项目下的历史会话。 */
   sessions: Session[]
   hasEnabledProvider: boolean
@@ -108,50 +102,6 @@ export function LandingView(props: LandingViewProps): React.JSX.Element {
               </select>
               <span>⌄</span>
             </label>
-            {props.selectedProjectId !== null && (
-              <label
-                className="composer-select"
-                title={
-                  props.gitBranchesError
-                    ? `分支读取失败：${props.gitBranchesError}`
-                    : '新会话分支'
-                }
-                aria-label="新会话分支"
-              >
-                <span>分支</span>
-                {props.gitBranchesLoading ? (
-                  <select value="" disabled aria-label="正在读取分支">
-                    <option value="">读取中…</option>
-                  </select>
-                ) : props.gitBranches.length > 0 ? (
-                  <>
-                    <select
-                      value={props.selectedGitBranch ?? ''}
-                      onChange={(event) =>
-                        props.onGitBranchChange(event.target.value || null)
-                      }
-                    >
-                      {props.gitBranches.map((branch) => (
-                        <option key={branch} value={branch}>
-                          {branch}
-                        </option>
-                      ))}
-                    </select>
-                    <span>⌄</span>
-                  </>
-                ) : (
-                  <select value="" disabled aria-label="无分支">
-                    <option value="">
-                      {props.gitBranchesError
-                        ? '读取失败'
-                        : props.gitRepo === false
-                          ? '非 Git 仓库'
-                          : '无分支'}
-                    </option>
-                  </select>
-                )}
-              </label>
-            )}
           </div>
           <Composer
             autoFocus

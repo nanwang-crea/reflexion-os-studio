@@ -25,7 +25,7 @@ export class McpServerStore {
     name: string
     command: string
     args: string[]
-    env: { key: string; value: string }[]
+    env: { key: string; secretRef: string }[]
   }): McpServer {
     const id = randomUUID()
     this.db
@@ -89,7 +89,7 @@ export class McpServerStore {
 
   private toServer(row: Row): McpServer {
     let args: string[] = []
-    let env: { key: string; value: string }[] = []
+    let env: { key: string; secretRef: string }[] = []
     try {
       const parsed = JSON.parse(String(row.args_json ?? '[]'))
       if (Array.isArray(parsed)) args = parsed.map(String)
@@ -98,7 +98,16 @@ export class McpServerStore {
     }
     try {
       const parsed = JSON.parse(String(row.env_json ?? '[]'))
-      if (Array.isArray(parsed)) env = parsed
+      if (Array.isArray(parsed)) {
+        env = parsed.flatMap((entry) => {
+          if (!entry || typeof entry !== 'object') return []
+          const item = entry as Record<string, unknown>
+          return typeof item.key === 'string' &&
+            typeof item.secretRef === 'string'
+            ? [{ key: item.key, secretRef: item.secretRef }]
+            : []
+        })
+      }
     } catch {
       env = []
     }

@@ -55,8 +55,9 @@ export const jsonSchemas: Readonly<Record<string, unknown>> = Object.freeze(
     toJSONSchema('McpTool', McpToolSchema),
     toJSONSchema('RuntimeError', RuntimeErrorSchema),
     toJSONSchema('RuntimeEvent', RuntimeEventSchema),
-    ...Object.entries(CommandSchemaRegistry).map(([method, entry]) =>
+    ...Object.entries(CommandSchemaRegistry).flatMap(([method, entry]) => [
       toJSONSchema(`${method}.params`, entry.params),
-    ),
+      toJSONSchema(`${method}.result`, entry.result),
+    ]),
   ]),
 )

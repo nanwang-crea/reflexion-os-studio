@@ -74,6 +74,11 @@ interface PendingApproval {
   resolve: (decision: 'approved' | 'denied', scope: 'once' | 'session') => void
 }
 
+export interface ApprovalContext {
+  sessionId: string
+  workspaceRoot: string | null
+}
+
 /**
  * 审批网关：工具循环等待用户决策的桥。
  * pending 以 toolCallId 为键，`approval.resolve` 命令驱动落子；
@@ -81,7 +86,11 @@ interface PendingApproval {
  */
 export class ApprovalGateway {
   private readonly pending = new Map<string, PendingApproval>()
-  private readonly sessionGrants = new Set<ToolOperation>()
+  private readonly sessionGrants = new Set<string>()
+
+  private grantKey(context: ApprovalContext, operation: ToolOperation): string {
+    return `${context.sessionId}\u0000${context.workspaceRoot ?? ''}\u0000${operation}`
+  }
 
   request(input: {
     toolCallId: string
@@ -89,8 +98,9 @@ export class ApprovalGateway {
     operation: ToolOperation
     summary: string
     signal: AbortSignal
+    context: ApprovalContext
   }): Promise<'approved' | 'denied'> {
-    const { toolCallId, emitter, operation, summary, signal } = input
+    const { toolCallId, emitter, operation, summary, signal, context } = input
     emitter.next({ type: 'approval.required', toolCallId, operation, summary })
     return new Promise((resolve, reject) => {
       const onAbort = (): void => {
@@ -108,7 +118,7 @@ export class ApprovalGateway {
           signal.removeEventListener('abort', onAbort)
           this.pending.delete(toolCallId)
           if (decision === 'approved' && scope === 'session') {
-            this.sessionGrants.add(operation)
+            this.sessionGrants.add(this.grantKey(context, operation))
           }
           emitter.next({
             type: 'approval.resolved',
@@ -134,8 +144,8 @@ export class ApprovalGateway {
     return true
   }
 
-  hasSessionGrant(operation: ToolOperation): boolean {
-    return this.sessionGrants.has(operation)
+  hasSessionGrant(operation: ToolOperation, context: ApprovalContext): boolean {
+    return this.sessionGrants.has(this.grantKey(context, operation))
   }
 
   /** 该 Run 是否仍有待审批调用：并行工具轮次据此维持 awaiting_approval。 */

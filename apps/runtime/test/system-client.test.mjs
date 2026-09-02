@@ -109,6 +109,47 @@ test('startup failure exhausts restart budget and stays degraded', async () => {
   delete process.env.FAKE_MODE
 }, 20000)
 
+test('system.ready with incompatible protocolVersion never reaches ready', async () => {
+  const transitions = []
+  const client = new SystemRuntimeClient(NODE, [FIXTURE], (status) =>
+    transitions.push({ status }),
+  )
+  // 每次启动都发不兼容版本：握手被拒 → 有限重启 → 预算耗尽后保持 degraded。
+  process.env.FAKE_MODE = 'bad-protocol'
+  client.start()
+  await new Promise((resolve) => setTimeout(resolve, 4500))
+  assert.equal(client.available, false)
+  assert.equal(
+    transitions.some((entry) => entry.status === 'ready'),
+    false,
+    'must never go ready with a non-matching protocolVersion',
+  )
+  const degradedCount = transitions.filter(
+    (entry) => entry.status === 'degraded',
+  ).length
+  assert.ok(degradedCount >= 4, `degraded transitions=${degradedCount}`)
+  await client.shutdown()
+  delete process.env.FAKE_MODE
+}, 20000)
+
+test('system.ready with malformed params never reaches ready', async () => {
+  const transitions = []
+  const client = new SystemRuntimeClient(NODE, [FIXTURE], (status) =>
+    transitions.push({ status }),
+  )
+  process.env.FAKE_MODE = 'malformed-ready'
+  client.start()
+  await new Promise((resolve) => setTimeout(resolve, 4500))
+  assert.equal(client.available, false)
+  assert.equal(
+    transitions.some((entry) => entry.status === 'ready'),
+    false,
+    'must never go ready on a malformed system.ready',
+  )
+  await client.shutdown()
+  delete process.env.FAKE_MODE
+}, 20000)
+
 test('binary resolver prefers env and falls back to relative search', () => {
   const previous = process.env.REFLEXION_SYSTEM_RUNTIME_BIN
   process.env.REFLEXION_SYSTEM_RUNTIME_BIN = FIXTURE

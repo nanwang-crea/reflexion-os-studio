@@ -2,6 +2,10 @@ import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
+import {
+  PROTOCOL_VERSION,
+  ReadyParamsSchema,
+} from '@reflexion-os-studio/contracts'
 
 export type SystemAvailability =
   'starting' | 'ready' | 'degraded' | 'unavailable' | 'stopped'
@@ -17,11 +21,6 @@ interface PendingRequest {
   resolve: (value: unknown) => void
   reject: (error: Error) => void
   timer: NodeJS.Timeout
-}
-
-interface SystemReadyParams {
-  protocolVersion?: string
-  runtimeVersion?: string
 }
 
 /**
@@ -235,9 +234,25 @@ export class SystemRuntimeClient {
     }
     if (message.method === 'system.ready') {
       this.clearHandshakeTimer()
+      const parsed = ReadyParamsSchema.safeParse(message.params)
+      // 握手严格校验 protocolVersion；不一致/畸形不允许进入 ready。
+      // 视为无效握手：杀掉进程走 exit 统一路径（degraded + 有限重启），而不是误标记 ready。
+      if (!parsed.success || parsed.data.protocolVersion !== PROTOCOL_VERSION) {
+        process.stderr.write(
+          `[runtime] system.ready rejected: expected protocol ${PROTOCOL_VERSION}, ` +
+            `got ${String((message.params as { protocolVersion?: unknown })?.protocolVersion)} ` +
+            `(${parsed.success ? 'version mismatch' : 'malformed params'})\n`,
+        )
+        try {
+          this.child?.kill()
+        } catch {
+          // 进程已退出：exit 路径会统一收尾。
+        }
+        return
+      }
+      // 重新协商成功：重置重启预算，避免历史崩溃累计导致后续无谓降级。
       this.restarts = 0
-      const params = (message.params ?? {}) as SystemReadyParams
-      this.setStatus('ready', params.runtimeVersion)
+      this.setStatus('ready', parsed.data.runtimeVersion)
       return
     }
     if (typeof message.id === 'number' && this.pending.has(message.id)) {

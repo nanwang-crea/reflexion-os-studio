@@ -77,6 +77,28 @@ export class PlanStore {
     }
   }
 
+  /** 启动恢复：进程退出时 active 计划及其未完成步骤统一失败收敛。 */
+  recoverActive(): void {
+    const now = nowIso()
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      this.db
+        .prepare(
+          "UPDATE plan_steps SET status = 'failed', note = ?, updated_at = ? WHERE status IN ('pending', 'in_progress') AND plan_id IN (SELECT id FROM plans WHERE status = 'active')",
+        )
+        .run('Runtime restarted before plan completion', now)
+      this.db
+        .prepare(
+          "UPDATE plans SET status = 'failed', summary = ?, updated_at = ?, completed_at = ? WHERE status = 'active'",
+        )
+        .run('Runtime restarted before plan completion', now, now)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
   get(id: string): Plan | null {
     const row = this.db.prepare('SELECT * FROM plans WHERE id = ?').get(id) as
       Row | undefined

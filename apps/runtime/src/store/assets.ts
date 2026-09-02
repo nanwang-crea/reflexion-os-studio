@@ -88,6 +88,21 @@ export class AssetStore {
     return row === undefined ? null : toAsset(row)
   }
 
+  /** 全部 Asset（跨项目）：供启动巡检跨引内容文件与 DB 行。 */
+  all(): AssetRef[] {
+    const rows = this.db
+      .prepare('SELECT * FROM assets ORDER BY created_at DESC')
+      .all() as unknown as AssetRow[]
+    return rows.map(toAsset)
+  }
+
+  /** 仅更新预览状态（内容缺失等巡检结论落库）。 */
+  setPreview(assetId: string, preview: AssetRef['preview']): void {
+    this.db
+      .prepare('UPDATE assets SET preview_status = ? WHERE id = ?')
+      .run(preview, assetId)
+  }
+
   delete(assetId: string): boolean {
     return (
       this.db.prepare('DELETE FROM assets WHERE id = ?').run(assetId).changes >

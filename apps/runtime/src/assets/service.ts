@@ -1,6 +1,15 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { copyFile, mkdir, readFile, rm, stat } from 'node:fs/promises'
-import { basename, join, resolve } from 'node:path'
+import {
+  copyFile,
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  stat,
+} from 'node:fs/promises'
+import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import type { AssetKind, AssetRef } from '@reflexion-os-studio/contracts'
 import { CommandError } from '../agent/errors.js'
 import { nowIso } from '../store/shared.js'
@@ -92,7 +101,13 @@ export class AssetService {
     return join(this.dirFor(projectId), assetId)
   }
 
-  /** 从工作区导入文件为 Asset：复制进 Store、计算 hash、落元数据。 */
+  /**
+   * 从工作区导入文件为 Asset：复制进 Store、计算 hash、落元数据。
+   * 安全边界：先对工作区根与源文件分别 realpath 解析符号链接，再按路径组件
+   * 做 containment 校验，拒绝 workspace 内指向外部的符号链接以及前缀碰撞
+   * （如 /ws/proj 🆚 /ws/project）。复制或落库任一环节失败时补偿删除已复制的
+   * 内容文件，避免留下无元数据的孤儿文件。
+   */
   async importWorkspace(projectId: string, path: string): Promise<AssetRef> {
     const project = this.store.projects.get(projectId)
     if (!project || project.folderPath === '') {
@@ -102,11 +117,26 @@ export class AssetService {
       )
     }
     assertWorkspacePath(path)
-    const source = resolve(project.folderPath, path)
-    if (!source.startsWith(resolve(project.folderPath))) {
+    const rawRoot = resolve(project.folderPath)
+    const rawSource = resolve(rawRoot, path)
+    // 组件级 containment：拒绝 .. 逃逸与前缀碰撞（/ws/a 不允许命中 /ws/ab）。
+    if (!isWithin(rawRoot, rawSource)) {
       throw new CommandError('invalid_request', '导入路径超出工作区范围')
     }
-    const info = await stat(source).catch(() => null)
+    // realpath 解析根与目标：workspace 内指向外部的符号链接会被解析到外部而拒绝；
+    // 仅指向 workspace 内部的链接解析后仍在根内，被视为合法。
+    const realRoot = await realpath(rawRoot).catch(() => rawRoot)
+    const realSource = await realpath(rawSource).catch(() => null)
+    if (realSource === null) {
+      throw new CommandError('invalid_request', `文件不存在：${path}`)
+    }
+    if (!isWithin(realRoot, realSource)) {
+      throw new CommandError(
+        'invalid_request',
+        '导入路径超出工作区范围（符号链接越界）',
+      )
+    }
+    const info = await lstat(realSource).catch(() => null)
     if (info === null || !info.isFile()) {
       throw new CommandError('invalid_request', `文件不存在：${path}`)
     }
@@ -116,17 +146,18 @@ export class AssetService {
         `文件过大（${info.size} B），导入上限 64MB`,
       )
     }
-    const content = await readFile(source)
+    const fileName = basename(realSource)
+    const content = await readFile(realSource)
     const assetId = randomUUID()
     const asset: AssetRef = {
       assetId,
       projectId,
       uri: `asset://${assetId}`,
-      kind: kindOf(detectMime(basename(path))),
-      mimeType: detectMime(basename(path)),
+      kind: kindOf(detectMime(fileName)),
+      mimeType: detectMime(fileName),
       size: info.size,
       hash: createHash('sha256').update(content).digest('hex'),
-      fileName: basename(path),
+      fileName,
       runId: null,
       nodeRunId: null,
       createdBy: 'user',
@@ -134,9 +165,20 @@ export class AssetService {
       metadata: { sourcePath: path },
       preview: 'ready',
     }
+    const destPath = this.pathFor(projectId, asset.assetId)
     await mkdir(this.dirFor(projectId), { recursive: true })
-    await copyFile(source, this.pathFor(projectId, asset.assetId))
-    return this.store.assetStore.create(asset)
+    await copyFile(realSource, destPath).catch(async () => {
+      // 复制中途失败：清掉残留半文件，避免孤儿。
+      await rm(destPath, { force: true }).catch(() => {})
+      throw new CommandError('invalid_request', '导入失败：无法复制文件')
+    })
+    try {
+      return this.store.assetStore.create(asset)
+    } catch (error) {
+      // 元数据落库失败：补偿删除已复制文件，保持 Store 与库一致。
+      await rm(destPath, { force: true }).catch(() => {})
+      throw error
+    }
   }
 
   list(projectId: string): AssetRef[] {
@@ -176,13 +218,52 @@ export class AssetService {
     return { asset, text: null, base64: null }
   }
 
-  /** 删除 Asset:先清行再删内容文件;内容缺失视同成功。 */
+  /**
+   * 删除 Asset：先清内容文件，再删 DB 行。
+   * DOS（like）失败时保留 DB 行（内容仍在，状态一致）并以 CommandError 上抛；
+   * DB 删行失败/行已失时保留孤立内容文件，交由启动巡检补偿清理。
+   */
   async delete(assetId: string): Promise<boolean> {
     const asset = this.store.assetStore.get(assetId)
     if (asset === null) return false
-    this.store.assetStore.delete(assetId)
-    await rm(this.pathFor(asset.projectId, asset.assetId), { force: true })
-    return true
+    const destPath = this.pathFor(asset.projectId, asset.assetId)
+    try {
+      await rm(destPath, { force: true })
+    } catch {
+      throw new CommandError('delete_failed', `删除内容文件失败：${assetId}`)
+    }
+    return this.store.assetStore.delete(assetId)
+  }
+
+  /**
+   * 启动巡检/补偿清理：与 Store 各领域 recover 方法同期调用。
+   * 1) 删除「有内容文件但无 DB 行」的孤立文件（此前导入复制成功但落库失败残留）；
+   * 2) 把「有 DB 行但内容文件缺失」的 Asset 标记为 failed（此前导出/崩溃/外部删除）。
+   */
+  async recover(): Promise<void> {
+    const root = join(this.dataDir, 'assets')
+    await mkdir(root, { recursive: true }).catch(() => {})
+    const dirs = await readdir(root, { withFileTypes: true }).catch(() => [])
+    for (const dir of dirs) {
+      if (!dir.isDirectory()) continue
+      const projectDir = join(root, dir.name)
+      const files = await readdir(projectDir).catch(() => [])
+      for (const assetId of files) {
+        if (this.store.assetStore.get(assetId) === null) {
+          await rm(join(projectDir, assetId), { force: true }).catch(() => {})
+        }
+      }
+    }
+    for (const asset of this.store.assetStore.all()) {
+      const info = await stat(
+        this.pathFor(asset.projectId, asset.assetId),
+      ).catch(() => null)
+      if (info === null || !info.isFile()) {
+        if (asset.preview !== 'failed') {
+          this.store.assetStore.setPreview(asset.assetId, 'failed')
+        }
+      }
+    }
   }
 }
 
@@ -196,4 +277,14 @@ function assertWorkspacePath(path: string): void {
   if (/^[\\/]/.test(path)) {
     throw new CommandError('invalid_request', '路径必须是工作区相对路径')
   }
+}
+
+/**
+ * 组件级 containment：用 path.relative 判定 target 是否位于 root 之下。
+ * 比字符串前缀更严格——`/ws/proj` 不会误命中 `/ws/project`（前缀碰撞），
+ * `..` 逃逸与跨盘符（Windows）也会被 relative/isAbsolute 拒绝。
+ */
+function isWithin(root: string, target: string): boolean {
+  const rel = relative(root, target)
+  return rel !== '' && rel !== '..' && !rel.startsWith('..') && !isAbsolute(rel)
 }

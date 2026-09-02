@@ -20,6 +20,7 @@ import {
   AgentSettingsSchema,
   McpServerSchema,
   McpToolSchema,
+  PlanSchema,
 } from './entities.js'
 import { RuntimeStatusSchema } from './handshake.js'
 
@@ -94,7 +95,8 @@ export const CommandSchemaRegistry = {
       // null / 省略 → 独立会话（不关联项目）。
       projectId: z.union([z.string().min(1), z.null()]).optional(),
       title: z.string().min(1).optional(),
-      // 项目 Git 会话绑定的本地分支；仅 projectId 非空时有效，可空。
+      // Deprecated legacy input: accepted by the wire schema for old clients,
+      // then rejected by Runtime so new sessions cannot claim a branch switch.
       gitBranch: z.string().min(1).nullable().optional(),
     }),
     result: z.object({ session: SessionSchema }),
@@ -133,6 +135,8 @@ export const CommandSchemaRegistry = {
       runs: z.array(RunSchema),
       // 会话内全部工具调用（跨 Run 汇总），供 UI 呈现工具轨迹。
       toolCalls: z.array(ToolCallSchema),
+      // 会话内全部计划（跨 Run 汇总），供 UI 呈现计划轨迹。
+      plans: z.array(PlanSchema),
     }),
   },
   'message.send': {
@@ -206,7 +210,21 @@ export const CommandSchemaRegistry = {
       name: z.string().min(1),
       command: z.string().min(1),
       args: z.array(z.string()),
-      env: z.array(z.object({ key: z.string().min(1), value: z.string() })),
+      env: z.array(
+        z
+          .object({
+            key: z.string().min(1),
+            secret: z.string().optional(),
+            secretRef: z.string().min(1).optional(),
+          })
+          .refine(
+            (entry) =>
+              entry.secret !== undefined || entry.secretRef !== undefined,
+            {
+              message: 'env entry requires secret or secretRef',
+            },
+          ),
+      ),
     }),
     result: z.object({ server: McpServerSchema }),
   },

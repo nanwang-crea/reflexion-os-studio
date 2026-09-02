@@ -10,7 +10,6 @@ import { useModelSelection } from './hooks/useModelSelection'
 import { usePermissionMode } from './hooks/usePermissionMode'
 import { listProviders } from './api/providers'
 import { listProjects } from './api/projects'
-import { gitBranches } from './api/workspace'
 import { resolveApproval } from './api/chat'
 import { listSkills } from './api/skills'
 import { getSessionData, listSessions, type SessionData } from './api/sessions'
@@ -57,13 +56,6 @@ export default function App() {
   const [projectSessions, setProjectSessions] = useState<Session[]>([])
   const [standaloneSessions, setStandaloneSessions] = useState<Session[]>([])
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null)
-  const [selectedGitBranch, setSelectedGitBranch] = useState<string | null>(
-    null,
-  )
-  const [gitRepo, setGitRepo] = useState<boolean | null>(null)
-  const [gitBranchesError, setGitBranchesError] = useState<string | null>(null)
-  const [branchOptions, setBranchOptions] = useState<string[]>([])
-  const [branchLoading, setBranchLoading] = useState(false)
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [sessionData, setSessionData] = useState<SessionData | null>(null)
   const [creatingProject, setCreatingProject] = useState(false)
@@ -212,10 +204,6 @@ export default function App() {
 
   const selectProject = (projectId: string): void => {
     setActiveProjectId(projectId)
-    setSelectedGitBranch(null)
-    setGitRepo(null)
-    setGitBranchesError(null)
-    setBranchOptions([])
     setActiveSessionId(null)
     setSessionData(null)
     setView('chat')
@@ -227,62 +215,19 @@ export default function App() {
       setActiveProjectId(projectId)
       setActiveSessionId(null)
       setSessionData(null)
-      setSelectedGitBranch(null)
-      setGitRepo(null)
-      setGitBranchesError(null)
-      setBranchOptions([])
       if (projectId !== null) void refreshProjectSessions(projectId)
     },
     [refreshProjectSessions],
   )
 
-  useEffect(() => {
-    if (
-      activeProjectId === null ||
-      activeSessionId !== null ||
-      bootstrap?.systemReady !== true
-    ) {
-      return
-    }
-    let cancelled = false
-    setBranchLoading(true)
-    setGitBranchesError(null)
-    void gitBranches(activeProjectId)
-      .then((result) => {
-        if (cancelled) return
-        setGitRepo(result.repo)
-        setBranchOptions(result.branches)
-        setSelectedGitBranch(result.current ?? result.branches[0] ?? null)
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return
-        setGitRepo(null)
-        setGitBranchesError(
-          error instanceof Error ? error.message : String(error),
-        )
-        setBranchOptions([])
-        setSelectedGitBranch(null)
-      })
-      .finally(() => {
-        if (!cancelled) setBranchLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [activeProjectId, activeSessionId, bootstrap?.systemReady])
-
   const selectStandaloneSession = (sessionId: string): void => {
     setActiveProjectId(null)
-    setSelectedGitBranch(null)
-    setBranchOptions([])
     openSession(sessionId)
   }
 
   /** 回到“新对话”落地页；未选项目即独立对话模式。 */
   const newStandaloneChat = (): void => {
     setActiveProjectId(null)
-    setSelectedGitBranch(null)
-    setBranchOptions([])
     setActiveSessionId(null)
     setSessionData(null)
     setView('chat')
@@ -300,7 +245,6 @@ export default function App() {
     projects,
     activeSessionId,
     activeProjectId,
-    selectedGitBranch,
     selectedModelKey,
     sessionData,
     permissionMode,
@@ -494,12 +438,6 @@ export default function App() {
                 projects={projects}
                 selectedProjectId={activeProjectId}
                 onProjectChange={selectLandingProject}
-                gitBranches={branchOptions}
-                gitRepo={gitRepo}
-                gitBranchesError={gitBranchesError}
-                selectedGitBranch={selectedGitBranch}
-                gitBranchesLoading={branchLoading}
-                onGitBranchChange={setSelectedGitBranch}
                 sessions={activeProject ? projectSessions : []}
                 hasEnabledProvider={hasEnabledProvider}
                 permissionValue={permissionMode}

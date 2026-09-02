@@ -451,6 +451,7 @@ export class ChatAgent {
             signal,
           ),
         registry,
+        workspaceRoot,
         gate,
         approvals: this.approvals,
         memory: this.memory,

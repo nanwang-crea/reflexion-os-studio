@@ -3,6 +3,14 @@ set -euo pipefail
 
 [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
 
+# clean checkout 下各包 dist 不存在，而单元测试与 smoke 脚本都从 dist 导入；
+# 先构建依赖包（contracts → runtime-client → runtime → 前端），确保产物就绪。
+scripts/build-ts.sh
+[ -f "apps/runtime/dist/index.js" ] || {
+  echo "test-all: apps/runtime/dist/index.js missing after build" >&2
+  exit 1
+}
+
 pnpm lint
 pnpm test:ts
 pnpm --filter @reflexion-os-studio/contracts test

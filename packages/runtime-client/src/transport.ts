@@ -1,5 +1,6 @@
 import {
   RuntimeEventSchema,
+  lookupCommandSchema,
   type JsonRpcErrorDetail,
   type RuntimeEvent,
 } from '@reflexion-os-studio/contracts'
@@ -110,7 +111,7 @@ export class RuntimeTransport {
           new TransportError(early.error.message, early.error),
         )
       }
-      return Promise.resolve(early.result as R)
+      return Promise.resolve(this.validateResult(method, early.result))
     }
     return new Promise<R>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -118,11 +119,33 @@ export class RuntimeTransport {
         reject(new TransportError(`runtime request timeout: ${method}`))
       }, timeoutMs)
       this.pending.set(id, {
-        resolve: (result) => resolve(result as R),
+        resolve: (result) => {
+          let validated: R
+          try {
+            validated = this.validateResult(method, result)
+          } catch (error) {
+            reject(error instanceof Error ? error : new Error(String(error)))
+            return
+          }
+          resolve(validated)
+        },
         reject,
         timer,
       })
     })
+  }
+
+  /** 按 contracts 注册表对命令响应做运行时校验；未知命令或校验失败时按策略处理。 */
+  private validateResult<R>(method: string, result: unknown): R {
+    const schema = lookupCommandSchema(method)?.result
+    if (!schema) return result as R
+    const parsed = schema.safeParse(result)
+    if (!parsed.success) {
+      throw new TransportError(
+        `runtime response validation failed for ${method}: ${parsed.error.message}`,
+      )
+    }
+    return parsed.data as R
   }
 
   private handleMessage(payload: TransportSidecarMessage): void {

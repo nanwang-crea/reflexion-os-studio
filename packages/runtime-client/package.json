@@ -15,7 +15,8 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json",
+    "test": "tsc -p tsconfig.json && node --test test/transport.test.mjs"
   },
   "dependencies": {
     "@reflexion-os-studio/contracts": "workspace:*"

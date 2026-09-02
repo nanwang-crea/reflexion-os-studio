@@ -29,6 +29,7 @@ interface RunStreamInput {
   /** Run 启动时构建会话历史（可能触发一次压缩摘要调用）。 */
   buildHistory: (signal: AbortSignal) => Promise<ModelMessage[]>
   registry: ToolRegistry
+  workspaceRoot: string | null
   /** 权限闸门：automatic / ask / denied（workspace 或 read-only Profile）。 */
   gate: PermissionGate
   approvals: ApprovalGateway
@@ -72,12 +73,22 @@ export class RunRunner {
     status: 'failed' | 'cancelled',
     summary: string,
   ): void {
-    if (!run.planId) return
+    // Plan linkage may be created by update_plan during this Run; re-read by runId.
+    const currentRun = this.store.runs.get(run.id)
+    const planId = currentRun?.planId ?? run.planId
+    if (!planId) return
     try {
+      const linked = this.store.plans.get(planId)
+      if (
+        !linked ||
+        linked.sessionId !== run.sessionId ||
+        linked.status !== 'active'
+      )
+        return
       const plan =
         status === 'failed'
-          ? this.store.plans.fail(run.planId, summary)
-          : this.store.plans.cancel(run.planId, summary)
+          ? this.store.plans.fail(planId, summary)
+          : this.store.plans.cancel(planId, summary)
       // Plan 事件使用当前 Run 的 emitter，在调用点单独发出。
       emitter.next({ type: 'plan.updated', plan })
     } catch {
@@ -297,7 +308,10 @@ export class RunRunner {
             decision === 'ask' &&
             !(
               isToolOperation(request.name) &&
-              input.approvals.hasSessionGrant(request.name)
+              input.approvals.hasSessionGrant(request.name, {
+                sessionId: run.sessionId,
+                workspaceRoot: input.workspaceRoot,
+              })
             )
           const row = this.store.toolCalls.create({
             runId: run.id,
@@ -328,6 +342,10 @@ export class RunRunner {
                 >[0]['operation'],
                 summary: summarizeArgs(request.name, args),
                 signal,
+                context: {
+                  sessionId: run.sessionId,
+                  workspaceRoot: input.workspaceRoot,
+                },
               })
             } finally {
               // 并行工具轮次:还有其它调用在等审批时保持 awaiting_approval,
@@ -350,10 +368,26 @@ export class RunRunner {
                 code: 'permission_denied',
               }
             }
-            grant = row.id
+            grant = JSON.stringify({
+              grantId: row.id,
+              requestId: row.id,
+              sessionId: run.sessionId,
+              workspaceId: input.workspaceRoot ?? '',
+              operation: request.name,
+              scope: 'once',
+              expiresAt: Date.now() + 5 * 60 * 1000,
+            })
             this.store.toolCalls.markStatus(row.id, 'running', row.id)
           } else if (decision === 'ask') {
-            grant = `session:${request.name}`
+            grant = JSON.stringify({
+              grantId: `session:${request.name}`,
+              requestId: row.id,
+              sessionId: run.sessionId,
+              workspaceId: input.workspaceRoot ?? '',
+              operation: request.name,
+              scope: 'session',
+              expiresAt: Date.now() + 30 * 60 * 1000,
+            })
             this.store.toolCalls.markStatus(row.id, 'running', grant)
           }
 

@@ -65,6 +65,7 @@ export class Store {
     this.messages.recoverInterrupted()
     this.toolCalls.recoverUnfinished()
     this.workspaceIndex.recoverInterrupted()
+    this.plans.recoverActive()
   }
 
   /** 单事务边界：同连接上的多个领域写入要么全部提交要么全部回滚。 */

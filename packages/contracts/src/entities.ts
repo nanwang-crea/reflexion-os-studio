@@ -492,7 +492,13 @@ export const McpServerSchema = z.object({
   name: z.string().min(1),
   command: z.string().min(1),
   args: z.array(z.string()),
-  env: z.array(z.object({ key: z.string().min(1), value: z.string() })),
+  // 环境变量只返回 secretRef，不返回明文 value。
+  env: z.array(
+    z.object({
+      key: z.string().min(1),
+      secretRef: z.string().min(1),
+    }),
+  ),
   enabled: z.boolean(),
   /** 当前可用工具;未就绪为 []。 */
   toolCount: z.number().int().nonnegative(),

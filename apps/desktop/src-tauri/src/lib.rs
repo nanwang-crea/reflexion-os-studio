@@ -325,13 +325,18 @@ fn bootstrap_get_state(
 /// 与 WebView 内导航隔离，永不内嵌）。
 #[tauri::command]
 fn open_external(url: String) -> Result<(), String> {
-    let trimmed = url.trim();
-    if !trimmed.starts_with("https://") {
-        return Err("only https external URLs allowed".to_string());
+    let parsed = url::Url::parse(url.trim())
+        .map_err(|_| "invalid external URL".to_string())?;
+    if parsed.scheme() != "https" || parsed.host_str().is_none() {
+        return Err("only valid https external URLs allowed".to_string());
     }
-    open_with_system_browser(trimmed)
-        .map(|_| ())
-        .map_err(|error| format!("failed to open: {error}"))
+    let trimmed = parsed.as_str();
+    let status = open_with_system_browser(trimmed)
+        .map_err(|error| format!("failed to open: {error}"))?;
+    if !status.success() {
+        return Err(format!("system browser exited with status {status}"))
+    }
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]
@@ -341,8 +346,8 @@ fn open_with_system_browser(url: &str) -> std::io::Result<std::process::ExitStat
 
 #[cfg(target_os = "windows")]
 fn open_with_system_browser(url: &str) -> std::io::Result<std::process::ExitStatus> {
-    std::process::Command::new("cmd")
-        .args(["/C", "start", "", url])
+    std::process::Command::new("rundll32.exe")
+        .args(["url.dll,FileProtocolHandler", url])
         .status()
 }
 

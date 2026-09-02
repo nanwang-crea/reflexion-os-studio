@@ -106,6 +106,10 @@ const commandContext = {
 }
 
 systemRuntime.start()
+// Asset Store 启动巡检/补偿清理：清理孤儿内容文件、标记缺内容的资产。
+void assetService.recover().catch((error: unknown) => {
+  process.stderr.write(`[runtime] asset recovery failed: ${String(error)}\n`)
+})
 // MCP:按配置连接全部已启用 server(失败标记 failed,不阻塞 Chat)。
 void mcpManager.reload().catch((error: unknown) => {
   process.stderr.write(`[runtime] mcp reload failed: ${String(error)}\n`)
