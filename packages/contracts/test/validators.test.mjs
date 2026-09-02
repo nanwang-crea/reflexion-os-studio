@@ -86,6 +86,8 @@ test('RunSchema carries agent delegation fields and awaiting_approval', () => {
     status: 'awaiting_approval',
     providerId: null,
     model: null,
+    planId: null,
+    planStepId: null,
     startedAt: NOW,
     completedAt: null,
     errorCode: null,

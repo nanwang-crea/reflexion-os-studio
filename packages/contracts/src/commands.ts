@@ -448,6 +448,11 @@ export const CommandSchemaRegistry = {
 
 export type CommandName = keyof typeof CommandSchemaRegistry
 
+/** Commands accepted by the desktop Host and forwarded to Runtime. */
+export const runtimeMethodNames = Object.freeze(
+  Object.keys(CommandSchemaRegistry).sort() as CommandName[],
+)
+
 export type CommandSchemaEntry = {
   params: z.ZodType
   result: z.ZodType

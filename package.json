@@ -9,6 +9,7 @@
     "build:desktop": "pnpm --filter @reflexion-os-studio/desktop build",
     "dev:desktop": "pnpm --filter @reflexion-os-studio/desktop dev",
     "build:packages": "bash scripts/build-ts.sh",
+    "generate:runtime-methods": "node scripts/generate-runtime-methods.mjs",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "lint": "eslint .",
