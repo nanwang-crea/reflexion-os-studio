@@ -239,17 +239,20 @@ pub fn branches(workspace_root: &Path) -> Result<BranchesOutcome, GitError> {
             .to_lowercase()
             .contains("not a git repository")
     };
-    if current_output.exit_code.map_or(false, |code| code != 0) && not_a_repo(&current_output) {
-        return Ok(BranchesOutcome {
-            repo: false,
-            current: None,
-            branches: Vec::new(),
-        });
+    if current_output.exit_code != Some(0) {
+        if not_a_repo(&current_output) {
+            return Ok(BranchesOutcome {
+                repo: false,
+                current: None,
+                branches: Vec::new(),
+            });
+        }
+        return Err(GitError::new(
+            "git_failed",
+            first_line(&current_output.stderr).to_string(),
+        ));
     }
-    let current = match current_output.exit_code {
-        Some(0) => trim_to_none(&current_output.stdout),
-        _ => None,
-    };
+    let current = trim_to_none(&current_output.stdout);
     let list_output = run_git(
         workspace_root,
         &[
@@ -259,6 +262,18 @@ pub fn branches(workspace_root: &Path) -> Result<BranchesOutcome, GitError> {
             "refs/heads",
         ],
     )?;
+    if list_output.timed_out {
+        return Err(GitError::new(
+            "git_failed",
+            "git branch list timed out".to_string(),
+        ));
+    }
+    if list_output.exit_code != Some(0) {
+        return Err(GitError::new(
+            "git_failed",
+            first_line(&list_output.stderr).to_string(),
+        ));
+    }
     let branches = list_output
         .stdout
         .lines()
@@ -289,7 +304,13 @@ fn first_line(text: &str) -> &str {
 
 /// 运行 git 并收集输出：超时杀进程，stdout/stderr 各限 512KB（防大 diff 撑爆内存）。
 fn run_git(workspace_root: &Path, args: &[&str]) -> Result<GitOutput, GitError> {
-    let mut command = Command::new("git");
+    let executable = find_git_executable().ok_or_else(|| {
+        GitError::new(
+            "git_unavailable",
+            "git not found; install Git or configure REFLEXION_GIT_PATH".to_string(),
+        )
+    })?;
+    let mut command = Command::new(executable);
     command
         .current_dir(workspace_root)
         .args(args)
@@ -338,6 +359,33 @@ fn run_git(workspace_root: &Path, args: &[&str]) -> Result<GitOutput, GitError> 
         truncated,
         timed_out,
     })
+}
+
+fn find_git_executable() -> Option<std::path::PathBuf> {
+    if let Ok(path) = std::env::var("REFLEXION_GIT_PATH") {
+        let candidate = std::path::PathBuf::from(path);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    let mut candidates = Vec::new();
+    if let Ok(path) = std::env::var("PATH") {
+        candidates.extend(std::env::split_paths(&path).map(|dir| dir.join("git")));
+    }
+    #[cfg(target_os = "macos")]
+    candidates.extend([
+        std::path::PathBuf::from("/usr/bin/git"),
+        std::path::PathBuf::from("/opt/homebrew/bin/git"),
+        std::path::PathBuf::from("/usr/local/bin/git"),
+    ]);
+    #[cfg(target_os = "windows")]
+    candidates.extend([
+        std::path::PathBuf::from(r"C:\\Program Files\\Git\\cmd\\git.exe"),
+        std::path::PathBuf::from(r"C:\\Program Files\\Git\\bin\\git.exe"),
+    ]);
+    #[cfg(target_os = "linux")]
+    candidates.push(std::path::PathBuf::from("/usr/bin/git"));
+    candidates.into_iter().find(|path| path.is_file())
 }
 
 /// 后台排空子进程管道：受限收集，避免子进程写满管道而阻塞。

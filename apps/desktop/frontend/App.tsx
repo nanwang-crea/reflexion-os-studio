@@ -61,6 +61,8 @@ export default function App() {
   const [selectedGitBranch, setSelectedGitBranch] = useState<string | null>(
     null,
   )
+  const [gitRepo, setGitRepo] = useState<boolean | null>(null)
+  const [gitBranchesError, setGitBranchesError] = useState<string | null>(null)
   const [branchOptions, setBranchOptions] = useState<string[]>([])
   const [branchLoading, setBranchLoading] = useState(false)
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
@@ -212,6 +214,9 @@ export default function App() {
   const selectProject = (projectId: string): void => {
     setActiveProjectId(projectId)
     setSelectedGitBranch(null)
+    setGitRepo(null)
+    setGitBranchesError(null)
+    setBranchOptions([])
     setActiveSessionId(null)
     setSessionData(null)
     setView('chat')
@@ -224,6 +229,8 @@ export default function App() {
       setActiveSessionId(null)
       setSessionData(null)
       setSelectedGitBranch(null)
+      setGitRepo(null)
+      setGitBranchesError(null)
       setBranchOptions([])
       if (projectId !== null) void refreshProjectSessions(projectId)
     },
@@ -231,17 +238,31 @@ export default function App() {
   )
 
   useEffect(() => {
-    if (activeProjectId === null || activeSessionId !== null) return
+    if (
+      activeProjectId === null ||
+      activeSessionId !== null ||
+      bootstrap?.systemReady !== true
+    ) {
+      return
+    }
     let cancelled = false
     setBranchLoading(true)
+    setGitBranchesError(null)
     void gitBranches(activeProjectId)
       .then((result) => {
         if (cancelled) return
+        setGitRepo(result.repo)
         setBranchOptions(result.branches)
         setSelectedGitBranch(result.current ?? result.branches[0] ?? null)
       })
-      .catch(() => {
-        if (!cancelled) setBranchOptions([])
+      .catch((error: unknown) => {
+        if (cancelled) return
+        setGitRepo(null)
+        setGitBranchesError(
+          error instanceof Error ? error.message : String(error),
+        )
+        setBranchOptions([])
+        setSelectedGitBranch(null)
       })
       .finally(() => {
         if (!cancelled) setBranchLoading(false)
@@ -249,7 +270,7 @@ export default function App() {
     return () => {
       cancelled = true
     }
-  }, [activeProjectId, activeSessionId])
+  }, [activeProjectId, activeSessionId, bootstrap?.systemReady])
 
   const selectStandaloneSession = (sessionId: string): void => {
     setActiveProjectId(null)
@@ -499,6 +520,8 @@ export default function App() {
                 selectedProjectId={activeProjectId}
                 onProjectChange={selectLandingProject}
                 gitBranches={branchOptions}
+                gitRepo={gitRepo}
+                gitBranchesError={gitBranchesError}
                 selectedGitBranch={selectedGitBranch}
                 gitBranchesLoading={branchLoading}
                 onGitBranchChange={setSelectedGitBranch}
