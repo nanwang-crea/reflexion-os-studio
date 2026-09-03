@@ -17,6 +17,7 @@ import {
   ToolCallSchema,
   ToolSpecSchema,
   jsonSchemas,
+  parseResourceUri,
 } from '../dist/index.js'
 
 const NOW = '2026-08-29T00:00:00.000Z'
@@ -599,4 +600,12 @@ test('memory.written event validates memory payloads', () => {
     }).success,
     false,
   )
+})
+
+test('parseResourceUri normalizes backslashes in workspace paths', () => {
+  const link = parseResourceUri('workspace:///src\\agent\\runner.ts#L418-L426')
+  assert.equal(link.kind, 'workspaceFile')
+  assert.equal(link.projectId, '')
+  assert.equal(link.path, 'src/agent/runner.ts')
+  assert.equal(link.line, 418)
 })

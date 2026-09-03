@@ -46,6 +46,7 @@ export function parseResourceUri(uri: string): ResourceLink {
       .slice(noProject ? 1 : slash + 1)
       .split('/')
       .map(decodeURIComponent)
+      .map((segment) => segment.replaceAll('\\', '/'))
       .join('/')
     const line =
       fragment === ''
