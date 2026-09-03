@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { URL } from 'node:url'
 import {
@@ -20,6 +21,46 @@ function within(root: string, candidate: string): boolean {
   )
 }
 
+function workspaceRelativePath(
+  rawPath: string,
+  workspaceRoot: string,
+): string | null {
+  let decoded: string
+  try {
+    decoded = decodeURIComponent(rawPath)
+  } catch {
+    return null
+  }
+  const normalized = decoded.replaceAll('\\\\', '/')
+  if (
+    !normalized ||
+    normalized.startsWith('/') ||
+    normalized.split('/').includes('..')
+  )
+    return null
+  const root = resolve(workspaceRoot)
+  const direct = resolve(root, normalized)
+
+  // Agents may cite paths relative to the repository root while the project
+  // points at a package subdirectory. Strip that known directory prefix only.
+  const rootParts = root.split(/[\\/]+/).filter(Boolean)
+  for (let count = Math.min(6, rootParts.length); count >= 1; count--) {
+    const prefix = rootParts.slice(-count).join('/')
+    if (normalized === prefix) return null
+    if (normalized.startsWith(`${prefix}/`)) {
+      const candidate = normalized.slice(prefix.length + 1)
+      if (
+        candidate &&
+        within(root, resolve(root, candidate)) &&
+        existsSync(resolve(root, candidate))
+      )
+        return candidate
+    }
+  }
+  if (within(root, direct)) return relative(root, direct).split(sep).join('/')
+  return null
+}
+
 function normalizeUri(
   raw: string,
   session: SessionContext,
@@ -28,15 +69,21 @@ function normalizeUri(
   const hash = raw.indexOf('#')
   const target = hash < 0 ? raw : raw.slice(0, hash)
   const fragment = hash < 0 ? '' : raw.slice(hash + 1)
-  const line = fragment === '' ? undefined : /^L([1-9]\d*)$/.exec(fragment)?.[1]
+  const line =
+    fragment === ''
+      ? undefined
+      : /^L([1-9]\d*)(?:-L?[1-9]\d*)?$/.exec(fragment)?.[1]
   if (fragment !== '' && line === undefined)
     throw new Error('Invalid resource fragment')
   if (target.startsWith('workspace:///')) {
     if (session.projectId === null)
       throw new Error('Resource requires a project session')
-    const path = target.slice('workspace:///'.length)
-    if (!path || path.split('/').includes('..'))
-      throw new Error('Invalid workspace path')
+    const project = store.projects.get(session.projectId)
+    if (!project || project.folderPath === '')
+      throw new Error('Project workspace unavailable')
+    const rawPath = target.slice('workspace:///'.length)
+    const path = workspaceRelativePath(rawPath, project.folderPath)
+    if (!path) throw new Error('Invalid workspace path')
     return resourceLinkFromUri(
       workspaceFileUri(
         session.projectId,

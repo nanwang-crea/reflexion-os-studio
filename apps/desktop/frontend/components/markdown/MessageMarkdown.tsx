@@ -1,5 +1,8 @@
 import type { ReactNode } from 'react'
-import type { ResourceLink } from '@reflexion-os-studio/runtime-client'
+import {
+  parseResourceUri,
+  type ResourceLink,
+} from '@reflexion-os-studio/runtime-client'
 
 /**
  * 轻量 Markdown 渲染：覆盖对话常见结构（标题 / 列表 / 引用 / 围栏代码 /
@@ -130,38 +133,11 @@ function displayNameOf(link: ResourceLink): string {
 
 /** 解析消息内资源引用协议；非资源协议（http 等）返回 null 保持普通链接。 */
 export function parseResourceLink(href: string): ResourceLink | null {
-  if (href.startsWith('workspace://')) {
-    const rest = href.slice('workspace://'.length)
-    const fragmentMatch = rest.match(/^(.*?)(?:#L(\d+))?$/)
-    if (fragmentMatch === null) return null
-    const raw = fragmentMatch[1]
-    const line = fragmentMatch[2]
-    // 两种形态：workspace://<projectId>/<path>（完整）与
-    // workspace:///<path>（projectId 留空，点击时按当前会话项目补全——
-    // 模型在工具结果里拿不到项目 ID，用它保证链接始终可用）。
-    const noProject = raw.startsWith('/')
-    const slash = raw.indexOf('/')
-    if (slash <= 0 && !noProject) return null
-    const projectId = noProject ? '' : raw.slice(0, slash)
-    const path = noProject ? raw.slice(1) : raw.slice(slash + 1)
-    if (path === '') return null
-    return {
-      kind: 'workspaceFile',
-      uri: href,
-      projectId,
-      path,
-      line: line === undefined ? undefined : Number.parseInt(line, 10),
-    }
+  try {
+    return parseResourceUri(href)
+  } catch {
+    return null
   }
-  if (href.startsWith('asset://')) {
-    const assetId = href.slice('asset://'.length)
-    if (assetId === '') return null
-    return { kind: 'asset', uri: href, assetId }
-  }
-  if (href.startsWith('https://')) {
-    return { kind: 'externalUrl', uri: href }
-  }
-  return null
 }
 
 /** 拆一行表格行：容忍首尾竖线缺失，`\|` 转义为字面竖线。 */

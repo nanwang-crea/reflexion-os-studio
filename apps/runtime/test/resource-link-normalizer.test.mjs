@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { test } from 'node:test'
@@ -8,7 +8,11 @@ import { normalizeContent } from '../dist/resources/resource-link-normalizer.js'
 
 test('normalizes explicit and filesystem resource links', () => {
   const root = mkdtempSync(join(tmpdir(), 'resource-normalizer-'))
-  const workspace = join(root, 'workspace')
+  const repo = join(root, 'repo')
+  const workspace = join(repo, 'apps', 'runtime')
+  const nested = join(workspace, 'src', 'agent')
+  mkdirSync(nested, { recursive: true })
+  writeFileSync(join(nested, 'runner.ts'), 'x\n')
   const store = new Store(join(root, 'db'))
   const project = store.projects.create({ name: 'p', folderPath: workspace })
   const session = store.sessions.create(project.id)
@@ -37,6 +41,12 @@ test('normalizes explicit and filesystem resource links', () => {
   assert.equal(result.parts[0].link.path, 'src/a.ts')
   assert.equal(result.parts[0].link.line, 3)
   assert.equal(result.parts[6].link.path, 'src/a.ts')
+  const repoStyle = normalizeContent(
+    '[runner](workspace:///apps/runtime/src/agent/runner.ts#L1)',
+    session,
+    store,
+  )
+  assert.equal(repoStyle.parts[0].link.path, 'src/agent/runner.ts')
   store.close()
 })
 

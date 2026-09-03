@@ -4,7 +4,7 @@ export const ResourceLinkSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('workspaceFile'),
     uri: z.string().min(1),
-    projectId: z.string().min(1),
+    projectId: z.string(),
     path: z.string().min(1),
     line: z.number().int().positive().optional(),
   }),
@@ -37,16 +37,20 @@ export function parseResourceUri(uri: string): ResourceLink {
   const fragment = hash < 0 ? '' : uri.slice(hash + 1)
   if (raw.startsWith('workspace://')) {
     const rest = raw.slice('workspace://'.length)
+    const noProject = rest.startsWith('/')
     const slash = rest.indexOf('/')
-    if (slash < 1) throw new Error('Invalid workspace resource URI')
-    const projectId = decodeURIComponent(rest.slice(0, slash))
+    if (!noProject && slash < 1)
+      throw new Error('Invalid workspace resource URI')
+    const projectId = noProject ? '' : decodeURIComponent(rest.slice(0, slash))
     const path = rest
-      .slice(slash + 1)
+      .slice(noProject ? 1 : slash + 1)
       .split('/')
       .map(decodeURIComponent)
       .join('/')
     const line =
-      fragment === '' ? undefined : /^L([1-9]\d*)$/.exec(fragment)?.[1]
+      fragment === ''
+        ? undefined
+        : /^L([1-9]\d*)(?:-L?[1-9]\d*)?$/.exec(fragment)?.[1]
     if (path === '' || (fragment !== '' && line === undefined))
       throw new Error('Invalid workspace resource URI')
     return {

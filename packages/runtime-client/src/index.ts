@@ -35,6 +35,12 @@ export type {
 } from '@reflexion-os-studio/contracts'
 
 export {
+  parseResourceUri,
+  resourceLinkFromUri,
+  workspaceFileUri,
+} from '@reflexion-os-studio/contracts'
+
+export {
   RuntimeTransport,
   TransportError,
   type RuntimeTransportOptions,
