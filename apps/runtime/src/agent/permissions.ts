@@ -1,4 +1,4 @@
-import type { ToolOperation } from '@reflexion-os-studio/contracts'
+import type { JsonValue, ToolOperation } from '@reflexion-os-studio/contracts'
 import type { RunEventEmitter } from '../events.js'
 
 export type DecisionMode = 'automatic' | 'ask' | 'denied'
@@ -37,6 +37,8 @@ const AUTOMATIC_OTHER_TOOLS = new Set([
   'get_current_time',
   'web.fetch',
   'skill.use',
+  // 计划工具只在本会话的 plans 表内写状态，不触工作区/Shell，无需审批。
+  'update_plan',
 ])
 
 export function policyFor(
@@ -88,14 +90,14 @@ export class ApprovalGateway {
   private readonly pending = new Map<string, PendingApproval>()
   private readonly sessionGrants = new Set<string>()
 
-  private grantKey(context: ApprovalContext, operation: ToolOperation): string {
+  private grantKey(context: ApprovalContext, operation: string): string {
     return `${context.sessionId}\u0000${context.workspaceRoot ?? ''}\u0000${operation}`
   }
 
   request(input: {
     toolCallId: string
     emitter: RunEventEmitter
-    operation: ToolOperation
+    operation: string
     summary: string
     signal: AbortSignal
     context: ApprovalContext
@@ -144,7 +146,7 @@ export class ApprovalGateway {
     return true
   }
 
-  hasSessionGrant(operation: ToolOperation, context: ApprovalContext): boolean {
+  hasSessionGrant(operation: string, context: ApprovalContext): boolean {
     return this.sessionGrants.has(this.grantKey(context, operation))
   }
 
@@ -155,4 +157,58 @@ export class ApprovalGateway {
     }
     return false
   }
+}
+
+/**
+ * 审批卡摘要：文件操作显示路径，move 显示 from→to，shell 显示命令，其余回退到参数 JSON。
+ * 支持内置操作与动态工具名（MCP 的 serverId/toolName）。
+ */
+export function summarizeArgs(toolName: string, args: JsonValue): string {
+  const record =
+    typeof args === 'object' && args !== null && !Array.isArray(args)
+      ? (args as Record<string, unknown>)
+      : undefined
+  if (record !== undefined) {
+    if (typeof record.path === 'string') return `${toolName}: ${record.path}`
+    if (typeof record.from === 'string' && typeof record.to === 'string') {
+      return `${toolName}: ${record.from} → ${record.to}`
+    }
+    if (typeof record.command === 'string')
+      return `${toolName}: ${record.command}`
+  }
+  return `${toolName}: ${JSON.stringify(args).slice(0, 200)}`
+}
+
+interface GrantIdentity {
+  grantId: string
+  requestId: string
+  sessionId: string
+  workspaceRoot: string | null
+  operation: string
+}
+
+/** once 凭据：ask 批准后以本次调用为凭据，时效 5 分钟。 */
+export function buildOnceGrant(input: GrantIdentity): string {
+  return JSON.stringify({
+    grantId: input.grantId,
+    requestId: input.requestId,
+    sessionId: input.sessionId,
+    workspaceId: input.workspaceRoot ?? '',
+    operation: input.operation,
+    scope: 'once',
+    expiresAt: Date.now() + 5 * 60 * 1000,
+  })
+}
+
+/** session 凭据：同一调用的稳定引用授权，时效 30 分钟（内存态，重启失效）。 */
+export function buildSessionGrant(input: GrantIdentity): string {
+  return JSON.stringify({
+    grantId: input.grantId,
+    requestId: input.requestId,
+    sessionId: input.sessionId,
+    workspaceId: input.workspaceRoot ?? '',
+    operation: input.operation,
+    scope: 'session',
+    expiresAt: Date.now() + 30 * 60 * 1000,
+  })
 }

@@ -10,12 +10,16 @@ export const mcpCommandHandlers: Record<string, CommandHandler> = {
   'mcp.add': (params, { mcp }) => {
     if (!mcp) throw new CommandError('unavailable', 'MCP service unavailable')
     const env = Array.isArray(params.env) ? params.env : []
+    const keys = new Set<string>()
     const storedEnv = env.map((entry) => {
       if (!entry || typeof entry !== 'object')
         throw new CommandError('invalid_request', 'invalid env entry')
       const item = entry as Record<string, unknown>
       const key = typeof item.key === 'string' ? item.key : ''
       if (!key) throw new CommandError('invalid_request', 'env key is required')
+      if (keys.has(key))
+        throw new CommandError('invalid_request', `duplicate env key: ${key}`)
+      keys.add(key)
       const secret = typeof item.secret === 'string' ? item.secret : undefined
       const secretRef =
         typeof item.secretRef === 'string' ? item.secretRef : undefined

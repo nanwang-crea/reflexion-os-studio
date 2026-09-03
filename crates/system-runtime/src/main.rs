@@ -2,371 +2,27 @@
 //! 协议：JSON-RPC 2.0 over newline-delimited stdio；stdout 只传协议，stderr 只写日志。
 //! 边界职责：workspace-relative 路径规范化、`..`/绝对路径/符号链接逃逸拒绝、
 //! 体量与超时上限、进程树回收、写/执行类操作的 grant 存在性检查。
+//!
+//! 职责拆分：`protocol`（IO/回包/错误类型）、`grant`（审批凭据校验）、
+//! `handlers`（各工具执行）分别独立成模块，本文件只留协议分发与主循环。
+
 mod files;
 mod git;
 mod glob;
+mod grant;
+mod handlers;
 mod mutate;
 mod params;
 mod paths;
+mod protocol;
 mod search;
 mod shell;
 mod walk;
 
-use serde::Deserialize;
 use serde_json::{json, Value};
-use std::collections::HashMap;
-use std::io::{self, BufRead, Write};
-use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::io::{self, BufRead};
 
-use params::{
-    EditParams, GitBranchesParams, GitDiffParams, GitStatusParams, GlobParams, GrantPathParams,
-    GrepParams, ListParams, MoveParams, ReadParams, ShellParams, WriteParams,
-};
-
-const PROTOCOL_VERSION: &str = "1.0";
-const RUNTIME_VERSION: &str = "0.3.0";
-
-/// stdout 互斥：主循环与 shell 完成线程并发回包时防串行错乱。
-static STDOUT_LOCK: Mutex<()> = Mutex::new(());
-
-fn emit(message: Value) {
-    let Ok(_guard) = STDOUT_LOCK.lock() else {
-        return;
-    };
-    println!("{}", message);
-    let _ = io::stdout().flush();
-}
-
-/// 运行中的 shell 子进程：requestId -> pid，供 system.cancel 树杀。
-fn running_shells() -> &'static Mutex<HashMap<u64, u32>> {
-    static SHELLS: OnceLock<Mutex<HashMap<u64, u32>>> = OnceLock::new();
-    SHELLS.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-fn ready_message() -> Value {
-    json!({
-        "jsonrpc": "2.0",
-        "method": "system.ready",
-        "params": {
-            "protocolVersion": PROTOCOL_VERSION,
-            "runtimeVersion": RUNTIME_VERSION,
-            "capabilities": ["system.bootstrap", "system.tools"]
-        }
-    })
-}
-
-/// 工具操作失败：稳定 code 进 data，前端/模型据此理解失败类别。
-struct OpError {
-    code: &'static str,
-    message: String,
-}
-
-impl OpError {
-    fn new(code: &'static str, message: String) -> Self {
-        Self { code, message }
-    }
-}
-
-fn error_response(id: Value, code: i64, message: &str, data: Option<Value>) -> Value {
-    json!({
-        "jsonrpc": "2.0",
-        "id": id,
-        "error": { "code": code, "message": message, "data": data }
-    })
-}
-
-fn workspace_root(value: &str) -> Result<PathBuf, OpError> {
-    if value.trim().is_empty() {
-        return Err(OpError::new(
-            "invalid_request",
-            "workspaceRoot must not be empty".to_string(),
-        ));
-    }
-    Ok(PathBuf::from(value))
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct ApprovalGrant {
-    grant_id: String,
-    request_id: String,
-    session_id: String,
-    workspace_id: String,
-    operation: String,
-    scope: String,
-    expires_at: u64,
-}
-
-fn require_grant(grant: &str, workspace_root: &str, operation: &str) -> Result<(), OpError> {
-    let grant: ApprovalGrant = serde_json::from_str(grant).map_err(|_| {
-        OpError::new(
-            "invalid_grant",
-            "write/execute operations require a valid approval grant".to_string(),
-        )
-    })?;
-    if grant.grant_id.trim().is_empty()
-        || grant.request_id.trim().is_empty()
-        || grant.session_id.trim().is_empty()
-        || grant.workspace_id != workspace_root
-        || grant.operation != operation
-        || !matches!(grant.scope.as_str(), "once" | "session")
-    {
-        return Err(OpError::new(
-            "invalid_grant",
-            "approval grant does not match this request".to_string(),
-        ));
-    }
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|_| OpError::new("invalid_grant", "invalid system clock".to_string()))?
-        .as_millis() as u64;
-    if grant.expires_at <= now {
-        return Err(OpError::new(
-            "grant_expired",
-            "approval grant has expired".to_string(),
-        ));
-    }
-    Ok(())
-}
-
-fn handle_file_read(params: Value) -> Result<Value, OpError> {
-    let params: ReadParams = serde_json::from_value(params)
-        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    let root = workspace_root(&params.workspace_root)?;
-    let result = files::read(&root, &params.path, params.offset, params.limit)
-        .map_err(|message| OpError::new("file_error", message))?;
-    Ok(json!({
-        "content": result.content,
-        "sizeBytes": result.size_bytes,
-        "totalLines": result.total_lines,
-        "offset": result.offset,
-    }))
-}
-
-fn handle_file_list(params: Value) -> Result<Value, OpError> {
-    let params: ListParams = serde_json::from_value(params)
-        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    let root = workspace_root(&params.workspace_root)?;
-    let entries = files::list(&root, &params.path, params.recursive.unwrap_or(false))
-        .map_err(|message| OpError::new("file_error", message))?;
-    Ok(json!({ "entries": entries }))
-}
-
-fn handle_file_glob(params: Value) -> Result<Value, OpError> {
-    let params: GlobParams = serde_json::from_value(params)
-        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    let root = workspace_root(&params.workspace_root)?;
-    let outcome = search::glob_search(
-        &root,
-        &params.pattern,
-        params.limit.unwrap_or(search::DEFAULT_GLOB_LIMIT),
-    )
-    .map_err(|message| OpError::new("file_error", message))?;
-    Ok(json!({
-        "matches": outcome.matches,
-        "truncated": outcome.truncated,
-    }))
-}
-
-fn handle_file_grep(params: Value) -> Result<Value, OpError> {
-    let params: GrepParams = serde_json::from_value(params)
-        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    let root = workspace_root(&params.workspace_root)?;
-    let outcome = search::grep_search(
-        &root,
-        &params.text,
-        params.glob.as_deref(),
-        params.ignore_case.unwrap_or(false),
-        params.max_results.unwrap_or(search::DEFAULT_GREP_LIMIT),
-    )
-    .map_err(|message| OpError::new("file_error", message))?;
-    Ok(json!({
-        "matches": outcome.matches,
-        "truncated": outcome.truncated,
-    }))
-}
-
-fn handle_file_write(params: Value) -> Result<Value, OpError> {
-    let params: WriteParams = serde_json::from_value(params)
-        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    require_grant(&params.grant, &params.workspace_root, "file.write")?;
-    let root = workspace_root(&params.workspace_root)?;
-    let written = files::write(&root, &params.path, &params.content)
-        .map_err(|message| OpError::new("file_error", message))?;
-    Ok(json!({ "writtenBytes": written }))
-}
-
-fn handle_file_edit(params: Value) -> Result<Value, OpError> {
-    let params: EditParams = serde_json::from_value(params)
-        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    require_grant(&params.grant, &params.workspace_root, "file.edit")?;
-    let root = workspace_root(&params.workspace_root)?;
-    let outcome = mutate::edit(
-        &root,
-        &params.path,
-        &params.old_text,
-        &params.new_text,
-        params.expected_count,
-    )
-    .map_err(|message| OpError::new("file_error", message))?;
-    Ok(json!({
-        "replacedCount": outcome.replaced_count,
-        "sizeBytes": outcome.size_bytes,
-    }))
-}
-
-fn handle_file_delete(params: Value) -> Result<Value, OpError> {
-    let params: GrantPathParams = serde_json::from_value(params)
-        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    require_grant(&params.grant, &params.workspace_root, "file.delete")?;
-    let root = workspace_root(&params.workspace_root)?;
-    let outcome = mutate::delete(&root, &params.path)
-        .map_err(|message| OpError::new("file_error", message))?;
-    Ok(json!({ "kind": outcome.kind }))
-}
-
-fn handle_file_move(params: Value) -> Result<Value, OpError> {
-    let params: MoveParams = serde_json::from_value(params)
-        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    require_grant(&params.grant, &params.workspace_root, "file.move")?;
-    let root = workspace_root(&params.workspace_root)?;
-    let outcome = mutate::move_path(&root, &params.from, &params.to)
-        .map_err(|message| OpError::new("file_error", message))?;
-    Ok(json!({ "from": outcome.from, "to": outcome.to }))
-}
-
-fn handle_file_mkdir(params: Value) -> Result<Value, OpError> {
-    let params: GrantPathParams = serde_json::from_value(params)
-        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    require_grant(&params.grant, &params.workspace_root, "file.mkdir")?;
-    let root = workspace_root(&params.workspace_root)?;
-    let outcome = mutate::mkdir(&root, &params.path)
-        .map_err(|message| OpError::new("file_error", message))?;
-    Ok(json!({ "path": outcome.path }))
-}
-
-/// git 只读查询（status/diff）：异步执行避免大仓库阻塞主循环，
-/// 结果与错误照常 emit；进程级超时与收集在 git 模块内完成。
-fn handle_git_status(id: Value, params: Value) -> Result<(Value, bool), OpError> {
-    let params: GitStatusParams = serde_json::from_value(params)
-        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    let root = workspace_root(&params.workspace_root)?;
-    std::thread::spawn(move || match git::status(&root) {
-        Ok(outcome) => emit(ok_response(
-            id,
-            serde_json::to_value(&outcome).unwrap_or(Value::Null),
-        )),
-        Err(error) => emit(error_response(
-            id,
-            -32000,
-            &error.message,
-            Some(json!({ "code": error.code })),
-        )),
-    });
-    Ok((Value::Null, false))
-}
-
-fn handle_git_diff(id: Value, params: Value) -> Result<(Value, bool), OpError> {
-    let params: GitDiffParams = serde_json::from_value(params)
-        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    let root = workspace_root(&params.workspace_root)?;
-    let path = params.path;
-    let staged = params.staged.unwrap_or(false);
-    std::thread::spawn(move || match git::diff(&root, &path, staged) {
-        Ok(outcome) => emit(ok_response(
-            id,
-            serde_json::to_value(&outcome).unwrap_or(Value::Null),
-        )),
-        Err(error) => emit(error_response(
-            id,
-            -32000,
-            &error.message,
-            Some(json!({ "code": error.code })),
-        )),
-    });
-    Ok((Value::Null, false))
-}
-
-/// git 本地分支只读查询（新建对话项目/分支选择用）；异步执行避免阻塞主循环。
-fn handle_git_branches(id: Value, params: Value) -> Result<(Value, bool), OpError> {
-    let params: GitBranchesParams = serde_json::from_value(params)
-        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    let root = workspace_root(&params.workspace_root)?;
-    std::thread::spawn(move || match git::branches(&root) {
-        Ok(outcome) => emit(ok_response(
-            id,
-            serde_json::to_value(&outcome).unwrap_or(Value::Null),
-        )),
-        Err(error) => emit(error_response(
-            id,
-            -32000,
-            &error.message,
-            Some(json!({ "code": error.code })),
-        )),
-    });
-    Ok((Value::Null, false))
-}
-
-fn handle_shell_execute(id: Value, params: Value) -> Result<(Value, bool), OpError> {
-    let params: ShellParams = serde_json::from_value(params)
-        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    require_grant(&params.grant, &params.workspace_root, "shell.execute")?;
-    let root = workspace_root(&params.workspace_root)?;
-    let cwd_relative = params.cwd.as_deref().unwrap_or(".");
-    let cwd = paths::resolve_in_workspace(&root, cwd_relative)
-        .map_err(|message| OpError::new("path_outside_workspace", message))?;
-    let timeout_ms = params
-        .timeout_ms
-        .unwrap_or(shell::DEFAULT_TIMEOUT_MS)
-        .min(shell::MAX_TIMEOUT_MS);
-    // 异步执行：长命令不阻塞主循环，system.cancel 才能被及时处理。
-    let request_id = id.as_u64().unwrap_or(0);
-    let command = params.command;
-    std::thread::spawn(move || {
-        let outcome = shell::execute(&command, &cwd, timeout_ms, &|pid| {
-            let _ = running_shells().lock().map(|mut shells| {
-                shells.insert(request_id, pid);
-            });
-        });
-        let _ = running_shells().lock().map(|mut shells| {
-            shells.remove(&request_id);
-        });
-        match outcome {
-            Ok(outcome) => emit(ok_response(
-                id,
-                json!({
-                    "exitCode": outcome.exit_code,
-                    "stdout": outcome.stdout,
-                    "stderr": outcome.stderr,
-                    "timedOut": outcome.timed_out,
-                    "truncated": outcome.truncated,
-                }),
-            )),
-            Err(message) => emit(error_response(
-                id,
-                -32000,
-                &message,
-                Some(json!({ "code": "execution_failed" })),
-            )),
-        }
-    });
-    // 哨兵：回包由完成线程异步发出。
-    Ok((Value::Null, false))
-}
-
-fn handle_cancel(params: &Value) {
-    let request_id = params.get("requestId").and_then(Value::as_u64);
-    if let Some(request_id) = request_id {
-        if let Ok(mut shells) = running_shells().lock() {
-            if let Some(pid) = shells.remove(&request_id) {
-                eprintln!("cancelling shell request {request_id} (pid {pid})");
-                shell::kill_tree(pid);
-            }
-        }
-    }
-}
+use crate::protocol::{error_response, finish, ok_response, OpError};
 
 fn handle_request(request: &Value) -> (Value, bool) {
     let id = request.get("id").cloned().unwrap_or(Value::Null);
@@ -377,19 +33,19 @@ fn handle_request(request: &Value) -> (Value, bool) {
     let outcome: Result<(Value, bool), OpError> = match method {
         Some("system.ping") => Ok((ok_response(id, json!({ "ok": true })), false)),
         Some("system.shutdown") => Ok((ok_response(id, json!({ "ok": true })), true)),
-        Some("file.read") => finish(id, handle_file_read(params)),
-        Some("file.list") => finish(id, handle_file_list(params)),
-        Some("file.glob") => finish(id, handle_file_glob(params)),
-        Some("file.grep") => finish(id, handle_file_grep(params)),
-        Some("file.write") => finish(id, handle_file_write(params)),
-        Some("file.edit") => finish(id, handle_file_edit(params)),
-        Some("file.delete") => finish(id, handle_file_delete(params)),
-        Some("file.move") => finish(id, handle_file_move(params)),
-        Some("file.mkdir") => finish(id, handle_file_mkdir(params)),
-        Some("shell.execute") => handle_shell_execute(id, params),
-        Some("git.status") => handle_git_status(id, params),
-        Some("git.diff") => handle_git_diff(id, params),
-        Some("git.branches") => handle_git_branches(id, params),
+        Some("file.read") => finish(id, handlers::handle_file_read(params)),
+        Some("file.list") => finish(id, handlers::handle_file_list(params)),
+        Some("file.glob") => finish(id, handlers::handle_file_glob(params)),
+        Some("file.grep") => finish(id, handlers::handle_file_grep(params)),
+        Some("file.write") => finish(id, handlers::handle_file_write(params)),
+        Some("file.edit") => finish(id, handlers::handle_file_edit(params)),
+        Some("file.delete") => finish(id, handlers::handle_file_delete(params)),
+        Some("file.move") => finish(id, handlers::handle_file_move(params)),
+        Some("file.mkdir") => finish(id, handlers::handle_file_mkdir(params)),
+        Some("shell.execute") => handlers::handle_shell_execute(id, params),
+        Some("git.status") => handlers::handle_git_status(id, params),
+        Some("git.diff") => handlers::handle_git_diff(id, params),
+        Some("git.branches") => handlers::handle_git_branches(id, params),
         Some(name) => Err(OpError::new(
             "method_not_found",
             format!("Method not found: {name}"),
@@ -416,18 +72,10 @@ fn handle_request(request: &Value) -> (Value, bool) {
     }
 }
 
-fn ok_response(id: Value, result: Value) -> Value {
-    json!({ "jsonrpc": "2.0", "id": id, "result": result })
-}
-
-/// 工具操作结果的统一回包：成功包 result，失败转 OpError。
-fn finish(id: Value, result: Result<Value, OpError>) -> Result<(Value, bool), OpError> {
-    result.map(|value| (ok_response(id, value), false))
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::grant::require_grant;
+    use serde_json::json;
 
     fn grant(workspace: &str, operation: &str, expires_at: u64) -> String {
         json!({
@@ -440,8 +88,8 @@ mod tests {
 
     #[test]
     fn validates_grant_binding_and_expiry() {
-        let future = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
+        let future = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_millis() as u64
             + 60_000;
@@ -502,7 +150,7 @@ mod tests {
 }
 
 fn main() {
-    emit(ready_message());
+    protocol::emit(protocol::ready_message());
     let stdin = io::stdin();
 
     for line in stdin.lock().lines() {
@@ -513,21 +161,21 @@ fn main() {
         let request: Value = match serde_json::from_str(&line) {
             Ok(value) => value,
             Err(_) => {
-                emit(error_response(Value::Null, -32700, "Parse error", None));
+                protocol::emit(error_response(Value::Null, -32700, "Parse error", None));
                 continue;
             }
         };
         // 无 id 的通知不产生回包：目前只有 system.cancel（中止运行中的 shell）。
         if request.get("id").is_none() {
             if request.get("method").and_then(Value::as_str) == Some("system.cancel") {
-                handle_cancel(request.get("params").unwrap_or(&Value::Null));
+                handlers::handle_cancel(request.get("params").unwrap_or(&Value::Null));
             }
             continue;
         }
         let (response, should_stop) = handle_request(&request);
         // Null 哨兵：shell.execute 异步回包，这里不写。
         if !response.is_null() {
-            emit(response);
+            protocol::emit(response);
         }
         if should_stop {
             break;

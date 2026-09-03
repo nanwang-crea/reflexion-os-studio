@@ -30,7 +30,7 @@ interface PendingRequest {
  */
 export class SystemRuntimeClient {
   private child: ReturnType<typeof spawn> | null = null
-  private pending = new Map<number, PendingRequest>()
+  private pending = new Map<string | number, PendingRequest>()
   private seq = 0
   private handshakeTimer: NodeJS.Timeout | null = null
   private restartTimer: NodeJS.Timeout | null = null
@@ -255,7 +255,10 @@ export class SystemRuntimeClient {
       this.setStatus('ready', parsed.data.runtimeVersion)
       return
     }
-    if (typeof message.id === 'number' && this.pending.has(message.id)) {
+    if (
+      (typeof message.id === 'number' || typeof message.id === 'string') &&
+      this.pending.has(message.id)
+    ) {
       const entry = this.pending.get(message.id)
       if (!entry) return
       this.pending.delete(message.id)

@@ -70,6 +70,30 @@ test('hasPendingRun tracks awaiting approvals per run', async () => {
   )
 })
 
+test('session grants are scoped to dynamic tool and context', async () => {
+  const gateway = new ApprovalGateway()
+  const context = { sessionId: 'session-d', workspaceRoot: '/workspace/d' }
+  const pending = gateway.request({
+    toolCallId: 'dynamic-1',
+    emitter: emitter('run-d'),
+    operation: 'server/tool-a',
+    summary: 'dynamic',
+    signal: new AbortController().signal,
+    context,
+  })
+  gateway.resolve('dynamic-1', 'approved', 'session')
+  await pending
+  assert.equal(gateway.hasSessionGrant('server/tool-a', context), true)
+  assert.equal(gateway.hasSessionGrant('server/tool-b', context), false)
+  assert.equal(
+    gateway.hasSessionGrant('server/tool-a', {
+      sessionId: 'session-d',
+      workspaceRoot: '/workspace-other',
+    }),
+    false,
+  )
+})
+
 test('hasPendingRun separates runs and cleans on abort', async () => {
   const gateway = new ApprovalGateway()
   const controller = new AbortController()

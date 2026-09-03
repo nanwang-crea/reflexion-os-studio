@@ -20,8 +20,12 @@ import type { Store } from '../store/index.js'
 import { compactInRun, type ProviderRuntimeConfig } from './context.js'
 import type { MemoryService } from './memory/service.js'
 import type { ApprovalGateway, PermissionGate } from './permissions.js'
-import { isToolOperation } from './permissions.js'
-import { capToolResultForModel } from './toolResults.js'
+import {
+  buildOnceGrant,
+  buildSessionGrant,
+  summarizeArgs,
+} from './permissions.js'
+import { capToolResultForModel, parseToolResultPayload } from './toolResults.js'
 
 interface RunStreamInput {
   run: Run
@@ -304,15 +308,14 @@ export class RunRunner {
             }
           }
 
+          // 会话级授权同时覆盖内置操作与动态工具名（MCP 的 serverId/toolName），
+          // 因此在 ask 判定处不再按 isToolOperation 过滤，统一走 hasSessionGrant。
           const askNeeded =
             decision === 'ask' &&
-            !(
-              isToolOperation(request.name) &&
-              input.approvals.hasSessionGrant(request.name, {
-                sessionId: run.sessionId,
-                workspaceRoot: input.workspaceRoot,
-              })
-            )
+            !input.approvals.hasSessionGrant(request.name, {
+              sessionId: run.sessionId,
+              workspaceRoot: input.workspaceRoot,
+            })
           const row = this.store.toolCalls.create({
             runId: run.id,
             messageId: state.lastAssistantMessageId,
@@ -337,9 +340,7 @@ export class RunRunner {
               verdict = await input.approvals.request({
                 toolCallId: row.id,
                 emitter,
-                operation: request.name as Parameters<
-                  ApprovalGateway['request']
-                >[0]['operation'],
+                operation: request.name,
                 summary: summarizeArgs(request.name, args),
                 signal,
                 context: {
@@ -368,25 +369,21 @@ export class RunRunner {
                 code: 'permission_denied',
               }
             }
-            grant = JSON.stringify({
+            grant = buildOnceGrant({
               grantId: row.id,
               requestId: row.id,
               sessionId: run.sessionId,
-              workspaceId: input.workspaceRoot ?? '',
+              workspaceRoot: input.workspaceRoot,
               operation: request.name,
-              scope: 'once',
-              expiresAt: Date.now() + 5 * 60 * 1000,
             })
             this.store.toolCalls.markStatus(row.id, 'running', row.id)
           } else if (decision === 'ask') {
-            grant = JSON.stringify({
+            grant = buildSessionGrant({
               grantId: `session:${request.name}`,
               requestId: row.id,
               sessionId: run.sessionId,
-              workspaceId: input.workspaceRoot ?? '',
+              workspaceRoot: input.workspaceRoot,
               operation: request.name,
-              scope: 'session',
-              expiresAt: Date.now() + 30 * 60 * 1000,
             })
             this.store.toolCalls.markStatus(row.id, 'running', grant)
           }
@@ -471,33 +468,5 @@ function parseToolArgs(arguments_: string): JsonValue {
     return result.success ? result.data : {}
   } catch {
     return {}
-  }
-}
-
-/** 审批卡摘要：文件操作显示路径，move 显示 from→to，shell 显示命令，其余回退到参数 JSON。 */
-function summarizeArgs(toolName: string, args: JsonValue): string {
-  const record =
-    typeof args === 'object' && args !== null && !Array.isArray(args)
-      ? (args as Record<string, unknown>)
-      : undefined
-  if (record !== undefined) {
-    if (typeof record.path === 'string') return `${toolName}: ${record.path}`
-    if (typeof record.from === 'string' && typeof record.to === 'string') {
-      return `${toolName}: ${record.from} → ${record.to}`
-    }
-    if (typeof record.command === 'string')
-      return `${toolName}: ${record.command}`
-  }
-  return `${toolName}: ${JSON.stringify(args).slice(0, 200)}`
-}
-
-/** 工具结果落库：能解析为 JSON 则存结构，否则存原文。 */
-function parseToolResultPayload(content: string): JsonValue {
-  try {
-    const parsed: unknown = JSON.parse(content)
-    const result = JsonValueSchema.safeParse(parsed)
-    return result.success ? result.data : content
-  } catch {
-    return content
   }
 }

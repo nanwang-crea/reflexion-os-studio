@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
 import {
-  copyFile,
   lstat,
   mkdir,
   readdir,
@@ -8,6 +7,7 @@ import {
   realpath,
   rm,
   stat,
+  writeFile,
 } from 'node:fs/promises'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import type { AssetKind, AssetRef } from '@reflexion-os-studio/contracts'
@@ -102,11 +102,11 @@ export class AssetService {
   }
 
   /**
-   * 从工作区导入文件为 Asset：复制进 Store、计算 hash、落元数据。
-   * 安全边界：先对工作区根与源文件分别 realpath 解析符号链接，再按路径组件
-   * 做 containment 校验，拒绝 workspace 内指向外部的符号链接以及前缀碰撞
-   * （如 /ws/proj 🆚 /ws/project）。复制或落库任一环节失败时补偿删除已复制的
-   * 内容文件，避免留下无元数据的孤儿文件。
+   * 从工作区导入文件为 Asset：读入一次内容、直接写入 Store，并以同一份缓冲
+   * 计算 size 与 hash。安全边界：先对工作区根与源文件分别 realpath 解析符号链接，
+   * 再按路径组件做 containment 校验，拒绝 workspace 内指向外部的符号链接以及
+   * 前缀碰撞（如 /ws/proj 🆚 /ws/project）。写入或落库任一环节失败时补偿删除已
+   * 写出的内容文件，避免留下无元数据的孤儿文件。
    */
   async importWorkspace(projectId: string, path: string): Promise<AssetRef> {
     const project = this.store.projects.get(projectId)
@@ -140,6 +140,8 @@ export class AssetService {
     if (info === null || !info.isFile()) {
       throw new CommandError('invalid_request', `文件不存在：${path}`)
     }
+    // 廉价预检：避免对明显超限的大文件执行整读。真正的上限以读入缓冲为准，
+    // 防止 lstat 后文件被并发改写（TOCTOU）导致拷贝内容与元数据不一致。
     if (info.size > MAX_IMPORT_BYTES) {
       throw new CommandError(
         'invalid_request',
@@ -147,7 +149,15 @@ export class AssetService {
       )
     }
     const fileName = basename(realSource)
+    // 只读一次并直接写这份缓冲：保证落盘内容、size 与 hash 三者来自同一份数据，
+    // 规避「先 stat 计算元数据、再二次 copyFile」在两次操作间源文件变化的不一致。
     const content = await readFile(realSource)
+    if (content.byteLength > MAX_IMPORT_BYTES) {
+      throw new CommandError(
+        'invalid_request',
+        `文件过大（${content.byteLength} B），导入上限 64MB`,
+      )
+    }
     const assetId = randomUUID()
     const asset: AssetRef = {
       assetId,
@@ -155,7 +165,7 @@ export class AssetService {
       uri: `asset://${assetId}`,
       kind: kindOf(detectMime(fileName)),
       mimeType: detectMime(fileName),
-      size: info.size,
+      size: content.byteLength,
       hash: createHash('sha256').update(content).digest('hex'),
       fileName,
       runId: null,
@@ -167,10 +177,10 @@ export class AssetService {
     }
     const destPath = this.pathFor(projectId, asset.assetId)
     await mkdir(this.dirFor(projectId), { recursive: true })
-    await copyFile(realSource, destPath).catch(async () => {
-      // 复制中途失败：清掉残留半文件，避免孤儿。
+    await writeFile(destPath, content).catch(async () => {
+      // 写入中途失败：清掉残留半文件，避免孤儿。
       await rm(destPath, { force: true }).catch(() => {})
-      throw new CommandError('invalid_request', '导入失败：无法复制文件')
+      throw new CommandError('invalid_request', '导入失败：无法写入文件')
     })
     try {
       return this.store.assetStore.create(asset)

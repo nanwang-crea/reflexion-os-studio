@@ -457,12 +457,25 @@ test('tool and approval events validate envelope payloads', () => {
       payload.type,
     )
   }
+  // 动态工具名（内置 MCP 的 serverId/toolName、update_plan 等）也应是合法操作：
+  // 审批操作契约已从「仅内置操作」扩展为「内置操作或任意非空工具名」。
   assert.equal(
     RuntimeEventSchema.safeParse({
       ...envelope,
       type: 'approval.required',
       toolCallId: 't1',
-      operation: 'process.spawn',
+      operation: 'someServer/tool',
+      summary: 'x',
+    }).success,
+    true,
+  )
+  // 空操作名仍非法：非空工具名约束是硬边界。
+  assert.equal(
+    RuntimeEventSchema.safeParse({
+      ...envelope,
+      type: 'approval.required',
+      toolCallId: 't1',
+      operation: '',
       summary: 'x',
     }).success,
     false,

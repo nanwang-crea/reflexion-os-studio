@@ -1,11 +1,11 @@
 import { z } from 'zod'
 import {
   JsonValueSchema,
+  ApprovalOperationSchema,
   MemorySchema,
   MessageSchema,
   RunSchema,
   SessionSchema,
-  ToolOperationSchema,
   UsageSchema,
   ContentPartSchema,
   WorkspaceIndexSnapshotSchema,
@@ -120,7 +120,7 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
   RuntimeEventEnvelopeSchema.extend({
     type: z.literal('approval.required'),
     toolCallId: z.string().min(1),
-    operation: ToolOperationSchema,
+    operation: ApprovalOperationSchema,
     summary: z.string(),
   }),
   RuntimeEventEnvelopeSchema.extend({

@@ -45,7 +45,7 @@ export class Store {
     this.db.exec('PRAGMA busy_timeout = 3000')
     this.db.exec('PRAGMA journal_mode = WAL')
     this.db.exec(SCHEMA)
-    runMigrations(this.db)
+    runMigrations(this.db, dir)
 
     this.projects = new ProjectStore(this.db)
     this.sessions = new SessionStore(this.db)

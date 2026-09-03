@@ -12,7 +12,7 @@ import {
 } from 'node:fs'
 import { basename, join } from 'node:path'
 import { CommandError } from './agent/errors.js'
-import { resolveDataDir } from './store/index.js'
+import { resolveDataDir } from './store/shared.js'
 
 const IS_WINDOWS = process.platform === 'win32'
 

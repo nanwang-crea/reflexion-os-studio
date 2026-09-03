@@ -1,3 +1,5 @@
+import { JsonValueSchema, type JsonValue } from '@reflexion-os-studio/contracts'
+
 /**
  * 回填模型的工具结果上限：file.read（默认 2000 行）、shell.execute（256KB）
  * 等真实工具结果远超一次模型调用的合理载荷，超过即截断并保留原文长度提示，
@@ -10,4 +12,15 @@ export const MODEL_TOOL_RESULT_MAX_CHARS = 16_000
 export function capToolResultForModel(content: string): string {
   if (content.length <= MODEL_TOOL_RESULT_MAX_CHARS) return content
   return `${content.slice(0, MODEL_TOOL_RESULT_MAX_CHARS)}\n\n…（结果过长已截断，原文共 ${content.length} 字符）`
+}
+
+/** 工具结果落库：能解析为 JSON 则存结构，否则存原文。 */
+export function parseToolResultPayload(content: string): JsonValue {
+  try {
+    const parsed: unknown = JSON.parse(content)
+    const result = JsonValueSchema.safeParse(parsed)
+    return result.success ? result.data : content
+  } catch {
+    return content
+  }
 }

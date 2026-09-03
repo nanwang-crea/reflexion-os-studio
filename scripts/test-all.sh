@@ -15,6 +15,7 @@ pnpm lint
 pnpm test:ts
 pnpm --filter @reflexion-os-studio/contracts test
 pnpm --filter @reflexion-os-studio/agent-core test
+pnpm --filter @reflexion-os-studio/runtime-client test
 pnpm --filter @reflexion-os-studio/runtime test
 pnpm --filter @reflexion-os-studio/desktop typecheck
 cargo test --manifest-path crates/Cargo.toml

@@ -7,7 +7,7 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "tsc -p tsconfig.json && node --disable-warning=ExperimentalWarning --test test/resource-link-normalizer.test.mjs test/handlers.test.mjs test/command-coverage.test.mjs test/store.test.mjs test/secrets.test.mjs test/provider-sse.test.mjs test/system-client.test.mjs test/memory.test.mjs test/tool-results.test.mjs test/workspace-indexer.test.mjs test/approval-gateway.test.mjs test/context-budget.test.mjs test/inrun-compaction.test.mjs test/queue.test.mjs test/mcp.test.mjs test/assets.test.mjs",
+    "test": "tsc -p tsconfig.json && node --disable-warning=ExperimentalWarning --import ./test/set-test-data-dir.mjs --test test/resource-link-normalizer.test.mjs test/handlers.test.mjs test/command-coverage.test.mjs test/store.test.mjs test/secrets.test.mjs test/provider-sse.test.mjs test/system-client.test.mjs test/memory.test.mjs test/tool-results.test.mjs test/workspace-indexer.test.mjs test/approval-gateway.test.mjs test/context-budget.test.mjs test/inrun-compaction.test.mjs test/queue.test.mjs test/mcp.test.mjs test/assets.test.mjs",
     "start": "node --disable-warning=ExperimentalWarning dist/index.js"
   },
   "dependencies": {
