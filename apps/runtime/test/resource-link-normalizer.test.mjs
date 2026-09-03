@@ -47,6 +47,21 @@ test('normalizes explicit and filesystem resource links', () => {
     store,
   )
   assert.equal(repoStyle.parts[0].link.path, 'src/agent/runner.ts')
+  // Windows-style single backslashes normalize to forward slashes.
+  const backslash = normalizeContent(
+    '[bs](workspace:///src\\agent\\runner.ts#L1)',
+    session,
+    store,
+  )
+  assert.equal(backslash.parts[0].type, 'resource_link')
+  assert.equal(backslash.parts[0].link.path, 'src/agent/runner.ts')
+  // Backslash-encoded traversal is rejected, not treated as a literal name.
+  const traversal = normalizeContent(
+    '[bt](workspace:///src\\..\\secret)',
+    session,
+    store,
+  )
+  assert.equal(traversal.parts[0].type, 'text')
   store.close()
 })
 
@@ -61,6 +76,10 @@ test('rejects unsupported, escaping, and standalone-session links', () => {
   const standalone = store.sessions.create(null)
   for (const target of [
     '../secret',
+    'src\\..\\secret',
+    'C:\\Users\\foo',
+    'C:/Users/foo',
+    '\\\\server\\share',
     'file:///tmp/a',
     'http://example.com',
     'foo://bar',

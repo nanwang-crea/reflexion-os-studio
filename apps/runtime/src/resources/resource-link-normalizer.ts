@@ -31,10 +31,13 @@ function workspaceRelativePath(
   } catch {
     return null
   }
-  const normalized = decoded.replaceAll('\\\\', '/')
+  // Normalize single backslashes to "/" so Windows drive/UNC paths read the
+  // same across platforms, and match the separator-agnostic traversal guard.
+  const normalized = decoded.replaceAll('\\', '/')
   if (
     !normalized ||
     normalized.startsWith('/') ||
+    /^[a-zA-Z]:/.test(normalized) ||
     normalized.split('/').includes('..')
   )
     return null
@@ -109,9 +112,17 @@ function normalizeUri(
   const project = store.projects.get(session.projectId)
   if (!project || project.folderPath === '')
     throw new Error('Project workspace unavailable')
-  const candidate = isAbsolute(raw)
-    ? resolve(raw)
-    : resolve(project.folderPath, raw)
+  const normalized = raw.replaceAll('\\', '/')
+  // Windows drive-letter and UNC forms are absolute paths on that platform,
+  // never workspace-relative names; reject them up front across platforms.
+  if (/^[a-zA-Z]:/.test(normalized) || normalized.startsWith('//'))
+    throw new Error('Resource is outside workspace')
+  // Reject `..` segments before resolving, matching the workspace:/// branch.
+  if (normalized.split('/').includes('..'))
+    throw new Error('Invalid workspace path')
+  const candidate = isAbsolute(normalized)
+    ? resolve(normalized)
+    : resolve(project.folderPath, normalized)
   if (!within(project.folderPath, candidate))
     throw new Error('Resource is outside workspace')
   const path = relative(resolve(project.folderPath), candidate)
