@@ -146,14 +146,13 @@
 }
 
 .assistant-actions {
-  right: 0;
+  left: 0;
   bottom: 0;
 }
 
 .user-actions {
-  right: calc(100% + 8px);
-  top: 50%;
-  transform: translateY(-50%);
+  right: 0;
+  bottom: 0;
 }
 
 .msg-action {
