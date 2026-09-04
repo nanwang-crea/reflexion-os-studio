@@ -47,15 +47,17 @@
 /* ---------- 用户消息 ---------- */
 
 .msg-user {
+  position: relative;
   display: flex;
   justify-content: flex-end;
   align-items: flex-start;
 }
 
 .user-bubble {
+  position: relative;
   background: var(--bg-elevated);
   border-radius: 16px 16px 4px 16px;
-  padding: 8px 14px 5px;
+  padding: 8px 14px;
   max-width: 78%;
   line-height: 1.6;
   white-space: pre-wrap;
@@ -127,13 +129,13 @@
   color: var(--text);
 }
 
-/* 消息操作栏：跟随消息底部排布，悬停时淡入，不覆盖正文。 */
+/* 消息操作栏：贴近消息底部悬浮，悬停时淡入，不占消息流高度。 */
 .assistant-actions,
 .user-actions {
+  position: absolute;
   display: flex;
   align-items: center;
-  min-height: 28px;
-  padding-top: 2px;
+  gap: 2px;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s ease;
@@ -147,10 +149,14 @@
   pointer-events: auto;
 }
 
+.assistant-actions {
+  left: 0;
+  bottom: -8px;
+}
+
 .user-actions {
-  justify-content: flex-end;
-  min-height: 24px;
-  padding-top: 1px;
+  right: -34px;
+  bottom: -8px;
 }
 
 .msg-action {
