@@ -17,7 +17,7 @@ function resourceFromPart(part: ResourcePart): ResourceLink {
   return 'link' in part ? part.link : part.resource_link
 }
 import { CopyButton } from '../../components/CopyButton'
-import { RefreshIcon } from '../../ui/icons'
+import { AlertIcon } from '../../ui/icons'
 import {
   extractResourceLinks,
   MessageMarkdown,
@@ -163,8 +163,20 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
           </div>
         )}
         {statusLabel && (
-          <div className="assistant-meta">
-            <span className="assistant-status">{statusLabel}</span>
+          <div className="assistant-error">
+            <span className="assistant-error-icon" aria-hidden="true">
+              <AlertIcon size={15} />
+            </span>
+            <span className="assistant-error-text">{statusLabel}</span>
+            {props.canRetry && (
+              <button
+                type="button"
+                className="assistant-retry"
+                onClick={() => void props.onRetry()}
+              >
+                重试
+              </button>
+            )}
           </div>
         )}
         {props.message.status === 'completed' &&
@@ -177,22 +189,9 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
                 ` · ${formatSeconds(props.runDurationMs)}`}
             </div>
           )}
-        {(contentText !== '' || props.canRetry) && (
+        {contentText !== '' && (
           <div className="assistant-actions">
-            {contentText !== '' && (
-              <CopyButton text={props.streamingText ?? props.message.content} />
-            )}
-            {props.canRetry && (
-              <button
-                type="button"
-                className="msg-action"
-                title="重新生成"
-                aria-label="重新生成"
-                onClick={() => void props.onRetry()}
-              >
-                <RefreshIcon />
-              </button>
-            )}
+            <CopyButton text={props.streamingText ?? props.message.content} />
           </div>
         )}
       </div>

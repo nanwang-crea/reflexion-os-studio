@@ -85,15 +85,43 @@
   word-break: break-word;
 }
 
-.assistant-meta {
+.assistant-error {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  color: var(--danger);
+  font-size: 13px;
 }
 
-.assistant-status {
-  font-size: 12px;
-  color: var(--danger);
+.assistant-error-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.assistant-error-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.assistant-retry {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: 8px;
+  padding: 4px 12px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.assistant-retry:hover:not(:disabled) {
+  background: var(--bg-active);
+  border-color: rgba(248, 113, 113, 0.4);
+  color: var(--text);
 }
 
 /* 消息操作栏：悬浮浮现，不占消息流高度。 */

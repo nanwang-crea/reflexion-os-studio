@@ -218,6 +218,26 @@ export function CheckIcon({ size = 14 }: IconProps): React.JSX.Element {
   )
 }
 
+/** 圆形感叹号：用于失败/异常状态提示条。 */
+export function AlertIcon({ size = 14 }: IconProps): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8v4M12 16h.01" />
+    </svg>
+  )
+}
+
 export function ArrowDownIcon({ size = 15 }: IconProps): React.JSX.Element {
   return (
     <svg
