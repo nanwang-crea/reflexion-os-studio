@@ -3,6 +3,7 @@ import {
   parseResourceUri,
   type ResourceLink,
 } from '@reflexion-os-studio/runtime-client'
+import { CopyButton } from '../CopyButton'
 
 /**
  * 轻量 Markdown 渲染：覆盖对话常见结构（标题 / 列表 / 引用 / 围栏代码 /
@@ -348,10 +349,13 @@ function renderBlock(
     }
     case 'code':
       return (
-        <pre key={key} className="md-pre" data-lang={block.lang || undefined}>
-          <code>{block.text}</code>
-          {caret}
-        </pre>
+        <div key={key} className="md-code-block">
+          <pre className="md-pre" data-lang={block.lang || undefined}>
+            <code>{block.text}</code>
+            {caret}
+          </pre>
+          <CopyButton text={block.text} className="md-block-copy" />
+        </div>
       )
     case 'list': {
       const Tag = block.ordered ? 'ol' : 'ul'
@@ -383,6 +387,9 @@ function renderBlock(
         while (cells.length < width) cells.push('')
         return cells
       }
+      const copyText = block.rows
+        .map((row) => normalize(row).join('\t'))
+        .join('\n')
       return (
         <div key={key} className="md-table-wrap">
           <table className="md-table">
@@ -421,6 +428,7 @@ function renderBlock(
               })}
             </tbody>
           </table>
+          <CopyButton text={copyText} className="md-block-copy" />
           {caret}
         </div>
       )

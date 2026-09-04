@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useMemo } from 'react'
 import type {
   Message,
   ResourceLink,
@@ -16,7 +16,8 @@ type MessagePart = { type: 'text'; text: string } | ResourcePart
 function resourceFromPart(part: ResourcePart): ResourceLink {
   return 'link' in part ? part.link : part.resource_link
 }
-import { CheckIcon, CopyIcon } from '../../ui/icons'
+import { CopyButton } from '../../components/CopyButton'
+import { RefreshIcon } from '../../ui/icons'
 import {
   extractResourceLinks,
   MessageMarkdown,
@@ -67,7 +68,6 @@ function formatSeconds(ms: number): string {
  * 阶段推导：等待（无任何增量）→ 思考中 → 作答（流式光标）→ 完成。
  */
 function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
-  const [copied, setCopied] = useState(false)
   const contentText = props.streamingText ?? props.message.content
   // Runtime 可能返回新协议 { label, link }，历史消息仍兼容 { resource_link }。
   const structuredParts = useMemo<MessagePart[]>(
@@ -95,21 +95,6 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
     reasoningText === '' &&
     props.streamingText === undefined &&
     props.streamingReasoning === undefined
-
-  useEffect(() => {
-    if (!copied) return
-    const timer = setTimeout(() => setCopied(false), 1600)
-    return () => clearTimeout(timer)
-  }, [copied])
-
-  const copy = async (): Promise<void> => {
-    try {
-      await navigator.clipboard.writeText(props.message.content)
-      setCopied(true)
-    } catch {
-      // 剪贴板不可用时静默失败，不打断阅读。
-    }
-  }
 
   const statusLabel = MESSAGE_STATUS_LABELS[props.message.status]
 
@@ -180,11 +165,6 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
         {statusLabel && (
           <div className="assistant-meta">
             <span className="assistant-status">{statusLabel}</span>
-            {props.canRetry && (
-              <button className="link" onClick={() => void props.onRetry()}>
-                重新生成
-              </button>
-            )}
           </div>
         )}
         {props.message.status === 'completed' &&
@@ -197,16 +177,22 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
                 ` · ${formatSeconds(props.runDurationMs)}`}
             </div>
           )}
-        {props.message.status === 'completed' && contentText !== '' && (
+        {(contentText !== '' || props.canRetry) && (
           <div className="assistant-actions">
-            <button
-              className="msg-action"
-              title={copied ? '已复制' : '复制'}
-              aria-label={copied ? '已复制' : '复制'}
-              onClick={() => void copy()}
-            >
-              {copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
-            </button>
+            {contentText !== '' && (
+              <CopyButton text={props.streamingText ?? props.message.content} />
+            )}
+            {props.canRetry && (
+              <button
+                type="button"
+                className="msg-action"
+                title="重新生成"
+                aria-label="重新生成"
+                onClick={() => void props.onRetry()}
+              >
+                <RefreshIcon />
+              </button>
+            )}
           </div>
         )}
       </div>

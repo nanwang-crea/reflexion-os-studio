@@ -7,6 +7,7 @@ import type {
   ToolCall,
 } from '@reflexion-os-studio/runtime-client'
 import { Composer, type ComposerModelOption } from '../../components/Composer'
+import { CopyButton } from '../../components/CopyButton'
 import { ArrowDownIcon, SparkIcon } from '../../ui/icons'
 import { ApprovalCard } from './ApprovalCard'
 import { AssistantMessage } from './AssistantMessage'
@@ -281,6 +282,9 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
             if (message.role === 'user') {
               return (
                 <div key={message.id} className="msg-user">
+                  <div className="user-actions">
+                    <CopyButton text={message.content} />
+                  </div>
                   <div className="user-bubble">{message.content}</div>
                 </div>
               )

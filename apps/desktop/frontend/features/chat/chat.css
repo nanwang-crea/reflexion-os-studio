@@ -47,8 +47,10 @@
 /* ---------- 用户消息 ---------- */
 
 .msg-user {
+  position: relative;
   display: flex;
   justify-content: flex-end;
+  align-items: flex-start;
 }
 
 .user-bubble {
@@ -89,29 +91,40 @@
   gap: 10px;
 }
 
-/* 操作按钮 hover 浮现，悬浮于消息右下角，不占消息流高度。 */
-.assistant-actions {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  display: none;
-}
-
-.msg-assistant:hover .assistant-actions {
-  display: flex;
-}
-
 .assistant-status {
   font-size: 12px;
   color: var(--danger);
 }
 
-button.link {
-  background: transparent;
-  color: var(--info);
-  padding: 0 4px;
-  text-decoration: underline;
-  font-size: 12px;
+/* 消息操作栏：悬浮浮现，不占消息流高度。 */
+.assistant-actions,
+.user-actions {
+  position: absolute;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+}
+
+.msg-assistant:hover .assistant-actions,
+.assistant-actions:focus-within,
+.msg-user:hover .user-actions,
+.user-actions:focus-within {
+  display: flex;
+}
+
+.assistant-actions {
+  left: 0;
+  bottom: 0;
+}
+
+.user-actions {
+  left: -40px;
+  top: 0;
 }
 
 .msg-action {
@@ -126,7 +139,7 @@ button.link {
 }
 
 .msg-action:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: var(--bg-active);
   color: var(--text);
 }
 
@@ -426,6 +439,11 @@ button.link {
   padding: 1px 6px;
 }
 
+.md-code-block,
+.md-table-wrap {
+  position: relative;
+}
+
 .md-pre {
   position: relative;
   margin: 0 0 10px;
@@ -455,6 +473,23 @@ button.link {
   font-size: 11px;
   color: var(--text-muted);
   pointer-events: none;
+}
+
+.md-block-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  opacity: 0;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.24);
+}
+
+.md-code-block:hover .md-block-copy,
+.md-table-wrap:hover .md-block-copy,
+.md-block-copy:focus-visible {
+  opacity: 1;
 }
 
 .md-quote {
