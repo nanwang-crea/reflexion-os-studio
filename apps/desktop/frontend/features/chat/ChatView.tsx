@@ -282,10 +282,12 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
             if (message.role === 'user') {
               return (
                 <div key={message.id} className="msg-user">
-                  <div className="user-actions">
-                    <CopyButton text={message.content} />
+                  <div className="user-bubble">
+                    <div className="user-content">{message.content}</div>
+                    <div className="user-actions">
+                      <CopyButton text={message.content} />
+                    </div>
                   </div>
-                  <div className="user-bubble">{message.content}</div>
                 </div>
               )
             }

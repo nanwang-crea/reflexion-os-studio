@@ -47,7 +47,6 @@
 /* ---------- 用户消息 ---------- */
 
 .msg-user {
-  position: relative;
   display: flex;
   justify-content: flex-end;
   align-items: flex-start;
@@ -56,11 +55,15 @@
 .user-bubble {
   background: var(--bg-elevated);
   border-radius: 16px 16px 4px 16px;
-  padding: 8px 14px;
+  padding: 8px 14px 5px;
   max-width: 78%;
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.user-content {
+  white-space: pre-wrap;
 }
 
 /* ---------- 助手消息 ---------- */
@@ -124,35 +127,30 @@
   color: var(--text);
 }
 
-/* 消息操作栏：悬浮浮现，不占消息流高度。 */
+/* 消息操作栏：跟随消息底部排布，悬停时淡入，不覆盖正文。 */
 .assistant-actions,
 .user-actions {
-  position: absolute;
-  display: none;
+  display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 3px;
-  border-radius: 10px;
-  background: var(--bg-hover);
-  border: 1px solid var(--border-subtle);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  min-height: 28px;
+  padding-top: 2px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
 }
 
 .msg-assistant:hover .assistant-actions,
 .assistant-actions:focus-within,
 .msg-user:hover .user-actions,
 .user-actions:focus-within {
-  display: flex;
-}
-
-.assistant-actions {
-  left: 0;
-  bottom: 0;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .user-actions {
-  right: 0;
-  bottom: 0;
+  justify-content: flex-end;
+  min-height: 24px;
+  padding-top: 1px;
 }
 
 .msg-action {
