@@ -151,8 +151,9 @@
 }
 
 .user-actions {
-  left: -40px;
-  top: 0;
+  right: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .msg-action {
@@ -1039,6 +1040,7 @@
   margin-top: 4px;
   font-size: 12px;
   color: var(--text-muted);
+  text-align: right;
 }
 
 /* ---------- 发送队列(等待上一条回复结束) ---------- */

@@ -189,7 +189,7 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
                 ` · ${formatSeconds(props.runDurationMs)}`}
             </div>
           )}
-        {contentText !== '' && (
+        {contentText !== '' && !statusLabel && (
           <div className="assistant-actions">
             <CopyButton text={props.streamingText ?? props.message.content} />
           </div>
