@@ -231,6 +231,117 @@ test('tool call lifecycle: create, status, finalize, recovery', () => {
   )
 })
 
+test('recovery converges pending/running delegations with missing or interrupted child', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'reflexion-delrec-'))
+  const first = new Store(dir)
+  const project = first.projects.create({ name: 'p', folderPath: '/tmp/p' })
+  const session = first.sessions.create(project.id)
+  const parent = first.runs.create({
+    sessionId: session.id,
+    providerId: null,
+    model: null,
+  })
+
+  // ① pending 且从未分配 child：启动后收敛为 failed（child missing）。
+  const noChild = first.delegations.create({
+    sessionId: session.id,
+    parentRunId: parent.id,
+    agentId: 'worker',
+    task: 'no child',
+  })
+  // ② running 但 child Run 已缺失：收敛为 failed（child missing）。
+  const gone = first.delegations.create({
+    sessionId: session.id,
+    parentRunId: parent.id,
+    agentId: 'worker',
+    task: 'gone child',
+  })
+  // ③ running 且 child Run 仍在但为 interrupted：收敛为 failed（child interrupted）。
+  const interrupted = first.delegations.create({
+    sessionId: session.id,
+    parentRunId: parent.id,
+    agentId: 'worker',
+    task: 'interrupted child',
+  })
+  const child = first.runs.create({
+    sessionId: session.id,
+    providerId: null,
+    model: null,
+    parentRunId: parent.id,
+    delegationId: interrupted.id,
+  })
+  first.delegations.attachChildRun(interrupted.id, child.id)
+  first.delegations.update(interrupted.id, 'running')
+  // ④ 已完成委派不受恢复影响。
+  const done = first.delegations.create({
+    sessionId: session.id,
+    parentRunId: parent.id,
+    agentId: 'worker',
+    task: 'done',
+  })
+  first.delegations.update(done.id, 'completed', 'ok')
+
+  const reopened = new Store(dir)
+  const byId = Object.fromEntries(
+    reopened.delegations.listBySession(session.id).map((d) => [d.id, d]),
+  )
+  assert.equal(byId[noChild.id].status, 'failed')
+  assert.equal(byId[noChild.id].error, 'recovered: child run missing')
+  assert.equal(byId[gone.id].status, 'failed')
+  assert.equal(byId[gone.id].error, 'recovered: child run missing')
+  assert.equal(byId[interrupted.id].status, 'failed')
+  assert.equal(byId[interrupted.id].error, 'recovered: child run interrupted')
+  assert.equal(byId[done.id].status, 'completed')
+  assert.equal(byId[done.id].result, 'ok')
+})
+
+test('cancelByParentRun cancels in-flight delegations idempotently', () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
+  const session = store.sessions.create(project.id)
+  const parent = store.runs.create({
+    sessionId: session.id,
+    providerId: null,
+    model: null,
+  })
+  const pending = store.delegations.create({
+    sessionId: session.id,
+    parentRunId: parent.id,
+    agentId: 'worker',
+    task: 'pending',
+  })
+  const running = store.delegations.create({
+    sessionId: session.id,
+    parentRunId: parent.id,
+    agentId: 'worker',
+    task: 'running',
+  })
+  const done = store.delegations.create({
+    sessionId: session.id,
+    parentRunId: parent.id,
+    agentId: 'worker',
+    task: 'done',
+  })
+  store.delegations.update(running.id, 'running')
+  store.delegations.update(done.id, 'completed', 'ok')
+
+  const firstCancel = store.delegations.cancelByParentRun(parent.id)
+  const byId = Object.fromEntries(firstCancel.map((d) => [d.id, d]))
+  assert.equal(byId[pending.id].status, 'cancelled')
+  assert.equal(byId[running.id].status, 'cancelled')
+  assert.equal(byId[done.id].status, 'completed')
+
+  // 幂等：再次取消不改变任何委派状态。
+  const secondCancel = store.delegations.cancelByParentRun(parent.id)
+  const byId2 = Object.fromEntries(secondCancel.map((d) => [d.id, d]))
+  assert.equal(byId2[pending.id].status, 'cancelled')
+  assert.equal(byId2[running.id].status, 'cancelled')
+  assert.equal(byId2[done.id].status, 'completed')
+  // 无关父 Run 不受影响。
+  const other = store.delegations.cancelByParentRun('nonexistent')
+  assert.equal(other.length, 0)
+})
+
 test('recovery marks unfinished runs/messages/tool calls on reopen', () => {
   const dir = mkdtempSync(join(tmpdir(), 'reflexion-recover-'))
   const first = new Store(dir)
@@ -486,12 +597,22 @@ test('agent settings default and round-trip', () => {
     reflectionThreshold: null,
     requestRetries: null,
     requestTimeoutSec: null,
+    maxDepth: 1,
+    maxChildRuns: 4,
+    maxParallelChildren: 2,
+    maxChildTimeoutSec: 120,
+    maxChildTotalTokens: 12000,
   })
   const updated = store.agentSettings.upsert({
     maxTurns: 32,
     reflectionThreshold: 3,
     requestRetries: 0,
     requestTimeoutSec: 60,
+    maxDepth: 1,
+    maxChildRuns: 4,
+    maxParallelChildren: 2,
+    maxChildTimeoutSec: 120,
+    maxChildTotalTokens: 12000,
   })
   assert.deepEqual(store.agentSettings.get(), updated)
   assert.equal(updated.maxTurns, 32)

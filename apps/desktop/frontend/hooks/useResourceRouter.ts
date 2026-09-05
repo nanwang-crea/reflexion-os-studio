@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 import type { RefObject } from 'react'
 import type { ResourceLink } from '@reflexion-os-studio/runtime-client'
 import { openExternalUrl } from '../api/system'
-import type { WorkspaceOpenRequest } from '../features/workspace/WorkspacePanel'
+import type { WorkspaceOpenRequest } from '../features/workspace/types'
 
 interface ResourceRouterOptions {
   activeProjectRef: RefObject<string | null>

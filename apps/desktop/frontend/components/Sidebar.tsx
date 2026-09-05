@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
 import type { Project, Session } from '@reflexion-os-studio/runtime-client'
 import { SessionRow } from './SessionRow'
+import { ProjectFiles } from '../features/workspace/ProjectFiles'
 import {
   ArchiveIcon,
   BoxIcon,
+  FolderIcon,
   GearIcon,
   PlusIcon,
   SearchIcon,
@@ -20,6 +22,10 @@ type OtherView = Exclude<AppView, 'chat'>
 interface SidebarProps {
   /** 收起时仍保持挂载（保留搜索过滤等状态），仅隐藏。 */
   open: boolean
+  /** 侧栏可拖拽宽度。 */
+  width: number
+  /** 侧栏内容模式：chat=会话列表；files=当前项目文件工作区。 */
+  mode: 'chat' | 'files'
   projects: Project[]
   /** 激活项目下的会话；仅当项目展开时展示。 */
   projectSessions: Session[]
@@ -30,6 +36,15 @@ interface SidebarProps {
   creatingProject: boolean
   /** 当前主视图；底部导航据此高亮。 */
   view: AppView
+  /** Rust System Runtime 可用性：文件树/查看器依赖它。 */
+  systemReady: boolean
+  /** 右侧查看器当前激活文件；用于文件工作区高亮。 */
+  activeFilePath: string | null
+  /** 外部请求聚焦预览的 Asset（点击消息里的 asset:// 链接）。 */
+  focusAssetId?: string | null
+  onFocusConsumed?: () => void
+  /** 点击文件：交给右侧查看器打开标签。 */
+  onOpenFile: (path: string, line?: number) => void
   /** 底部导航切换；点击已激活页回到聊天。 */
   onSelectView: (view: OtherView) => void
   onSelectProject: (projectId: string) => void
@@ -37,6 +52,10 @@ interface SidebarProps {
   onSelectStandaloneSession: (sessionId: string) => void
   /** 在指定项目内新建会话（进入项目落地页）。 */
   onNewSessionInProject: (projectId: string) => void
+  /** 点击项目行文件图标：切到该项目并让侧栏进入文件工作区。 */
+  onEnterProjectFiles: (projectId: string) => void
+  /** 从文件工作区返回会话列表。 */
+  onBackToChat: () => void
   onNewChat: () => void
   onCreateProject: () => Promise<void>
   onDeleteProject: (projectId: string) => Promise<void>
@@ -76,16 +95,51 @@ function groupByTime(sessions: Session[]): [string, Session[]][] {
 }
 
 /**
- * 桌面版 Codex 式单列侧栏：顶部品牌，导航区提供新建对话入口，
- * 下方项目/对话分组列表，导航区进入技能/自动化/记忆，
- * 底部固定设置入口。点导航打开对应主区页面；点已激活项回到聊天
- * （与旧图标轨行为一致）。
+ * 桌面版 Codex 式单列侧栏：默认展示会话列表；切到文件模式后整个侧栏
+ * 变为当前项目的文件工作区（文件 / Git 变更 / 资产 + 搜索 + 返回聊天）。
  */
 export function Sidebar(props: SidebarProps): React.JSX.Element {
+  const activeProject =
+    props.projects.find((project) => project.id === props.activeProjectId) ??
+    null
+
+  // 文件模式：整个侧栏只展示当前项目的文件工作区，顶部提供返回聊天。
+  if (props.mode === 'files') {
+    return (
+      <aside
+        className={props.open ? 'sidebar' : 'sidebar sidebar-hidden'}
+        aria-hidden={!props.open}
+        style={{ width: props.width }}
+      >
+        <header className="sidebar-files-head">
+          <button
+            type="button"
+            className="ghost sidebar-back"
+            title="返回会话列表"
+            aria-label="返回会话列表"
+            onClick={props.onBackToChat}
+          >
+            ←
+          </button>
+          <span className="sidebar-files-brand">项目文件</span>
+        </header>
+        <ProjectFiles
+          project={activeProject}
+          systemReady={props.systemReady}
+          activePath={props.activeFilePath}
+          focusAssetId={props.focusAssetId}
+          onFocusConsumed={props.onFocusConsumed}
+          onOpenFile={props.onOpenFile}
+        />
+      </aside>
+    )
+  }
+
   return (
     <aside
       className={props.open ? 'sidebar' : 'sidebar sidebar-hidden'}
       aria-hidden={!props.open}
+      style={{ width: props.width }}
     >
       <header className="sidebar-head">
         <span className="brand-mark" aria-hidden="true">
@@ -137,6 +191,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
         onSelectSession={props.onSelectSession}
         onSelectStandaloneSession={props.onSelectStandaloneSession}
         onNewSessionInProject={props.onNewSessionInProject}
+        onEnterProjectFiles={props.onEnterProjectFiles}
         onCreateProject={props.onCreateProject}
         onDeleteProject={props.onDeleteProject}
         onRenameSession={props.onRenameSession}
@@ -186,6 +241,8 @@ interface ChatsPanelProps {
   onSelectSession: (sessionId: string) => void
   onSelectStandaloneSession: (sessionId: string) => void
   onNewSessionInProject: (projectId: string) => void
+  /** 点击项目行文件图标：切到该项目并让侧栏进入文件工作区。 */
+  onEnterProjectFiles: (projectId: string) => void
   onCreateProject: () => Promise<void>
   onDeleteProject: (projectId: string) => Promise<void>
   onRenameSession: (sessionId: string, title: string) => Promise<void>
@@ -244,6 +301,14 @@ function ChatsPanel(props: ChatsPanelProps): React.JSX.Element {
                     onClick={() => props.onSelectProject(project.id)}
                   >
                     <span className="row-label">{project.name}</span>
+                  </button>
+                  <button
+                    className="row-action"
+                    title="打开项目文件工作区"
+                    aria-label={`打开 ${project.name} 的文件`}
+                    onClick={() => props.onEnterProjectFiles(project.id)}
+                  >
+                    <FolderIcon />
                   </button>
                   <button
                     className="row-action"

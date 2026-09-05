@@ -4,6 +4,7 @@ import type {
   Project,
   Session,
   SkillManifest,
+  Delegation,
 } from '@reflexion-os-studio/runtime-client'
 import { useAppBootstrap } from './hooks/useAppBootstrap'
 import { useModelSelection } from './hooks/useModelSelection'
@@ -12,6 +13,7 @@ import { listProviders } from './api/providers'
 import { listProjects } from './api/projects'
 import { resolveApproval } from './api/chat'
 import { listSkills } from './api/skills'
+import { listDelegations } from './api/agents'
 import { getSessionData, listSessions, type SessionData } from './api/sessions'
 import {
   ConfirmDialog,
@@ -23,10 +25,11 @@ import { MemoryView } from './features/memories/MemoryView'
 import { Sidebar } from './components/Sidebar'
 import { SkillsView } from './features/skills/SkillsView'
 import { AutomationsView } from './features/automations/AutomationsView'
-import {
-  WorkspacePanel,
-  type WorkspaceOpenRequest,
-} from './features/workspace/WorkspacePanel'
+import { FileViewerPanel } from './features/workspace/FileViewerPanel'
+import type {
+  OpenFileTab,
+  WorkspaceOpenRequest,
+} from './features/workspace/types'
 import { SettingsView } from './features/settings/SettingsView'
 import { useSessionActions } from './hooks/useSessionActions'
 import { useResourceRouter } from './hooks/useResourceRouter'
@@ -58,14 +61,34 @@ export default function App() {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null)
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [sessionData, setSessionData] = useState<SessionData | null>(null)
+  const [delegations, setDelegations] = useState<Delegation[]>([])
   const [creatingProject, setCreatingProject] = useState(false)
   // 侧栏开合（单栏 Codex 式）：收起时隐藏侧栏但保留挂载状态。
   const [sidebarOpen, setSidebarOpen] = useState(
     () => localStorage.getItem('reflexion.sidebarOpen') !== '0',
   )
+  // 侧栏内容模式：chat=会话列表；files=当前项目文件工作区。
+  const [sidebarMode, setSidebarMode] = useState<'chat' | 'files'>('chat')
+  // 侧栏可拖拽宽度。
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const stored = Number(localStorage.getItem('reflexion.sidebarWidth'))
+    return Number.isFinite(stored) && stored >= 200 ? stored : 272
+  })
   // 对话右侧工作区面板（Codex 右侧文件栏式）：默认展开，按用户偏好记忆。
   const [workspaceOpen, setWorkspaceOpen] = useState(
     () => localStorage.getItem('reflexion.workspacePanel') !== '0',
+  )
+  // 右侧文件查看器可拖拽宽度。
+  const [workspaceWidth, setWorkspaceWidth] = useState(() => {
+    const stored = Number(localStorage.getItem('reflexion.workspaceWidth'))
+    return Number.isFinite(stored) && stored >= 280 ? stored : 420
+  })
+  // 右侧查看器已打开的文件标签（顺序）+ 当前激活标签 path。
+  const [openTabs, setOpenTabs] = useState<OpenFileTab[]>([])
+  const [activeFilePath, setActiveFilePath] = useState<string | null>(null)
+  // 资源链接里的 asset:// 定位请求，转发给侧栏资产视图聚焦。
+  const [filesFocusAssetId, setFilesFocusAssetId] = useState<string | null>(
+    null,
   )
   // 资源链接点击产生的面板定位请求；nonce 区分每次点击。
   const [workspaceRequest, setWorkspaceRequest] =
@@ -84,8 +107,16 @@ export default function App() {
   }, [sidebarOpen])
 
   useEffect(() => {
+    localStorage.setItem('reflexion.sidebarWidth', String(sidebarWidth))
+  }, [sidebarWidth])
+
+  useEffect(() => {
     localStorage.setItem('reflexion.workspacePanel', workspaceOpen ? '1' : '0')
   }, [workspaceOpen])
+
+  useEffect(() => {
+    localStorage.setItem('reflexion.workspaceWidth', String(workspaceWidth))
+  }, [workspaceWidth])
 
   const { permissionMode, changePermissionMode } = usePermissionMode()
   const { modelOptions, selectedModelKey, setSelectedModelKey } =
@@ -118,6 +149,11 @@ export default function App() {
     setStandaloneSessions(result.sessions)
   }, [])
 
+  const refreshDelegations = useCallback(async (sessionId: string) => {
+    const delegationsList = await listDelegations(sessionId)
+    setDelegations(delegationsList)
+  }, [])
+
   // deps 对象必须稳定：useAppBootstrap 内部的引导 effect 以它为依赖，
   // 每次渲染重建会导致事件监听反复重挂、启动拉取反复触发。
   const bootstrapDeps = useMemo(
@@ -129,6 +165,7 @@ export default function App() {
       refreshSessionData,
       refreshStandaloneSessions,
       refreshProjectSessions,
+      refreshDelegations,
       setNotice,
     }),
     [
@@ -139,6 +176,7 @@ export default function App() {
       refreshProjects,
       refreshSessionData,
       refreshStandaloneSessions,
+      refreshDelegations,
       setNotice,
     ],
   )
@@ -200,13 +238,19 @@ export default function App() {
     setActiveSessionId(sessionId)
     resetStreaming()
     void refreshSessionData(sessionId)
+    void refreshDelegations(sessionId)
   }
 
   const selectProject = (projectId: string): void => {
     setActiveProjectId(projectId)
     setActiveSessionId(null)
     setSessionData(null)
+    setDelegations([])
     setView('chat')
+    // 文件标签只属于当前项目：切项目时清空。
+    setOpenTabs([])
+    setActiveFilePath(null)
+    setFilesFocusAssetId(null)
     void refreshProjectSessions(projectId)
   }
 
@@ -215,7 +259,13 @@ export default function App() {
       setActiveProjectId(projectId)
       setActiveSessionId(null)
       setSessionData(null)
-      if (projectId !== null) void refreshProjectSessions(projectId)
+      setDelegations([])
+      if (projectId !== null) {
+        setOpenTabs([])
+        setActiveFilePath(null)
+        setFilesFocusAssetId(null)
+        void refreshProjectSessions(projectId)
+      }
     },
     [refreshProjectSessions],
   )
@@ -225,13 +275,73 @@ export default function App() {
     openSession(sessionId)
   }
 
-  /** 回到“新对话”落地页；未选项目即独立对话模式。 */
   const newStandaloneChat = (): void => {
     setActiveProjectId(null)
     setActiveSessionId(null)
     setSessionData(null)
+    setDelegations([])
     setView('chat')
   }
+
+  /** 点击项目行文件图标：切到对应项目并让侧栏进入文件工作区。 */
+  const enterProjectFiles = useCallback(
+    (projectId: string): void => {
+      setActiveProjectId(projectId)
+      setActiveSessionId(null)
+      setSessionData(null)
+      setDelegations([])
+      setView('chat')
+      setSidebarMode('files')
+      setSidebarOpen(true)
+      setOpenTabs([])
+      setActiveFilePath(null)
+      setFilesFocusAssetId(null)
+      void refreshProjectSessions(projectId)
+    },
+    [refreshProjectSessions],
+  )
+
+  const backToChat = useCallback((): void => {
+    setSidebarMode('chat')
+  }, [])
+
+  /** 在右侧查看器打开/激活一个文件标签；重复点击只切标签不重复创建。 */
+  const openFile = useCallback((path: string, line?: number): void => {
+    const nonce = Date.now()
+    setOpenTabs((tabs) => {
+      const existing = tabs.find((tab) => tab.path === path)
+      if (!existing) return [...tabs, { path, line, nonce }]
+      // 已打开：仅更新跳转定位（若提供），供 ContentView 重新应用 initialLine。
+      if (line !== undefined) {
+        return tabs.map((tab) =>
+          tab.path === path ? { ...tab, line, nonce } : tab,
+        )
+      }
+      return tabs
+    })
+    setActiveFilePath(path)
+    setWorkspaceOpen(true)
+  }, [])
+
+  const closeTab = useCallback(
+    (path: string): void => {
+      setOpenTabs((tabs) => {
+        const index = tabs.findIndex((tab) => tab.path === path)
+        const next = tabs.filter((tab) => tab.path !== path)
+        if (activeFilePath === path) {
+          // 关闭当前激活标签：激活紧随其后的标签（为最后一个时回到前一个）。
+          const neighbor = next[Math.min(index, next.length - 1)] ?? null
+          setActiveFilePath(neighbor ? neighbor.path : null)
+        }
+        return next
+      })
+    },
+    [activeFilePath],
+  )
+
+  const selectTab = useCallback((path: string): void => {
+    setActiveFilePath(path)
+  }, [])
 
   const {
     createProject,
@@ -287,6 +397,19 @@ export default function App() {
     setWorkspaceOpen,
     setNotice,
   })
+
+  useEffect(() => {
+    const request = workspaceRequest
+    if (request === null) return
+    if (request.kind === 'file') {
+      openFile(request.path, request.line)
+    } else {
+      setSidebarMode('files')
+      setSidebarOpen(true)
+      setFilesFocusAssetId(request.assetId)
+    }
+  }, [workspaceRequest, openFile])
+
   const contextTitle =
     view === 'settings'
       ? '设置'
@@ -316,6 +439,8 @@ export default function App() {
     <div className="app-shell">
       <Sidebar
         open={sidebarOpen}
+        width={sidebarWidth}
+        mode={sidebarMode}
         projects={projects}
         projectSessions={projectSessions}
         standaloneSessions={standaloneSessions}
@@ -323,6 +448,13 @@ export default function App() {
         activeSessionId={activeSessionId}
         creatingProject={creatingProject}
         view={view}
+        systemReady={bootstrap?.systemReady ?? false}
+        activeFilePath={openTabs.length > 0 ? activeFilePath : null}
+        focusAssetId={filesFocusAssetId}
+        onFocusConsumed={() => setFilesFocusAssetId(null)}
+        onOpenFile={openFile}
+        onEnterProjectFiles={enterProjectFiles}
+        onBackToChat={backToChat}
         onSelectProject={selectProject}
         onSelectSession={openSession}
         onSelectStandaloneSession={selectStandaloneSession}
@@ -336,6 +468,13 @@ export default function App() {
           // 底部导航：打开对应页面；点已激活项回到聊天。
           setView((current) => (current === nextView ? 'chat' : nextView))
         }}
+      />
+      <ResizeHandle
+        onResize={(delta) =>
+          setSidebarWidth((width) =>
+            Math.max(200, Math.min(560, width + delta)),
+          )
+        }
       />
       <div className="main-pane">
         <header className="topbar">
@@ -365,9 +504,11 @@ export default function App() {
           {memoryNotice && (
             <span className="badge badge-memory">{memoryNotice}</span>
           )}
-          <span className={`badge badge-${bootstrap?.state ?? ''}`}>
-            {statusLabel}
-          </span>
+          {bootstrap?.state !== 'system-ready' && (
+            <span className={`badge badge-${bootstrap?.state ?? ''}`}>
+              {statusLabel}
+            </span>
+          )}
         </header>
 
         {notice && (
@@ -410,6 +551,7 @@ export default function App() {
             ) : activeSessionId ? (
               <ChatView
                 sessionData={sessionData}
+                delegations={delegations}
                 streaming={streaming}
                 streamingReasoning={streamingReasoning}
                 runActivities={runActivities}
@@ -459,11 +601,25 @@ export default function App() {
             )}
           </div>
           {view === 'chat' && workspaceOpen && (
-            <WorkspacePanel
-              project={activeProject}
-              systemReady={bootstrap?.systemReady ?? false}
-              openRequest={workspaceRequest}
-            />
+            <>
+              <ResizeHandle
+                reverse
+                onResize={(delta) =>
+                  setWorkspaceWidth((width) =>
+                    Math.max(280, Math.min(900, width - delta)),
+                  )
+                }
+              />
+              <FileViewerPanel
+                project={activeProject}
+                systemReady={bootstrap?.systemReady ?? false}
+                openTabs={openTabs}
+                activePath={activeFilePath}
+                onSelectTab={selectTab}
+                onCloseTab={closeTab}
+                width={workspaceWidth}
+              />
+            </>
           )}
         </div>
       </div>
@@ -473,5 +629,46 @@ export default function App() {
         onCancel={handleCancel}
       />
     </div>
+  )
+}
+
+interface ResizeHandleProps {
+  /** 向右拖动时宽度增量回调；reverse 用于右侧面板（面板在分隔线右侧）。 */
+  reverse?: boolean
+  onResize: (delta: number) => void
+}
+
+/** 可拖拽分栏分隔条：按住拖动调整相邻面板宽度（pointer capture）。 */
+function ResizeHandle(props: ResizeHandleProps): React.JSX.Element {
+  const draggingRef = useRef(false)
+  const lastXRef = useRef(0)
+
+  return (
+    <div
+      className="resize-handle"
+      role="separator"
+      aria-orientation="vertical"
+      onPointerDown={(event) => {
+        event.preventDefault()
+        draggingRef.current = true
+        lastXRef.current = event.clientX
+        event.currentTarget.setPointerCapture(event.pointerId)
+      }}
+      onPointerMove={(event) => {
+        if (!draggingRef.current) return
+        const delta = event.clientX - lastXRef.current
+        lastXRef.current = event.clientX
+        props.onResize(props.reverse ? -delta : delta)
+      }}
+      onPointerUp={(event) => {
+        if (!draggingRef.current) return
+        draggingRef.current = false
+        event.currentTarget.releasePointerCapture(event.pointerId)
+      }}
+      onPointerCancel={(event) => {
+        draggingRef.current = false
+        event.currentTarget.releasePointerCapture(event.pointerId)
+      }}
+    />
   )
 }

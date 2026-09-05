@@ -29,37 +29,40 @@ export type { ToolContext } from './shared.js'
 /**
  * 单次 Run 的工具装配：时间/网络/Skill 等纯计算工具始终可用；
  * 文件/Shell 工具走 Rust System Runtime，仅在系统就绪且会话有工作区时注册。
+ * allowedTools 白名单过滤内置与 MCP 工具；子 Run 未注入 childRunStarter，
+ * 因此 task(委派)工具默认不注册——"child 默认无 task"。
  */
 export function createToolRegistry(ctx: ToolContext): ToolRegistry {
   const registry = new ToolRegistry()
-  for (const tool of alwaysAvailableTools(ctx)) {
-    registry.register(tool)
-  }
-  for (const tool of mcpTools(ctx)) {
-    registry.register(tool)
-  }
+  const tools = [...alwaysAvailableTools(ctx), ...mcpTools(ctx)]
   if (
     ctx.system !== null &&
     ctx.system.available &&
     ctx.workspaceRoot !== null
   ) {
-    const workspaceRoot = ctx.workspaceRoot
-    const system = ctx.system
-    for (const tool of workspaceTools(system, workspaceRoot)) {
-      registry.register(tool)
+    tools.push(...workspaceTools(ctx.system, ctx.workspaceRoot))
+  }
+  for (const tool of tools) {
+    if (ctx.allowedTools != null && !ctx.allowedTools.has(tool.name)) {
+      continue
     }
+    registry.register(tool)
   }
   return registry
 }
 
 function alwaysAvailableTools(ctx: ToolContext): ToolDefinition[] {
-  return [
+  const tools = [
     createCurrentTimeTool(),
     createWebFetchTool(),
     createSkillUseTool(ctx.skills),
     createUpdatePlanTool(ctx),
-    createTaskTool(ctx),
   ]
+  // 只有注入 childRunStarter 的 Run 才具备委派能力(task 工具)；子 Run 默认无此工具。
+  if (ctx.childRunStarter) {
+    tools.push(createTaskTool(ctx))
+  }
+  return tools
 }
 
 function mcpTools(ctx: ToolContext): ToolDefinition[] {

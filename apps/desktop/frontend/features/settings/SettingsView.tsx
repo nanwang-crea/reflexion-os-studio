@@ -139,8 +139,16 @@ export function SettingsView(props: SettingsViewProps): React.JSX.Element {
               </div>
             </>
           )}
-          {section === 'runtime' && <AgentRuntimePanel />}
-          {section === 'mcp' && <McpPanel confirm={props.confirm} />}
+          {section === 'runtime' && (
+            <div className="settings-single">
+              <AgentRuntimePanel />
+            </div>
+          )}
+          {section === 'mcp' && (
+            <div className="settings-single">
+              <McpPanel confirm={props.confirm} />
+            </div>
+          )}
         </div>
       </div>
     </div>

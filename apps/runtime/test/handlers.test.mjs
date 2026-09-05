@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { Store } from '../dist/store/index.js'
 import { dispatchCommand } from '../dist/handlers.js'
 import { createTaskTool } from '../dist/agent/tools/task.js'
+import { createToolRegistry } from '../dist/agent/tools/index.js'
 import { ChatAgent } from '../dist/agent/index.js'
 
 function freshStore() {
@@ -113,6 +114,43 @@ test('task tool rejects without starter and validates arguments', async () => {
   assert.deepEqual(result, { content: 'done', isError: false })
   assert.equal(starterCalls[0].parentRunId, 'run-1')
   assert.equal(starterCalls[0].agentId, 'agent-1')
+})
+
+test('tool registry: child has no task and allowedTools filters tools', () => {
+  const baseCtx = () => ({
+    store: {},
+    sessionId: 's',
+    messageId: 'm',
+    runId: 'r',
+    emitter: {},
+    system: null,
+    workspaceRoot: null,
+    skills: { get: () => null, list: () => [] },
+    mcp: null,
+  })
+
+  // 未注入 childRunStarter（子 Run 场景）：不注册 task，也不暴露写/Shell。
+  const noStarter = createToolRegistry(baseCtx())
+  assert.equal(noStarter.has('task'), false)
+  assert.equal(noStarter.has('shell.execute'), false)
+  assert.equal(noStarter.has('file.write'), false)
+
+  // 注入 childRunStarter（Primary 场景）：task 可用。
+  const primary = createToolRegistry({
+    ...baseCtx(),
+    childRunStarter: async () => 'x',
+  })
+  assert.equal(primary.has('task'), true)
+
+  // allowedTools 白名单：仅注册名单内工具，其余（含 MCP/写工具）被过滤。
+  const allowed = new Set(['get_current_time', 'file.read'])
+  const scoped = createToolRegistry({ ...baseCtx(), allowedTools: allowed })
+  const registeredNames = scoped.specs().map((tool) => tool.name)
+  for (const name of registeredNames) {
+    assert.equal(allowed.has(name), true, `unexpected tool: ${name}`)
+  }
+  assert.equal(scoped.has('web.fetch'), false)
+  assert.equal(scoped.has('update_plan'), false)
 })
 
 test('provider.configure forwards tuning fields with omitted, null, and value semantics', async () => {

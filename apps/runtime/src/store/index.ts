@@ -75,6 +75,7 @@ export class Store {
 
     // 启动恢复：上次进程未走完的生命周期统一落为 interrupted/cancelled。
     this.runs.recoverInterrupted()
+    this.delegations.recoverInterrupted()
     this.messages.recoverInterrupted()
     this.toolCalls.recoverUnfinished()
     this.workspaceIndex.recoverInterrupted()

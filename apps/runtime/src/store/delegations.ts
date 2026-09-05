@@ -77,6 +77,42 @@ export class DelegationStore {
     return row ? this.toDelegation(row) : null
   }
 
+  /** 启动恢复：无法继续执行的子任务统一收敛为可解释的失败。 */
+  recoverInterrupted(): void {
+    const rows = this.db
+      .prepare(
+        `SELECT d.* FROM delegations d
+         LEFT JOIN runs r ON r.id = d.child_run_id
+         WHERE d.status IN ('pending', 'running')
+           AND (d.child_run_id IS NULL OR r.id IS NULL OR r.status = 'interrupted')`,
+      )
+      .all() as Row[]
+    const now = nowIso()
+    const statement = this.db.prepare(
+      `UPDATE delegations SET status = 'failed', error = ?, updated_at = ?, completed_at = ?
+       WHERE id = ? AND status IN ('pending', 'running')`,
+    )
+    for (const row of rows) {
+      const reason =
+        row.child_run_id == null || row.child_run_id === ''
+          ? 'recovered: child run missing'
+          : 'recovered: child run interrupted'
+      statement.run(reason, now, now, String(row.id))
+    }
+  }
+
+  /** 按父 Run 取消所有未结束委派；重复调用保持幂等。 */
+  cancelByParentRun(parentRunId: string): Delegation[] {
+    const now = nowIso()
+    this.db
+      .prepare(
+        `UPDATE delegations SET status = 'cancelled', updated_at = ?, completed_at = ?
+         WHERE parent_run_id = ? AND status IN ('pending', 'running')`,
+      )
+      .run(now, now, parentRunId)
+    return this.listByParentRun(parentRunId)
+  }
+
   attachChildRun(id: string, childRunId: string): Delegation {
     const current = this.get(id)
     if (!current) throw new Error('delegation not found')

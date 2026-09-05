@@ -18,9 +18,7 @@ function resourceFromPart(part: ResourcePart): ResourceLink {
 }
 import { CopyButton } from '../../components/CopyButton'
 import { AlertIcon } from '../../ui/icons'
-import {
-  MessageMarkdown,
-} from '../../components/markdown/MessageMarkdown'
+import { MessageMarkdown } from '../../components/markdown/MessageMarkdown'
 import { ReasoningBlock } from './ReasoningBlock'
 import { ToolTrace } from './ToolTrace'
 import type { RunActivity } from '../../hooks/useAppBootstrap'

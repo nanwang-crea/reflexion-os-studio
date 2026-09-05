@@ -50,10 +50,16 @@ export function createTaskTool(ctx: ToolContext): ToolDefinition {
         })
         return { content: result, isError: false }
       } catch (error) {
+        // 子 Run 限额/超时等用 ChildLimitError 携带稳定 code，透传而不是折叠为 tool_error。
+        const code =
+          error instanceof Error &&
+          typeof (error as unknown as { code?: unknown }).code === 'string'
+            ? (error as unknown as { code: string }).code
+            : 'tool_error'
         return {
           content: `子 Run 执行失败：${error instanceof Error ? error.message : String(error)}`,
           isError: true,
-          code: 'tool_error',
+          code,
         }
       }
     },

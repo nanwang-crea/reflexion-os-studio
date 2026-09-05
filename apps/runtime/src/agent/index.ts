@@ -20,9 +20,10 @@ import { DEFAULT_SESSION_TITLE, type Store } from '../store/index.js'
 import type { SystemRuntimeClient } from '../system.js'
 import { ContextBuilder, type ProviderRuntimeConfig } from './context.js'
 import type { McpManager } from '../mcp/manager.js'
-import { CommandError } from './errors.js'
+import { ChildLimitError, CommandError } from './errors.js'
 import { MemoryService } from './memory/service.js'
 import { ApprovalGateway, PermissionGate } from './permissions.js'
+import type { PermissionMode } from './permissions.js'
 import { PRIMARY_AGENT_SYSTEM_PROMPT } from './prompts/index.js'
 import { QueueService } from './queue.js'
 import { RunRunner } from './runner.js'
@@ -36,12 +37,27 @@ interface RunningStream {
   controller: AbortController
 }
 
+/** 子 Agent 默认工具白名单：纯计算 + 只读文件查询，不暴露写/Shell/MCP，且无 task(不递归)。 */
+const CHILD_DEFAULT_TOOLS: ReadonlySet<string> = new Set([
+  'get_current_time',
+  'web.fetch',
+  'skill.use',
+  'update_plan',
+  'file.read',
+  'file.list',
+  'file.glob',
+  'file.grep',
+])
+
 /**
  * Agent 门面：对外保持 message.send / run.cancel / run.retry / approval.resolve 的命令契约，
  * 对内把执行委托给 ContextBuilder（历史重建+压缩）与 RunRunner（工具循环编排+审批）。
  */
 export class ChatAgent {
   private readonly streams = new Map<string, RunningStream>()
+  /** Run 级委派上下文：不写入协议/数据库，避免子 Run 自行升级权限或深度。 */
+  private readonly runDepth = new Map<string, number>()
+  private readonly runPermissionModes = new Map<string, PermissionMode>()
   private readonly contextBuilder: ContextBuilder
   private readonly runner: RunRunner
   private readonly memory: MemoryService
@@ -415,7 +431,14 @@ export class ChatAgent {
     childRunStarter?: ToolContext['childRunStarter']
     onResult?: (content: string) => void
     onFailure?: (error: Error) => void
+    onCancel?: () => void
     parentSignal?: AbortSignal
+    /** 委派深度：顶层为 0，每下一层 +1，用于 maxDepth 强制。 */
+    depth?: number
+    /** 子 Run 累计输出 token 预算；超出以 child_token_budget 中止。 */
+    childTokenBudget?: number
+    /** 工具白名单：设置后仅注册这些内置/MCP 工具；缺省不限制。 */
+    allowedTools?: ReadonlySet<string> | null
   }): void {
     const {
       run,
@@ -429,12 +452,14 @@ export class ChatAgent {
     } = input
     const controller = new AbortController()
     const parentSignal = input.parentSignal
-    const abortChild = () => controller.abort()
+    const abortChild = () => controller.abort(parentSignal?.reason)
     if (parentSignal) {
-      if (parentSignal.aborted) controller.abort()
+      if (parentSignal.aborted) controller.abort(parentSignal.reason)
       else parentSignal.addEventListener('abort', abortChild, { once: true })
     }
     this.streams.set(run.id, { controller })
+    this.runDepth.set(run.id, input.depth ?? 0)
+    this.runPermissionModes.set(run.id, input.permissionMode ?? 'workspace')
     const settings = this.store.agentSettings.get()
     const provider: ProviderRuntimeConfig = {
       baseUrl: profile.baseUrl,
@@ -467,6 +492,7 @@ export class ChatAgent {
       skills: builtinSkills,
       mcp: this.mcp,
       childRunStarter: input.childRunStarter,
+      allowedTools: input.allowedTools,
     })
     const gate = new PermissionGate(
       input.permissionMode ?? 'workspace',
@@ -493,12 +519,16 @@ export class ChatAgent {
         firstAssistantMessage: assistantMessage,
         settings,
         onResult: input.onResult,
+        onCancel: input.onCancel,
+        childTokenBudget: input.childTokenBudget,
       })
       // runner 自吞全部执行期异常；此处仅保证取消句柄必然清理。
       .catch(() => {})
       .finally(() => {
         parentSignal?.removeEventListener('abort', abortChild)
         this.streams.delete(run.id)
+        this.runDepth.delete(run.id)
+        this.runPermissionModes.delete(run.id)
         // Run 结束(完成/失败/取消):自动出队发送排队中的下一条。
         this.pumpQueue(run.sessionId)
       })
@@ -510,12 +540,51 @@ export class ChatAgent {
     profile: ProviderProfile,
     apiKey: string,
   ): NonNullable<ToolContext['childRunStarter']> {
+    // 委派边界上下文：深度与权限模式取父 Run 记录（顶层深度 0、权限默认 workspace），
+    // 子 Run 只继承不升级——read-only 父的 child 仍 read-only。
+    // 父 Run 级的子 Run 计数（maxChildRuns / maxParallelChildren）随闭包持有，
+    // 单次父执行内累计，父 Run 结束后随闭包释放，无需跨 Run 清理。
+    let childCount = 0
+    let activeChildren = 0
+    const settings = this.store.agentSettings.get()
     return async ({ task, agentId, parentRunId, signal }) => {
+      const parentDepth = this.runDepth.get(parentRun.id) ?? 0
+      const parentMode =
+        this.runPermissionModes.get(parentRun.id) ?? 'workspace'
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
       const agent = this.store.agents.get(agentId)
       if (!agent || !agent.enabled) {
         throw new Error(`agent not found or disabled: ${agentId}`)
       }
+      // 委派限额强制：深度 / 总子数 / 并行数，超出抛稳定 code（由 task 工具透传）。
+      const childDepth = parentDepth + 1
+      if (settings.maxDepth != null && childDepth > settings.maxDepth) {
+        throw new ChildLimitError(
+          'child_limit_depth',
+          `子 Agent 委派深度超过上限 ${settings.maxDepth}`,
+        )
+      }
+      if (
+        settings.maxChildRuns != null &&
+        childCount >= settings.maxChildRuns
+      ) {
+        throw new ChildLimitError(
+          'child_limit_runs',
+          `子 Agent 数量超过上限 ${settings.maxChildRuns}`,
+        )
+      }
+      if (
+        settings.maxParallelChildren != null &&
+        activeChildren >= settings.maxParallelChildren
+      ) {
+        throw new ChildLimitError(
+          'child_limit_parallel',
+          `子 Agent 并行数超过上限 ${settings.maxParallelChildren}`,
+        )
+      }
+      childCount += 1
+      activeChildren += 1
+
       const session = this.store.sessions.create(
         parentSession.projectId,
         `子任务：${task.slice(0, 40)}`,
@@ -546,43 +615,90 @@ export class ChatAgent {
       const assistant = this.createAssistantMessage(session.id, run)
       const emitter = new RunEventEmitter(run.id, this.notifier)
       emitter.next({ type: 'delegation.created', delegation })
-      const result = new Promise<string>((resolve, reject) => {
-        this.launch({
-          run,
-          session,
-          profile,
-          apiKey,
-          model: profile.models[0] ?? profile.models[0]!,
-          sampling: this.resolveSampling(profile, {}),
-          permissionMode: 'workspace',
-          skill: null,
-          systemPrompt: agent.systemPrompt,
-          assistantMessage: assistant,
-          emitter,
-          childRunStarter: undefined,
-          parentSignal: signal,
-          onResult: (value) => {
-            const updated = this.store.delegations.update(
-              delegation.id,
-              'completed',
-              value,
-            )
-            emitter.next({ type: 'delegation.updated', delegation: updated })
-            resolve(value)
-          },
-          onFailure: (error) => {
-            const updated = this.store.delegations.update(
-              delegation.id,
-              'failed',
-              null,
-              error.message,
-            )
-            emitter.next({ type: 'delegation.updated', delegation: updated })
-            reject(error)
-          },
+
+      // 子 Run 独立 AbortController：父取消传导为取消；超时以 ChildLimitError 中止
+      //（不触碰父 signal，避免把子超时误标为父取消）。
+      const childController = new AbortController()
+      const onParentAbort = (): void => {
+        childController.abort(signal.reason)
+      }
+      signal.addEventListener('abort', onParentAbort, { once: true })
+      let timer: ReturnType<typeof setTimeout> | undefined
+      if (settings.maxChildTimeoutSec != null) {
+        timer = setTimeout(
+          () =>
+            childController.abort(
+              new ChildLimitError(
+                'child_timeout',
+                `子 Run 超时(${settings.maxChildTimeoutSec}s)`,
+              ),
+            ),
+          settings.maxChildTimeoutSec * 1000,
+        )
+      }
+      try {
+        return await new Promise<string>((resolve, reject) => {
+          this.launch({
+            run,
+            session,
+            profile,
+            apiKey,
+            model: profile.models[0] ?? profile.models[0]!,
+            sampling: this.resolveSampling(profile, {}),
+            // 继承父权限模式，只降不升：read-only 父的子 Run 仍 read-only。
+            permissionMode: parentMode,
+            depth: childDepth,
+            skill: null,
+            systemPrompt: agent.systemPrompt,
+            assistantMessage: assistant,
+            emitter,
+            // child 默认无 task：不注入 childRunStarter，子 Run 不能再委派；
+            // 工具白名单只允许只读能力，写/Shell/MCP 对子 Agent 默认关闭。
+            childRunStarter: undefined,
+            allowedTools: CHILD_DEFAULT_TOOLS,
+            parentSignal: childController.signal,
+            childTokenBudget: settings.maxChildTotalTokens ?? undefined,
+            onResult: (value) => {
+              const updated = this.store.delegations.update(
+                delegation.id,
+                'completed',
+                value,
+              )
+              emitter.next({
+                type: 'delegation.updated',
+                delegation: updated,
+              })
+              resolve(value)
+            },
+            onFailure: (error) => {
+              const updated = this.store.delegations.update(
+                delegation.id,
+                'failed',
+                null,
+                error.message,
+              )
+              emitter.next({ type: 'delegation.updated', delegation: updated })
+              reject(error)
+            },
+            onCancel: () => {
+              const updated = this.store.delegations.update(
+                delegation.id,
+                'cancelled',
+                null,
+                '父 Run 已取消',
+              )
+              emitter.next({ type: 'delegation.updated', delegation: updated })
+              reject(
+                new DOMException('The operation was aborted.', 'AbortError'),
+              )
+            },
+          })
         })
-      })
-      return result
+      } finally {
+        activeChildren -= 1
+        if (timer !== undefined) clearTimeout(timer)
+        signal.removeEventListener('abort', onParentAbort)
+      }
     }
   }
 

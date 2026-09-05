@@ -32,7 +32,68 @@ const FIELDS: {
     placeholder: '120（默认）',
     hint: '单次 Provider 请求超时；流式输出期间也受此约束。',
   },
+  {
+    key: 'maxDepth',
+    label: '最大深度',
+    placeholder: '1（默认）',
+    hint: '委派链最多嵌套层数，防止无限递归。',
+  },
+  {
+    key: 'maxChildRuns',
+    label: '最大数量',
+    placeholder: '4（默认）',
+    hint: '一次 Run 最多创建的子 Agent 数量。',
+  },
+  {
+    key: 'maxParallelChildren',
+    label: '最大并行数',
+    placeholder: '2（默认）',
+    hint: '同时运行的子 Agent 数量上限。',
+  },
+  {
+    key: 'maxChildTimeoutSec',
+    label: '执行超时（秒）',
+    placeholder: '120（默认）',
+    hint: '单个子 Agent 的最长运行时间。',
+  },
+  {
+    key: 'maxChildTotalTokens',
+    label: '输出 Token 上限',
+    placeholder: '12000（默认）',
+    hint: '单个子 Agent 的输出 token 上限。',
+  },
 ]
+
+/** 字段分组：每个小组独立小标题 + 分隔线，改善视觉密度。 */
+const GROUPS: {
+  id: string
+  title: string
+  keys: (keyof AgentSettings)[]
+}[] = [
+  {
+    id: 'loop',
+    title: '循环',
+    keys: ['maxTurns', 'reflectionThreshold'],
+  },
+  {
+    id: 'network',
+    title: '网络',
+    keys: ['requestRetries', 'requestTimeoutSec'],
+  },
+  {
+    id: 'delegation',
+    title: '子 Agent 委派',
+    keys: [
+      'maxDepth',
+      'maxChildRuns',
+      'maxParallelChildren',
+      'maxChildTimeoutSec',
+      'maxChildTotalTokens',
+    ],
+  },
+]
+
+const FIELD_BY_KEY = new Map(FIELDS.map((field) => [field.key, field]))
 
 function toDraft(settings: AgentSettings): Record<string, string> {
   return Object.fromEntries(
@@ -107,27 +168,50 @@ export function AgentRuntimePanel(): React.JSX.Element {
           调整循环、反思和网络请求参数；留空时使用推荐默认值。
         </p>
       </div>
-      <div className="agent-runtime-grid">
-        {FIELDS.map((field) => (
-          <label className="field" key={field.key}>
-            {field.label}
-            <input
-              type="number"
-              min={0}
-              step={1}
-              value={draft[field.key]}
-              placeholder={field.placeholder}
-              title={field.hint}
-              onChange={(event) => {
-                setDraft((current) => ({
-                  ...(current ?? {}),
-                  [field.key]: event.target.value,
-                }))
-              }}
-            />
-            <span className="field-hint">{field.hint}</span>
-          </label>
-        ))}
+      <div className="agent-runtime-body">
+        {GROUPS.map((group) => {
+          const delegationNote =
+            group.id === 'delegation' ? (
+              <div className="delegation-note">
+                <strong>复用父 Provider</strong>
+                <span>
+                  子 Agent 复用父 Provider
+                  的模型与密钥配置，无需单独配置供应商。
+                </span>
+              </div>
+            ) : null
+          return (
+            <section className="runtime-group" key={group.id}>
+              <h4 className="runtime-group-title">{group.title}</h4>
+              {delegationNote}
+              <div className="agent-runtime-grid">
+                {group.keys.map((key) => {
+                  const field = FIELD_BY_KEY.get(key)!
+                  return (
+                    <label className="field" key={field.key}>
+                      {field.label}
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={draft[field.key]}
+                        placeholder={field.placeholder}
+                        title={field.hint}
+                        onChange={(event) => {
+                          setDraft((current) => ({
+                            ...(current ?? {}),
+                            [field.key]: event.target.value,
+                          }))
+                        }}
+                      />
+                      <span className="field-hint">{field.hint}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            </section>
+          )
+        })}
       </div>
       <div className="form-actions">
         <button

@@ -593,3 +593,231 @@
 .asset-hint-error {
   color: var(--danger);
 }
+
+/* ---------- 右侧多文件标签 ---------- */
+
+.file-tabs {
+  flex: none;
+  min-width: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-sidebar);
+}
+
+.file-tabs-scroll {
+  display: flex;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.file-tab {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  max-width: 210px;
+  border-right: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+}
+
+.file-tab.active {
+  color: var(--text);
+  background: var(--bg-active);
+}
+
+.file-tab-main {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 7px 8px;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+}
+
+.file-tab-main:hover {
+  background: var(--bg-hover);
+}
+
+.file-tab-close {
+  flex: none;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+.file-tab-close:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* ---------- 侧栏项目文件工作区 ---------- */
+
+.project-files {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.project-files-head {
+  padding: 7px 12px 5px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-files-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-files-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.project-files-tab {
+  padding: 5px 8px 6px;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.project-files-tab:hover {
+  color: var(--text-secondary);
+}
+
+.project-files-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--text);
+}
+
+.project-files-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.project-files-body > .file-tree,
+.project-files-body > .git-changes {
+  border-top: 0;
+}
+
+.project-files-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 18px;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 12px;
+}
+
+.file-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  margin: 7px 8px 3px;
+}
+
+.file-search input {
+  width: 100%;
+  min-width: 0;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.file-search-hint {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.file-search-results {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 12px;
+  overflow: auto;
+}
+
+.file-search-results .tree-row {
+  padding-right: 8px;
+}
+
+.git-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--warning-text);
+}
+
+.git-dot-added,
+.git-dot-untracked {
+  background: var(--ok);
+}
+
+.git-dot-deleted,
+.git-dot-conflicted {
+  background: var(--danger);
+}
+
+.git-dot-renamed {
+  background: var(--info);
+}
+
+.sidebar-files-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 8px 10px 4px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sidebar-back {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.sidebar-files-brand {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ---------- 可拖拽分栏 ---------- */
+
+.resize-handle {
+  width: 5px;
+  flex: 0 0 5px;
+  cursor: col-resize;
+  background: transparent;
+  touch-action: none;
+}
+
+.resize-handle:hover {
+  background: var(--border);
+}

@@ -1,13 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { ResourceLink, Usage } from '@reflexion-os-studio/runtime-client'
+import type {
+  Delegation,
+  ResourceLink,
+  Usage,
+} from '@reflexion-os-studio/runtime-client'
 import { ChevronIcon } from '../../ui/icons'
 import { AssistantMessage } from './AssistantMessage'
 import { RunProcess, type ProcessItem } from './RunProcess'
 import { ChangedFiles } from './ChangedFiles'
+import { DelegationList } from './DelegationList'
 
 interface RunBlockProps {
   processItems: ProcessItem[]
   finalItem: ProcessItem | null
+  delegations: Delegation[]
   runActive: boolean
   runActivity?: import('../../hooks/useAppBootstrap').RunActivity
   streaming: Record<string, string>
@@ -111,6 +117,7 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
         projectId={props.projectId}
         onResourceClick={props.onResourceClick}
       />
+      <DelegationList items={props.delegations} runActive={props.runActive} />
     </div>
   )
 }

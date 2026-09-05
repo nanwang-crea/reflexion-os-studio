@@ -7,6 +7,11 @@ export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   reflectionThreshold: null,
   requestRetries: null,
   requestTimeoutSec: null,
+  maxDepth: 1,
+  maxChildRuns: 4,
+  maxParallelChildren: 2,
+  maxChildTimeoutSec: 120,
+  maxChildTotalTokens: 12000,
 }
 
 /**
@@ -55,6 +60,27 @@ export class AgentSettingsStore {
           typeof parsed.requestTimeoutSec === 'number'
             ? parsed.requestTimeoutSec
             : null,
+        // 治理极限优先安全：旧数据/缺失时回退到内置保守默认，绝不落入"不限制"。
+        maxDepth:
+          typeof parsed.maxDepth === 'number'
+            ? parsed.maxDepth
+            : DEFAULT_AGENT_SETTINGS.maxDepth,
+        maxChildRuns:
+          typeof parsed.maxChildRuns === 'number'
+            ? parsed.maxChildRuns
+            : DEFAULT_AGENT_SETTINGS.maxChildRuns,
+        maxParallelChildren:
+          typeof parsed.maxParallelChildren === 'number'
+            ? parsed.maxParallelChildren
+            : DEFAULT_AGENT_SETTINGS.maxParallelChildren,
+        maxChildTimeoutSec:
+          typeof parsed.maxChildTimeoutSec === 'number'
+            ? parsed.maxChildTimeoutSec
+            : DEFAULT_AGENT_SETTINGS.maxChildTimeoutSec,
+        maxChildTotalTokens:
+          typeof parsed.maxChildTotalTokens === 'number'
+            ? parsed.maxChildTotalTokens
+            : DEFAULT_AGENT_SETTINGS.maxChildTotalTokens,
       }
     } catch {
       return { ...DEFAULT_AGENT_SETTINGS }

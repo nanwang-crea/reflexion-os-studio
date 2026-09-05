@@ -47,6 +47,25 @@ export const workspaceCommandHandlers: Record<string, CommandHandler> = {
     })) as { entries?: unknown[] }
     return { entries: result.entries ?? [] }
   },
+  'workspace.search_files': async (p, { store, system }) => {
+    const project = requireWorkspaceProject(
+      store,
+      requireString(p, 'projectId'),
+    )
+    const query = globSafe(requireString(p, 'query'))
+    // 文件名子串搜索用 glob 全量递归：`**` 跨所有目录段，`*query*` 命中末段文件名。
+    // query 已做白名单清洗（去掉 `/`、`..`、通配符等），避免影响分段与匹配语义。
+    if (query === '') return { entries: [], truncated: false }
+    const pattern = `**/*${query}*`
+    const result = (await requestSystem(system, 'file.glob', {
+      workspaceRoot: project.folderPath,
+      pattern,
+    })) as { matches?: unknown[]; truncated?: boolean }
+    return {
+      entries: result.matches ?? [],
+      truncated: result.truncated ?? false,
+    }
+  },
   'workspace.read_file': async (p, { store, system }) => {
     const project = requireWorkspaceProject(
       store,
@@ -133,6 +152,13 @@ function requireWorkspaceProject(
 }
 
 /** 只允许相对路径；拒绝绝对路径与任何 `..`（Rust 侧还有第二道 enforce）。 */
+function globSafe(value: string): string {
+  return Array.from(value.trim())
+    .filter((char) => /[\p{L}\p{N}._-]/u.test(char))
+    .join('')
+    .replace(/\.{2,}/g, '.')
+}
+
 function assertRelativePath(path: string): string {
   if (path.trim() === '') {
     throw new CommandError('invalid_request', '路径不能为空')

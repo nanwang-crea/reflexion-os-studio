@@ -5,6 +5,7 @@ import type {
   Run,
   SkillManifest,
   ToolCall,
+  Delegation,
 } from '@reflexion-os-studio/runtime-client'
 import { Composer, type ComposerModelOption } from '../../components/Composer'
 import { CopyButton } from '../../components/CopyButton'
@@ -20,6 +21,7 @@ import type { PendingApproval, RunActivity } from '../../hooks/useAppBootstrap'
 
 interface ChatViewProps {
   sessionData: SessionData | null
+  delegations: Delegation[]
   streaming: Record<string, string>
   streamingReasoning: Record<string, string>
   /** Run 级活动阶段（事件驱动，对齐 Codex）：决定状态行文案与折叠。 */
@@ -249,6 +251,9 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
                   key={block.runId}
                   processItems={block.processItems}
                   finalItem={block.finalItem}
+                  delegations={props.delegations.filter(
+                    (entry) => entry.parentRunId === block.runId,
+                  )}
                   runActive={activeRunIds.has(block.runId)}
                   runActivity={props.runActivities[block.runId]}
                   streaming={props.streaming}

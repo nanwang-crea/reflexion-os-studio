@@ -440,6 +440,17 @@ export const CommandSchemaRegistry = {
     }),
     result: z.object({ entries: z.array(WorkspaceEntrySchema) }),
   },
+  'workspace.search_files': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+      query: z.string().min(1),
+    }),
+    result: z.object({
+      entries: z.array(WorkspaceEntrySchema),
+      truncated: z.boolean(),
+    }),
+  },
   'workspace.read_file': {
     params: z.object({
       requestId: RequestIdSchema,

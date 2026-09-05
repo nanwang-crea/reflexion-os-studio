@@ -8,12 +8,16 @@ interface FileTreeProps {
   /** Rust 不可用时降级为错误提示（索引仍可用）。 */
   systemReady: boolean
   activePath: string | null
-  onOpenFile: (path: string) => void
+  /** 各文件的 Git 状态（workspace 相对路径 → 状态）；缺省不显示标记。 */
+  gitStatus?: ReadonlyMap<string, string>
+  onOpenFile: (path: string, line?: number) => void
   /** 外部刷新（换项目/手动刷新）时重新加载根目录。 */
   onRefresh: () => void
 }
 
 type DirState = 'idle' | 'loading' | 'loaded' | 'error'
+
+const EMPTY_STATUS: ReadonlyMap<string, string> = new Map()
 
 /**
  * 按需加载的目录树（非递归、惰性展开）：目录条目在展开时才调 file.list，
@@ -99,6 +103,7 @@ export function FileTree(props: FileTreeProps): React.JSX.Element {
     const dirEntries = entries.get(path) ?? []
     const state = dirState.get(path) ?? 'idle'
     const isExpanded = expanded.has(path)
+    const gitStatus = props.gitStatus ?? EMPTY_STATUS
     return (
       <li key={path}>
         <button
@@ -143,6 +148,13 @@ export function FileTree(props: FileTreeProps): React.JSX.Element {
                       title={entry.path}
                     >
                       <span className="tree-file-dot" aria-hidden="true" />
+                      {gitStatus.has(entry.path) && (
+                        <span
+                          className={`git-dot git-dot-${gitStatus.get(entry.path)}`}
+                          title={`Git 状态：${gitStatus.get(entry.path)}`}
+                          aria-hidden="true"
+                        />
+                      )}
                       <span className="tree-name">{basename(entry.path)}</span>
                     </button>
                   </li>

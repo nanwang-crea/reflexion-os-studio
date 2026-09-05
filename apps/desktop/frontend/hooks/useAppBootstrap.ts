@@ -49,6 +49,7 @@ interface AppBootstrapDeps {
   refreshSessionData: (sessionId: string) => Promise<void>
   refreshStandaloneSessions: () => Promise<void>
   refreshProjectSessions: (projectId: string) => Promise<void>
+  refreshDelegations: (sessionId: string) => Promise<void>
   setNotice: (notice: string | null) => void
 }
 
@@ -115,6 +116,24 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
       }
     }, 200)
   }, [deps])
+
+  // 委派事件防抖刷新：task 子 Run 创建/状态推进时让委派树实时跟进。
+  const delegationRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  )
+  const scheduleDelegationRefresh = useCallback(
+    (sessionId?: string): void => {
+      const target = sessionId ?? deps.activeSessionRef.current
+      if (target === null) return
+      if (delegationRefreshTimer.current)
+        clearTimeout(delegationRefreshTimer.current)
+      delegationRefreshTimer.current = setTimeout(() => {
+        delegationRefreshTimer.current = null
+        void deps.refreshDelegations(target).catch(() => undefined)
+      }, 200)
+    },
+    [deps],
+  )
 
   const fail = useCallback(
     (error: unknown): void => {
@@ -322,6 +341,14 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           )
           return
         }
+        // 委派事件：更新当前会话对应的委派树（task 子 Run 创建/状态推进）。
+        if (
+          event.type === 'delegation.created' ||
+          event.type === 'delegation.updated'
+        ) {
+          scheduleDelegationRefresh(event.delegation.sessionId)
+          return
+        }
         // 工具调用事件：防抖刷新当前会话，轨迹卡在 Run 进行中也能推进状态。
         if (event.type === 'tool.completed') {
           scheduleToolRefresh()
@@ -412,6 +439,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     clearPendingApprovals,
     clearRunActivity,
     scheduleToolRefresh,
+    scheduleDelegationRefresh,
     scheduleStreamingFlush,
     setRunActivity,
     showMemoryNotice,

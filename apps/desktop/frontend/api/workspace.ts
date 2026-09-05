@@ -53,6 +53,17 @@ export function readFile(
   })
 }
 
+/** 文件名子串搜索（glob 全量递归，复用 WorkspaceEntry 外形）；只读。 */
+export function searchFiles(
+  projectId: string,
+  query: string,
+): Promise<{ entries: WorkspaceEntry[]; truncated: boolean }> {
+  return request<{ entries: WorkspaceEntry[]; truncated: boolean }>(
+    'workspace.search_files',
+    { projectId, query },
+  )
+}
+
 /** Git 变更列表（porcelain 状态聚合）；repo=false 表示不是 Git 仓库。 */
 export function gitStatus(
   projectId: string,

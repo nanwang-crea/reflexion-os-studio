@@ -17,6 +17,7 @@ import { RunEventEmitter } from '../events.js'
 import { normalizeContent } from '../resources/resource-link-normalizer.js'
 import { ProviderError, streamChatCompletion } from '../provider.js'
 import type { Store } from '../store/index.js'
+import { ChildLimitError } from './errors.js'
 import { compactInRun, type ProviderRuntimeConfig } from './context.js'
 import type { MemoryService } from './memory/service.js'
 import type { ApprovalGateway, PermissionGate } from './permissions.js'
@@ -47,6 +48,10 @@ interface RunStreamInput {
   firstAssistantMessage: Message
   onResult?: (content: string) => void
   onFailure?: (error: Error) => void
+  /** 子 Run 被取消(父取消)时回调，用于把委派落为 cancelled；缺省不回调。 */
+  onCancel?: () => void
+  /** 子 Run 单次累计输出 token 预算；超出以 child_token_budget 稳定错误码中止。 */
+  childTokenBudget?: number
 }
 
 /** 未落终态的模型轮次草稿：取消/失败时把已累积内容一并收尾。 */
@@ -271,6 +276,23 @@ export class RunRunner {
           }
           state.turn = null
           finalContent = normalized.content
+          // 子 Run token 预算：累计输出超限以稳定错误码中止(而非父取消)。
+          // 放在 turn 置空之后，避免把已完成轮次误标为 failed。
+          if (input.childTokenBudget != null) {
+            const current = this.store.runs.get(run.id)
+            const completion = current?.usage?.completionTokens ?? 0
+            if (completion > input.childTokenBudget) {
+              const limit = new ChildLimitError(
+                'child_token_budget',
+                `子 Run 输出 token 超过预算 ${input.childTokenBudget}`,
+              )
+              input.controller.abort(limit)
+              throw new DOMException(
+                'child token budget exceeded',
+                'AbortError',
+              )
+            }
+          }
           return {
             content: result.content,
             reasoning: result.reasoning,
@@ -444,10 +466,24 @@ export class RunRunner {
       })
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
+        const reason = controller.signal.reason
+        if (reason instanceof ChildLimitError) {
+          cancelInFlightToolCalls()
+          finalizePendingTurn('failed')
+          this.store.runs.finalize(run.id, 'failed', reason.code)
+          this.finishPlan(run, emitter, 'failed', reason.message)
+          input.onFailure?.(reason)
+          emitter.next({
+            type: 'run.failed',
+            error: { code: reason.code, message: reason.message },
+          })
+          return
+        }
         cancelInFlightToolCalls()
         finalizePendingTurn('interrupted')
         this.store.runs.finalize(run.id, 'cancelled')
         this.finishPlan(run, emitter, 'cancelled', 'Run 已被取消')
+        input.onCancel?.()
         emitter.next({ type: 'run.cancelled' })
         return
       }

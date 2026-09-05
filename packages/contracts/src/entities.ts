@@ -580,6 +580,16 @@ export const AgentSettingsSchema = z.object({
   requestRetries: z.number().int().min(0).max(5).nullable(),
   // Provider 请求超时(秒)。
   requestTimeoutSec: z.number().int().min(10).max(600).nullable(),
+  // 子 Agent 最大委派深度。
+  maxDepth: z.number().int().min(1).max(8).nullable(),
+  // 单次 Run 最多创建的子 Agent 数量。
+  maxChildRuns: z.number().int().min(1).max(32).nullable(),
+  // 子 Agent 最大并行数。
+  maxParallelChildren: z.number().int().min(1).max(8).nullable(),
+  // 单个子 Agent 最大运行时间(秒)。
+  maxChildTimeoutSec: z.number().int().min(10).max(3600).nullable(),
+  // 单次子 Agent 最大输出 token 数。
+  maxChildTotalTokens: z.number().int().min(1000).max(1000000).nullable(),
 })
 export type AgentSettings = z.infer<typeof AgentSettingsSchema>
 
