@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Project } from '@reflexion-os-studio/runtime-client'
 import { FolderIcon } from '../../ui/icons'
 import { ContentView } from './ContentView'
@@ -31,6 +31,84 @@ export function FileViewerPanel(
   const activeTab =
     props.openTabs.find((tab) => tab.path === props.activePath) ?? null
   const tabsScrollRef = useRef<HTMLDivElement>(null)
+  const trackRef = useRef<HTMLDivElement>(null)
+  const [canScroll, setCanScroll] = useState(false)
+  const [scrollRatio, setScrollRatio] = useState(0)
+  const [thumbRatio, setThumbRatio] = useState(1)
+  const [trackWidth, setTrackWidth] = useState(0)
+
+  // 同步标签容器的横向滚动量，驱动自定义滚动条滑块；窗口/标签变化时重算。
+  useEffect(() => {
+    const el = tabsScrollRef.current
+    if (el === null) return
+    const update = (): void => {
+      const { scrollLeft, scrollWidth, clientWidth } = el
+      const overflow = scrollWidth - clientWidth
+      setCanScroll(overflow > 0)
+      setThumbRatio(Math.min(1, clientWidth / scrollWidth))
+      setScrollRatio(overflow > 0 ? scrollLeft / overflow : 0)
+    }
+    update()
+    el.addEventListener('scroll', update, { passive: true })
+    const observer = new ResizeObserver(update)
+    observer.observe(el)
+    const trackObserver = trackRef.current
+      ? new ResizeObserver(() => {
+          const width = trackRef.current?.clientWidth ?? 0
+          setTrackWidth(width)
+        })
+      : null
+    if (trackObserver !== null)
+      trackObserver.observe(trackRef.current as HTMLElement)
+    return () => {
+      el.removeEventListener('scroll', update)
+      observer.disconnect()
+      trackObserver?.disconnect()
+    }
+  }, [props.openTabs])
+
+  // 点击轨道：跳到点击位置附近；拖动滑块：按比例换算 scrollLeft。
+  const handleTrackPointerDown = (
+    event: React.PointerEvent<HTMLDivElement>,
+  ): void => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    const el = tabsScrollRef.current
+    const track = trackRef.current
+    if (el === null || track === null) return
+    const trackWidth = track.clientWidth
+    const thumbWidth = Math.max(24, trackWidth * thumbRatio)
+    const maxScroll = el.scrollWidth - el.clientWidth
+    const clickOffset = event.clientX - track.getBoundingClientRect().left
+    const startLeft = el.scrollLeft
+    const startX = event.clientX
+
+    // 点击轨道但未落在滑块上时直接跳转。
+    const onThumb = clickOffset >= 0 && clickOffset <= thumbWidth
+    if (!onThumb && maxScroll > 0) {
+      el.scrollLeft = (clickOffset / trackWidth) * maxScroll
+    }
+
+    const move = (moveEvent: PointerEvent): void => {
+      if (maxScroll <= 0) return
+      const deltaX = moveEvent.clientX - startX
+      const maxDelta = trackWidth - thumbWidth
+      const ratio = maxDelta > 0 ? deltaX / maxDelta : 0
+      el.scrollLeft = Math.min(
+        maxScroll,
+        Math.max(0, startLeft + ratio * maxScroll),
+      )
+    }
+    const up = (): void => {
+      track.removeEventListener('pointermove', move)
+      track.removeEventListener('pointerup', up)
+      track.removeEventListener('pointercancel', up)
+    }
+    track.setPointerCapture(event.pointerId)
+    track.addEventListener('pointermove', move)
+    track.addEventListener('pointerup', up)
+    track.addEventListener('pointercancel', up)
+  }
 
   // 鼠标滚轮在标签栏上滚动时转换为横向滚动；按住 Shift 或已有横向
   // 增量（触控板）时不拦截，保留原生行为。
@@ -55,44 +133,62 @@ export function FileViewerPanel(
   return (
     <div className="workspace-panel" style={{ width: props.width }}>
       {props.openTabs.length > 0 ? (
-        <div className="file-tabs" role="tablist" aria-label="已打开文件">
-          <div
-            className="file-tabs-scroll"
-            ref={tabsScrollRef}
-            onWheel={handleWheel}
-          >
-            {props.openTabs.map((tab) => {
-              const active = tab.path === props.activePath
-              const fileName = tab.path.split('/').pop() ?? tab.path
-              return (
+        <>
+          <div className="file-tabs" role="tablist" aria-label="已打开文件">
+            <div
+              className="file-tabs-scroll"
+              ref={tabsScrollRef}
+              onWheel={handleWheel}
+            >
+              {props.openTabs.map((tab) => {
+                const active = tab.path === props.activePath
+                const fileName = tab.path.split('/').pop() ?? tab.path
+                return (
+                  <div
+                    key={tab.path}
+                    className={`file-tab${active ? ' active' : ''}`}
+                    role="tab"
+                    aria-selected={active}
+                  >
+                    <button
+                      type="button"
+                      className="file-tab-main"
+                      title={tab.path}
+                      onClick={() => props.onSelectTab(tab.path)}
+                    >
+                      {fileName}
+                    </button>
+                    <button
+                      type="button"
+                      className="file-tab-close"
+                      title={`关闭 ${fileName}`}
+                      aria-label={`关闭 ${fileName}`}
+                      onClick={() => props.onCloseTab(tab.path)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+            {/* 始终可见的自定义横向滚动条：有溢出才显示滑块，可点击/拖动 */}
+            <div
+              className="file-tabs-track"
+              ref={trackRef}
+              onPointerDown={handleTrackPointerDown}
+            >
+              {canScroll && trackWidth > 0 && (
                 <div
-                  key={tab.path}
-                  className={`file-tab${active ? ' active' : ''}`}
-                  role="tab"
-                  aria-selected={active}
-                >
-                  <button
-                    type="button"
-                    className="file-tab-main"
-                    title={tab.path}
-                    onClick={() => props.onSelectTab(tab.path)}
-                  >
-                    {fileName}
-                  </button>
-                  <button
-                    type="button"
-                    className="file-tab-close"
-                    title={`关闭 ${fileName}`}
-                    aria-label={`关闭 ${fileName}`}
-                    onClick={() => props.onCloseTab(tab.path)}
-                  >
-                    ×
-                  </button>
-                </div>
-              )
-            })}
+                  className="file-tabs-thumb"
+                  style={{
+                    width: `${Math.max(24, trackWidth * thumbRatio)}px`,
+                    transform: `translateX(${scrollRatio * Math.max(0, trackWidth - 8 - Math.max(24, trackWidth * thumbRatio))}px)`,
+                  }}
+                />
+              )}
+            </div>
           </div>
-        </div>
+        </>
       ) : (
         <div className="workspace-panel-empty">
           <FolderIcon />

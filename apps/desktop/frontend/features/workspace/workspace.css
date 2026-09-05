@@ -607,29 +607,43 @@
   display: flex;
   min-width: 0;
   overflow-x: auto;
-  /* 横向溢出时始终显示滚动条，便于鼠标操作 */
-  scrollbar-width: thin;
-  scrollbar-color: var(--bg-active) transparent;
+  /* 隐藏原生滚动条，改用下方自定义可见滑块 */
+  scrollbar-width: none;
   overscroll-behavior-x: contain;
 }
 
 .file-tabs-scroll::-webkit-scrollbar {
-  height: 8px;
-}
-
-.file-tabs-scroll::-webkit-scrollbar-thumb {
-  background: var(--bg-active);
-  border-radius: 4px;
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
-
-.file-tabs-scroll::-webkit-scrollbar-track {
-  background: transparent;
+  display: none;
 }
 
 .file-tabs-scroll:focus-visible {
   outline: 1px solid var(--border);
+}
+
+/* 自定义横向滚动条：始终在标签行下方占位，有溢出才显示滑块 */
+.file-tabs-track {
+  position: relative;
+  height: 6px;
+  flex: none;
+  padding: 1px 4px;
+  background: var(--bg-inset);
+  border-top: 1px solid var(--border-subtle);
+  cursor: pointer;
+}
+
+.file-tabs-thumb {
+  position: absolute;
+  top: 1px;
+  left: 4px;
+  height: 4px;
+  border-radius: 3px;
+  background: var(--bg-active);
+  cursor: grab;
+}
+
+.file-tabs-thumb:active {
+  cursor: grabbing;
+  background: var(--text-muted);
 }
 
 .file-tab {
