@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import type { Project } from '@reflexion-os-studio/runtime-client'
 import { FolderIcon } from '../../ui/icons'
 import { ContentView } from './ContentView'
@@ -29,6 +30,16 @@ export function FileViewerPanel(
   const { project } = props
   const activeTab =
     props.openTabs.find((tab) => tab.path === props.activePath) ?? null
+  const tabsScrollRef = useRef<HTMLDivElement>(null)
+
+  // 鼠标滚轮在标签栏上滚动时转换为横向滚动；按住 Shift 或已有横向
+  // 增量（触控板）时不拦截，保留原生行为。
+  const handleWheel = (event: React.WheelEvent<HTMLDivElement>): void => {
+    if (event.shiftKey || event.deltaX !== 0) return
+    const el = tabsScrollRef.current
+    if (el === null) return
+    el.scrollLeft += event.deltaY
+  }
 
   if (project === null) {
     return (
@@ -45,7 +56,11 @@ export function FileViewerPanel(
     <div className="workspace-panel" style={{ width: props.width }}>
       {props.openTabs.length > 0 ? (
         <div className="file-tabs" role="tablist" aria-label="已打开文件">
-          <div className="file-tabs-scroll">
+          <div
+            className="file-tabs-scroll"
+            ref={tabsScrollRef}
+            onWheel={handleWheel}
+          >
             {props.openTabs.map((tab) => {
               const active = tab.path === props.activePath
               const fileName = tab.path.split('/').pop() ?? tab.path

@@ -607,7 +607,29 @@
   display: flex;
   min-width: 0;
   overflow-x: auto;
+  /* 横向溢出时始终显示滚动条，便于鼠标操作 */
   scrollbar-width: thin;
+  scrollbar-color: var(--bg-active) transparent;
+  overscroll-behavior-x: contain;
+}
+
+.file-tabs-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.file-tabs-scroll::-webkit-scrollbar-thumb {
+  background: var(--bg-active);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.file-tabs-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.file-tabs-scroll:focus-visible {
+  outline: 1px solid var(--border);
 }
 
 .file-tab {
