@@ -36,8 +36,25 @@ export function aggregateChangedFiles(
     const result = call.result
     if (!result || typeof result !== 'object' || Array.isArray(result)) continue
     const changedFiles = (result as { changedFiles?: unknown }).changedFiles
-    if (!Array.isArray(changedFiles)) continue
-    for (const file of changedFiles) {
+    const fallbackPath = (call.args as { path?: unknown }).path
+    const fallbackFiles =
+      Array.isArray(changedFiles) || typeof fallbackPath !== 'string'
+        ? changedFiles
+        : [
+            {
+              path: fallbackPath,
+              action:
+                call.toolName === 'file.write'
+                  ? 'modified'
+                  : call.toolName === 'file.edit'
+                    ? 'modified'
+                    : call.toolName === 'file.delete'
+                      ? 'deleted'
+                      : undefined,
+            },
+          ]
+    if (!Array.isArray(fallbackFiles)) continue
+    for (const file of fallbackFiles) {
       if (
         !file ||
         typeof file !== 'object' ||
