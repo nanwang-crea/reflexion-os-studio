@@ -22,6 +22,7 @@ import { createCurrentTimeTool } from './time.js'
 import { createWebFetchTool } from './web.js'
 import { createMcpTool } from './mcp.js'
 import { createUpdatePlanTool } from './plans.js'
+import { createTaskTool } from './task.js'
 
 export type { ToolContext } from './shared.js'
 
@@ -57,6 +58,7 @@ function alwaysAvailableTools(ctx: ToolContext): ToolDefinition[] {
     createWebFetchTool(),
     createSkillUseTool(ctx.skills),
     createUpdatePlanTool(ctx),
+    createTaskTool(ctx),
   ]
 }
 

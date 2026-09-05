@@ -14,6 +14,8 @@ import { ToolCallStore } from './toolCalls.js'
 import { WorkspaceIndexStore } from './workspaceIndex.js'
 import { AssetStore } from './assets.js'
 import { PlanStore } from './plans.js'
+import { AgentStore } from './agents.js'
+import { DelegationStore } from './delegations.js'
 
 export { DEFAULT_SESSION_TITLE, resolveDataDir } from './shared.js'
 
@@ -35,6 +37,8 @@ export class Store {
   readonly agentSettings: AgentSettingsStore
   readonly mcpServers: McpServerStore
   readonly plans: PlanStore
+  readonly agents: AgentStore
+  readonly delegations: DelegationStore
 
   constructor(dir: string) {
     mkdirSync(dir, { recursive: true })
@@ -59,6 +63,15 @@ export class Store {
     this.agentSettings = new AgentSettingsStore(this.db)
     this.mcpServers = new McpServerStore(this.db)
     this.plans = new PlanStore(this.db)
+    this.agents = new AgentStore(this.db)
+    this.delegations = new DelegationStore(this.db)
+    this.agents.upsert({
+      id: 'worker',
+      name: 'Worker Agent',
+      description: '受控的通用子 Agent。',
+      systemPrompt: 'Complete the assigned task and return a concise result.',
+      enabled: true,
+    })
 
     // 启动恢复：上次进程未走完的生命周期统一落为 interrupted/cancelled。
     this.runs.recoverInterrupted()

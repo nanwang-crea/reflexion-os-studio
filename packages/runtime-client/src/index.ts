@@ -39,6 +39,9 @@ export type {
   Plan,
   PlanStep,
   PlanStepStatus,
+  AgentDefinition,
+  Delegation,
+  DelegationStatus,
 } from '@reflexion-os-studio/contracts'
 
 export {
@@ -53,3 +56,13 @@ export {
   type RuntimeTransportOptions,
   type TransportSidecarMessage,
 } from './transport.js'
+
+export {
+  createRuntimeAgentClient,
+  listAgents,
+  listDelegations,
+  listDelegationsByParent,
+  type AgentClientRequestOptions,
+  type AgentDelegationUpdate,
+  type RuntimeAgentClient,
+} from './agents.js'

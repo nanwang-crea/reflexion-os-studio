@@ -13,6 +13,7 @@ import {
   McpServerSchema,
   PlanSchema,
   PlanStepSchema,
+  DelegationSchema,
 } from './entities.js'
 import { RuntimeErrorSchema } from './errors.js'
 import { RuntimeStatusSchema } from './handshake.js'
@@ -157,6 +158,14 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     type: z.literal('queue.changed'),
     sessionId: z.string().min(1),
     items: z.array(QueueEntrySchema),
+  }),
+  RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('delegation.created'),
+    delegation: DelegationSchema,
+  }),
+  RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('delegation.updated'),
+    delegation: DelegationSchema,
   }),
   // MCP server 状态变化(ready/failed/removed),envelope.runId=serverId。
   RuntimeEventEnvelopeSchema.extend({

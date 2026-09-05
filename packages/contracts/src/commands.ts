@@ -21,6 +21,8 @@ import {
   McpServerSchema,
   McpToolSchema,
   PlanSchema,
+  AgentDefinitionSchema,
+  DelegationSchema,
 } from './entities.js'
 import { RuntimeStatusSchema } from './handshake.js'
 
@@ -184,6 +186,65 @@ export const CommandSchemaRegistry = {
       queueId: z.string().min(1),
     }),
     result: z.object({ accepted: z.boolean() }),
+  },
+  'agent.list': {
+    params: z.object({ requestId: RequestIdSchema }),
+    result: z.object({ agents: z.array(AgentDefinitionSchema) }),
+  },
+  'delegation.list': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      sessionId: z.string().min(1),
+    }),
+    result: z.object({ delegations: z.array(DelegationSchema) }),
+  },
+  'delegation.create': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      sessionId: z.string().min(1),
+      parentRunId: z.string().min(1),
+      agentId: z.string().min(1),
+      task: z.string().min(1),
+    }),
+    result: z.object({ delegation: DelegationSchema }),
+  },
+  'delegation.list_by_parent': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      parentRunId: z.string().min(1),
+    }),
+    result: z.object({ delegations: z.array(DelegationSchema) }),
+  },
+  'delegation.get_by_child_run': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      childRunId: z.string().min(1),
+    }),
+    result: z.object({ delegation: DelegationSchema.nullable() }),
+  },
+  'delegation.attach_child_run': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      delegationId: z.string().min(1),
+      childRunId: z.string().min(1),
+    }),
+    result: z.object({ delegation: DelegationSchema }),
+  },
+  'delegation.update': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      delegationId: z.string().min(1),
+      status: z.enum([
+        'pending',
+        'running',
+        'completed',
+        'failed',
+        'cancelled',
+      ]),
+      result: z.string().nullable().optional(),
+      error: z.string().nullable().optional(),
+    }),
+    result: z.object({ delegation: DelegationSchema }),
   },
   'agent_settings.get': {
     params: z.object({ requestId: RequestIdSchema }),

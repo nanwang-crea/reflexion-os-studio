@@ -136,6 +136,56 @@ test('retry_of_run_id and agent delegation fields persist', () => {
   assert.equal(store.runs.get(plain.id).agentId, null)
 })
 
+test('delegation store attaches child run idempotently and queries by session, parent, and child', () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
+  const session = store.sessions.create(project.id)
+  const parentRun = store.runs.create({
+    sessionId: session.id,
+    providerId: null,
+    model: null,
+  })
+  for (const id of ['agent-1', 'agent-2']) {
+    store.agents.upsert({
+      id,
+      name: id,
+      description: '',
+      systemPrompt: '',
+      enabled: true,
+    })
+  }
+  const first = store.delegations.create({
+    sessionId: session.id,
+    parentRunId: parentRun.id,
+    agentId: 'agent-1',
+    task: 'first task',
+  })
+  const second = store.delegations.create({
+    sessionId: session.id,
+    parentRunId: parentRun.id,
+    agentId: 'agent-2',
+    task: 'second task',
+  })
+  assert.equal(first.status, 'pending')
+  const attached = store.delegations.attachChildRun(first.id, 'child-1')
+  assert.equal(attached.childRunId, 'child-1')
+  assert.deepEqual(store.delegations.getByChildRun('child-1').id, first.id)
+  assert.deepEqual(
+    store.delegations.listBySession(session.id).map((d) => d.id),
+    [first.id, second.id],
+  )
+  assert.deepEqual(
+    store.delegations.listByParentRun(parentRun.id).map((d) => d.id),
+    [first.id, second.id],
+  )
+  assert.throws(
+    () => store.delegations.attachChildRun(first.id, 'child-2'),
+    /already attached/,
+  )
+  assert.equal(store.delegations.get('missing'), null)
+  store.close()
+})
+
 test('tool call lifecycle: create, status, finalize, recovery', () => {
   const store = freshStore()
   const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })

@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Store } from '../dist/store/index.js'
 import { dispatchCommand } from '../dist/handlers.js'
+import { createTaskTool } from '../dist/agent/tools/task.js'
+import { ChatAgent } from '../dist/agent/index.js'
 
 function freshStore() {
   return new Store(mkdtempSync(join(tmpdir(), 'reflexion-handlers-')))
@@ -29,6 +31,88 @@ test('agent_settings.update passes nested settings to agent', async () => {
   assert.deepEqual(result, {
     settings: { requestTimeoutSec: 30, requestRetries: 2 },
   })
+})
+
+test('child task starter rejects disabled agents before creating a delegation', async () => {
+  const store = freshStore()
+  const agent = new ChatAgent(store, () => {}, null)
+  const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
+  const session = store.sessions.create(project.id)
+  const parentRun = store.runs.create({
+    sessionId: session.id,
+    providerId: null,
+    model: null,
+  })
+  store.agents.upsert({
+    id: 'disabled-agent',
+    name: 'Disabled',
+    description: '',
+    systemPrompt: '',
+    enabled: false,
+  })
+  const starter = agent.createChildRunStarter(
+    parentRun,
+    session,
+    { id: 'provider', models: ['model'] },
+    'unused',
+  )
+  await assert.rejects(
+    () =>
+      starter({
+        task: 'do work',
+        agentId: 'disabled-agent',
+        parentRunId: parentRun.id,
+        signal: new AbortController().signal,
+      }),
+    /agent not found or disabled: disabled-agent/,
+  )
+  assert.equal(store.delegations.listBySession(session.id).length, 0)
+})
+
+test('task tool rejects without starter and validates arguments', async () => {
+  const base = { store: freshStore(), runId: 'run-1' }
+  const unavailable = await createTaskTool(base).execute({
+    args: { task: 'do work', agentId: 'agent-1' },
+    signal: new AbortController().signal,
+  })
+  assert.equal(unavailable.isError, true)
+  assert.equal(unavailable.code, 'unsupported')
+
+  const starterCalls = []
+  const tool = createTaskTool({
+    ...base,
+    childRunStarter: async (input) => {
+      starterCalls.push(input)
+      return 'done'
+    },
+  })
+  await assert.rejects(
+    () => tool.execute({ args: null, signal: new AbortController().signal }),
+    /arguments must be an object/,
+  )
+  await assert.rejects(
+    () =>
+      tool.execute({
+        args: { task: ' ' },
+        signal: new AbortController().signal,
+      }),
+    /task is required/,
+  )
+  await assert.rejects(
+    () =>
+      tool.execute({
+        args: { task: 'do' },
+        signal: new AbortController().signal,
+      }),
+    /agentId is required/,
+  )
+  const result = await tool.execute({
+    args: { task: ' do ', agentId: ' agent-1 ' },
+    signal: new AbortController().signal,
+  })
+  assert.deepEqual(result, { content: 'done', isError: false })
+  assert.equal(starterCalls[0].parentRunId, 'run-1')
+  assert.equal(starterCalls[0].agentId, 'agent-1')
 })
 
 test('provider.configure forwards tuning fields with omitted, null, and value semantics', async () => {

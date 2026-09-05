@@ -45,6 +45,8 @@ interface RunStreamInput {
   emitter: RunEventEmitter
   /** 门面预建的首轮 assistant 消息（保持 message.send 返回 messageId 的契约）。 */
   firstAssistantMessage: Message
+  onResult?: (content: string) => void
+  onFailure?: (error: Error) => void
 }
 
 /** 未落终态的模型轮次草稿：取消/失败时把已累积内容一并收尾。 */
@@ -136,6 +138,7 @@ export class RunRunner {
       toolCallRowIds: new Set(),
       lastAssistantMessageId: null,
     }
+    let finalContent = ''
 
     const cancelInFlightToolCalls = (): void => {
       for (const rowId of state.toolCallRowIds) {
@@ -267,6 +270,7 @@ export class RunRunner {
             this.store.runs.addUsage(run.id, result.usage)
           }
           state.turn = null
+          finalContent = normalized.content
           return {
             content: result.content,
             reasoning: result.reasoning,
@@ -414,6 +418,7 @@ export class RunRunner {
 
       if (outcome.status === 'completed') {
         this.store.runs.finalize(run.id, 'completed')
+        input.onResult?.(finalContent)
         emitter.next({ type: 'run.completed' })
         // A2 Memory：Run 成功后异步提取记忆（fire-and-forget，失败只写 stderr）。
         if (input.memory) {
@@ -449,6 +454,7 @@ export class RunRunner {
 
       const code = error instanceof ProviderError ? error.code : 'internal'
       const message = error instanceof Error ? error.message : 'unknown failure'
+      input.onFailure?.(error instanceof Error ? error : new Error(message))
       // Provider/工具循环异常只经事件与 stderr 暴露，不进 stdout 协议通道。
       process.stderr.write(`[runtime] run failed (${code}): ${message}\n`)
       cancelInFlightToolCalls()

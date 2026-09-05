@@ -1,6 +1,7 @@
 {
   "version": 1,
   "methods": [
+    "agent.list",
     "agent_settings.get",
     "agent_settings.update",
     "approval.resolve",
@@ -8,6 +9,12 @@
     "asset.import",
     "asset.list",
     "asset.read",
+    "delegation.attach_child_run",
+    "delegation.create",
+    "delegation.get_by_child_run",
+    "delegation.list",
+    "delegation.list_by_parent",
+    "delegation.update",
     "mcp.add",
     "mcp.list",
     "mcp.reload",

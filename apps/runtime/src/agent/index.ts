@@ -28,6 +28,7 @@ import { QueueService } from './queue.js'
 import { RunRunner } from './runner.js'
 import { createToolRegistry } from './tools/index.js'
 import { deriveSessionTitle } from './title.js'
+import type { ToolContext } from './tools/shared.js'
 
 export { CommandError } from './errors.js'
 
@@ -292,6 +293,12 @@ export class ChatAgent {
       skill,
       assistantMessage,
       emitter,
+      childRunStarter: this.createChildRunStarter(
+        run,
+        session,
+        profile,
+        apiKey,
+      ),
     })
 
     return { messageId: assistantMessage.id, runId: run.id }
@@ -359,6 +366,12 @@ export class ChatAgent {
         original.skillId === null ? null : builtinSkills.get(original.skillId),
       assistantMessage,
       emitter,
+      childRunStarter: this.createChildRunStarter(
+        run,
+        originalSession,
+        profile,
+        apiKey,
+      ),
     })
 
     return {
@@ -396,8 +409,13 @@ export class ChatAgent {
     sampling: { temperature?: number; maxTokens?: number }
     permissionMode: ChatCommand['permissionMode']
     skill: SkillDefinition | null
+    systemPrompt?: string
     assistantMessage: Message
     emitter: RunEventEmitter
+    childRunStarter?: ToolContext['childRunStarter']
+    onResult?: (content: string) => void
+    onFailure?: (error: Error) => void
+    parentSignal?: AbortSignal
   }): void {
     const {
       run,
@@ -410,6 +428,12 @@ export class ChatAgent {
       emitter,
     } = input
     const controller = new AbortController()
+    const parentSignal = input.parentSignal
+    const abortChild = () => controller.abort()
+    if (parentSignal) {
+      if (parentSignal.aborted) controller.abort()
+      else parentSignal.addEventListener('abort', abortChild, { once: true })
+    }
     this.streams.set(run.id, { controller })
     const settings = this.store.agentSettings.get()
     const provider: ProviderRuntimeConfig = {
@@ -442,6 +466,7 @@ export class ChatAgent {
       workspaceRoot,
       skills: builtinSkills,
       mcp: this.mcp,
+      childRunStarter: input.childRunStarter,
     })
     const gate = new PermissionGate(
       input.permissionMode ?? 'workspace',
@@ -454,7 +479,7 @@ export class ChatAgent {
         buildHistory: (signal) =>
           this.contextBuilder.build(
             sessionId,
-            this.composeSystemPrompt(input.skill),
+            input.systemPrompt ?? this.composeSystemPrompt(input.skill),
             provider,
             signal,
           ),
@@ -467,14 +492,98 @@ export class ChatAgent {
         emitter,
         firstAssistantMessage: assistantMessage,
         settings,
+        onResult: input.onResult,
       })
       // runner 自吞全部执行期异常；此处仅保证取消句柄必然清理。
       .catch(() => {})
       .finally(() => {
+        parentSignal?.removeEventListener('abort', abortChild)
         this.streams.delete(run.id)
         // Run 结束(完成/失败/取消):自动出队发送排队中的下一条。
         this.pumpQueue(run.sessionId)
       })
+  }
+
+  private createChildRunStarter(
+    parentRun: Run,
+    parentSession: Session,
+    profile: ProviderProfile,
+    apiKey: string,
+  ): NonNullable<ToolContext['childRunStarter']> {
+    return async ({ task, agentId, parentRunId, signal }) => {
+      if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
+      const agent = this.store.agents.get(agentId)
+      if (!agent || !agent.enabled) {
+        throw new Error(`agent not found or disabled: ${agentId}`)
+      }
+      const session = this.store.sessions.create(
+        parentSession.projectId,
+        `子任务：${task.slice(0, 40)}`,
+      )
+      const delegation = this.store.delegations.create({
+        sessionId: parentSession.id,
+        parentRunId,
+        agentId: agentId ?? 'default',
+        task,
+      })
+      const run = this.store.runs.create({
+        sessionId: session.id,
+        providerId: profile.id,
+        model: profile.models[0] ?? null,
+        parentRunId,
+        delegationId: delegation.id,
+        agentId: agentId ?? null,
+      })
+      this.store.delegations.attachChildRun(delegation.id, run.id)
+      this.store.delegations.update(delegation.id, 'running')
+      this.store.messages.create({
+        sessionId: session.id,
+        runId: run.id,
+        role: 'user',
+        content: task,
+        status: 'completed',
+      })
+      const assistant = this.createAssistantMessage(session.id, run)
+      const emitter = new RunEventEmitter(run.id, this.notifier)
+      emitter.next({ type: 'delegation.created', delegation })
+      const result = new Promise<string>((resolve, reject) => {
+        this.launch({
+          run,
+          session,
+          profile,
+          apiKey,
+          model: profile.models[0] ?? profile.models[0]!,
+          sampling: this.resolveSampling(profile, {}),
+          permissionMode: 'workspace',
+          skill: null,
+          systemPrompt: agent.systemPrompt,
+          assistantMessage: assistant,
+          emitter,
+          childRunStarter: undefined,
+          parentSignal: signal,
+          onResult: (value) => {
+            const updated = this.store.delegations.update(
+              delegation.id,
+              'completed',
+              value,
+            )
+            emitter.next({ type: 'delegation.updated', delegation: updated })
+            resolve(value)
+          },
+          onFailure: (error) => {
+            const updated = this.store.delegations.update(
+              delegation.id,
+              'failed',
+              null,
+              error.message,
+            )
+            emitter.next({ type: 'delegation.updated', delegation: updated })
+            reject(error)
+          },
+        })
+      })
+      return result
+    }
   }
 
   /** system prompt = 主 prompt + 可用 Skills 清单 +（可选）本次激活技能的完整说明。 */

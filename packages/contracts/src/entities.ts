@@ -190,6 +190,44 @@ export const RunSchema = z.object({
 })
 export type Run = z.infer<typeof RunSchema>
 
+/** Stable definition of an agent available for delegation. */
+export const AgentDefinitionSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string(),
+  systemPrompt: z.string().min(1),
+  enabled: z.boolean(),
+  createdAt: IsoDateTimeSchema,
+  updatedAt: IsoDateTimeSchema,
+})
+export type AgentDefinition = z.infer<typeof AgentDefinitionSchema>
+
+export const DelegationStatusSchema = z.enum([
+  'pending',
+  'running',
+  'completed',
+  'failed',
+  'cancelled',
+])
+export type DelegationStatus = z.infer<typeof DelegationStatusSchema>
+
+/** A request for a child agent run; execution is intentionally deferred. */
+export const DelegationSchema = z.object({
+  id: z.string().min(1),
+  sessionId: z.string().min(1),
+  parentRunId: z.string().min(1),
+  agentId: z.string().min(1),
+  task: z.string().min(1),
+  status: DelegationStatusSchema,
+  childRunId: z.string().min(1).nullable(),
+  result: z.string().nullable(),
+  error: z.string().nullable(),
+  createdAt: IsoDateTimeSchema,
+  updatedAt: IsoDateTimeSchema,
+  completedAt: IsoDateTimeSchema.nullable(),
+})
+export type Delegation = z.infer<typeof DelegationSchema>
+
 export const ToolCallStatusSchema = z.enum([
   'pending',
   'awaiting_approval',

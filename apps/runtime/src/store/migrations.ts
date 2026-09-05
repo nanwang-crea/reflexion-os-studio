@@ -174,6 +174,30 @@ CREATE TABLE IF NOT EXISTS workspace_index (
 );
 -- Phase 1B：Asset 元数据与引用(内容在数据目录 assets/<projectId>/,
 -- 按项目隔离);run_id 产出来源,node_run_id 多 Agent 阶段预留。
+CREATE TABLE IF NOT EXISTS agents (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  system_prompt TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS delegations (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  parent_run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  agent_id TEXT NOT NULL REFERENCES agents(id),
+  task TEXT NOT NULL,
+  status TEXT NOT NULL,
+  child_run_id TEXT,
+  result TEXT,
+  error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  completed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_delegations_session ON delegations(session_id, created_at);
 CREATE TABLE IF NOT EXISTS assets (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -193,7 +217,7 @@ CREATE TABLE IF NOT EXISTS assets (
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 16
+export const LATEST_SCHEMA_VERSION = 17
 
 const SESSIONS_TABLE_V1 = `
 CREATE TABLE sessions (
@@ -448,6 +472,7 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
     if (version < 16) {
       migrateMcpEnvSecrets(db, dir)
     }
+    // v17: agents/delegations tables are additive and created by SCHEMA.
     db.exec('COMMIT')
     // 迁移全部执行完毕才推进版本号；否则下次启动会重复进入迁移分支。
     version = LATEST_SCHEMA_VERSION

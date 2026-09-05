@@ -82,6 +82,24 @@ export class RunStore {
     return row ? this.toRun(row as Row) : null
   }
 
+  listByParentRun(parentRunId: string): Run[] {
+    return this.db
+      .prepare(
+        'SELECT * FROM runs WHERE parent_run_id = ? ORDER BY started_at ASC, rowid ASC',
+      )
+      .all(parentRunId)
+      .map((row) => this.toRun(row as Row))
+  }
+
+  listByDelegation(delegationId: string): Run[] {
+    return this.db
+      .prepare(
+        'SELECT * FROM runs WHERE delegation_id = ? ORDER BY started_at ASC, rowid ASC',
+      )
+      .all(delegationId)
+      .map((row) => this.toRun(row as Row))
+  }
+
   finalize(id: string, status: RunStatus, errorCode?: string): void {
     this.db
       .prepare(
