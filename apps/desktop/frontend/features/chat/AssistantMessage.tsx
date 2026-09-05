@@ -19,7 +19,6 @@ function resourceFromPart(part: ResourcePart): ResourceLink {
 import { CopyButton } from '../../components/CopyButton'
 import { AlertIcon } from '../../ui/icons'
 import {
-  extractResourceLinks,
   MessageMarkdown,
 } from '../../components/markdown/MessageMarkdown'
 import { ReasoningBlock } from './ReasoningBlock'
@@ -98,19 +97,6 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
 
   const statusLabel = MESSAGE_STATUS_LABELS[props.message.status]
 
-  // Artifact 卡：聚合该回复正文里的资源引用（按 uri 去重），点击同样分发。
-  const resources = useMemo(() => {
-    const seen = new Set<string>()
-    const links = structuredParts
-      .filter((part): part is ResourcePart => part.type === 'resource_link')
-      .map(resourceFromPart)
-    return [...links, ...extractResourceLinks(contentText)].filter((link) => {
-      if (seen.has(link.uri)) return false
-      seen.add(link.uri)
-      return true
-    })
-  }, [contentText, structuredParts])
-
   return (
     <div className="msg-assistant">
       <div className="assistant-main">
@@ -132,34 +118,6 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
               caret={answerStreaming}
               onResourceClick={props.onResourceClick}
             />
-          </div>
-        )}
-        {resources.length > 0 && (
-          <div className="artifact-links">
-            {resources.map((link) => (
-              <button
-                key={link.uri}
-                type="button"
-                className="artifact-chip"
-                title={link.uri}
-                onClick={() => props.onResourceClick?.(link)}
-              >
-                <span className="artifact-kind">
-                  {link.kind === 'workspaceFile'
-                    ? '文件'
-                    : link.kind === 'asset'
-                      ? '资产'
-                      : '链接'}
-                </span>
-                <span className="artifact-target">
-                  {link.kind === 'workspaceFile'
-                    ? link.path
-                    : link.kind === 'asset'
-                      ? link.assetId.slice(0, 8)
-                      : link.uri}
-                </span>
-              </button>
-            ))}
           </div>
         )}
         {statusLabel && (
@@ -189,12 +147,14 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
                 ` · ${formatSeconds(props.runDurationMs)}`}
             </div>
           )}
-        {contentText !== '' && !statusLabel && (
-          <div className="assistant-actions">
-            <CopyButton text={props.streamingText ?? props.message.content} />
-          </div>
-        )}
       </div>
+      {contentText !== '' && (
+        <div className="assistant-actions">
+          <CopyButton
+            text={structuredParts.length > 0 ? structuredText : contentText}
+          />
+        </div>
+      )}
     </div>
   )
 }

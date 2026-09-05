@@ -14,6 +14,11 @@ import {
   WorkspaceEntrySchema,
   WorkspaceIndexSnapshotSchema,
   WorkspaceReadResultSchema,
+  FileWriteResultSchema,
+  FileEditResultSchema,
+  FileDeleteResultSchema,
+  FileMoveResultSchema,
+  FileMkdirResultSchema,
   GitChangeEntrySchema,
   AssetRefSchema,
   QueueEntrySchema,
@@ -346,6 +351,48 @@ export const CommandSchemaRegistry = {
     // 内置 Skill 清单（Phase 1A 无安装/启停，列表即全部可用项）。
     params: z.object({ requestId: RequestIdSchema }),
     result: z.object({ skills: z.array(SkillManifestSchema) }),
+  },
+  // ---------- System workspace mutations ----------
+  'file.write': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      workspaceRoot: z.string().min(1),
+      path: z.string().min(1),
+      content: z.string(),
+      grant: z.string().min(1),
+    }),
+    result: FileWriteResultSchema,
+  },
+  'file.edit': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      workspaceRoot: z.string().min(1),
+      path: z.string().min(1),
+      oldText: z.string(),
+      newText: z.string(),
+      expectedCount: z.number().int().positive().optional(),
+      grant: z.string().min(1),
+    }),
+    result: FileEditResultSchema,
+  },
+  'file.delete': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      workspaceRoot: z.string().min(1),
+      path: z.string().min(1),
+      grant: z.string().min(1),
+    }),
+    result: FileDeleteResultSchema,
+  },
+  'file.move': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      workspaceRoot: z.string().min(1),
+      from: z.string().min(1),
+      to: z.string().min(1),
+      grant: z.string().min(1),
+    }),
+    result: FileMoveResultSchema,
   },
   // ---------- Phase 1B：Workspace Surface ----------
   'workspace.index.start': {

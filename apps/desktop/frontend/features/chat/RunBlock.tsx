@@ -3,6 +3,7 @@ import type { ResourceLink, Usage } from '@reflexion-os-studio/runtime-client'
 import { ChevronIcon } from '../../ui/icons'
 import { AssistantMessage } from './AssistantMessage'
 import { RunProcess, type ProcessItem } from './RunProcess'
+import { ChangedFiles } from './ChangedFiles'
 
 interface RunBlockProps {
   processItems: ProcessItem[]
@@ -16,6 +17,7 @@ interface RunBlockProps {
   canRetry: boolean
   onRetry: () => void
   onResourceClick?: (link: ResourceLink) => void
+  projectId: string
 }
 
 export function RunBlock(props: RunBlockProps): React.JSX.Element {
@@ -103,6 +105,12 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
           onResourceClick={props.onResourceClick}
         />
       )}
+      <ChangedFiles
+        items={props.processItems}
+        finalItem={props.finalItem}
+        projectId={props.projectId}
+        onResourceClick={props.onResourceClick}
+      />
     </div>
   )
 }

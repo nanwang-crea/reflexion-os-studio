@@ -265,6 +265,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
                   }
                   onRetry={handleRetry}
                   onResourceClick={props.onResourceClick}
+                  projectId={props.sessionData?.session?.projectId ?? ''}
                 />
               )
             }
@@ -284,9 +285,9 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
                 <div key={message.id} className="msg-user">
                   <div className="user-bubble">
                     <div className="user-content">{message.content}</div>
-                    <div className="user-actions">
-                      <CopyButton text={message.content} />
-                    </div>
+                  </div>
+                  <div className="user-actions">
+                    <CopyButton text={message.content} />
                   </div>
                 </div>
               )

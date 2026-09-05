@@ -405,6 +405,54 @@ export const WorkspaceReadResultSchema = z.object({
 })
 export type WorkspaceReadResult = z.infer<typeof WorkspaceReadResultSchema>
 
+/** A workspace mutation's filesystem effect. Paths are workspace-relative. */
+export const ChangedFileActionSchema = z.enum([
+  'created',
+  'modified',
+  'deleted',
+  'moved',
+])
+export type ChangedFileAction = z.infer<typeof ChangedFileActionSchema>
+
+export const ChangedFileSchema = z.object({
+  path: z.string().min(1),
+  action: ChangedFileActionSchema,
+  oldPath: z.string().min(1).optional(),
+})
+export type ChangedFile = z.infer<typeof ChangedFileSchema>
+
+export const FileWriteResultSchema = z.object({
+  writtenBytes: z.number().int().nonnegative(),
+  changedFiles: z.array(ChangedFileSchema).optional(),
+})
+export type FileWriteResult = z.infer<typeof FileWriteResultSchema>
+
+export const FileEditResultSchema = z.object({
+  replacedCount: z.number().int().nonnegative(),
+  sizeBytes: z.number().int().nonnegative(),
+  changedFiles: z.array(ChangedFileSchema).optional(),
+})
+export type FileEditResult = z.infer<typeof FileEditResultSchema>
+
+export const FileDeleteResultSchema = z.object({
+  kind: z.enum(['file', 'dir']),
+  changedFiles: z.array(ChangedFileSchema).optional(),
+})
+export type FileDeleteResult = z.infer<typeof FileDeleteResultSchema>
+
+export const FileMoveResultSchema = z.object({
+  from: z.string().min(1),
+  to: z.string().min(1),
+  changedFiles: z.array(ChangedFileSchema).optional(),
+})
+export type FileMoveResult = z.infer<typeof FileMoveResultSchema>
+
+export const FileMkdirResultSchema = z.object({
+  path: z.string().min(1),
+  changedFiles: z.array(ChangedFileSchema).optional(),
+})
+export type FileMkdirResult = z.infer<typeof FileMkdirResultSchema>
+
 /** Git 变更类别：porcelain XY 聚合后的语义（Rust git.status 透传）。 */
 export const GitChangeStatusSchema = z.enum([
   'modified',

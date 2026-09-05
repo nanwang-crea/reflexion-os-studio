@@ -49,8 +49,12 @@
 .msg-user {
   position: relative;
   display: flex;
-  justify-content: flex-end;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: flex-end;
+  /* 为底部操作行预留槽位（绝对定位展开，不改动布局、不推挤后续消息）；
+     负 margin 抵消预留高度，保持消息间距稳定。 */
+  padding-bottom: 30px;
+  margin-bottom: -10px;
 }
 
 .user-bubble {
@@ -74,6 +78,8 @@
   display: block;
   width: 100%;
   position: relative;
+  padding-bottom: 30px;
+  margin-bottom: -10px;
 }
 
 .assistant-main {
@@ -129,7 +135,9 @@
   color: var(--text);
 }
 
-/* 消息操作栏：贴近消息底部悬浮，悬停时淡入，不占消息流高度。 */
+/* 消息操作栏：绝对定位吸附到消息底部预留槽内，悬停淡入。
+   按钮落在各自 :hover 容器（.msg-user/.msg-assistant）内，移向按钮不丢失悬停；
+   键盘聚焦（:focus-within）同样淡入，且因绝对定位【不引起任何布局回流】。 */
 .assistant-actions,
 .user-actions {
   position: absolute;
@@ -149,14 +157,16 @@
   pointer-events: auto;
 }
 
-.assistant-actions {
-  left: 0;
-  bottom: -8px;
+/* 用户消息：按钮位于气泡下方右侧。 */
+.user-actions {
+  right: 6px;
+  bottom: 4px;
 }
 
-.user-actions {
-  right: -34px;
-  bottom: -8px;
+/* 助手消息：按钮位于正文下方左侧。 */
+.assistant-actions {
+  left: 0;
+  bottom: 4px;
 }
 
 .msg-action {
@@ -1220,3 +1230,29 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.changed-files {
+  margin: 10px 0 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.changed-files summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  list-style: none;
+}
+
+.changed-files summary::-webkit-details-marker { display: none; }
+.changed-files summary svg { width: 14px; margin-left: auto; transform: rotate(-90deg); }
+.changed-files[open] summary svg { transform: rotate(0deg); }
+.changed-files-count { color: var(--text-muted); }
+.changed-files-list { border-top: 1px solid var(--border); padding: 4px; }
+.changed-file { display: flex; width: 100%; gap: 8px; padding: 5px 6px; border: 0; background: transparent; color: var(--text-secondary); text-align: left; cursor: pointer; }
+.changed-file:hover { background: var(--surface-hover); color: var(--text); }
+.changed-file-action { min-width: 48px; color: var(--text-muted); }

@@ -10,15 +10,34 @@ use crate::paths::resolve_in_workspace;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ChangedFile {
+    pub path: String,
+    pub action: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub old_path: Option<String>,
+}
+
+fn changed(path: &str, action: &str) -> ChangedFile {
+    ChangedFile {
+        path: path.to_string(),
+        action: action.to_string(),
+        old_path: None,
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EditOutcome {
     pub replaced_count: usize,
     pub size_bytes: u64,
+    pub changed_files: Vec<ChangedFile>,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteOutcome {
     pub kind: String,
+    pub changed_files: Vec<ChangedFile>,
 }
 
 #[derive(Serialize)]
@@ -26,12 +45,14 @@ pub struct DeleteOutcome {
 pub struct MoveOutcome {
     pub from: String,
     pub to: String,
+    pub changed_files: Vec<ChangedFile>,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MkdirOutcome {
     pub path: String,
+    pub changed_files: Vec<ChangedFile>,
 }
 
 /// 精确替换：oldText 出现次数必须等于 expected（默认 1），否则报错不写入。
@@ -69,6 +90,7 @@ pub fn edit(
     Ok(EditOutcome {
         replaced_count: count,
         size_bytes: updated.len() as u64,
+        changed_files: vec![changed(relative, "modified")],
     })
 }
 
@@ -84,11 +106,13 @@ pub fn delete(workspace_root: &Path, relative: &str) -> Result<DeleteOutcome, St
         fs::remove_dir_all(&path).map_err(|e| e.to_string())?;
         Ok(DeleteOutcome {
             kind: "dir".to_string(),
+            changed_files: vec![changed(relative, "deleted")],
         })
     } else {
         fs::remove_file(&path).map_err(|e| e.to_string())?;
         Ok(DeleteOutcome {
             kind: "file".to_string(),
+            changed_files: vec![changed(relative, "deleted")],
         })
     }
 }
@@ -109,6 +133,11 @@ pub fn move_path(workspace_root: &Path, from: &str, to: &str) -> Result<MoveOutc
     Ok(MoveOutcome {
         from: from.to_string(),
         to: to.to_string(),
+        changed_files: vec![ChangedFile {
+            path: to.to_string(),
+            action: "moved".to_string(),
+            old_path: Some(from.to_string()),
+        }],
     })
 }
 
@@ -120,6 +149,7 @@ pub fn mkdir(workspace_root: &Path, relative: &str) -> Result<MkdirOutcome, Stri
     fs::create_dir_all(&path).map_err(|e| e.to_string())?;
     Ok(MkdirOutcome {
         path: relative.to_string(),
+        changed_files: vec![changed(relative, "created")],
     })
 }
 
@@ -142,6 +172,8 @@ mod tests {
         fs::write(root.join("a.txt"), "fee fee fi").unwrap();
         let ok = edit(&root, "a.txt", "fee", "foo", Some(2)).unwrap();
         assert_eq!(ok.replaced_count, 2);
+        assert_eq!(ok.changed_files[0].action, "modified");
+        assert_eq!(ok.changed_files[0].path, "a.txt");
         assert_eq!(
             fs::read_to_string(root.join("a.txt")).unwrap(),
             "foo foo fi"

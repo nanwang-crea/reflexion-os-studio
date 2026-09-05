@@ -74,9 +74,14 @@ pub fn handle_file_write(params: Value) -> Result<Value, OpError> {
         .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
     require_grant(&params.grant, &params.workspace_root, "file.write")?;
     let root = workspace_root(&params.workspace_root)?;
+    let path = paths::resolve_in_workspace(&root, &params.path)
+        .map_err(|message| OpError::new("file_error", message))?;
+    let existed = path.exists();
     let written = files::write(&root, &params.path, &params.content)
         .map_err(|message| OpError::new("file_error", message))?;
-    Ok(json!({ "writtenBytes": written }))
+    Ok(
+        json!({ "writtenBytes": written, "changedFiles": [{ "path": params.path, "action": if existed { "modified" } else { "created" } }] }),
+    )
 }
 
 pub fn handle_file_edit(params: Value) -> Result<Value, OpError> {
@@ -95,6 +100,7 @@ pub fn handle_file_edit(params: Value) -> Result<Value, OpError> {
     Ok(json!({
         "replacedCount": outcome.replaced_count,
         "sizeBytes": outcome.size_bytes,
+        "changedFiles": outcome.changed_files,
     }))
 }
 
@@ -105,7 +111,7 @@ pub fn handle_file_delete(params: Value) -> Result<Value, OpError> {
     let root = workspace_root(&params.workspace_root)?;
     let outcome = mutate::delete(&root, &params.path)
         .map_err(|message| OpError::new("file_error", message))?;
-    Ok(json!({ "kind": outcome.kind }))
+    Ok(json!({ "kind": outcome.kind, "changedFiles": outcome.changed_files }))
 }
 
 pub fn handle_file_move(params: Value) -> Result<Value, OpError> {
@@ -115,7 +121,7 @@ pub fn handle_file_move(params: Value) -> Result<Value, OpError> {
     let root = workspace_root(&params.workspace_root)?;
     let outcome = mutate::move_path(&root, &params.from, &params.to)
         .map_err(|message| OpError::new("file_error", message))?;
-    Ok(json!({ "from": outcome.from, "to": outcome.to }))
+    Ok(json!({ "from": outcome.from, "to": outcome.to, "changedFiles": outcome.changed_files }))
 }
 
 pub fn handle_file_mkdir(params: Value) -> Result<Value, OpError> {
@@ -125,7 +131,7 @@ pub fn handle_file_mkdir(params: Value) -> Result<Value, OpError> {
     let root = workspace_root(&params.workspace_root)?;
     let outcome = mutate::mkdir(&root, &params.path)
         .map_err(|message| OpError::new("file_error", message))?;
-    Ok(json!({ "path": outcome.path }))
+    Ok(json!({ "path": outcome.path, "changedFiles": outcome.changed_files }))
 }
 
 /// git 只读查询（status/diff）：异步执行避免大仓库阻塞主循环，
