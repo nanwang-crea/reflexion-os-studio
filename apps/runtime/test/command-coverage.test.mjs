@@ -9,7 +9,14 @@ import { commandHandlers } from '../dist/handlers.js'
 
 // These commands are intentionally handled in index.ts because they have
 // transport-level behavior that dispatchCommand does not need to own.
-const inlineRuntimeHandlers = new Set(['runtime.get_status', 'provider.test'])
+const inlineRuntimeHandlers = new Set([
+  'runtime.get_status',
+  'provider.test',
+  'file.write',
+  'file.edit',
+  'file.delete',
+  'file.move',
+])
 
 test('every contract command is covered by a runtime handler', () => {
   const missing = runtimeMethodNames.filter(

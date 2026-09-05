@@ -321,6 +321,14 @@ export class ChatAgent {
     )
     this.requireIdleSession(original.sessionId)
 
+    // 替换式重试：先把失败 Run 的助手消息与 Run 本体（工具调用随级联清理）移除，
+    // 保留用户问题，让重试结果原地取代失败回复，而非并列显示两条。
+    this.store.transaction(() => {
+      this.store.messages.deleteByRun(original.id, 'assistant')
+      // runs 删除时 tool_calls 经外键 ON DELETE CASCADE 一并清理。
+      this.store.runs.delete(original.id)
+    })
+
     const run = this.store.runs.create({
       sessionId: original.sessionId,
       providerId: profile.id,

@@ -219,6 +219,50 @@ test('recovery marks unfinished runs/messages/tool calls on reopen', () => {
   assert.equal(reopened.toolCalls.get(toolCall.id).status, 'cancelled')
 })
 
+test('retry replacement deletes assistant messages + run but keeps user question', () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
+  const session = store.sessions.create(project.id)
+  const run = store.runs.create({
+    sessionId: session.id,
+    providerId: 'prov1',
+    model: 'm',
+  })
+  const userMessage = store.messages.create({
+    sessionId: session.id,
+    runId: run.id,
+    role: 'user',
+    content: '请分析',
+    status: 'completed',
+  })
+  const assistantMessage = store.messages.create({
+    sessionId: session.id,
+    runId: run.id,
+    role: 'assistant',
+    content: '',
+    status: 'failed',
+  })
+  const toolCall = store.toolCalls.create({
+    runId: run.id,
+    messageId: assistantMessage.id,
+    toolName: 'file.read',
+    args: { path: 'a.ts' },
+    status: 'completed',
+  })
+
+  // 模拟重试替换：事务内删助手消息 + 删 Run（级联清工具调用），保留用户消息。
+  store.transaction(() => {
+    store.messages.deleteByRun(run.id, 'assistant')
+    store.runs.delete(run.id)
+  })
+
+  const remaining = store.messages.listBySession(session.id)
+  assert.equal(remaining.length, 1)
+  assert.equal(remaining[0].id, userMessage.id)
+  assert.equal(store.runs.get(run.id), null)
+  assert.equal(store.toolCalls.get(toolCall.id), null)
+})
+
 test('provider profile upsert keeps capabilities when omitted on edit', () => {
   const store = freshStore()
   const created = store.providers.upsert({

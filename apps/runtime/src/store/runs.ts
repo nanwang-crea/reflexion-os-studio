@@ -133,6 +133,11 @@ export class RunStore {
       .run(nowIso())
   }
 
+  /** 硬删除某 Run。调用方须自行按正确顺序清理依赖（消息、工具调用）。 */
+  delete(id: string): void {
+    this.db.prepare('DELETE FROM runs WHERE id = ?').run(id)
+  }
+
   private toRun(row: Row): Run {
     return {
       id: String(row.id),

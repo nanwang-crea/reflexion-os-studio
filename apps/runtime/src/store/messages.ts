@@ -106,6 +106,16 @@ export class MessageStore {
       .run(nowIso())
   }
 
+  /**
+   * 删除某 Run 下指定角色的消息。重试替换场景需要先移除失败 Run 的助手消息，
+   * 但保留用户问题；工具调用经 runs/tool_calls 外键随 Run 一起清理。
+   */
+  deleteByRun(runId: string, role: MessageRole): void {
+    this.db
+      .prepare('DELETE FROM messages WHERE run_id = ? AND role = ?')
+      .run(runId, role)
+  }
+
   private toMessage(row: Row): Message {
     return {
       id: String(row.id),

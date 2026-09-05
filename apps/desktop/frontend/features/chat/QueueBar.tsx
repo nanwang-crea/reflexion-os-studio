@@ -150,6 +150,7 @@ export function QueueBar(props: QueueBarProps): React.JSX.Element {
               <button
                 className="icon-btn danger"
                 title="删除"
+                aria-label="删除"
                 onClick={() => void remove(entry.id)}
               >
                 <TrashIcon />

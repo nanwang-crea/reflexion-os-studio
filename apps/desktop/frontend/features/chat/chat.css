@@ -1017,10 +1017,10 @@
 /* ---------- 工具审批卡 ---------- */
 .approval-card {
   margin-bottom: 12px;
-  border: 1px solid var(--border, #d9d9e3);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
   padding: 12px 14px;
-  background: var(--surface-raised, #f7f7fa);
+  background: var(--bg-elevated);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1035,7 +1035,8 @@
   font-size: 12px;
   padding: 8px 10px;
   border-radius: 6px;
-  background: var(--surface, #fff);
+  background: var(--bg-inset);
+  color: var(--text-secondary);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -1046,7 +1047,7 @@
 }
 
 .approval-actions .danger {
-  color: #c0392b;
+  color: var(--danger);
 }
 
 .assistant-usage {
@@ -1248,11 +1249,40 @@
   list-style: none;
 }
 
-.changed-files summary::-webkit-details-marker { display: none; }
-.changed-files summary svg { width: 14px; margin-left: auto; transform: rotate(-90deg); }
-.changed-files[open] summary svg { transform: rotate(0deg); }
-.changed-files-count { color: var(--text-muted); }
-.changed-files-list { border-top: 1px solid var(--border); padding: 4px; }
-.changed-file { display: flex; width: 100%; gap: 8px; padding: 5px 6px; border: 0; background: transparent; color: var(--text-secondary); text-align: left; cursor: pointer; }
-.changed-file:hover { background: var(--surface-hover); color: var(--text); }
-.changed-file-action { min-width: 48px; color: var(--text-muted); }
+.changed-files summary::-webkit-details-marker {
+  display: none;
+}
+.changed-files summary svg {
+  width: 14px;
+  margin-left: auto;
+  transform: rotate(-90deg);
+}
+.changed-files[open] summary svg {
+  transform: rotate(0deg);
+}
+.changed-files-count {
+  color: var(--text-muted);
+}
+.changed-files-list {
+  border-top: 1px solid var(--border);
+  padding: 4px;
+}
+.changed-file {
+  display: flex;
+  width: 100%;
+  gap: 8px;
+  padding: 5px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+.changed-file:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.changed-file-action {
+  min-width: 48px;
+  color: var(--text-muted);
+}
