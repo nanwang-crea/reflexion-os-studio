@@ -20,7 +20,6 @@ import {
   type ConfirmDialogState,
 } from './components/ConfirmDialog'
 import { ChatView } from './features/chat/ChatView'
-import { PlanPanel } from './features/chat/PlanPanel'
 import { LandingView } from './features/landing/LandingView'
 import { MemoryView } from './features/memories/MemoryView'
 import { Sidebar } from './components/Sidebar'
@@ -34,7 +33,7 @@ import type {
 import { SettingsView } from './features/settings/SettingsView'
 import { useSessionActions } from './hooks/useSessionActions'
 import { useResourceRouter } from './hooks/useResourceRouter'
-import { DoubleChevronIcon, FolderIcon, ListIcon } from './ui/icons'
+import { DoubleChevronIcon, FolderIcon } from './ui/icons'
 
 const STATUS_LABELS: Record<string, string> = {
   starting: '正在启动本地 Runtime…',
@@ -373,6 +372,18 @@ export default function App() {
     setActiveFilePath(path)
   }, [])
 
+  const reorderTabs = useCallback((fromPath: string, toPath: string): void => {
+    setOpenTabs((tabs) => {
+      const fromIndex = tabs.findIndex((tab) => tab.path === fromPath)
+      const toIndex = tabs.findIndex((tab) => tab.path === toPath)
+      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return tabs
+      const next = tabs.slice()
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, moved)
+      return next
+    })
+  }, [])
+
   const {
     createProject,
     deleteProject,
@@ -660,6 +671,7 @@ export default function App() {
                 activePath={activeFilePath}
                 onSelectTab={selectTab}
                 onCloseTab={closeTab}
+                onReorderTabs={reorderTabs}
                 width={workspaceWidth}
               />
             </>

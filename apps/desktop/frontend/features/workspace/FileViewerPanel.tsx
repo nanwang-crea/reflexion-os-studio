@@ -15,6 +15,7 @@ interface FileViewerPanelProps {
   activePath: string | null
   onSelectTab: (path: string) => void
   onCloseTab: (path: string) => void
+  onReorderTabs: (fromPath: string, toPath: string) => void
   /** 面板宽度（由 App 拖拽控制）。 */
   width?: number
 }
@@ -32,6 +33,7 @@ export function FileViewerPanel(
     props.openTabs.find((tab) => tab.path === props.activePath) ?? null
   const tabsScrollRef = useRef<HTMLDivElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
+  const draggedPathRef = useRef<string | null>(null)
   const [canScroll, setCanScroll] = useState(false)
   const [scrollRatio, setScrollRatio] = useState(0)
   const [thumbRatio, setThumbRatio] = useState(1)
@@ -119,6 +121,33 @@ export function FileViewerPanel(
     el.scrollLeft += event.deltaY
   }
 
+  // 标签拖拽排序：记录源标签，drop 到目标标签时回调重排（拖到自身忽略）。
+  const handleDragStart = (
+    event: React.DragEvent<HTMLDivElement>,
+    path: string,
+  ): void => {
+    draggedPathRef.current = path
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', path)
+  }
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>): void => {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleDrop = (
+    event: React.DragEvent<HTMLDivElement>,
+    toPath: string,
+  ): void => {
+    event.preventDefault()
+    const fromPath =
+      draggedPathRef.current ?? event.dataTransfer.getData('text/plain')
+    if (fromPath === '' || fromPath === toPath) return
+    props.onReorderTabs(fromPath, toPath)
+    draggedPathRef.current = null
+  }
+
   if (project === null) {
     return (
       <div className="workspace-panel" style={{ width: props.width }}>
@@ -149,6 +178,10 @@ export function FileViewerPanel(
                     className={`file-tab${active ? ' active' : ''}`}
                     role="tab"
                     aria-selected={active}
+                    draggable
+                    onDragStart={(event) => handleDragStart(event, tab.path)}
+                    onDragOver={handleDragOver}
+                    onDrop={(event) => handleDrop(event, tab.path)}
                   >
                     <button
                       type="button"
