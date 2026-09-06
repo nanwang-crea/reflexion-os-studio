@@ -7,6 +7,7 @@ export type ViewName =
   'chat' | 'settings' | 'memories' | 'skills' | 'automations'
 
 export interface SessionNavigationDeps {
+  activeProjectId: string | null
   setActiveProjectId: Dispatch<SetStateAction<string | null>>
   setActiveSessionId: Dispatch<SetStateAction<string | null>>
   setSessionData: Dispatch<SetStateAction<SessionData | null>>
@@ -86,13 +87,12 @@ export function useSessionNavigation(
 
   const enterProjectFiles = (projectId: string): void => {
     deps.setActiveProjectId(projectId)
-    deps.setActiveSessionId(null)
-    deps.setSessionData(null)
-    deps.setDelegations([])
     deps.setView('chat')
     deps.setSidebarMode('files')
     deps.setSidebarOpen(true)
-    deps.resetWorkspaceFiles()
+    if (deps.activeProjectId !== projectId) {
+      deps.resetWorkspaceFiles()
+    }
     void deps.refreshProjectSessions(projectId)
   }
 
