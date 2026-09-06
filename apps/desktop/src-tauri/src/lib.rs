@@ -30,7 +30,18 @@ struct SupervisorState {
     runtime: Mutex<Option<SidecarProcess>>,
     stopping: AtomicBool,
     request_seq: AtomicU64,
+    restart: Mutex<RuntimeRestartState>,
 }
+
+/// TS Runtime 崩溃重启记账：有限次数 + 退避，耗尽后保持不可用直到应用重启，
+/// 与 Rust System Runtime（apps/runtime/src/system.ts）的自愈语义对齐。
+struct RuntimeRestartState {
+    count: u32,
+}
+
+/// TS Runtime 崩溃重启预算：I/O 或瞬时故障可自愈，但避免连续崩溃打满 CPU/内存。
+const MAX_RUNTIME_RESTARTS: u32 = 3;
+const RUNTIME_RESTART_BACKOFF_MS: [u64; 3] = [500, 1_000, 2_000];
 
 fn initial_snapshot() -> BootstrapSnapshot {
     BootstrapSnapshot {
@@ -103,6 +114,10 @@ fn observe_stdout(
                     snapshot.runtime_ready = true;
                     derive_state(snapshot.runtime_ready, snapshot.system_ready)
                 };
+                // 重启成功后清零预算：历史崩溃不再累计，避免后续无谓降级。
+                if let Ok(mut restart) = state.restart.lock() {
+                    restart.count = 0;
+                }
                 update_state(&app, &state, next, None);
             }
             if method == Some("runtime.status") {
@@ -143,7 +158,11 @@ fn observe_stderr(name: &'static str, stderr: impl std::io::Read + Send + 'stati
     });
 }
 
-fn monitor_exit(app: tauri::AppHandle, state: Arc<SupervisorState>) {
+fn monitor_exit(
+    app: tauri::AppHandle,
+    state: Arc<SupervisorState>,
+    cfg: Arc<RuntimeLaunchConfig>,
+) {
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_millis(300));
         let Ok(mut guard) = state.runtime.lock() else {
@@ -155,15 +174,46 @@ fn monitor_exit(app: tauri::AppHandle, state: Arc<SupervisorState>) {
         match process.child.try_wait() {
             Ok(Some(status)) => {
                 let stopping = state.stopping.load(Ordering::SeqCst);
+                // 进程已退出：清空槽位并置 runtime_ready=false，避免死进程残留在
+                // state.runtime / runtime_ready 导致 UI 误报“Chat 可用”。
+                *guard = None;
                 drop(guard);
-                if !stopping && !status.success() {
-                    update_state(
-                        &app,
-                        &state,
-                        "system-degraded",
-                        Some(format!("runtime exited ({status})")),
-                    );
+                if stopping || status.success() {
+                    return;
                 }
+                let detail = format!("runtime exited ({status})");
+                let next = {
+                    let Ok(mut snapshot) = state.snapshot.lock() else {
+                        return;
+                    };
+                    snapshot.runtime_ready = false;
+                    derive_state(snapshot.runtime_ready, snapshot.system_ready)
+                };
+                update_state(&app, &state, next, Some(detail));
+                // 有限重启 + 退避：一次性故障（如瞬时 OOM）可自愈，连续崩溃则停手。
+                let delay_ms = {
+                    let Ok(mut restart) = state.restart.lock() else {
+                        return;
+                    };
+                    if restart.count >= MAX_RUNTIME_RESTARTS {
+                        eprintln!("[host] runtime restart budget exhausted; staying down");
+                        return;
+                    }
+                    let backoff = RUNTIME_RESTART_BACKOFF_MS[restart.count as usize];
+                    restart.count += 1;
+                    backoff
+                };
+                eprintln!("[host] runtime exited, restarting in {delay_ms}ms");
+                let state_for_restart = state.clone();
+                let cfg_for_restart = cfg.clone();
+                let app_for_restart = app.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_millis(delay_ms));
+                    if state_for_restart.stopping.load(Ordering::SeqCst) {
+                        return;
+                    }
+                    launch_runtime(&app_for_restart, state_for_restart, cfg_for_restart);
+                });
                 return;
             }
             Ok(None) => {}
@@ -215,7 +265,6 @@ fn spawn_sidecar(
     };
     observe_stdout(app.clone(), state.clone(), "runtime", stdout);
     observe_stderr("runtime", stderr);
-    monitor_exit(app.clone(), state);
     Ok(SidecarProcess { child, stdin })
 }
 
@@ -312,57 +361,87 @@ fn resolve_system_runtime(root: &Path, resources: Option<&Path>) -> Option<PathB
         })
 }
 
-fn start_sidecars(app: &tauri::AppHandle, state: Arc<SupervisorState>) {
-    let root = repo_root();
-    // 安装包内资源目录：打包态存在并作为 sidecar 首要来源；开发态缺失走仓库回退。
-    let resources = app.path().resource_dir().ok();
-    let runtime_entry = resolve_runtime_entry(resources.as_deref(), &root);
+/// 解析出的 TS Runtime 启动参数（打包/开发态差异在此收敛）。崩溃重启复用它，
+/// 避免每次重算路径与 Node 解析。
+#[derive(Clone)]
+struct RuntimeLaunchConfig {
+    node: PathBuf,
+    args: Vec<PathBuf>,
+    cwd: PathBuf,
+    envs: Vec<(String, String)>,
+}
+
+fn resolve_runtime_launch_config(
+    resources: Option<&Path>,
+    root: &Path,
+) -> Option<RuntimeLaunchConfig> {
+    let runtime_entry = resolve_runtime_entry(resources, root);
     if !runtime_entry.exists() {
-        update_state(
-            app,
-            &state,
-            "error",
-            Some(format!(
-                "Runtime entry not found: {}",
-                runtime_entry.display()
-            )),
-        );
-        return;
+        return None;
     }
-
-    // Rust 二进制路径经环境变量交接给 TS；找不到也照常启动（TS 会按
-    // runtime.status 上报 degraded，工具不可用但不阻塞 Chat）。
-    let system_binary_env: Option<(String, String)> =
-        resolve_system_runtime(&root, resources.as_deref()).map(|path| {
-            (
-                "REFLEXION_SYSTEM_RUNTIME_BIN".to_string(),
-                path.display().to_string(),
-            )
-        });
-    let envs: Vec<(&str, &str)> = system_binary_env
-        .as_ref()
-        .map(|(key, value)| vec![(key.as_str(), value.as_str())])
-        .unwrap_or_default();
-
-    let node = resolve_node(resources.as_deref());
+    let node = resolve_node(resources);
     // node:sqlite 在 Node 22 仍标 experimental：产品进程抑制该已知警告，
     // 避免被误读为真正的运行时报错（stderr 仍是日志通道）。
-    let runtime_args = [
+    let args = vec![
         PathBuf::from("--disable-warning=ExperimentalWarning"),
         runtime_entry,
     ];
-    let cwd = sidecar_cwd(resources.as_deref(), &root);
-    match spawn_sidecar(app, state.clone(), &node, &runtime_args, &cwd, &envs) {
+    let cwd = sidecar_cwd(resources, root);
+    // Rust 二进制路径经环境变量交接给 TS；找不到则照常启动（TS 会按
+    // runtime.status 上报 degraded，工具不可用但不阻塞 Chat）。
+    let envs = resolve_system_runtime(root, resources)
+        .map(|path| {
+            vec![(
+                "REFLEXION_SYSTEM_RUNTIME_BIN".to_string(),
+                path.display().to_string(),
+            )]
+        })
+        .unwrap_or_default();
+    Some(RuntimeLaunchConfig { node, args, cwd, envs })
+}
+
+/// 拉起一次 TS Runtime，并为其挂单代 exit 监控（意外退出时清槽位 + 有限重启）。
+fn launch_runtime(
+    app: &tauri::AppHandle,
+    state: Arc<SupervisorState>,
+    cfg: Arc<RuntimeLaunchConfig>,
+) {
+    let envs: Vec<(&str, &str)> = cfg
+        .envs
+        .iter()
+        .map(|(key, value)| (key.as_str(), value.as_str()))
+        .collect();
+    match spawn_sidecar(app, state.clone(), &cfg.node, &cfg.args, &cfg.cwd, &envs) {
         Ok(process) => {
             #[cfg(unix)]
             TERMINATED_RUNTIME_PID.store(process.child.id() as usize, Ordering::SeqCst);
             if let Ok(mut guard) = state.runtime.lock() {
                 *guard = Some(process);
             }
+            monitor_exit(app.clone(), state.clone(), cfg.clone());
         }
-        Err(error) => update_state(app, &state, "error", Some(error)),
+        Err(error) => {
+            let next = {
+                let Ok(mut snapshot) = state.snapshot.lock() else {
+                    return;
+                };
+                snapshot.runtime_ready = false;
+                derive_state(snapshot.runtime_ready, snapshot.system_ready)
+            };
+            update_state(app, &state, next, Some(error));
+        }
     }
-    if system_binary_env.is_none() {
+}
+
+fn start_sidecars(app: &tauri::AppHandle, state: Arc<SupervisorState>) {
+    let root = repo_root();
+    // 安装包内资源目录：打包态存在并作为 sidecar 首要来源；开发态缺失走仓库回退。
+    let resources = app.path().resource_dir().ok();
+    let Some(cfg) = resolve_runtime_launch_config(resources.as_deref(), &root) else {
+        update_state(app, &state, "error", Some("Runtime entry not found".to_string()));
+        return;
+    };
+    if cfg.envs.is_empty() {
         update_state(
             app,
             &state,
@@ -370,6 +449,7 @@ fn start_sidecars(app: &tauri::AppHandle, state: Arc<SupervisorState>) {
             Some("Rust System Runtime binary not found; tools unavailable".to_string()),
         );
     }
+    launch_runtime(app, state, Arc::new(cfg));
 }
 
 #[tauri::command]
@@ -550,6 +630,7 @@ pub fn run() {
         runtime: Mutex::new(None),
         stopping: AtomicBool::new(false),
         request_seq: AtomicU64::new(0),
+        restart: Mutex::new(RuntimeRestartState { count: 0 }),
     });
     let state_for_setup = state.clone();
     let state_for_window = state.clone();
