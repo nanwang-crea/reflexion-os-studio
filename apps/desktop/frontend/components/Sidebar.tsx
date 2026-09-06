@@ -33,6 +33,9 @@ interface SidebarProps {
   standaloneSessions: Session[]
   activeProjectId: string | null
   activeSessionId: string | null
+  runningSessionIds?: string[]
+  completedSessionIds?: string[]
+  failedSessionIds?: string[]
   creatingProject: boolean
   /** 当前主视图；底部导航据此高亮。 */
   view: AppView
@@ -186,6 +189,9 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
         standaloneSessions={props.standaloneSessions}
         activeProjectId={props.activeProjectId}
         activeSessionId={props.activeSessionId}
+        runningSessionIds={props.runningSessionIds}
+        completedSessionIds={props.completedSessionIds}
+        failedSessionIds={props.failedSessionIds}
         creatingProject={props.creatingProject}
         onSelectProject={props.onSelectProject}
         onSelectSession={props.onSelectSession}
@@ -236,6 +242,9 @@ interface ChatsPanelProps {
   standaloneSessions: Session[]
   activeProjectId: string | null
   activeSessionId: string | null
+  runningSessionIds?: string[]
+  completedSessionIds?: string[]
+  failedSessionIds?: string[]
   creatingProject: boolean
   onSelectProject: (projectId: string) => void
   onSelectSession: (sessionId: string) => void
@@ -329,11 +338,14 @@ function ChatsPanel(props: ChatsPanelProps): React.JSX.Element {
                 </div>
                 {active && (
                   <ul className="nested-list">
-                    {props.projectSessions.map((session) => (
+                    {[...props.projectSessions].sort((a, b) => Number(props.runningSessionIds?.includes(b.id) ?? false) - Number(props.runningSessionIds?.includes(a.id) ?? false)).map((session) => (
                       <li key={session.id}>
                         <SessionRow
                           session={session}
                           active={session.id === props.activeSessionId}
+                          running={props.runningSessionIds?.includes(session.id)}
+                          completed={props.completedSessionIds?.includes(session.id)}
+                          failed={props.failedSessionIds?.includes(session.id)}
                           onSelect={() => props.onSelectSession(session.id)}
                           onRename={(title) =>
                             props.onRenameSession(session.id, title)
@@ -369,11 +381,14 @@ function ChatsPanel(props: ChatsPanelProps): React.JSX.Element {
           <div key={bucket} className="time-group">
             <div className="time-group-label">{bucket}</div>
             <ul className="section-list">
-              {sessions.map((session) => (
+              {[...sessions].sort((a, b) => Number(props.runningSessionIds?.includes(b.id) ?? false) - Number(props.runningSessionIds?.includes(a.id) ?? false)).map((session) => (
                 <li key={session.id}>
                   <SessionRow
                     session={session}
                     active={session.id === props.activeSessionId}
+                    running={props.runningSessionIds?.includes(session.id)}
+                    completed={props.completedSessionIds?.includes(session.id)}
+                    failed={props.failedSessionIds?.includes(session.id)}
                     onSelect={() => props.onSelectStandaloneSession(session.id)}
                     onRename={(title) =>
                       props.onRenameSession(session.id, title)

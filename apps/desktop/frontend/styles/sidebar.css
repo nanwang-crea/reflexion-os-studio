@@ -132,6 +132,34 @@
   color: var(--text);
 }
 
+.session-status {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.session-status.running { color: var(--info); }
+.session-status.completed { color: var(--ok); animation: session-complete 1.6s ease-out forwards; }
+.session-status.failed { color: var(--danger); }
+.session-spinner {
+  width: 11px;
+  height: 11px;
+  border: 2px solid color-mix(in srgb, var(--info) 28%, transparent);
+  border-top-color: var(--info);
+  border-radius: 50%;
+  animation: session-spin 0.8s linear infinite;
+}
+@keyframes session-spin { to { transform: rotate(360deg); } }
+@keyframes session-complete { 0% { opacity: 0; transform: scale(.7); } 20% { opacity: 1; transform: scale(1.1); } 100% { opacity: 0; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .session-spinner, .session-status.completed { animation: none; }
+}
+
 .session-actions {
   display: flex;
   align-items: center;

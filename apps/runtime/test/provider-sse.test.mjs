@@ -572,6 +572,88 @@ test('retries a successful response without a body', async () => {
   assert.match(retries[0].reason, /stream failure:/)
 })
 
+test('retries a request timeout with a fresh timeout per attempt', async () => {
+  let calls = 0
+  const server = await startServer((request, response) => {
+    calls += 1
+    if (calls === 1) {
+      setTimeout(() => response.end(), 80)
+      return
+    }
+    response.writeHead(200, { 'content-type': 'text/event-stream' })
+    response.end(sseBody())
+  })
+  const retries = []
+  const result = await streamChatCompletion(
+    {
+      baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
+      apiKey: 'sk-test',
+      model: 'mock-model',
+      messages: [{ role: 'user', content: 'hi' }],
+      signal: new AbortController().signal,
+      timeoutMs: 30,
+      maxRetries: 1,
+      onRetry: (retry) => retries.push(retry),
+    },
+    () => {},
+  )
+  server.close()
+  assert.equal(calls, 2)
+  assert.equal(result.content, 'Hello')
+  assert.equal(retries.length, 1)
+  assert.match(retries[0].reason, /^timeout:/)
+})
+
+test('user abort during timeout retry backoff stops further attempts', async () => {
+  const controller = new AbortController()
+  let calls = 0
+  const server = await startServer((request, response) => {
+    calls += 1
+    setTimeout(() => response.end(), 80)
+  })
+  const pending = streamChatCompletion(
+    {
+      baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
+      apiKey: 'sk-test',
+      model: 'mock-model',
+      messages: [{ role: 'user', content: 'hi' }],
+      signal: controller.signal,
+      timeoutMs: 20,
+      maxRetries: 2,
+    },
+    () => {},
+  )
+  setTimeout(() => controller.abort(), 80)
+  await assert.rejects(pending, (error) => error.name === 'AbortError')
+  server.close()
+  assert.equal(calls, 1)
+})
+
+test('maxRetries=0 does not retry a request timeout', async () => {
+  let calls = 0
+  const server = await startServer((request, response) => {
+    calls += 1
+    setTimeout(() => response.end(), 80)
+  })
+  await assert.rejects(
+    streamChatCompletion(
+      {
+        baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
+        apiKey: 'sk-test',
+        model: 'mock-model',
+        messages: [{ role: 'user', content: 'hi' }],
+        signal: new AbortController().signal,
+        timeoutMs: 20,
+        maxRetries: 0,
+      },
+      () => {},
+    ),
+    (error) => error instanceof ProviderError && error.code === 'timeout',
+  )
+  server.close()
+  assert.equal(calls, 1)
+})
+
 test('maxRetries=0 fails fast on 429', async () => {
   let calls = 0
   const server = await startServer((request, response) => {

@@ -6,6 +6,9 @@ import { PencilIcon, TrashIcon } from '../ui/icons'
 export function SessionRow(props: {
   session: Session
   active: boolean
+  running?: boolean
+  completed?: boolean
+  failed?: boolean
   onSelect: () => void
   onRename: (title: string) => Promise<void>
   onDelete: () => Promise<void>
@@ -73,6 +76,9 @@ export function SessionRow(props: {
           title={props.session.title}
           onClick={props.onSelect}
         >
+          <span className={`session-status${props.running ? ' running' : props.failed ? ' failed' : props.completed ? ' completed' : ''}`} aria-label={props.running ? '正在回复' : props.failed ? '回复失败' : props.completed ? '回复完成' : undefined}>
+            {props.running ? <span className="session-spinner" /> : props.failed ? '!' : props.completed ? '✓' : null}
+          </span>
           <span className="row-label">{props.session.title}</span>
         </button>
       )}

@@ -66,6 +66,9 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
   pendingApprovals: PendingApproval[]
   clearPendingApprovals: (runId: string) => void
   memoryNotice: string | null
+  runningSessionIds: string[]
+  completedSessionIds: string[]
+  failedSessionIds: string[]
 } {
   const [bootstrap, setBootstrap] = useState<BootstrapSnapshot | null>(null)
   const [streaming, setStreaming] = useState<Record<string, string>>({})
@@ -94,6 +97,11 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
   )
   // A2 Memory：非打断式写入提示（顶栏角标，自动消失），不用弹窗。
   const [memoryNotice, setMemoryNotice] = useState<string | null>(null)
+  const [runningSessionIds, setRunningSessionIds] = useState<string[]>([])
+  const [completedSessionIds, setCompletedSessionIds] = useState<string[]>([])
+  const [failedSessionIds, setFailedSessionIds] = useState<string[]>([])
+  const runSessionsRef = useRef<Record<string, string>>({})
+  const activeSessionRunsRef = useRef<Record<string, number>>({})
   const memoryNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const initialRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const showMemoryNotice = useCallback((text: string): void => {
@@ -309,6 +317,12 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
         }
         if (event.type === 'run.started') {
           setRunActivity(event.runId, { phase: 'thinking' })
+          runSessionsRef.current[event.runId] = event.run.sessionId
+          const sessionId = event.run.sessionId
+          activeSessionRunsRef.current[sessionId] =
+            (activeSessionRunsRef.current[sessionId] ?? 0) + 1
+          setRunningSessionIds(Object.keys(activeSessionRunsRef.current))
+          setFailedSessionIds((ids) => ids.filter((id) => id !== sessionId))
           return
         }
         if (event.type === 'run.retrying') {
@@ -348,6 +362,37 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           )
           return
         }
+        if (
+          event.type === 'run.completed' ||
+          event.type === 'run.failed' ||
+          event.type === 'run.cancelled'
+        ) {
+          const sessionId = runSessionsRef.current[event.runId]
+          if (sessionId !== undefined) {
+            const nextCount = Math.max(
+              0,
+              (activeSessionRunsRef.current[sessionId] ?? 1) - 1,
+            )
+            if (nextCount === 0) delete activeSessionRunsRef.current[sessionId]
+            else activeSessionRunsRef.current[sessionId] = nextCount
+            setRunningSessionIds(Object.keys(activeSessionRunsRef.current))
+            if (event.type === 'run.completed') {
+              setCompletedSessionIds((ids) =>
+                ids.includes(sessionId) ? ids : [...ids, sessionId],
+              )
+              window.setTimeout(() => {
+                setCompletedSessionIds((ids) => ids.filter((id) => id !== sessionId))
+              }, 1600)
+            }
+            if (event.type === 'run.failed') {
+              setFailedSessionIds((ids) =>
+                ids.includes(sessionId) ? ids : [...ids, sessionId],
+              )
+            }
+            delete runSessionsRef.current[event.runId]
+          }
+          return
+        }
         // 委派事件：更新当前会话对应的委派树（task 子 Run 创建/状态推进）。
         if (
           event.type === 'delegation.created' ||
@@ -378,10 +423,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
             }
             scheduleStreamingFlush()
           }
-          // Provider/网络等失败原因必须可见：直接进顶部通知条。
-          if (event.type === 'run.failed') {
-            fail(new Error(event.error.message))
-          }
+          // run.failed 已在上方完成状态更新；这里仅负责刷新会话数据。
           // Run 结束后标题可能已被自动命名，会话列表一并刷新。
           void deps.refreshStandaloneSessions()
           const projectId = deps.activeProjectRef.current
@@ -461,5 +503,8 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     pendingApprovals,
     clearPendingApprovals,
     memoryNotice,
+    runningSessionIds,
+    completedSessionIds,
+    failedSessionIds,
   }
 }

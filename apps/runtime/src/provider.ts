@@ -106,10 +106,11 @@ function mapFinishReason(
 }
 
 function isAbort(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    (error.name === 'AbortError' || error.name === 'TimeoutError')
-  )
+  return error instanceof Error && error.name === 'AbortError'
+}
+
+function isTimeout(error: unknown): boolean {
+  return error instanceof Error && error.name === 'TimeoutError'
 }
 
 class StreamCallbackError extends Error {
@@ -180,10 +181,11 @@ export async function streamChatCompletion(
   onDelta: (delta: string) => void,
   onReasoningDelta?: (delta: string) => void,
 ): Promise<StreamChatResult> {
-  const timeout = AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
-  const signal = AbortSignal.any([options.signal, timeout])
+  // options.signal 代表整个 Run 的外部取消信号，贯穿所有 attempt。
+  // 每个 attempt 的 timeout signal 在循环内部独立创建，避免上一轮超时污染后续重试。
 
-  // 请求建立阶段的重试:网络错误、429、5xx。流读取开始后不重试
+  // 请求建立阶段的重试:网络错误、超时、429、5xx。流读取开始后，
+  // 普通流错误继续重试；硬超时不重试，避免已经产生的增量无法回滚。
   // (已吐出的 delta 无法回滚),避免 UI 文本重复。
   const maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES
 
@@ -218,6 +220,13 @@ export async function streamChatCompletion(
   attempts: for (;;) {
     let response: Response
     for (;;) {
+      const attemptTimeout = AbortSignal.timeout(
+        options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      )
+      const attemptSignal = AbortSignal.any([
+        options.signal,
+        attemptTimeout,
+      ])
       try {
         // canonical 工具声明投影为 OpenAI function calling 方言，名称用清洗后的合法名。
         const tools =
@@ -254,28 +263,30 @@ export async function streamChatCompletion(
                 : {}),
               ...(tools !== undefined ? { tools } : {}),
             }),
-            signal,
+            signal: attemptSignal,
           },
         )
       } catch (error) {
+        // 外部取消优先级最高；只有 attempt 自己的超时才允许进入重试。
+        if (options.signal.aborted) throw error
         if (isAbort(error)) throw error
         if (attempt < maxRetries) {
           attempt += 1
           options.onRetry?.({
             attempt,
             maxRetries,
-            reason: `network: ${String(error)}`,
+            reason: `${isTimeout(error) ? 'timeout' : 'network'}: ${String(error)}`,
           })
           await sleep(
             RETRY_BACKOFF_MS[
               Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)
             ],
-            signal,
+            options.signal,
           )
           continue
         }
         throw new ProviderError(
-          'network',
+          isTimeout(error) ? 'timeout' : 'network',
           `provider request failed: ${String(error)}`,
         )
       }
@@ -291,7 +302,7 @@ export async function streamChatCompletion(
         })
         await sleep(
           RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)],
-          signal,
+          options.signal,
         )
         continue
       }
@@ -311,7 +322,7 @@ export async function streamChatCompletion(
         })
         await sleep(
           RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)],
-          signal,
+          options.signal,
         )
         continue
       }
@@ -427,7 +438,8 @@ export async function streamChatCompletion(
       }
     } catch (error) {
       if (error instanceof StreamCallbackError) throw error.cause
-      if (isAbort(error)) throw error
+      // attempt 的硬超时发生在流读取阶段时不重试，避免已发送增量重复。
+      if (isTimeout(error) || isAbort(error)) throw error
       if (attempt < maxRetries) {
         attempt += 1
         options.onRetry?.({
@@ -437,7 +449,7 @@ export async function streamChatCompletion(
         })
         await sleep(
           RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)],
-          signal,
+          options.signal,
         )
         continue attempts
       }

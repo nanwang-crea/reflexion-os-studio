@@ -141,6 +141,9 @@ export default function App() {
     resetStreaming,
     pendingApprovals,
     memoryNotice,
+    runningSessionIds,
+    completedSessionIds,
+    failedSessionIds,
   } = useAppBootstrap(bootstrapDeps)
 
   const {
@@ -299,6 +302,9 @@ export default function App() {
         standaloneSessions={standaloneSessions}
         activeProjectId={activeProjectId}
         activeSessionId={activeSessionId}
+        runningSessionIds={runningSessionIds}
+        completedSessionIds={completedSessionIds}
+        failedSessionIds={failedSessionIds}
         creatingProject={creatingProject}
         view={view}
         systemReady={bootstrap?.systemReady ?? false}
