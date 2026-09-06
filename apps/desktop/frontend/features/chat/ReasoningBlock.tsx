@@ -8,9 +8,10 @@ const SUMMARY_MAX_CHARS = 180
 
 function summarize(text: string): string {
   const compact = text.replace(/\s+/g, ' ').trim()
-  return compact.length > SUMMARY_MAX_CHARS
-    ? `${compact.slice(0, SUMMARY_MAX_CHARS)}…`
-    : compact
+  if (compact.length <= SUMMARY_MAX_CHARS) return compact
+  // 超长时展示最新内容（尾部）：思考过程中预览持续跟进实时输出，
+  // 而不是固定取开头一段（开头固定不变会让长思考看起来像卡住）。
+  return `…${compact.slice(-(SUMMARY_MAX_CHARS - 1))}`
 }
 
 export function ReasoningBlock(props: ReasoningBlockProps): React.JSX.Element {

@@ -44,6 +44,18 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
         ]
       : props.processItems
   }, [props.finalItem, props.processItems, props.streamingReasoning])
+  // 追加进时间线展示思考的 finalItem 副本：即便流式缓存里还残留完整正文
+  // （message.completed 占位、刷新落地前），时间线也只渲染该消息的思考、
+  // 不再渲染正文，避免与下方最终回复同时显示“两条一样的消息”。
+  const reasoningOnlyIds = useMemo(() => {
+    if (props.finalItem === null) return undefined
+    const reasoning =
+      props.streamingReasoning[props.finalItem.message.id] ??
+      props.finalItem.message.reasoning
+    return reasoning !== ''
+      ? new Set([props.finalItem.message.id])
+      : undefined
+  }, [props.finalItem, props.streamingReasoning])
   const hasProcess = processItems.length > 0
 
   useEffect(() => {
@@ -88,6 +100,7 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
                 streaming={props.streaming}
                 streamingReasoning={props.streamingReasoning}
                 runActive={props.runActive}
+                reasoningOnlyMessageIds={reasoningOnlyIds}
               />
             </div>
           )}
