@@ -48,6 +48,11 @@ interface SidebarProps {
   onFocusConsumed?: () => void
   /** 点击文件：交给右侧查看器打开标签。 */
   onOpenFile: (path: string, line?: number) => void
+  /** 点击 Git 变更：在右侧查看器打开双栏 Diff。 */
+  onOpenDiff?: (
+    path: string,
+    options: { staged?: boolean; oldPath?: string },
+  ) => void
   /** 底部导航切换；点击已激活页回到聊天。 */
   onSelectView: (view: OtherView) => void
   onSelectProject: (projectId: string) => void
@@ -133,6 +138,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
           focusAssetId={props.focusAssetId}
           onFocusConsumed={props.onFocusConsumed}
           onOpenFile={props.onOpenFile}
+          onOpenDiff={props.onOpenDiff}
         />
       </aside>
     )

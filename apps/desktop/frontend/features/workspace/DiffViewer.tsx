@@ -71,7 +71,13 @@ export function DiffViewer(props: DiffViewerProps): React.JSX.Element {
     <header className="content-head">
       <button className="ghost content-close" onClick={props.onClose} aria-label="关闭 Diff">×</button>
       <span className="content-name" title={title}>{title}</span>
-      <span className="diff-mode">{props.staged ? '暂存区' : '工作区'}</span>
+      <span className="diff-mode">
+        {props.source === 'chat'
+          ? '本次编辑'
+          : props.staged
+            ? '暂存区'
+            : '工作区'}
+      </span>
       <button className="ghost" onClick={load} title="刷新 Diff">刷新</button>
     </header>
     {state.loading ? <div className="content-hint">加载 Diff…</div> : state.error ? <div className="content-error">{state.error}</div> : rows.length === 0 ? <div className="content-hint">没有可显示的变更。</div> : <div className="diff-scroll">

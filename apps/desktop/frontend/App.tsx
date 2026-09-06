@@ -77,6 +77,7 @@ export default function App() {
     workspaceRequest,
     setWorkspaceRequest,
     openFile,
+    openDiff,
     closeTab,
     selectTab,
     reorderTabs,
@@ -313,6 +314,7 @@ export default function App() {
         focusAssetId={filesFocusAssetId}
         onFocusConsumed={() => setFilesFocusAssetId(null)}
         onOpenFile={openFile}
+        onOpenDiff={openDiff}
         onEnterProjectFiles={enterProjectFiles}
         onBackToChat={backToChat}
         onSelectProject={selectProject}
@@ -411,6 +413,7 @@ export default function App() {
                 pendingApprovals={pendingApprovals}
                 onResolveApproval={handleResolveApproval}
                 onResourceClick={handleResourceClick}
+                onOpenDiff={openDiff}
               />
             ) : (
               <LandingView

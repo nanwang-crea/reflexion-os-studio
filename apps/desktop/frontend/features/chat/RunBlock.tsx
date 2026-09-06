@@ -23,6 +23,16 @@ interface RunBlockProps {
   canRetry: boolean
   onRetry: () => void
   onResourceClick?: (link: ResourceLink) => void
+  /** 点击已变更文件：有编辑前后快照时展示本次编辑 Diff。 */
+  onOpenDiff?: (
+    path: string,
+    options: {
+      source: 'chat'
+      before?: string
+      after?: string
+      oldPath?: string
+    },
+  ) => void
   projectId: string
 }
 
@@ -129,6 +139,7 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
         finalItem={props.finalItem}
         projectId={props.projectId}
         onResourceClick={props.onResourceClick}
+        onOpenDiff={props.onOpenDiff}
       />
       <DelegationList items={props.delegations} runActive={props.runActive} />
     </div>

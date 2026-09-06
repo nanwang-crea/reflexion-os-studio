@@ -73,6 +73,16 @@ interface ChangedFilesProps {
   finalItem: ProcessItem | null
   projectId: string
   onResourceClick?: (link: ResourceLink) => void
+  /** 有快照时打开本次编辑 Diff，否则降级 onResourceClick。 */
+  onOpenDiff?: (
+    path: string,
+    options: {
+      source: 'chat'
+      before?: string
+      after?: string
+      oldPath?: string
+    },
+  ) => void
 }
 
 const ACTION_LABELS: Record<string, string> = {
@@ -110,7 +120,22 @@ export function ChangedFiles(
               type="button"
               className="changed-file"
               key={file.path}
-              onClick={() => props.onResourceClick?.(link)}
+              onClick={() => {
+                // 有编辑前后快照时展示「本次编辑」双栏 Diff；否则降级打开文件。
+                if (
+                  props.onOpenDiff !== undefined &&
+                  (file.before !== undefined || file.after !== undefined)
+                ) {
+                  props.onOpenDiff(file.path, {
+                    source: 'chat',
+                    before: file.before,
+                    after: file.after,
+                    oldPath: file.oldPath,
+                  })
+                  return
+                }
+                props.onResourceClick?.(link)
+              }}
             >
               <span className={`changed-file-action ${file.action}`}>
                 {ACTION_LABELS[file.action] ?? '变更'}

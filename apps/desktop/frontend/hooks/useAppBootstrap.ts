@@ -381,7 +381,9 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
                 ids.includes(sessionId) ? ids : [...ids, sessionId],
               )
               window.setTimeout(() => {
-                setCompletedSessionIds((ids) => ids.filter((id) => id !== sessionId))
+                setCompletedSessionIds((ids) =>
+                  ids.filter((id) => id !== sessionId),
+                )
               }, 1600)
             }
             if (event.type === 'run.failed') {
@@ -391,7 +393,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
             }
             delete runSessionsRef.current[event.runId]
           }
-          return
+          // 继续进入统一刷新路径，确保失败/取消时持久化的消息状态及时落到前端。
         }
         // 委派事件：更新当前会话对应的委派树（task 子 Run 创建/状态推进）。
         if (

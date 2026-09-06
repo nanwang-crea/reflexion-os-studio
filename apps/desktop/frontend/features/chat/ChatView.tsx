@@ -47,6 +47,16 @@ interface ChatViewProps {
   ) => void
   /** 资源引用（工作区文件/资产/外链）点击后按类型分发。 */
   onResourceClick?: (link: ResourceLink) => void
+  /** 点击已变更文件：有编辑前后快照时展示本次编辑 Diff。 */
+  onOpenDiff?: (
+    path: string,
+    options: {
+      source: 'chat'
+      before?: string
+      after?: string
+      oldPath?: string
+    },
+  ) => void
 }
 
 /** 距底部小于该值视为“贴底”，流式期间继续跟随滚动。 */
@@ -284,6 +294,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
                   }
                   onRetry={handleRetry}
                   onResourceClick={props.onResourceClick}
+                  onOpenDiff={props.onOpenDiff}
                   projectId={props.sessionData?.session?.projectId ?? ''}
                 />
               )

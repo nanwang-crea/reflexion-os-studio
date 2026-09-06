@@ -18,7 +18,16 @@ export interface WorkspacePanelState {
   setWorkspaceRequest: Dispatch<SetStateAction<WorkspaceOpenRequest | null>>
   /** 在右侧查看器打开/激活一个文件标签；重复点击只切标签不重复创建。 */
   openFile: (path: string, line?: number) => void
-  openDiff: (path: string, options?: { staged?: boolean; oldPath?: string; source?: 'git' | 'chat' }) => void
+  openDiff: (
+    path: string,
+    options?: {
+      staged?: boolean
+      oldPath?: string
+      source?: 'git' | 'chat'
+      before?: string
+      after?: string
+    },
+  ) => void
   closeTab: (path: string) => void
   selectTab: (path: string) => void
   /** 按拖拽结果重新排序标签：paths 为新的打开顺序。 */
@@ -77,7 +86,13 @@ export function useWorkspacePanel(): WorkspacePanelState {
   const openDiff = useCallback(
     (
       path: string,
-      options: { staged?: boolean; oldPath?: string; source?: 'git' | 'chat' } = {},
+      options: {
+        staged?: boolean
+        oldPath?: string
+        source?: 'git' | 'chat'
+        before?: string
+        after?: string
+      } = {},
     ): void => {
       const nonce = Date.now()
       setOpenTabs((tabs) => {
