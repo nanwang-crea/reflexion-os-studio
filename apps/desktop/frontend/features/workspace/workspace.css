@@ -604,12 +604,16 @@
 }
 
 .file-tabs-scroll {
+  position: relative;
   display: flex;
   min-width: 0;
   overflow-x: auto;
   /* 隐藏原生滚动条，改用下方自定义可见滑块 */
   scrollbar-width: none;
   overscroll-behavior-x: contain;
+  /* 标签文字不可选中，避免拖拽排序时被文本选择干扰 */
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .file-tabs-scroll::-webkit-scrollbar {
@@ -618,6 +622,18 @@
 
 .file-tabs-scroll:focus-visible {
   outline: 1px solid var(--border);
+}
+
+/* 拖拽排序的插入指示线：随指针移动实时预览落点 */
+.file-tabs-drop-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  width: 2px;
+  background: var(--info);
+  pointer-events: none;
 }
 
 /* 自定义横向滚动条：始终在标签行下方占位，有溢出才显示滑块 */

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Project } from '@reflexion-os-studio/runtime-client'
 import { FolderIcon } from '../../ui/icons'
 import { ContentView } from './ContentView'
@@ -28,9 +28,11 @@ interface FileViewerPanelProps {
 
 /**
  * 对话右侧的文件查看器：多文件顶部标签 + 单个激活文件的只读预览。
- * 标签排序用 pointer events 自绘拖动（拖过目标标签一半即实时换位，松手落定），
- * 不依赖原生 HTML5 DnD——后者在 Tauri 各平台 WebView 行为不一致。
- * 文件内容只经 workspace.read_file 获取（Rust 侧 workspace 边界校验）。
+ * 标签排序用 pointer events 自绘拖动（不依赖原生 HTML5 DnD——后者在
+ * Tauri 各平台 WebView 行为不一致）：按下只登记候选、不捕获指针，
+ * 指针移动超过阈值才进入拖动态；被拖标签原位半透明 + 虚线框，插入
+ * 指示线实时预览落点，松手一次性提交新顺序；普通点击仍正常派发给
+ * 选择/关闭按钮。文件内容只经 workspace.read_file 获取。
  */
 export function FileViewerPanel(
   props: FileViewerPanelProps,
@@ -45,11 +47,31 @@ export function FileViewerPanel(
   const [thumbRatio, setThumbRatio] = useState(1)
   const [trackWidth, setTrackWidth] = useState(0)
 
-  // 拖拽排序状态：dragPath 为被拖标签；previewTabs 为拖动中的实时顺序。
-  const dragPathRef = useRef<string | null>(null)
-  const dragPointerIdRef = useRef<number | null>(null)
+  // 拖拽排序状态：pendingRef 为按下后的候选拖拽（指针未越过阈值前不进
+  // 入拖动态，保证普通点击选择/关闭不受影响）；dragStateRef 为已进入拖
+  // 动态的标签与最新插入点；insertLineX 驱动插入指示线渲染。
+  const pendingRef = useRef<{
+    path: string
+    pointerId: number
+    startX: number
+    startY: number
+    el: HTMLElement
+  } | null>(null)
+  const dragStateRef = useRef<{
+    path: string
+    pointerId: number
+    insertIndex: number
+  } | null>(null)
+  // 窗口级监听在每次 pointerdown 时登记，供松手/取消后精确移除。
+  const windowHandlersRef = useRef<{
+    move: (event: PointerEvent) => void
+    up: (event: PointerEvent) => void
+    cancel: () => void
+  } | null>(null)
+  const openTabsRef = useRef(props.openTabs)
+  openTabsRef.current = props.openTabs
   const [dragPath, setDragPath] = useState<string | null>(null)
-  const [previewTabs, setPreviewTabs] = useState<OpenFileTab[] | null>(null)
+  const [insertLineX, setInsertLineX] = useState<number | null>(null)
 
   // 同步标签容器的横向滚动量，驱动自定义滚动条滑块；窗口/标签变化时重算。
   useEffect(() => {
@@ -133,82 +155,158 @@ export function FileViewerPanel(
     el.scrollLeft += event.deltaY
   }
 
-  // 标签拖拽排序（pointer events 自绘）：
-  // pointerdown 记录被拖标签并捕获指针；pointermove 实时按目标标签中心
-  // 计算插入位置；pointerup/cancel 提交新顺序。
+  // 指针 x 对应的插入点：候选标签（排除被拖标签）中心左侧即插入其前；
+  // lineX 为插入指示线在标签行内容坐标系中的位置（渲染 + 边缘自动滚动共用）。
+  const computeDrop = (
+    x: number,
+    path: string,
+  ): { index: number; lineX: number } => {
+    const el = tabsScrollRef.current
+    if (el === null) return { index: 0, lineX: 0 }
+    const rest = openTabsRef.current.filter((tab) => tab.path !== path)
+    const nodes = rest.map((tab) =>
+      el.querySelector<HTMLElement>(`[data-tab-path="${cssEscape(tab.path)}"]`),
+    )
+    let insertAt = rest.length
+    for (let i = 0; i < nodes.length; i += 1) {
+      const node = nodes[i]
+      if (node === null) continue
+      const rect = node.getBoundingClientRect()
+      if (x < rect.left + rect.width / 2) {
+        insertAt = i
+        break
+      }
+    }
+    let lineX = 0
+    if (insertAt === 0) {
+      lineX = nodes[0]?.offsetLeft ?? 0
+    } else if (insertAt >= rest.length) {
+      const last = nodes[nodes.length - 1]
+      lineX = last !== null ? last.offsetLeft + last.offsetWidth : 0
+    } else {
+      const prev = nodes[insertAt - 1]
+      const next = nodes[insertAt]
+      lineX =
+        prev !== null && next !== null
+          ? (prev.offsetLeft + prev.offsetWidth + next.offsetLeft) / 2
+          : 0
+    }
+    return { index: insertAt, lineX }
+  }
+
+  // 按最终插入点落定新顺序；与当前顺序一致时不触发回调。
+  const commitDrag = (path: string, insertIndex: number): void => {
+    const tabs = openTabsRef.current
+    const moved = tabs.find((tab) => tab.path === path)
+    if (moved === undefined) return
+    const next = tabs.filter((tab) => tab.path !== path)
+    next.splice(insertIndex, 0, moved)
+    const unchanged =
+      next.length === tabs.length &&
+      next.every((tab, index) => tab.path === tabs[index].path)
+    if (!unchanged) props.onReorderTabs(next.map((tab) => tab.path))
+  }
+
+  const clearDragHandlers = useCallback((): void => {
+    const handlers = windowHandlersRef.current
+    if (handlers !== null) {
+      window.removeEventListener('pointermove', handlers.move)
+      window.removeEventListener('pointerup', handlers.up)
+      window.removeEventListener('pointercancel', handlers.cancel)
+      windowHandlersRef.current = null
+    }
+    pendingRef.current = null
+    dragStateRef.current = null
+    setDragPath(null)
+    setInsertLineX(null)
+  }, [])
+
+  // 面板卸载时兜底清理窗口级监听，避免拖拽中途卸载导致泄漏。
+  useEffect(() => clearDragHandlers, [clearDragHandlers])
+
+  // 标签拖拽排序（pointer events 自绘）：按下只登记候选，不捕获指针、
+  // 不 preventDefault——普通点击仍能正常派发 click 到选择/关闭按钮；
+  // 窗口级 pointermove 中越过阈值才进入拖动态并捕获指针，拖动中仅更新
+  // 插入指示线（标签保持原位），pointerup 提交新顺序，pointercancel 复原。
   const handleTabPointerDown = (
     event: React.PointerEvent<HTMLDivElement>,
     path: string,
   ): void => {
+    // 上次按下若未正常结束（如指针在窗口外松开）会残留候选状态，
+    // 先自愈清理再登记本次按下，避免标签永久无法拖拽。
+    if (windowHandlersRef.current !== null) clearDragHandlers()
     if (event.button !== 0) return
-    event.preventDefault()
-    dragPathRef.current = path
-    dragPointerIdRef.current = event.pointerId
-    setDragPath(path)
-    setPreviewTabs(props.openTabs)
-    event.currentTarget.setPointerCapture(event.pointerId)
-  }
+    const el = event.currentTarget
 
-  const handleTabPointerMove = (
-    event: React.PointerEvent<HTMLDivElement>,
-  ): void => {
-    const path = dragPathRef.current
-    if (path === null) return
-    const el = tabsScrollRef.current
-    if (el === null) return
-    const x = event.clientX
-    setPreviewTabs((current) => {
-      const base = current ?? props.openTabs
-      const moved = base.find((tab) => tab.path === path)
-      if (moved === undefined) return base
-      const rest = base.filter((tab) => tab.path !== path)
-      // 按每个候选标签的横向中心定位插入点：指针越过中心即插入到其后。
-      let insertAt = rest.length
-      for (let i = 0; i < rest.length; i += 1) {
-        const node = el.querySelector<HTMLElement>(
-          `[data-tab-path="${cssEscape(rest[i].path)}"]`,
-        )
-        if (node === null) continue
-        const rect = node.getBoundingClientRect()
-        if (x < rect.left + rect.width / 2) {
-          insertAt = i
-          break
+    const move = (moveEvent: PointerEvent): void => {
+      const pending = pendingRef.current
+      if (pending === null || moveEvent.pointerId !== pending.pointerId) return
+      // 主键已松开却仍收到 move（窗口外松开等）时放弃本次拖拽。
+      if ((moveEvent.buttons & 1) === 0) {
+        clearDragHandlers()
+        return
+      }
+      if (dragStateRef.current === null) {
+        // 移动超过阈值才算拖拽，避免点击时的轻微抖动误触发。
+        const dx = moveEvent.clientX - pending.startX
+        const dy = moveEvent.clientY - pending.startY
+        if (Math.hypot(dx, dy) < 5) return
+        moveEvent.preventDefault()
+        dragStateRef.current = {
+          path: pending.path,
+          pointerId: pending.pointerId,
+          insertIndex: 0,
+        }
+        setDragPath(pending.path)
+        pending.el.setPointerCapture(pending.pointerId)
+      }
+      const drop = computeDrop(moveEvent.clientX, pending.path)
+      if (dragStateRef.current !== null) {
+        dragStateRef.current.insertIndex = drop.index
+      }
+      setInsertLineX(drop.lineX)
+      // 拖到标签行边缘时自动滚动，保证指示线始终可见。
+      const scroller = tabsScrollRef.current
+      if (scroller !== null && scroller.scrollWidth > scroller.clientWidth) {
+        if (drop.lineX < scroller.scrollLeft + 4) {
+          scroller.scrollLeft = Math.max(0, drop.lineX - 4)
+        } else if (
+          drop.lineX >
+          scroller.scrollLeft + scroller.clientWidth - 4
+        ) {
+          scroller.scrollLeft = drop.lineX - scroller.clientWidth + 4
         }
       }
-      const next = rest.slice()
-      next.splice(insertAt, 0, moved)
-      return next
-    })
-  }
-
-  const handleTabPointerUp = (): void => {
-    const path = dragPathRef.current
-    if (path === null) return
-    const id = dragPointerIdRef.current
-    dragPathRef.current = null
-    dragPointerIdRef.current = null
-    setPreviewTabs((current) => {
-      const ordered = current ?? props.openTabs
-      if (current !== null) props.onReorderTabs(ordered.map((tab) => tab.path))
-      return null
-    })
-    setDragPath(null)
-    if (id !== null) {
-      const el = tabsScrollRef.current
-      el?.releasePointerCapture(id)
     }
-  }
 
-  const handleTabPointerCancel = (): void => {
-    const id = dragPointerIdRef.current
-    dragPathRef.current = null
-    dragPointerIdRef.current = null
-    setPreviewTabs(null)
-    setDragPath(null)
-    if (id !== null) {
-      const el = tabsScrollRef.current
-      el?.releasePointerCapture(id)
+    const up = (upEvent: PointerEvent): void => {
+      const pending = pendingRef.current
+      const engaged = dragStateRef.current
+      if (
+        engaged !== null &&
+        pending !== null &&
+        upEvent.pointerId === engaged.pointerId
+      ) {
+        commitDrag(engaged.path, engaged.insertIndex)
+      }
+      clearDragHandlers()
     }
+
+    const cancel = (): void => {
+      clearDragHandlers()
+    }
+
+    pendingRef.current = {
+      path,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      el,
+    }
+    windowHandlersRef.current = { move, up, cancel }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', cancel)
   }
 
   if (project === null) {
@@ -222,8 +320,6 @@ export function FileViewerPanel(
     )
   }
 
-  const renderTabs = previewTabs ?? props.openTabs
-
   return (
     <div className="workspace-panel" style={{ width: props.width }}>
       {props.openTabs.length > 0 ? (
@@ -234,7 +330,14 @@ export function FileViewerPanel(
               ref={tabsScrollRef}
               onWheel={handleWheel}
             >
-              {renderTabs.map((tab) => {
+              {dragPath !== null && insertLineX !== null && (
+                <div
+                  className="file-tabs-drop-line"
+                  aria-hidden="true"
+                  style={{ transform: `translateX(${insertLineX}px)` }}
+                />
+              )}
+              {props.openTabs.map((tab) => {
                 const active = tab.path === props.activePath
                 const dragging = tab.path === dragPath
                 const fileName = tab.path.split('/').pop() ?? tab.path
@@ -250,9 +353,6 @@ export function FileViewerPanel(
                     onPointerDown={(event) =>
                       handleTabPointerDown(event, tab.path)
                     }
-                    onPointerMove={handleTabPointerMove}
-                    onPointerUp={handleTabPointerUp}
-                    onPointerCancel={handleTabPointerCancel}
                   >
                     <button
                       type="button"
