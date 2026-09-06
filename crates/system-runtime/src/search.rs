@@ -225,4 +225,25 @@ mod tests {
         assert!(grep_search(&root, "  ", None, false, DEFAULT_GREP_LIMIT).is_err());
         fs::remove_dir_all(&root).ok();
     }
+
+    #[test]
+    fn glob_and_grep_skip_dependency_directories() {
+        let root = temp_workspace("skip-deps");
+        fs::create_dir_all(root.join("node_modules/pkg")).unwrap();
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("node_modules/pkg/dep.ts"), "needle").unwrap();
+        fs::write(root.join("src/main.ts"), "needle").unwrap();
+
+        let glob = glob_search(&root, "**/*.ts", DEFAULT_GLOB_LIMIT).unwrap();
+        assert_eq!(glob.matches.len(), 1);
+        assert_eq!(glob.matches[0].path, "src/main.ts");
+        assert!(!glob.truncated);
+
+        let grep = grep_search(&root, "needle", None, false, DEFAULT_GREP_LIMIT).unwrap();
+        assert_eq!(grep.matches.len(), 1);
+        assert_eq!(grep.matches[0].path, "src/main.ts");
+        assert!(!grep.truncated);
+
+        fs::remove_dir_all(&root).ok();
+    }
 }

@@ -44,6 +44,10 @@ export function useSessionNavigation(
   deps: SessionNavigationDeps,
 ): SessionNavigation {
   const openSession = (sessionId: string): void => {
+    // 必须切回聊天视图：从技能/自动化/记忆/设置页点会话时，
+    // 若不重置 view，主区仍渲染上一个页面，表现为"点了没反应"。
+    // 新建对话入口能"救回来"，正是因为 newStandaloneChat 里执行了 setView('chat')。
+    deps.setView('chat')
     deps.setActiveSessionId(sessionId)
     deps.resetStreaming()
     void deps.refreshSessionData(sessionId)

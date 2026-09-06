@@ -26,11 +26,20 @@ pub struct Walked {
 
 /// 从 `start_dir`（对应相对名 `start_relative`，根目录传 ""）递归收集文件。
 pub fn walk_files(start_dir: &Path, start_relative: &str) -> Walked {
+    walk_files_with_limits(start_dir, start_relative, MAX_WALK_FILES, MAX_WALK_DEPTH)
+}
+
+fn walk_files_with_limits(
+    start_dir: &Path,
+    start_relative: &str,
+    max_files: usize,
+    max_depth: usize,
+) -> Walked {
     let mut state = WalkState {
         files: Vec::new(),
         truncated: false,
     };
-    walk_dir(start_dir, start_relative, 0, &mut state);
+    walk_dir(start_dir, start_relative, 0, max_files, max_depth, &mut state);
     state.files.sort_by(|a, b| a.path.cmp(&b.path));
     Walked {
         files: state.files,
@@ -43,8 +52,15 @@ struct WalkState {
     truncated: bool,
 }
 
-fn walk_dir(dir: &Path, relative: &str, depth: usize, state: &mut WalkState) {
-    if depth > MAX_WALK_DEPTH || state.files.len() >= MAX_WALK_FILES {
+fn walk_dir(
+    dir: &Path,
+    relative: &str,
+    depth: usize,
+    max_files: usize,
+    max_depth: usize,
+    state: &mut WalkState,
+) {
+    if depth > max_depth || state.files.len() >= max_files {
         state.truncated = true;
         return;
     }
@@ -52,7 +68,7 @@ fn walk_dir(dir: &Path, relative: &str, depth: usize, state: &mut WalkState) {
         return;
     };
     for entry in entries.flatten() {
-        if state.files.len() >= MAX_WALK_FILES {
+        if state.files.len() >= max_files {
             state.truncated = true;
             return;
         }
@@ -69,7 +85,14 @@ fn walk_dir(dir: &Path, relative: &str, depth: usize, state: &mut WalkState) {
             format!("{relative}/{}", entry.file_name().to_string_lossy())
         };
         if file_type.is_dir() {
-            walk_dir(&entry.path(), &child_relative, depth + 1, state);
+            walk_dir(
+                &entry.path(),
+                &child_relative,
+                depth + 1,
+                max_files,
+                max_depth,
+                state,
+            );
         } else if file_type.is_file() {
             let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
             state.files.push(FileEntry {
@@ -122,5 +145,39 @@ mod tests {
         }
         fs::remove_dir_all(&root).ok();
         fs::remove_dir_all(&outside).ok();
+    }
+
+    #[test]
+    fn ignores_standard_junk_directories() {
+        let root = temp_workspace("ignored-dirs");
+        fs::create_dir_all(root.join("node_modules/pkg")).unwrap();
+        fs::create_dir_all(root.join(".git")).unwrap();
+        fs::create_dir_all(root.join("dist")).unwrap();
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("node_modules/pkg/dep.ts"), "d").unwrap();
+        fs::write(root.join(".git/config"), "c").unwrap();
+        fs::write(root.join("dist/bundle.js"), "b").unwrap();
+        fs::write(root.join("src/real.ts"), "r").unwrap();
+        let walked = walk_files(&root, "");
+        assert_eq!(walked.files.len(), 1);
+        assert_eq!(walked.files[0].path, "src/real.ts");
+        assert!(!walked.truncated);
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn junk_directories_do_not_consume_the_walk_budget() {
+        let root = temp_workspace("junk-budget");
+        fs::create_dir_all(root.join("node_modules/pkg")).unwrap();
+        fs::create_dir_all(root.join("src")).unwrap();
+        for index in 0..20 {
+            fs::write(root.join(format!("node_modules/pkg/dep-{index}.ts")), "d").unwrap();
+        }
+        fs::write(root.join("src/real.ts"), "r").unwrap();
+        let walked = walk_files_with_limits(&root, "", 10, 32);
+        assert_eq!(walked.files.len(), 1);
+        assert_eq!(walked.files[0].path, "src/real.ts");
+        assert!(!walked.truncated);
+        fs::remove_dir_all(&root).ok();
     }
 }
