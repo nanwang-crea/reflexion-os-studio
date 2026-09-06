@@ -6,10 +6,33 @@ interface DiffViewerProps {
   path: string
   staged?: boolean
   oldPath?: string
+  source?: 'git' | 'chat'
+  before?: string
+  after?: string
   onClose: () => void
 }
 
 type DiffRow = { kind: 'context' | 'add' | 'del'; oldNo?: number; newNo?: number; text: string }
+
+function alignContents(before: string, after: string): DiffRow[] {
+  const left = before.split('\n')
+  const right = after.split('\n')
+  const rows: DiffRow[] = []
+  let i = 0
+  let j = 0
+  let oldNo = 1
+  let newNo = 1
+  while (i < left.length || j < right.length) {
+    if (i < left.length && j < right.length && left[i] === right[j]) {
+      rows.push({ kind: 'context', oldNo: oldNo++, newNo: newNo++, text: left[i++] })
+    } else if (i < left.length && (j >= right.length || left[i + 1] === right[j])) {
+      rows.push({ kind: 'del', oldNo: oldNo++, text: left[i++] })
+    } else if (j < right.length) {
+      rows.push({ kind: 'add', newNo: newNo++, text: right[j++] })
+    }
+  }
+  return rows
+}
 
 function parseDiff(text: string): DiffRow[] {
   const rows: DiffRow[] = []
@@ -30,12 +53,19 @@ export function DiffViewer(props: DiffViewerProps): React.JSX.Element {
   const [state, setState] = useState<{ diff: string; truncated: boolean; error: string | null; loading: boolean }>({ diff: '', truncated: false, error: null, loading: true })
   const load = (): void => {
     setState((current) => ({ ...current, loading: true, error: null }))
+    if (props.before !== undefined || props.after !== undefined) {
+      setState({ diff: '', truncated: false, error: null, loading: false })
+      return
+    }
     void gitDiff(props.projectId, props.path, props.staged).then((result) => {
       setState({ diff: result.diff, truncated: result.truncated, error: result.repo ? null : '当前目录不是 Git 仓库', loading: false })
     }).catch((error: unknown) => setState({ diff: '', truncated: false, error: error instanceof Error ? error.message : String(error), loading: false }))
   }
-  useEffect(() => { load() }, [props.projectId, props.path, props.staged])
-  const rows = useMemo(() => parseDiff(state.diff), [state.diff])
+  useEffect(() => { load() }, [props.projectId, props.path, props.staged, props.before, props.after])
+  const rows = useMemo(() => {
+    if (props.before !== undefined || props.after !== undefined) return alignContents(props.before ?? '', props.after ?? '')
+    return parseDiff(state.diff)
+  }, [state.diff, props.before, props.after])
   const title = props.oldPath ? `${props.oldPath} → ${props.path}` : props.path
   return <div className="diff-view">
     <header className="content-head">

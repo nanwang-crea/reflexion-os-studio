@@ -7,6 +7,8 @@ export interface OpenFileTab {
   staged?: boolean
   oldPath?: string
   source?: 'git' | 'chat'
+  before?: string
+  after?: string
 }
 
 export type WorkspaceOpenRequest =

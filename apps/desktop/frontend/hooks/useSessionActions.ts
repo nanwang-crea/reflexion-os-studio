@@ -196,11 +196,9 @@ export function useSessionActions(deps: SessionActionsDeps): {
         run.status === 'awaiting_approval',
     )
     if (!activeRun) return
-    try {
-      await chatApi.cancelRun(activeRun.id)
-    } catch (error) {
+    void chatApi.cancelRun(activeRun.id).catch((error) => {
       fail(error)
-    }
+    })
   }
 
   const retryRun = async (): Promise<void> => {

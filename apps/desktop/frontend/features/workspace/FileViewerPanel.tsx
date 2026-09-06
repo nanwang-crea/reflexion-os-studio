@@ -416,6 +416,9 @@ export function FileViewerPanel(
               path={activeTab.path}
               staged={activeTab.staged}
               oldPath={activeTab.oldPath}
+              source={activeTab.source}
+              before={activeTab.before}
+              after={activeTab.after}
               onClose={() => props.onCloseTab(activeTab.path)}
             />
           ) : (

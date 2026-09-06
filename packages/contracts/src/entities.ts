@@ -456,6 +456,9 @@ export const ChangedFileSchema = z.object({
   path: z.string().min(1),
   action: ChangedFileActionSchema,
   oldPath: z.string().min(1).optional(),
+  /** Tool-local snapshot; absent when the runtime cannot safely capture text. */
+  before: z.string().optional(),
+  after: z.string().optional(),
 })
 export type ChangedFile = z.infer<typeof ChangedFileSchema>
 
