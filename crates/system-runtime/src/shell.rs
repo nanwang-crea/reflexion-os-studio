@@ -72,9 +72,9 @@ pub fn execute(
         }
     };
 
-    let stdout = stdout_handle.join().unwrap_or_default();
-    let stderr = stderr_handle.join().unwrap_or_default();
-    let truncated = stdout.len() >= MAX_OUTPUT_BYTES || stderr.len() >= MAX_OUTPUT_BYTES;
+    let (stdout, stdout_truncated) = stdout_handle.join().unwrap_or_default();
+    let (stderr, stderr_truncated) = stderr_handle.join().unwrap_or_default();
+    let truncated = stdout_truncated || stderr_truncated;
     Ok(ShellOutcome {
         exit_code: status.and_then(|status| status.code()),
         stdout,
@@ -99,7 +99,9 @@ fn build_command(command: &str) -> Command {
     }
 }
 
-fn drain_pipe<T: Read + Send + 'static>(pipe: &mut Option<T>) -> std::thread::JoinHandle<String> {
+fn drain_pipe<T: Read + Send + 'static>(
+    pipe: &mut Option<T>,
+) -> std::thread::JoinHandle<(String, bool)> {
     let mut pipe = pipe.take();
     std::thread::spawn(move || {
         let mut collected: Vec<u8> = Vec::new();
@@ -125,8 +127,7 @@ fn drain_pipe<T: Read + Send + 'static>(pipe: &mut Option<T>) -> std::thread::Jo
                 }
             }
         }
-        let _ = truncated;
-        String::from_utf8_lossy(&collected).into_owned()
+        (String::from_utf8_lossy(&collected).into_owned(), truncated)
     })
 }
 
@@ -173,6 +174,29 @@ mod tests {
         assert_eq!(outcome.stdout, "hello");
         assert_eq!(outcome.exit_code, Some(3));
         assert!(!outcome.timed_out);
+        std::fs::remove_dir_all(&cwd).ok();
+    }
+
+    #[test]
+    fn marks_output_truncated_only_when_bytes_are_dropped() {
+        let cwd = temp_dir("output-limit");
+        let command = format!("python3 -c 'print(\"x\" * {})'", MAX_OUTPUT_BYTES + 1);
+        let outcome = execute(&command, &cwd, 10_000, &|_| {}).unwrap();
+        assert!(outcome.truncated);
+        assert_eq!(outcome.stdout.len(), MAX_OUTPUT_BYTES);
+        std::fs::remove_dir_all(&cwd).ok();
+    }
+
+    #[test]
+    fn does_not_mark_truncated_when_output_is_exactly_at_limit() {
+        let cwd = temp_dir("output-exact-limit");
+        let command = format!(
+            "python3 -c 'import sys; sys.stdout.write(\"x\" * {})'",
+            MAX_OUTPUT_BYTES
+        );
+        let outcome = execute(&command, &cwd, 10_000, &|_| {}).unwrap();
+        assert_eq!(outcome.stdout.len(), MAX_OUTPUT_BYTES);
+        assert!(!outcome.truncated);
         std::fs::remove_dir_all(&cwd).ok();
     }
 

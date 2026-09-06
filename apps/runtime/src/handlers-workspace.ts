@@ -41,11 +41,30 @@ export const workspaceCommandHandlers: Record<string, CommandHandler> = {
     const path = assertRelativePath(
       typeof p.path === 'string' && p.path.trim() !== '' ? p.path.trim() : '.',
     )
-    const result = (await requestSystem(system, 'file.list', {
+    const params: Record<string, unknown> = {
       workspaceRoot: project.folderPath,
       path,
-    })) as { entries?: unknown[] }
-    return { entries: result.entries ?? [] }
+    }
+    if (typeof p.offset === 'number') {
+      params.offset = Math.max(0, Math.trunc(p.offset))
+    }
+    if (typeof p.limit === 'number') {
+      params.limit = Math.max(1, Math.trunc(p.limit))
+    }
+    const result = (await requestSystem(system, 'file.list', params)) as {
+      entries?: unknown[]
+      truncated?: boolean
+      returnedCount?: number
+      nextOffset?: number
+    }
+    return {
+      entries: result.entries ?? [],
+      truncated: result.truncated ?? false,
+      returnedCount: result.returnedCount ?? 0,
+      ...(result.nextOffset !== undefined
+        ? { nextOffset: result.nextOffset }
+        : {}),
+    }
   },
   'workspace.search_files': async (p, { store, system }) => {
     const project = requireWorkspaceProject(

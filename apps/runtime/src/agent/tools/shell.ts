@@ -9,7 +9,7 @@ export function createShellExecuteTool(
   return {
     name: 'shell.execute',
     description:
-      '在工作区内执行 shell 命令（POSIX sh / Windows cmd），返回退出码与输出。cwd 需在工作区内。需要用户审批。',
+      '在工作区内执行 shell 命令（POSIX sh / Windows cmd），返回退出码与输出。truncated=true 表示 stdout 或 stderr 超过输出上限，需改用更窄的命令范围或分页/重定向到工作区文件后用 file.read 分段读取。cwd 需在工作区内。需要用户审批。',
     parameters: {
       type: 'object',
       properties: {

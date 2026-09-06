@@ -271,9 +271,9 @@ export const ToolOperationSchema = z.enum([
 export type ToolOperation = z.infer<typeof ToolOperationSchema>
 
 /**
- * 审批操作的协议表示：内置操作（ToolOperation）或任意动态工具名
- * （内置 MCP 工具的 `serverId/toolName`、update_plan 等）。前端据
- * 此决定如何渲染审批卡；不能只接受内置枚举，否则动态工具名会被校验丢弃。
+ * 审批操作的协议表示：内置操作（ToolOperation，点分命名如 file.read）或任意动态工具名
+ * （MCP 工具的 `serverId/toolName`、Agent 侧注册的 manage_plan 等，命名不在此枚举内）。
+ * 前端据此决定如何渲染审批卡；不能只接受内置枚举，否则动态工具名会被校验丢弃。
  */
 export const ApprovalOperationSchema = z.union([
   ToolOperationSchema,

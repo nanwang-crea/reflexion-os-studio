@@ -349,9 +349,9 @@ fn run_git(workspace_root: &Path, args: &[&str]) -> Result<GitOutput, GitError> 
             }
         }
     };
-    let stdout = stdout_handle.join().unwrap_or_default();
-    let stderr = stderr_handle.join().unwrap_or_default();
-    let truncated = stdout.len() >= MAX_DIFF_BYTES;
+    let (stdout, stdout_truncated) = stdout_handle.join().unwrap_or_default();
+    let (stderr, stderr_truncated) = stderr_handle.join().unwrap_or_default();
+    let truncated = stdout_truncated || stderr_truncated;
     Ok(GitOutput {
         exit_code: status.and_then(|value| value.code()),
         stdout,
@@ -389,10 +389,13 @@ fn find_git_executable() -> Option<std::path::PathBuf> {
 }
 
 /// 后台排空子进程管道：受限收集，避免子进程写满管道而阻塞。
-fn drain_pipe<T: Read + Send + 'static>(pipe: &mut Option<T>) -> std::thread::JoinHandle<String> {
+fn drain_pipe<T: Read + Send + 'static>(
+    pipe: &mut Option<T>,
+) -> std::thread::JoinHandle<(String, bool)> {
     let mut pipe = pipe.take();
     std::thread::spawn(move || {
         let mut collected: Vec<u8> = Vec::new();
+        let mut truncated = false;
         if let Some(pipe) = pipe.as_mut() {
             let mut buffer = [0u8; 8192];
             loop {
@@ -401,16 +404,20 @@ fn drain_pipe<T: Read + Send + 'static>(pipe: &mut Option<T>) -> std::thread::Jo
                     Ok(read) => {
                         let remaining = MAX_DIFF_BYTES.saturating_sub(collected.len());
                         if remaining == 0 {
-                            continue; // 读完丢弃，保持管道畅通
+                            truncated = true;
+                            continue;
                         }
                         let take = read.min(remaining);
                         collected.extend_from_slice(&buffer[..take]);
+                        if take < read {
+                            truncated = true;
+                        }
                     }
                     Err(_) => break,
                 }
             }
         }
-        String::from_utf8_lossy(&collected).into_owned()
+        (String::from_utf8_lossy(&collected).into_owned(), truncated)
     })
 }
 

@@ -84,7 +84,7 @@ export class RunRunner {
     status: 'failed' | 'cancelled',
     summary: string,
   ): void {
-    // Plan linkage may be created by update_plan during this Run; re-read by runId.
+    // Plan linkage may be created by manage_plan during this Run; re-read by runId.
     const currentRun = this.store.runs.get(run.id)
     const planId = currentRun?.planId ?? run.planId
     if (!planId) return
@@ -221,11 +221,21 @@ export class RunRunner {
                 ? { timeoutMs: input.provider.timeoutMs }
                 : {}),
               onRetry: ({ attempt, maxRetries, reason }) => {
+                draft.content = ''
+                draft.reasoning = ''
+                chunkSeq = 0
+                streamingMarked = false
+                reasoningSeq = 0
+                this.store.messages.resetPending(draft.id)
                 emitter.next({
                   type: 'run.retrying',
                   attempt,
                   maxRetries,
                   reason,
+                })
+                emitter.next({
+                  type: 'message.reset',
+                  messageId: draft.id,
                 })
               },
               signal,

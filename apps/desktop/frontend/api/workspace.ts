@@ -5,6 +5,13 @@ import type {
   WorkspaceIndexSnapshot,
   WorkspaceReadResult,
 } from '@reflexion-os-studio/runtime-client'
+
+export interface WorkspaceListResult {
+  entries: WorkspaceEntry[]
+  truncated: boolean
+  returnedCount: number
+  nextOffset?: number
+}
 import { request } from './client'
 import { transport } from '../lib/transport'
 
@@ -31,10 +38,14 @@ export function getIndexStatus(
 export function listDir(
   projectId: string,
   path = '.',
-): Promise<{ entries: WorkspaceEntry[] }> {
-  return request<{ entries: WorkspaceEntry[] }>('workspace.list_dir', {
+  offset?: number,
+  limit?: number,
+): Promise<WorkspaceListResult> {
+  return request<WorkspaceListResult>('workspace.list_dir', {
     projectId,
     path,
+    ...(offset !== undefined ? { offset } : {}),
+    ...(limit !== undefined ? { limit } : {}),
   })
 }
 

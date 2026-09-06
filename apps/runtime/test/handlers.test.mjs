@@ -13,6 +13,48 @@ function freshStore() {
   return new Store(mkdtempSync(join(tmpdir(), 'reflexion-handlers-')))
 }
 
+test('workspace.list_dir forwards pagination and preserves metadata', async () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/workspace' })
+  const calls = []
+  const result = await dispatchCommand(
+    'workspace.list_dir',
+    { projectId: project.id, path: 'src', offset: 3.9, limit: 2.8 },
+    {
+      store,
+      system: {
+        available: true,
+        request: async (method, params) => {
+          calls.push({ method, params })
+          return {
+            entries: [{ path: 'src/a.ts', kind: 'file', sizeBytes: 1 }],
+            truncated: true,
+            returnedCount: 1,
+            nextOffset: 4,
+          }
+        },
+      },
+    },
+  )
+  assert.deepEqual(calls, [
+    {
+      method: 'file.list',
+      params: {
+        workspaceRoot: '/workspace',
+        path: 'src',
+        offset: 3,
+        limit: 2,
+      },
+    },
+  ])
+  assert.deepEqual(result, {
+    entries: [{ path: 'src/a.ts', kind: 'file', sizeBytes: 1 }],
+    truncated: true,
+    returnedCount: 1,
+    nextOffset: 4,
+  })
+})
+
 test('agent_settings.update passes nested settings to agent', async () => {
   const received = []
   const result = await dispatchCommand(
@@ -150,6 +192,7 @@ test('tool registry: child has no task and allowedTools filters tools', () => {
     assert.equal(allowed.has(name), true, `unexpected tool: ${name}`)
   }
   assert.equal(scoped.has('web.fetch'), false)
+  assert.equal(scoped.has('manage_plan'), false)
   assert.equal(scoped.has('update_plan'), false)
 })
 

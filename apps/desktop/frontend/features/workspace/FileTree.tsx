@@ -17,6 +17,11 @@ interface FileTreeProps {
 
 type DirState = 'idle' | 'loading' | 'loaded' | 'error'
 
+interface DirPage {
+  nextOffset: number | null
+  truncated: boolean
+}
+
 const EMPTY_STATUS: ReadonlyMap<string, string> = new Map()
 
 /**
@@ -28,6 +33,10 @@ export function FileTree(props: FileTreeProps): React.JSX.Element {
     new Map(),
   )
   const [dirState, setDirState] = useState<Map<string, DirState>>(new Map())
+  const [pages, setPages] = useState<Map<string, DirPage>>(new Map())
+  const [loadingMore, setLoadingMore] = useState<Map<string, boolean>>(
+    new Map(),
+  )
   const [expanded, setExpanded] = useState<Set<string>>(new Set(['.']))
   const [rootError, setRootError] = useState<string | null>(null)
   const inFlight = useRef(new Set<string>())
@@ -48,6 +57,13 @@ export function FileTree(props: FileTreeProps): React.JSX.Element {
         const result = await listDir(props.projectId, path)
         if (generation !== generationRef.current) return
         setEntries((map) => new Map(map).set(path, result.entries))
+        setPages((map) =>
+          new Map(map).set(path, {
+            nextOffset: result.nextOffset ?? null,
+            truncated: result.truncated,
+          }),
+        )
+        setLoadingMore((map) => new Map(map).set(path, false))
         setDirState((state) => new Map(state).set(path, 'loaded'))
       } catch (error) {
         if (generation !== generationRef.current) return
@@ -73,12 +89,50 @@ export function FileTree(props: FileTreeProps): React.JSX.Element {
         const result = await listDir(props.projectId, path)
         if (generation !== generationRef.current) return
         setEntries((map) => new Map(map).set(path, result.entries))
+        setPages((map) =>
+          new Map(map).set(path, {
+            nextOffset: result.nextOffset ?? null,
+            truncated: result.truncated,
+          }),
+        )
+        setLoadingMore((map) => new Map(map).set(path, false))
         setDirState((state) => new Map(state).set(path, 'loaded'))
       } catch {
         if (generation !== generationRef.current) return
         setDirState((state) => new Map(state).set(path, 'error'))
       } finally {
         inFlight.current.delete(path)
+      }
+    },
+    [props.projectId, props.systemReady],
+  )
+
+  const loadMore = useCallback(
+    async (path: string, offset: number): Promise<void> => {
+      const generation = generationRef.current
+      if (!props.systemReady || inFlight.current.has(path)) return
+      inFlight.current.add(path)
+      setLoadingMore((map) => new Map(map).set(path, true))
+      try {
+        const result = await listDir(props.projectId, path, offset)
+        if (generation !== generationRef.current) return
+        setEntries((map) => {
+          const current = map.get(path) ?? []
+          return new Map(map).set(path, mergeUnique(current, result.entries))
+        })
+        setPages((map) =>
+          new Map(map).set(path, {
+            nextOffset: result.nextOffset ?? null,
+            truncated: result.truncated,
+          }),
+        )
+        setDirState((state) => new Map(state).set(path, 'loaded'))
+      } catch {
+        if (generation !== generationRef.current) return
+        setDirState((state) => new Map(state).set(path, 'error'))
+      } finally {
+        inFlight.current.delete(path)
+        setLoadingMore((map) => new Map(map).set(path, false))
       }
     },
     [props.projectId, props.systemReady],
@@ -102,6 +156,8 @@ export function FileTree(props: FileTreeProps): React.JSX.Element {
   const renderDir = (path: string, depth: number): React.JSX.Element => {
     const dirEntries = entries.get(path) ?? []
     const state = dirState.get(path) ?? 'idle'
+    const page = pages.get(path)
+    const isLoadingMore = loadingMore.get(path) === true
     const isExpanded = expanded.has(path)
     const gitStatus = props.gitStatus ?? EMPTY_STATUS
     return (
@@ -160,6 +216,27 @@ export function FileTree(props: FileTreeProps): React.JSX.Element {
                   </li>
                 ),
               )}
+            {page?.nextOffset != null && (
+              <li className="tree-more-row">
+                <button
+                  type="button"
+                  className="ghost"
+                  disabled={isLoadingMore}
+                  onClick={() => {
+                    if (page.nextOffset != null) {
+                      void loadMore(path, page.nextOffset)
+                    }
+                  }}
+                >
+                  {isLoadingMore ? '加载中…' : '加载更多'}
+                </button>
+              </li>
+            )}
+            {page?.truncated && page.nextOffset == null && (
+              <li className="tree-hint tree-hint-error">
+                目录结果不完整，建议缩小目录范围
+              </li>
+            )}
           </ul>
         )}
       </li>
@@ -195,6 +272,22 @@ function basename(path: string): string {
 
 function hasAnyEntries(entries: WorkspaceEntry[]): boolean {
   return entries.length > 0
+}
+
+function mergeUnique(
+  current: WorkspaceEntry[],
+  incoming: WorkspaceEntry[],
+): WorkspaceEntry[] {
+  if (incoming.length === 0) return current
+  const seen = new Set(current.map((entry) => entry.path))
+  const merged = current.slice()
+  for (const entry of incoming) {
+    if (!seen.has(entry.path)) {
+      seen.add(entry.path)
+      merged.push(entry)
+    }
+  }
+  return merged
 }
 
 function compareEntries(a: WorkspaceEntry, b: WorkspaceEntry): number {

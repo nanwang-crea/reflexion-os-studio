@@ -437,8 +437,18 @@ export const CommandSchemaRegistry = {
       projectId: z.string().min(1),
       // 工作区相对目录；缺省 "."（根），只允许相对路径。
       path: z.string().optional(),
+      // 分页续读：与 path 一起透传 file.list；缺省按服务端默认页大小返回。
+      offset: z.number().int().nonnegative().optional(),
+      limit: z.number().int().nonnegative().optional(),
     }),
-    result: z.object({ entries: z.array(WorkspaceEntrySchema) }),
+    result: z.object({
+      entries: z.array(WorkspaceEntrySchema),
+      // 稳定排序后仍有后续页或触达遍历硬上限时为 true，用 nextOffset 续读。
+      truncated: z.boolean(),
+      returnedCount: z.number().int().nonnegative(),
+      // 仍有后续内容时给出下一次请求的偏移量；无后续内容时省略。
+      nextOffset: z.number().int().nonnegative().optional(),
+    }),
   },
   'workspace.search_files': {
     params: z.object({

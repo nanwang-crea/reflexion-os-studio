@@ -277,6 +277,13 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
       if (disposed) return
       unlistenEvents = transport.onEvent((event: RuntimeEvent) => {
         if (disposed) return
+        if (event.type === 'message.reset') {
+          delete streamingRef.current[event.messageId]
+          delete streamingReasoningRef.current[event.messageId]
+          setStreaming({ ...streamingRef.current })
+          setStreamingReasoning({ ...streamingReasoningRef.current })
+          return
+        }
         if (event.type === 'message.delta') {
           setRunActivity(event.runId, { phase: 'answering' })
           streamRunRef.current[event.messageId] = event.runId

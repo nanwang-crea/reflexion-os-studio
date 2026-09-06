@@ -47,7 +47,7 @@ pub fn glob_search(
     let segments = glob::pattern_segments(pattern)?;
     let start = resolve_in_workspace(workspace_root, ".")?;
     let walked = walk_files(&start, "");
-    let limit = limit.min(MAX_GLOB_RESULTS);
+    let limit = limit.clamp(1, MAX_GLOB_RESULTS);
     let mut matches = Vec::new();
     for entry in &walked.files {
         let path_segments: Vec<&str> = entry.path.split('/').collect();
@@ -84,7 +84,7 @@ pub fn grep_search(
     };
     let start = resolve_in_workspace(workspace_root, ".")?;
     let walked = walk_files(&start, "");
-    let limit = limit.min(MAX_GREP_RESULTS);
+    let limit = limit.clamp(1, MAX_GREP_RESULTS);
     let mut matches = Vec::new();
     for entry in &walked.files {
         if let Some(pattern) = &filter {
@@ -198,6 +198,24 @@ mod tests {
         let filtered =
             grep_search(&root, "needle", Some("*.bin"), false, DEFAULT_GREP_LIMIT).unwrap();
         assert!(filtered.matches.is_empty());
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn zero_limit_returns_at_most_one_result_for_each_search() {
+        let root = temp_workspace("zero-limit");
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("a.ts"), "needle").unwrap();
+        fs::write(root.join("src/b.ts"), "needle").unwrap();
+
+        let glob = glob_search(&root, "**/*.ts", 0).unwrap();
+        assert_eq!(glob.matches.len(), 1);
+        assert!(glob.truncated);
+
+        let grep = grep_search(&root, "needle", None, false, 0).unwrap();
+        assert_eq!(grep.matches.len(), 1);
+        assert!(grep.truncated);
+
         fs::remove_dir_all(&root).ok();
     }
 

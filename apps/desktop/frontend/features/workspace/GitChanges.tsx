@@ -8,6 +8,10 @@ interface GitChangesProps {
   systemReady: boolean
   /** 点击变更文件时直接交给右侧只读文件查看器。 */
   onOpenFile: (path: string) => void
+  onOpenDiff?: (
+    path: string,
+    options: { staged?: boolean; oldPath?: string },
+  ) => void
 }
 
 const STATUS_LABELS: Record<GitChangeEntry['status'], string> = {
@@ -97,7 +101,16 @@ export function GitChanges(props: GitChangesProps): React.JSX.Element {
               <button
                 type="button"
                 className="git-row"
-                onClick={() => props.onOpenFile(entry.path)}
+                onClick={() => {
+                  if (props.onOpenDiff !== undefined) {
+                    props.onOpenDiff(entry.path, {
+                      staged: entry.staged,
+                      oldPath: entry.oldPath,
+                    })
+                    return
+                  }
+                  props.onOpenFile(entry.path)
+                }}
                 title={`在右侧打开 ${entry.path}`}
               >
                 <span className={`git-badge git-badge-${entry.status}`}>

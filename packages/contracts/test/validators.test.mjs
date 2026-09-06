@@ -269,6 +269,28 @@ test('RuntimeEventSchema validates message.delta envelope and rejects unknown ty
   )
 })
 
+test('RuntimeEventSchema message.reset requires envelope and messageId', () => {
+  const envelope = {
+    type: 'message.reset',
+    protocolVersion: '1.0',
+    eventId: 'e1',
+    runId: 'r1',
+    seq: 4,
+    occurredAt: NOW,
+    messageId: 'm1',
+  }
+  assert.equal(RuntimeEventSchema.safeParse(envelope).success, true)
+
+  const missingMessageId = { ...envelope }
+  delete missingMessageId.messageId
+  assert.equal(RuntimeEventSchema.safeParse(missingMessageId).success, false)
+
+  assert.equal(
+    RuntimeEventSchema.safeParse({ ...envelope, messageId: '' }).success,
+    false,
+  )
+})
+
 test('RuntimeErrorSchema enforces stable error codes', () => {
   assert.equal(
     RuntimeErrorSchema.safeParse({ code: 'rate_limit', message: 'slow down' })
@@ -458,7 +480,7 @@ test('tool and approval events validate envelope payloads', () => {
       payload.type,
     )
   }
-  // 动态工具名（内置 MCP 的 serverId/toolName、update_plan 等）也应是合法操作：
+  // 动态工具名（MCP 的 serverId/toolName、Agent 侧 manage_plan 等）也应是合法操作：
   // 审批操作契约已从「仅内置操作」扩展为「内置操作或任意非空工具名」。
   assert.equal(
     RuntimeEventSchema.safeParse({
@@ -598,6 +620,40 @@ test('memory.written event validates memory payloads', () => {
       ...envelope,
       type: 'memory.written',
     }).success,
+    false,
+  )
+})
+
+test('workspace.list_dir carries pagination params and truncation result metadata', () => {
+  const params = CommandSchemaRegistry['workspace.list_dir'].params
+  const base = { requestId: 'r1', projectId: 'p1' }
+  assert.equal(params.safeParse(base).success, true)
+  assert.equal(
+    params.safeParse({ ...base, path: 'src', offset: 0, limit: 50 }).success,
+    true,
+  )
+  assert.equal(params.safeParse({ ...base, offset: -1 }).success, false)
+  assert.equal(params.safeParse({ ...base, limit: 1.5 }).success, false)
+
+  const result = CommandSchemaRegistry['workspace.list_dir'].result
+  assert.equal(
+    result.safeParse({ entries: [], truncated: false, returnedCount: 0 })
+      .success,
+    true,
+  )
+  assert.equal(
+    result.safeParse({
+      entries: [],
+      truncated: true,
+      returnedCount: 0,
+      nextOffset: 50,
+    }).success,
+    true,
+  )
+  // truncated/returnedCount 必填；nextOffset 仅在有后续内容时出现。
+  assert.equal(result.safeParse({ entries: [] }).success, false)
+  assert.equal(
+    result.safeParse({ entries: [], truncated: false }).success,
     false,
   )
 })

@@ -96,6 +96,14 @@ export class MessageStore {
       .run(id)
   }
 
+  resetPending(id: string): void {
+    this.db
+      .prepare(
+        "UPDATE messages SET content = '', parts_json = '[]', reasoning = '', status = 'pending', completed_at = NULL WHERE id = ?",
+      )
+      .run(id)
+  }
+
   /** 启动恢复：未完成的消息标记为 interrupted。 */
   recoverInterrupted(): void {
     this.db

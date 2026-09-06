@@ -59,6 +59,10 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     delta: z.string(),
   }),
   RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('message.reset'),
+    messageId: z.string().min(1),
+  }),
+  RuntimeEventEnvelopeSchema.extend({
     type: z.literal('message.reasoning_delta'),
     messageId: z.string().min(1),
     chunkSeq: z.number().int().nonnegative(),

@@ -7,7 +7,7 @@ use std::path::Path;
 use serde::Serialize;
 
 pub const MAX_WALK_FILES: usize = 20_000;
-const MAX_WALK_DEPTH: usize = 32;
+pub const MAX_WALK_DEPTH: usize = 32;
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]

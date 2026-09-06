@@ -8,6 +8,38 @@ import type {
 } from '@reflexion-os-studio/contracts'
 import { nowIso, type Row } from './shared.js'
 
+/**
+ * 计划领域状态机错误：携带稳定错误码供模型自纠。
+ * 码值约定见 docs/UPDATE-PLAN-TOOL-REDESIGN.md 第 3 节。
+ */
+export class PlanError extends Error {
+  constructor(
+    readonly code:
+      | 'PLAN_ALREADY_EXISTS'
+      | 'STEP_ID_CONFLICT'
+      | 'INVALID_STEP_TRANSITION'
+      | 'PLAN_NOT_READY_TO_COMPLETE'
+      | 'PLAN_NOT_FOUND'
+      | 'STEP_NOT_FOUND'
+      | 'PLAN_TERMINAL',
+    message: string,
+  ) {
+    super(message)
+    this.name = 'PlanError'
+  }
+}
+
+/** plan_steps.id 在全局唯一，跨计划冲突（模型自带 id）以 SQLite UNIQUE 约束暴露。 */
+const SQLITE_UNIQUE_RE = /UNIQUE constraint failed/i
+
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message !== undefined &&
+    SQLITE_UNIQUE_RE.test(error.message)
+  )
+}
+
 export class PlanStore {
   constructor(private readonly db: DatabaseSync) {}
 
@@ -18,7 +50,7 @@ export class PlanStore {
     steps: Array<{ id: string; title: string }>
   }): Plan {
     if (new Set(input.steps.map((step) => step.id)).size !== input.steps.length)
-      throw new Error('duplicate step id')
+      throw new PlanError('STEP_ID_CONFLICT', '计划内存在重复的步骤 id')
     const now = nowIso()
     const plan: Plan = {
       id: randomUUID(),
@@ -48,7 +80,11 @@ export class PlanStore {
           "SELECT id FROM plans WHERE session_id = ? AND status = 'active' LIMIT 1",
         )
         .get(input.sessionId)
-      if (active) throw new Error('session already has an active plan')
+      if (active)
+        throw new PlanError(
+          'PLAN_ALREADY_EXISTS',
+          '当前会话已存在活动计划；请沿用已有 planId 使用 update_step，或先 complete/fail/cancel 已有计划',
+        )
       this.db
         .prepare(
           'INSERT INTO plans (id, session_id, message_id, goal, status, summary, created_at, updated_at, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -73,6 +109,12 @@ export class PlanStore {
       return plan
     } catch (error) {
       this.db.exec('ROLLBACK')
+      if (isUniqueViolation(error)) {
+        throw new PlanError(
+          'STEP_ID_CONFLICT',
+          `步骤 id 与历史计划冲突（plan_steps.id 全局唯一）：${input.steps.map((step) => step.id).join(', ')}；请使用带唯一前缀的步骤 id`,
+        )
+      }
       throw error
     }
   }
@@ -129,20 +171,26 @@ export class PlanStore {
     const current = this.db
       .prepare('SELECT * FROM plan_steps WHERE id = ? AND plan_id = ?')
       .get(stepId, planId) as Row | undefined
-    if (!current) throw new Error('plan step not found')
+    if (!current)
+      throw new PlanError(
+        'STEP_NOT_FOUND',
+        `计划 ${planId} 中不存在步骤 ${stepId}`,
+      )
     const previous = String(current.status) as PlanStepStatus
-    if (previous === 'completed' || previous === 'cancelled')
-      throw new Error(`cannot reopen ${previous} step`)
+    // 终止状态（completed/failed/skipped/cancelled）不可回退、不可再次推进。
     const allowed: Record<PlanStepStatus, PlanStepStatus[]> = {
-      pending: ['in_progress', 'skipped', 'cancelled'],
+      pending: ['in_progress', 'failed', 'skipped', 'cancelled'],
       in_progress: ['completed', 'failed', 'skipped', 'cancelled'],
       completed: [],
-      failed: ['in_progress'],
+      failed: [],
       skipped: [],
       cancelled: [],
     }
-    if (!allowed[previous].includes(status) && previous !== status)
-      throw new Error(`invalid plan step transition: ${previous} -> ${status}`)
+    if (previous !== status && !allowed[previous].includes(status))
+      throw new PlanError(
+        'INVALID_STEP_TRANSITION',
+        `非法步骤流转：${previous} -> ${status}（终止状态不可回退；正常路径为 pending → in_progress → completed）`,
+      )
     const now = nowIso()
     this.db
       .prepare(
@@ -160,15 +208,18 @@ export class PlanStore {
     } as Row)
   }
 
-  complete(planId: string, summary: string): Plan {
+  complete(planId: string, summary: string | null): Plan {
     const plan = this.get(planId)
-    if (!plan) throw new Error('plan not found')
+    if (!plan) throw new PlanError('PLAN_NOT_FOUND', `计划不存在：${planId}`)
     if (
       plan.steps.some(
         (step) => step.status === 'pending' || step.status === 'in_progress',
       )
     )
-      throw new Error('plan has unfinished steps')
+      throw new PlanError(
+        'PLAN_NOT_READY_TO_COMPLETE',
+        '计划仍有未处理步骤（pending/in_progress），不得 complete_plan；请先推进或跳过全部步骤',
+      )
     const now = nowIso()
     this.db
       .prepare(
@@ -178,18 +229,23 @@ export class PlanStore {
     return this.get(planId)!
   }
 
-  fail(planId: string, summary: string): Plan {
+  fail(planId: string, summary: string | null): Plan {
     return this.finish(planId, 'failed', summary)
   }
 
-  cancel(planId: string, summary: string): Plan {
+  cancel(planId: string, summary: string | null): Plan {
     return this.finish(planId, 'cancelled', summary)
   }
 
-  private finish(planId: string, status: PlanStatus, summary: string): Plan {
+  private finish(
+    planId: string,
+    status: PlanStatus,
+    summary: string | null,
+  ): Plan {
     const plan = this.get(planId)
-    if (!plan) throw new Error('plan not found')
-    if (plan.status !== 'active') throw new Error('plan is already terminal')
+    if (!plan) throw new PlanError('PLAN_NOT_FOUND', `计划不存在：${planId}`)
+    if (plan.status !== 'active')
+      throw new PlanError('PLAN_TERMINAL', `计划已处于终止状态：${plan.status}`)
     const now = nowIso()
     this.db
       .prepare(

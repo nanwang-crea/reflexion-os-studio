@@ -38,6 +38,8 @@ const AUTOMATIC_OTHER_TOOLS = new Set([
   'web.fetch',
   'skill.use',
   // 计划工具只在本会话的 plans 表内写状态，不触工作区/Shell，无需审批。
+  // manage_plan 为新名；update_plan 保留兼容别名映射到同一实现。
+  'manage_plan',
   'update_plan',
 ])
 

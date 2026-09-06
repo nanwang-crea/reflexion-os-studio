@@ -30,9 +30,15 @@ pub fn handle_file_list(params: Value) -> Result<Value, OpError> {
     let params: ListParams = serde_json::from_value(params)
         .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
     let root = workspace_root(&params.workspace_root)?;
-    let entries = files::list(&root, &params.path, params.recursive.unwrap_or(false))
-        .map_err(|message| OpError::new("file_error", message))?;
-    Ok(json!({ "entries": entries }))
+    let result = files::list(
+        &root,
+        &params.path,
+        params.recursive.unwrap_or(false),
+        params.offset,
+        params.limit,
+    )
+    .map_err(|message| OpError::new("file_error", message))?;
+    serde_json::to_value(result).map_err(|error| OpError::new("internal", error.to_string()))
 }
 
 pub fn handle_file_glob(params: Value) -> Result<Value, OpError> {

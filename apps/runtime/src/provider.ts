@@ -112,6 +112,16 @@ function isAbort(error: unknown): boolean {
   )
 }
 
+class StreamCallbackError extends Error {
+  constructor(cause: unknown) {
+    super(String(cause))
+    this.name = 'StreamCallbackError'
+    this.cause = cause
+  }
+
+  readonly cause: unknown
+}
+
 /**
  * 部分 Provider(如某些聚合/中转服务)只接受 a-z A-Z 0-9 _ - 的工具名，
  * 而内部 canonical 名含点号(web.fetch)或斜杠(MCP 的 serverId/toolName)。
@@ -205,55 +215,99 @@ export async function streamChatCompletion(
   }
 
   let attempt = 0
-  let response: Response
-  for (;;) {
-    try {
-      // canonical 工具声明投影为 OpenAI function calling 方言，名称用清洗后的合法名。
-      const tools =
-        options.tools && options.tools.length > 0
-          ? options.tools.map((tool) => ({
-              type: 'function',
-              function: {
-                name: canonicalToProvider.get(tool.name) ?? tool.name,
-                description: tool.description,
-                parameters: tool.parameters,
-              },
-            }))
-          : undefined
-      response = await fetch(
-        `${options.baseUrl.replace(/\/$/, '')}/chat/completions`,
-        {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            authorization: `Bearer ${options.apiKey}`,
+  attempts: for (;;) {
+    let response: Response
+    for (;;) {
+      try {
+        // canonical 工具声明投影为 OpenAI function calling 方言，名称用清洗后的合法名。
+        const tools =
+          options.tools && options.tools.length > 0
+            ? options.tools.map((tool) => ({
+                type: 'function',
+                function: {
+                  name: canonicalToProvider.get(tool.name) ?? tool.name,
+                  description: tool.description,
+                  parameters: tool.parameters,
+                },
+              }))
+            : undefined
+        response = await fetch(
+          `${options.baseUrl.replace(/\/$/, '')}/chat/completions`,
+          {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              authorization: `Bearer ${options.apiKey}`,
+            },
+            body: JSON.stringify({
+              model: options.model,
+              messages: options.messages.map((message) =>
+                toProviderMessage(message, canonicalToProvider),
+              ),
+              stream: true,
+              stream_options: { include_usage: true },
+              ...(options.maxTokens !== undefined
+                ? { max_tokens: options.maxTokens }
+                : {}),
+              ...(options.temperature !== undefined
+                ? { temperature: options.temperature }
+                : {}),
+              ...(tools !== undefined ? { tools } : {}),
+            }),
+            signal,
           },
-          body: JSON.stringify({
-            model: options.model,
-            messages: options.messages.map((message) =>
-              toProviderMessage(message, canonicalToProvider),
-            ),
-            stream: true,
-            stream_options: { include_usage: true },
-            ...(options.maxTokens !== undefined
-              ? { max_tokens: options.maxTokens }
-              : {}),
-            ...(options.temperature !== undefined
-              ? { temperature: options.temperature }
-              : {}),
-            ...(tools !== undefined ? { tools } : {}),
-          }),
+        )
+      } catch (error) {
+        if (isAbort(error)) throw error
+        if (attempt < maxRetries) {
+          attempt += 1
+          options.onRetry?.({
+            attempt,
+            maxRetries,
+            reason: `network: ${String(error)}`,
+          })
+          await sleep(
+            RETRY_BACKOFF_MS[
+              Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)
+            ],
+            signal,
+          )
+          continue
+        }
+        throw new ProviderError(
+          'network',
+          `provider request failed: ${String(error)}`,
+        )
+      }
+
+      if (response.ok) break
+      const detail = await response.text().catch(() => '')
+      if (shouldRetryStatus(response.status) && attempt < maxRetries) {
+        attempt += 1
+        options.onRetry?.({
+          attempt,
+          maxRetries,
+          reason: `HTTP ${response.status}`,
+        })
+        await sleep(
+          RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)],
           signal,
-        },
+        )
+        continue
+      }
+      throw new ProviderError(
+        mapHttpStatus(response.status),
+        `provider responded ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`,
       )
-    } catch (error) {
-      if (isAbort(error)) throw error
+    }
+    if (!response.body) {
+      const error = new Error('provider response has no body')
       if (attempt < maxRetries) {
         attempt += 1
         options.onRetry?.({
           attempt,
           maxRetries,
-          reason: `network: ${String(error)}`,
+          reason: `stream failure: ${String(error)}`,
         })
         await sleep(
           RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)],
@@ -263,136 +317,143 @@ export async function streamChatCompletion(
       }
       throw new ProviderError(
         'network',
-        `provider request failed: ${String(error)}`,
+        `provider stream failed: ${String(error)}`,
       )
     }
 
-    if (response.ok) break
-    const detail = await response.text().catch(() => '')
-    if (shouldRetryStatus(response.status) && attempt < maxRetries) {
-      attempt += 1
-      options.onRetry?.({
-        attempt,
-        maxRetries,
-        reason: `HTTP ${response.status}`,
-      })
-      await sleep(
-        RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)],
-        signal,
-      )
-      continue
-    }
-    throw new ProviderError(
-      mapHttpStatus(response.status),
-      `provider responded ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`,
-    )
-  }
-  if (!response.body) {
-    throw new ProviderError('provider', 'provider response has no body')
-  }
+    let content = ''
+    let reasoning = ''
+    let finishReason: FinishReason = 'stop'
+    let usage: Usage | undefined
+    const toolCallByIndex = new Map<number, StreamedToolCall>()
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let sawDone = false
 
-  let content = ''
-  let reasoning = ''
-  let finishReason: FinishReason = 'stop'
-  let usage: Usage | undefined
-  const toolCallByIndex = new Map<number, StreamedToolCall>()
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-
-  const handleLine = (line: string): void => {
-    const trimmed = line.trim()
-    if (!trimmed.startsWith('data:')) return
-    const payload = trimmed.slice(5).trim()
-    if (payload === '[DONE]') return
-    let parsed: {
-      choices?: {
-        delta?: {
-          content?: string
-          // 推理模型的思考增量：DeepSeek/Qwen/GLM 用 reasoning_content，
-          // OpenRouter 等用 reasoning。
-          reasoning_content?: string
-          reasoning?: string
-          // 工具调用增量：按 index 分片累积 id/name/arguments。
-          tool_calls?: {
-            index?: number
-            id?: string
-            function?: { name?: string; arguments?: string }
-          }[]
+    const handleLine = (line: string): void => {
+      const trimmed = line.trim()
+      if (!trimmed.startsWith('data:')) return
+      const payload = trimmed.slice(5).trim()
+      if (payload === '[DONE]') {
+        sawDone = true
+        return
+      }
+      let parsed: {
+        choices?: {
+          delta?: {
+            content?: string
+            // 推理模型的思考增量：DeepSeek/Qwen/GLM 用 reasoning_content，
+            // OpenRouter 等用 reasoning。
+            reasoning_content?: string
+            reasoning?: string
+            // 工具调用增量：按 index 分片累积 id/name/arguments。
+            tool_calls?: {
+              index?: number
+              id?: string
+              function?: { name?: string; arguments?: string }
+            }[]
+          }
+          finish_reason?: string | null
+        }[]
+        usage?: { prompt_tokens?: number; completion_tokens?: number }
+      }
+      if (payload === '') return
+      try {
+        parsed = JSON.parse(payload)
+      } catch {
+        throw new Error('malformed SSE data payload')
+      }
+      const delta = parsed.choices?.[0]?.delta
+      const reasoningDelta = delta?.reasoning_content ?? delta?.reasoning
+      if (reasoningDelta) {
+        reasoning += reasoningDelta
+        try {
+          onReasoningDelta?.(reasoningDelta)
+        } catch (error) {
+          throw new StreamCallbackError(error)
         }
-        finish_reason?: string | null
-      }[]
-      usage?: { prompt_tokens?: number; completion_tokens?: number }
+      }
+      if (delta?.content) {
+        content += delta.content
+        try {
+          onDelta(delta.content)
+        } catch (error) {
+          throw new StreamCallbackError(error)
+        }
+      }
+      for (const chunk of delta?.tool_calls ?? []) {
+        const index = typeof chunk.index === 'number' ? chunk.index : 0
+        const existing = toolCallByIndex.get(index) ?? {
+          id: '',
+          name: '',
+          arguments: '',
+        }
+        if (typeof chunk.id === 'string' && chunk.id !== '')
+          existing.id = chunk.id
+        if (typeof chunk.function?.name === 'string') {
+          existing.name += chunk.function.name
+        }
+        if (typeof chunk.function?.arguments === 'string') {
+          existing.arguments += chunk.function.arguments
+        }
+        toolCallByIndex.set(index, existing)
+      }
+      const mapped = mapFinishReason(parsed.choices?.[0]?.finish_reason)
+      if (mapped) finishReason = mapped
+      if (parsed.usage) {
+        usage = {
+          promptTokens: parsed.usage.prompt_tokens ?? 0,
+          completionTokens: parsed.usage.completion_tokens ?? 0,
+        }
+      }
     }
+
     try {
-      parsed = JSON.parse(payload)
-    } catch {
-      return
-    }
-    const delta = parsed.choices?.[0]?.delta
-    const reasoningDelta = delta?.reasoning_content ?? delta?.reasoning
-    if (reasoningDelta) {
-      reasoning += reasoningDelta
-      onReasoningDelta?.(reasoningDelta)
-    }
-    if (delta?.content) {
-      content += delta.content
-      onDelta(delta.content)
-    }
-    for (const chunk of delta?.tool_calls ?? []) {
-      const index = typeof chunk.index === 'number' ? chunk.index : 0
-      const existing = toolCallByIndex.get(index) ?? {
-        id: '',
-        name: '',
-        arguments: '',
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        let newlineIndex = buffer.indexOf('\n')
+        while (newlineIndex !== -1) {
+          handleLine(buffer.slice(0, newlineIndex))
+          buffer = buffer.slice(newlineIndex + 1)
+          newlineIndex = buffer.indexOf('\n')
+        }
       }
-      if (typeof chunk.id === 'string' && chunk.id !== '')
-        existing.id = chunk.id
-      if (typeof chunk.function?.name === 'string') {
-        existing.name += chunk.function.name
+      handleLine(buffer)
+      if (!sawDone) {
+        throw new Error('stream ended before [DONE]')
       }
-      if (typeof chunk.function?.arguments === 'string') {
-        existing.arguments += chunk.function.arguments
+    } catch (error) {
+      if (error instanceof StreamCallbackError) throw error.cause
+      if (isAbort(error)) throw error
+      if (attempt < maxRetries) {
+        attempt += 1
+        options.onRetry?.({
+          attempt,
+          maxRetries,
+          reason: `stream failure: ${String(error)}`,
+        })
+        await sleep(
+          RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)],
+          signal,
+        )
+        continue attempts
       }
-      toolCallByIndex.set(index, existing)
+      throw new ProviderError(
+        'network',
+        `provider stream failed: ${String(error)}`,
+      )
     }
-    const mapped = mapFinishReason(parsed.choices?.[0]?.finish_reason)
-    if (mapped) finishReason = mapped
-    if (parsed.usage) {
-      usage = {
-        promptTokens: parsed.usage.prompt_tokens ?? 0,
-        completionTokens: parsed.usage.completion_tokens ?? 0,
-      }
-    }
+
+    const toolCalls = [...toolCallByIndex.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([, toolCall]) => ({
+        ...toolCall,
+        name: providerToCanonical.get(toolCall.name) ?? toolCall.name,
+      }))
+
+    return { content, reasoning, finishReason, usage, toolCalls }
   }
-
-  try {
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      let newlineIndex = buffer.indexOf('\n')
-      while (newlineIndex !== -1) {
-        handleLine(buffer.slice(0, newlineIndex))
-        buffer = buffer.slice(newlineIndex + 1)
-        newlineIndex = buffer.indexOf('\n')
-      }
-    }
-    handleLine(buffer)
-  } catch (error) {
-    if (isAbort(error)) throw error
-    throw new ProviderError(
-      'network',
-      `provider stream failed: ${String(error)}`,
-    )
-  }
-
-  const toolCalls = [...toolCallByIndex.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([, toolCall]) => ({
-      ...toolCall,
-      name: providerToCanonical.get(toolCall.name) ?? toolCall.name,
-    }))
-
-  return { content, reasoning, finishReason, usage, toolCalls }
 }

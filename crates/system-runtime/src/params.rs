@@ -25,6 +25,10 @@ pub struct ListParams {
     pub workspace_root: String,
     pub path: String,
     pub recursive: Option<bool>,
+    /// 分页起点：默认 0；非法负数由调用方归一化，服务端不做拒绝。
+    pub offset: Option<usize>,
+    /// 单次返回条数上限：默认 DEFAULT_LIST_LIMIT，服务端再按 MAX_LIST_LIMIT 收敛。
+    pub limit: Option<usize>,
 }
 
 #[derive(Deserialize)]

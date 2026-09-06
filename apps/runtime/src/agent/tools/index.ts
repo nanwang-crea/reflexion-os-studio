@@ -21,7 +21,7 @@ import type { ToolContext } from './shared.js'
 import { createCurrentTimeTool } from './time.js'
 import { createWebFetchTool } from './web.js'
 import { createMcpTool } from './mcp.js'
-import { createUpdatePlanTool } from './plans.js'
+import { createLegacyUpdatePlanTool, createManagePlanTool } from './plans.js'
 import { createTaskTool } from './task.js'
 
 export type { ToolContext } from './shared.js'
@@ -56,7 +56,8 @@ function alwaysAvailableTools(ctx: ToolContext): ToolDefinition[] {
     createCurrentTimeTool(),
     createWebFetchTool(),
     createSkillUseTool(ctx.skills),
-    createUpdatePlanTool(ctx),
+    createManagePlanTool(ctx),
+    createLegacyUpdatePlanTool(ctx),
   ]
   // 只有注入 childRunStarter 的 Run 才具备委派能力(task 工具)；子 Run 默认无此工具。
   if (ctx.childRunStarter) {

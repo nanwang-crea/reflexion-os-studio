@@ -42,7 +42,7 @@ const CHILD_DEFAULT_TOOLS: ReadonlySet<string> = new Set([
   'get_current_time',
   'web.fetch',
   'skill.use',
-  'update_plan',
+  'manage_plan',
   'file.read',
   'file.list',
   'file.glob',

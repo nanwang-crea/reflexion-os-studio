@@ -202,6 +202,15 @@
   color: var(--danger);
 }
 
+.tree-more-row {
+  padding: 2px 24px 4px;
+}
+
+.tree-more-row .ghost {
+  width: 100%;
+  font-size: 12px;
+}
+
 /* ---------- 面板内预览 ---------- */
 
 .workspace-preview {

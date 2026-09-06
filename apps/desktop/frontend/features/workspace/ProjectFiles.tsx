@@ -19,6 +19,10 @@ interface ProjectFilesProps {
   activePath: string | null
   /** 点击文件/Git 变更"打开文件"：交给右侧查看器打开标签。 */
   onOpenFile: (path: string, line?: number) => void
+  onOpenDiff?: (
+    path: string,
+    options: { staged?: boolean; oldPath?: string },
+  ) => void
   /** 请求聚焦预览的 Asset（点击消息里的 asset:// 链接）。 */
   focusAssetId?: string | null
   onFocusConsumed?: () => void
@@ -199,6 +203,7 @@ export function ProjectFiles(props: ProjectFilesProps): React.JSX.Element {
             projectId={project.id}
             systemReady={props.systemReady}
             onOpenFile={props.onOpenFile}
+            onOpenDiff={props.onOpenDiff}
           />
         ) : (
           <AssetsPanel

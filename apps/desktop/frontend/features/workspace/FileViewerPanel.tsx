@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Project } from '@reflexion-os-studio/runtime-client'
 import { FolderIcon } from '../../ui/icons'
 import { ContentView } from './ContentView'
+import { DiffViewer } from './DiffViewer'
 import type { OpenFileTab } from './types'
 
 /** 转义 CSS 选择器属性值中的特殊字符，路径可含 `.`、`/` 等。 */
@@ -406,15 +407,26 @@ export function FileViewerPanel(
         </div>
       )}
 
-      {activeTab !== null && (
+      {activeTab !== null && project !== null && (
         <div className="workspace-preview">
-          <ContentView
-            key={`${activeTab.path}#${activeTab.nonce ?? 0}`}
-            projectId={project.id}
-            path={activeTab.path}
-            initialLine={activeTab.line}
-            onClose={() => props.onCloseTab(activeTab.path)}
-          />
+          {activeTab.mode === 'diff' ? (
+            <DiffViewer
+              key={`${activeTab.path}#diff#${activeTab.nonce ?? 0}`}
+              projectId={project.id}
+              path={activeTab.path}
+              staged={activeTab.staged}
+              oldPath={activeTab.oldPath}
+              onClose={() => props.onCloseTab(activeTab.path)}
+            />
+          ) : (
+            <ContentView
+              key={`${activeTab.path}#${activeTab.nonce ?? 0}`}
+              projectId={project.id}
+              path={activeTab.path}
+              initialLine={activeTab.line}
+              onClose={() => props.onCloseTab(activeTab.path)}
+            />
+          )}
         </div>
       )}
     </div>

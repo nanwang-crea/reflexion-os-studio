@@ -79,6 +79,36 @@ test('message lifecycle: create, streaming, finalize keeps parts in sync', () =>
   assert.ok(finalized.completedAt)
 })
 
+test('pending assistant reset clears content while retaining message identity', () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
+  const session = store.sessions.create(project.id)
+  const run = store.runs.create({
+    sessionId: session.id,
+    providerId: 'prov1',
+    model: 'mock-model',
+  })
+  const message = store.messages.create({
+    sessionId: session.id,
+    runId: run.id,
+    role: 'assistant',
+    content: '',
+    status: 'pending',
+  })
+
+  store.messages.finalize(message.id, 'old content', 'pending', 'old reasoning')
+  store.messages.resetPending(message.id)
+
+  const reset = store.messages
+    .listBySession(session.id)
+    .find((item) => item.id === message.id)
+  assert.equal(reset.id, message.id)
+  assert.equal(reset.content, '')
+  assert.equal(reset.reasoning, '')
+  assert.deepEqual(reset.parts, [])
+  assert.equal(reset.status, 'pending')
+})
+
 test('run lifecycle: awaiting_approval counts as active', () => {
   const store = freshStore()
   const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
