@@ -8,3 +8,5 @@ src-tauri/gen
 **/target/**
 .zcode
 **/.zcode/**
+**/src-tauri/package-resources/**
+.cache/

@@ -5,7 +5,7 @@
   "identifier": "com.reflexionos.studio",
   "build": {
     "beforeDevCommand": "pnpm dev:frontend",
-    "beforeBuildCommand": "pnpm build:frontend",
+    "beforeBuildCommand": "pnpm prepare:package && pnpm build:frontend",
     "devUrl": "http://localhost:5173",
     "frontendDist": "../dist-frontend"
   },
@@ -26,6 +26,10 @@
     }
   },
   "bundle": {
-    "active": false
+    "active": true,
+    "targets": ["app", "msi", "nsis", "deb", "appimage"],
+    "resources": {
+      "package-resources/": "pkg"
+    }
   }
 }

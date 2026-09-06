@@ -98,10 +98,12 @@ pnpm build:packages        # contracts → runtime-client → runtime → 前端
 cargo fmt --manifest-path crates/Cargo.toml -- --check
 cargo test --manifest-path crates/Cargo.toml
 cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml   # Tauri 宿主
-pnpm build:desktop         # release 宿主二进制（不打包安装器）
+pnpm build:desktop         # 打包安装包（beforeBuildCommand 自动准备 sidecar 资源）
 ```
 
-常用命令：`pnpm dev`（开发模式启动桌面应用）、`pnpm build`（全量）、`pnpm clean`。
+常用命令：`pnpm dev`（开发模式启动桌面应用）、`pnpm build`（全量 + 打包安装包）、`pnpm clean`。
+
+打包说明：`pnpm build` / `pnpm build:desktop` 会产出**自包含安装包**——`prepare-package.sh` 把 TS Runtime 打成单文件 `runtime.mjs`（esbuild），下载并随包内置固定版本 Node（`scripts/fetch-node-dist.mjs`，缓存于 `.cache/node-dist/`），拷贝 `reflexion-system-runtime`（release）进 `package-resources/`，由 `bundle.resources` 打进安装包。宿主编译时从 `resource_dir/pkg/` 解析三个 sidecar，开发态回退仓库路径与 PATH `node`，`pnpm dev` 行为不变。安装包产物位于 `apps/desktop/src-tauri/target/release/bundle/`。
 
 环境注意：`cargo` 已写入 `~/.zshrc` 与 `~/.zprofile`（`source "$HOME/.cargo/env"`）；若脚本环境找不到 cargo，先 `source ~/.cargo/env`。
 
@@ -117,7 +119,9 @@ pnpm build:desktop         # release 宿主二进制（不打包安装器）
 
   预期：先输出 `system.ready` 通知，再输出两个 id 对应的 result，最后干净退出。
 
-- **宿主 sidecar 监管**：后台启动 `apps/desktop/src-tauri/target/release/reflexion-desktop`，数秒后用 `pgrep -fl` 确认 `node …/apps/runtime/dist/index.js` 与 `reflexion-system-runtime` 两个进程存在（Rust 由 TS spawn 监管，Host 只握进程树兜底收割权）；TERM 宿主后再次 pgrep 确认无孤儿进程。
+- **宿主 sidecar 监管（开发态）**：后台启动 `apps/desktop/src-tauri/target/release/reflexion-desktop`，数秒后用 `pgrep -fl` 确认 `node …/apps/runtime/dist/index.js` 与 `reflexion-system-runtime` 两个进程存在（Rust 由 TS spawn 监管，Host 只握进程树兜底收割权）；TERM 宿主后再次 pgrep 确认无孤儿进程。
+
+- **打包态启动冒烟**：`pnpm build` 后直接运行安装包内二进制（macOS：`apps/desktop/src-tauri/target/release/bundle/macos/ReflexionOS Studio.app/Contents/MacOS/reflexion-desktop`），确认 sidecar 从包内资源解析——`pgrep -fl` 应看到 `package-resources` 里的 `node`（或安装包内 `node/bin/node`）与 `reflexion-system-runtime`，且不含仓库路径；TERM 后无孤儿进程。
 
 ## 8. 跨平台纪律（红线第 8 条的落地清单）
 
@@ -130,7 +134,7 @@ pnpm build:desktop         # release 宿主二进制（不打包安装器）
 - **编码与换行**：文件与协议统一 UTF-8 无 BOM；协议换行固定 `\n`（newline-delimited JSON），读取侧不要依赖 CRLF/LF 平台默认。
 - **系统依赖**：Linux 运行需要 `webkit2gtk`，Windows 依赖 WebView2（Win10/11 多数自带）；新增系统依赖时在文档记录三平台差异。
 - **脚本**：bash 脚本仅用于开发编排；产品逻辑不得写成 bash-only。跨平台工具逻辑进 Node/Rust。
-- **分发**：安装包（.app/.dmg、.msi、.deb/AppImage）在对应平台分别构建（CI 矩阵），Tauri 不支持交叉打包；签名/公证属 Phase 6，当前 `bundle.active = false`，`tauri build` 只产出宿主二进制。
+- **分发**：安装包（.app/.dmg、.msi、.deb/AppImage）在对应平台分别构建（CI 矩阵），Tauri 不支持交叉打包；`pnpm build` 即产出安装包（`bundle.active = true`），打包前需先拉取随包 Node 发行版（脚本自动完成，需联网）。签名/公证、自动更新、激活码许可仍属 Phase 6。
 
 ## 9. 变更纪律
 

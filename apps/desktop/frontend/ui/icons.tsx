@@ -274,6 +274,26 @@ export function ArchiveIcon({ size = 15 }: IconProps): React.JSX.Element {
   )
 }
 
+/** 清单图标：对话右侧“任务计划”面板切换入口。 */
+export function ListIcon({ size = 15 }: IconProps): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M9 6h11M9 12h11M9 18h11" />
+      <path d="M3 6h.01M3 12h.01M3 18h.01" />
+    </svg>
+  )
+}
+
 export function GearIcon({ size = 15 }: IconProps): React.JSX.Element {
   return (
     <svg

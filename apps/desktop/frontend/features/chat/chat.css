@@ -1,6 +1,7 @@
 /* ---------- 对话视图 ---------- */
 
 .chat-view {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -14,7 +15,7 @@
 }
 
 .transcript {
-  max-width: 760px;
+  max-width: var(--chat-col);
   margin: 0 auto;
   padding: 16px 16px 8px;
   display: flex;
@@ -191,47 +192,167 @@
   font-size: 12px;
 }
 
-/* ---------- Task plan ---------- */
-.plan-card {
+/* ---------- Task plan（Codex 风格悬浮卡片） ---------- */
+.plan-float {
+  position: absolute;
+  top: 12px;
+  right: max(12px, calc((100% - var(--chat-col)) / 2 + 12px));
+  z-index: 10;
+  width: min(320px, calc(100% - 24px));
+  overflow: hidden;
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  padding: 12px 14px;
-  background: var(--bg-elevated);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
 }
-.plan-card-header {
+
+.plan-float-head {
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--text);
-}
-.plan-card-header span,
-.plan-card-summary,
-.plan-step small {
-  color: var(--text-muted);
-  font-size: 12px;
-}
-.plan-card-steps {
-  margin: 10px 0 0;
-  padding-left: 0;
-  list-style: none;
-  display: grid;
+  align-items: center;
   gap: 6px;
+  width: 100%;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
 }
+
+.plan-float-head:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.plan-float-head > svg:first-child {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.plan-float-head > svg:last-child {
+  flex: none;
+  color: var(--text-muted);
+  transition: transform 0.18s ease;
+}
+
+.plan-float-head[aria-expanded='true'] > svg:last-child {
+  transform: rotate(180deg);
+}
+
+.plan-float-goal {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+}
+
+.plan-float-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.plan-float-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.plan-active .plan-float-dot {
+  background: var(--info);
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.12);
+}
+
+.plan-completed .plan-float-dot {
+  background: var(--ok);
+}
+
+.plan-failed .plan-float-dot {
+  background: var(--danger);
+}
+
+.plan-float-status {
+  white-space: nowrap;
+}
+
+.plan-float-progress {
+  padding-left: 5px;
+  border-left: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.plan-float-current {
+  display: -webkit-box;
+  margin: 0;
+  padding: 0 10px 8px 28px;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.plan-float-step-label {
+  margin-right: 5px;
+  color: var(--info);
+}
+
+.plan-float-body {
+  max-height: 240px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.plan-card-steps {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 8px 10px;
+  list-style: none;
+}
+
 .plan-step {
   display: grid;
-  grid-template-columns: 18px 1fr auto;
+  grid-template-columns: 16px 1fr auto;
   align-items: center;
   gap: 6px;
   color: var(--text-secondary);
+  font-size: 12px;
 }
+
 .plan-step-completed {
   color: var(--text);
 }
+
 .plan-step-failed {
-  color: var(--danger, #c44);
+  color: var(--danger);
 }
+
+.plan-step small {
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+
 .plan-card-summary {
-  margin: 10px 0 0;
+  margin: 0;
+  padding: 0 10px 9px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+@media (max-width: 760px) {
+  .plan-float {
+    right: 12px;
+    width: min(300px, calc(100% - 24px));
+  }
 }
 
 /* ---------- Run 过程折叠与思考摘要 ---------- */
@@ -586,7 +707,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  max-width: 760px;
+  max-width: var(--chat-col);
   margin: 0 auto 8px;
   padding: 10px 14px;
   border-radius: 12px;
@@ -604,7 +725,7 @@
 
 .composer {
   position: relative;
-  max-width: 760px;
+  max-width: var(--chat-col);
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -826,7 +947,7 @@
 
 .landing-content {
   width: 100%;
-  max-width: 760px;
+  max-width: var(--chat-col);
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -1063,7 +1184,7 @@
 /* ---------- 发送队列(等待上一条回复结束) ---------- */
 
 .queue-bar {
-  max-width: 760px;
+  max-width: var(--chat-col);
   margin: 0 auto;
   width: 100%;
   padding: 0 16px 8px;

@@ -226,12 +226,74 @@ fn repo_root() -> PathBuf {
         .join("..")
 }
 
+/// 打包资源在安装包 resource_dir 下的子目录名（与 tauri.conf.json 的
+/// bundle.resources 目标名一致）。
+const PACKAGED_RESOURCES_DIR: &str = "pkg";
+
+/// TS Runtime 入口：打包态用随包单文件 runtime.mjs，开发态回退仓库 tsc 产物。
+fn resolve_runtime_entry(resources: Option<&Path>, root: &Path) -> PathBuf {
+    if let Some(resources) = resources {
+        let packaged = resources
+            .join(PACKAGED_RESOURCES_DIR)
+            .join("runtime")
+            .join("runtime.mjs");
+        if packaged.exists() {
+            return packaged;
+        }
+    }
+    root.join("apps")
+        .join("runtime")
+        .join("dist")
+        .join("index.js")
+}
+
+/// Node 可执行文件：打包态用随包 Node（目标机器无需预装），开发态回退 PATH。
+fn resolve_node(resources: Option<&Path>) -> PathBuf {
+    if let Some(resources) = resources {
+        let base = resources
+            .join(PACKAGED_RESOURCES_DIR)
+            .join("node")
+            .join("bin")
+            .join("node");
+        let mut with_exe = base.clone().into_os_string();
+        with_exe.push(".exe");
+        for candidate in [base, PathBuf::from(with_exe)] {
+            if candidate.exists() {
+                return candidate;
+            }
+        }
+    }
+    PathBuf::from("node")
+}
+
+/// sidecar 工作目录：打包态用资源目录（目标机器上仓库路径不存在，
+/// current_dir 指向不存在目录会导致 spawn 失败），开发态用仓库根。
+fn sidecar_cwd(resources: Option<&Path>, root: &Path) -> PathBuf {
+    resources
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| root.to_path_buf())
+}
+
 /// Rust System Runtime 二进制解析（宿主只负责找到路径并交给 TS，
-/// spawn/监管由 TS 承担）：env 覆盖优先，其次仓库相对路径（带 .exe 变体）。
-fn resolve_system_runtime(root: &Path) -> Option<PathBuf> {
+/// spawn/监管由 TS 承担）：env 覆盖优先，其次打包资源目录（带 .exe 变体），
+/// 最后仓库相对路径（开发态）。
+fn resolve_system_runtime(root: &Path, resources: Option<&Path>) -> Option<PathBuf> {
     std::env::var_os("REFLEXION_SYSTEM_RUNTIME")
         .map(PathBuf::from)
         .filter(|path| path.exists())
+        .or_else(|| {
+            resources.and_then(|resources| {
+                let base = resources
+                    .join(PACKAGED_RESOURCES_DIR)
+                    .join("bin")
+                    .join("reflexion-system-runtime");
+                let mut with_exe = base.clone().into_os_string();
+                with_exe.push(".exe");
+                [base, PathBuf::from(with_exe)]
+                    .into_iter()
+                    .find(|path| path.exists())
+            })
+        })
         .or_else(|| {
             [
                 "target/debug",
@@ -252,11 +314,9 @@ fn resolve_system_runtime(root: &Path) -> Option<PathBuf> {
 
 fn start_sidecars(app: &tauri::AppHandle, state: Arc<SupervisorState>) {
     let root = repo_root();
-    let runtime_entry = root
-        .join("apps")
-        .join("runtime")
-        .join("dist")
-        .join("index.js");
+    // 安装包内资源目录：打包态存在并作为 sidecar 首要来源；开发态缺失走仓库回退。
+    let resources = app.path().resource_dir().ok();
+    let runtime_entry = resolve_runtime_entry(resources.as_deref(), &root);
     if !runtime_entry.exists() {
         update_state(
             app,
@@ -272,25 +332,27 @@ fn start_sidecars(app: &tauri::AppHandle, state: Arc<SupervisorState>) {
 
     // Rust 二进制路径经环境变量交接给 TS；找不到也照常启动（TS 会按
     // runtime.status 上报 degraded，工具不可用但不阻塞 Chat）。
-    let system_binary_env: Option<(String, String)> = resolve_system_runtime(&root).map(|path| {
-        (
-            "REFLEXION_SYSTEM_RUNTIME_BIN".to_string(),
-            path.display().to_string(),
-        )
-    });
+    let system_binary_env: Option<(String, String)> =
+        resolve_system_runtime(&root, resources.as_deref()).map(|path| {
+            (
+                "REFLEXION_SYSTEM_RUNTIME_BIN".to_string(),
+                path.display().to_string(),
+            )
+        });
     let envs: Vec<(&str, &str)> = system_binary_env
         .as_ref()
         .map(|(key, value)| vec![(key.as_str(), value.as_str())])
         .unwrap_or_default();
 
-    let node = PathBuf::from("node");
+    let node = resolve_node(resources.as_deref());
     // node:sqlite 在 Node 22 仍标 experimental：产品进程抑制该已知警告，
     // 避免被误读为真正的运行时报错（stderr 仍是日志通道）。
     let runtime_args = [
         PathBuf::from("--disable-warning=ExperimentalWarning"),
         runtime_entry,
     ];
-    match spawn_sidecar(app, state.clone(), &node, &runtime_args, &root, &envs) {
+    let cwd = sidecar_cwd(resources.as_deref(), &root);
+    match spawn_sidecar(app, state.clone(), &node, &runtime_args, &cwd, &envs) {
         Ok(process) => {
             #[cfg(unix)]
             TERMINATED_RUNTIME_PID.store(process.child.id() as usize, Ordering::SeqCst);
@@ -325,16 +387,15 @@ fn bootstrap_get_state(
 /// 与 WebView 内导航隔离，永不内嵌）。
 #[tauri::command]
 fn open_external(url: String) -> Result<(), String> {
-    let parsed = url::Url::parse(url.trim())
-        .map_err(|_| "invalid external URL".to_string())?;
+    let parsed = url::Url::parse(url.trim()).map_err(|_| "invalid external URL".to_string())?;
     if parsed.scheme() != "https" || parsed.host_str().is_none() {
         return Err("only valid https external URLs allowed".to_string());
     }
     let trimmed = parsed.as_str();
-    let status = open_with_system_browser(trimmed)
-        .map_err(|error| format!("failed to open: {error}"))?;
+    let status =
+        open_with_system_browser(trimmed).map_err(|error| format!("failed to open: {error}"))?;
     if !status.success() {
-        return Err(format!("system browser exited with status {status}"))
+        return Err(format!("system browser exited with status {status}"));
     }
     Ok(())
 }

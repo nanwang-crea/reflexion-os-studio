@@ -135,6 +135,14 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
     () => props.sessionData?.messages ?? [],
     [props.sessionData],
   )
+  const currentPlan = useMemo(() => {
+    const plans = props.sessionData?.plans ?? []
+    return (
+      [...plans].reverse().find((plan) => plan.status === 'active') ??
+      plans.at(-1) ??
+      null
+    )
+  }, [props.sessionData])
   const runs = useMemo(() => props.sessionData?.runs ?? [], [props.sessionData])
   const toolCalls = useMemo(
     () => props.sessionData?.toolCalls ?? [],
@@ -227,11 +235,9 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
 
   return (
     <div className="chat-view">
+      {currentPlan && <PlanCard key={currentPlan.id} plan={currentPlan} />}
       <div className="chat-scroll" ref={scrollRef} onScroll={handleScroll}>
         <div className="transcript">
-          {props.sessionData?.plans?.map((plan) => (
-            <PlanCard key={plan.id} plan={plan} />
-          ))}
           {messages.length === 0 && (
             <div className="chat-empty">
               <div className="chat-empty-icon" aria-hidden="true">

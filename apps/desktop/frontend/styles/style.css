@@ -22,6 +22,8 @@
   --mono:
     ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono',
     monospace;
+  /* 聊天列宽：transcript/输入区/悬浮卡对齐共用，改一处即可整体同步。 */
+  --chat-col: 760px;
   font-family:
     system-ui,
     -apple-system,

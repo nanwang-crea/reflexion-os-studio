@@ -11,6 +11,7 @@ export default ts.config(
       '**/dist-frontend/**',
       '**/target/**',
       '**/src-tauri/gen/**',
+      '**/src-tauri/package-resources/**',
       '*.config.*',
     ],
   },

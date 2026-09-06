@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "tauri dev",
-    "build": "tauri build",
+    "build": "tauri build && node ../../scripts/package-macos-dmg.mjs",
     "build:frontend": "vite build",
+    "prepare:package": "bash ../../scripts/prepare-package.sh",
     "dev:frontend": "vite",
     "typecheck": "tsc -p tsconfig.json"
   },

@@ -8,3 +8,7 @@ dist-frontend
 *.log
 .idea
 .vscode
+# 打包产物（prepare-package.sh 生成）：runtime 单文件、随包 Node、sidecar 拷贝
+apps/desktop/src-tauri/package-resources/
+# Node 发行版下载缓存（fetch-node-dist.mjs）
+.cache/
