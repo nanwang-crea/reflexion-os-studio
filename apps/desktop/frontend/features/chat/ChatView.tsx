@@ -183,7 +183,15 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
         )
         .map((run) => run.id),
     )
-    for (const runId of Object.keys(props.runActivities)) ids.add(runId)
+    for (const runId of Object.keys(props.runActivities)) {
+      const run = runs.find((candidate) => candidate.id === runId)
+      if (
+        run === undefined ||
+        !['completed', 'failed', 'cancelled'].includes(run.status)
+      ) {
+        ids.add(runId)
+      }
+    }
     return ids
   }, [runs, props.runActivities])
   const chatBlocks = useMemo(

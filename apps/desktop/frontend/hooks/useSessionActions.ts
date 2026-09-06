@@ -1,4 +1,4 @@
-import type { RefObject } from 'react'
+import type { Dispatch, RefObject, SetStateAction } from 'react'
 import { open } from '@tauri-apps/plugin-dialog'
 import type { Project, Session } from '@reflexion-os-studio/runtime-client'
 import type { ConfirmDialogState } from '../components/ConfirmDialog'
@@ -30,7 +30,7 @@ interface SessionActionsDeps {
   // 状态写入
   setActiveSessionId: (sessionId: string | null) => void
   setActiveProjectId: (projectId: string | null) => void
-  setSessionData: (data: SessionData | null) => void
+  setSessionData: Dispatch<SetStateAction<SessionData | null>>
   setProjectSessions: (sessions: Session[]) => void
   setCreatingProject: (creating: boolean) => void
   setNotice: (notice: string | null) => void
@@ -196,7 +196,18 @@ export function useSessionActions(deps: SessionActionsDeps): {
         run.status === 'awaiting_approval',
     )
     if (!activeRun) return
+    deps.setSessionData((current) =>
+      current === null
+        ? current
+        : {
+            ...current,
+            runs: current.runs.map((run) =>
+              run.id === activeRun.id ? { ...run, status: 'cancelled' } : run,
+            ),
+          },
+    )
     void chatApi.cancelRun(activeRun.id).catch((error) => {
+      void deps.refreshSessionData(activeRun.sessionId).catch(() => {})
       fail(error)
     })
   }
