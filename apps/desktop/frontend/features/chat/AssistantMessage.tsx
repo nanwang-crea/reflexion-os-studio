@@ -99,7 +99,10 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
     <div className="msg-assistant">
       <div className="assistant-main">
         {reasoningText !== '' && !props.hideReasoning && (
-          <ReasoningBlock text={reasoningText} />
+          <ReasoningBlock
+            text={reasoningText}
+            active={props.runActive && props.streamingReasoning !== undefined}
+          />
         )}
         <ToolTrace calls={props.toolCalls} runActive={props.runActive} />
         {waiting && (

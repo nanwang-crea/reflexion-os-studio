@@ -2,6 +2,8 @@ import { useState } from 'react'
 
 interface ReasoningBlockProps {
   text: string
+  /** 思考仍在流式输出中：预览行显示呼吸/脉冲反馈，让用户知道还在实时更新。 */
+  active?: boolean
 }
 
 const SUMMARY_MAX_CHARS = 180
@@ -20,7 +22,7 @@ export function ReasoningBlock(props: ReasoningBlockProps): React.JSX.Element {
     <div className={`reasoning-block${open ? ' open' : ''}`}>
       <button
         type="button"
-        className="reasoning-toggle"
+        className={`reasoning-toggle${props.active ? ' active' : ''}`}
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
       >

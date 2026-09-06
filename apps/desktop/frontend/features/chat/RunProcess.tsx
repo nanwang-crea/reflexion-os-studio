@@ -28,7 +28,15 @@ export function RunProcess(props: RunProcessProps): React.JSX.Element {
         }
         return (
           <div className="run-process-part" key={message.id}>
-            {reasoning !== '' && <ReasoningBlock text={reasoning} />}
+            {reasoning !== '' && (
+              <ReasoningBlock
+                text={reasoning}
+                active={
+                  props.runActive &&
+                  props.streamingReasoning[message.id] !== undefined
+                }
+              />
+            )}
             {text !== '' && !props.reasoningOnlyMessageIds?.has(message.id) && (
               <div className="run-process-text">
                 <MessageMarkdown text={text} />

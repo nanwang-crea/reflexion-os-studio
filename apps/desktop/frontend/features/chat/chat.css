@@ -450,6 +450,58 @@
 .reasoning-label {
   flex: none;
   font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 活动指示点：思考流式输出中显示为脉动圆点，平时透明占位不引起布局位移。 */
+.reasoning-label::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: transparent;
+  flex: none;
+}
+
+.reasoning-toggle.active .reasoning-label::before {
+  background: var(--info);
+  animation: reasoning-pulse 1.4s ease-in-out infinite;
+}
+
+/* 思考进行中：预览文字缓慢呼吸，与静止的历史消息形成区分。 */
+.reasoning-toggle.active .reasoning-preview {
+  animation: reasoning-breathe 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reasoning-toggle.active .reasoning-label::before,
+  .reasoning-toggle.active .reasoning-preview {
+    animation: none;
+  }
+}
+
+@keyframes reasoning-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.7);
+  }
+}
+
+@keyframes reasoning-breathe {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .reasoning-preview {
