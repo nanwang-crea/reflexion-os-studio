@@ -579,8 +579,8 @@ export const AgentSettingsSchema = z.object({
   maxTurns: z.number().int().positive().max(64).nullable(),
   // 工具失败累计次数达到该值注入反思消息；0=禁用反思。
   reflectionThreshold: z.number().int().min(0).max(10).nullable(),
-  // Provider 请求建立阶段失败(429/5xx/网络)自动重试次数。
-  requestRetries: z.number().int().min(0).max(5).nullable(),
+  // Provider 请求建立阶段失败(可恢复 400/429/5xx/网络)自动重试次数。
+  requestRetries: z.number().int().min(0).max(15).nullable(),
   // Provider 请求超时(秒)。
   requestTimeoutSec: z.number().int().min(10).max(600).nullable(),
   // 子 Agent 最大委派深度。

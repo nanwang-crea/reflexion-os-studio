@@ -12,8 +12,26 @@ const DEFAULT_MAX_RETRIES = 5
 const RETRY_BACKOFF_MS = [1_000, 2_500, 5_000, 10_000, 20_000]
 
 /** 429 限流与 5xx 短暂故障可重试；认证/配置类错误重试无意义。 */
-function shouldRetryStatus(code: number): boolean {
-  return code === 429 || code >= 500
+function shouldRetryStatus(code: number, detail = ''): boolean {
+  if (code === 429 || code >= 500) return true
+  if (code !== 400) return false
+  try {
+    const parsed = JSON.parse(detail) as {
+      error?: { type?: unknown; code?: unknown; message?: unknown }
+    }
+    const values = [
+      parsed.error?.type,
+      parsed.error?.code,
+      parsed.error?.message,
+    ]
+    return values.some(
+      (value) =>
+        typeof value === 'string' &&
+        /temporary|overload|try again|temporarily unavailable/i.test(value),
+    )
+  } catch {
+    return false
+  }
 }
 
 /** 可取消的等待；signal 已中止时立即抛 AbortError。 */
@@ -223,10 +241,7 @@ export async function streamChatCompletion(
       const attemptTimeout = AbortSignal.timeout(
         options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       )
-      const attemptSignal = AbortSignal.any([
-        options.signal,
-        attemptTimeout,
-      ])
+      const attemptSignal = AbortSignal.any([options.signal, attemptTimeout])
       try {
         // canonical 工具声明投影为 OpenAI function calling 方言，名称用清洗后的合法名。
         const tools =
@@ -293,7 +308,7 @@ export async function streamChatCompletion(
 
       if (response.ok) break
       const detail = await response.text().catch(() => '')
-      if (shouldRetryStatus(response.status) && attempt < maxRetries) {
+      if (shouldRetryStatus(response.status, detail) && attempt < maxRetries) {
         attempt += 1
         options.onRetry?.({
           attempt,
