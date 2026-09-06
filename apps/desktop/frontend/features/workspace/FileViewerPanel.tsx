@@ -4,6 +4,11 @@ import { FolderIcon } from '../../ui/icons'
 import { ContentView } from './ContentView'
 import type { OpenFileTab } from './types'
 
+/** 转义 CSS 选择器属性值中的特殊字符，路径可含 `.`、`/` 等。 */
+function cssEscape(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, (char) => `\\${char}`)
+}
+
 interface FileViewerPanelProps {
   /** 当前激活项目；null 时展示占位提示。 */
   project: Project | null
@@ -15,15 +20,17 @@ interface FileViewerPanelProps {
   activePath: string | null
   onSelectTab: (path: string) => void
   onCloseTab: (path: string) => void
-  onReorderTabs: (fromPath: string, toPath: string) => void
+  /** 拖拽排序完成后回调：paths 为新的打开顺序。 */
+  onReorderTabs: (paths: string[]) => void
   /** 面板宽度（由 App 拖拽控制）。 */
   width?: number
 }
 
 /**
  * 对话右侧的文件查看器：多文件顶部标签 + 单个激活文件的只读预览。
+ * 标签排序用 pointer events 自绘拖动（拖过目标标签一半即实时换位，松手落定），
+ * 不依赖原生 HTML5 DnD——后者在 Tauri 各平台 WebView 行为不一致。
  * 文件内容只经 workspace.read_file 获取（Rust 侧 workspace 边界校验）。
- * 打开哪个文件由左侧项目文件工作区决定（App 持有 openTabs 状态）。
  */
 export function FileViewerPanel(
   props: FileViewerPanelProps,
@@ -33,11 +40,16 @@ export function FileViewerPanel(
     props.openTabs.find((tab) => tab.path === props.activePath) ?? null
   const tabsScrollRef = useRef<HTMLDivElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
-  const draggedPathRef = useRef<string | null>(null)
   const [canScroll, setCanScroll] = useState(false)
   const [scrollRatio, setScrollRatio] = useState(0)
   const [thumbRatio, setThumbRatio] = useState(1)
   const [trackWidth, setTrackWidth] = useState(0)
+
+  // 拖拽排序状态：dragPath 为被拖标签；previewTabs 为拖动中的实时顺序。
+  const dragPathRef = useRef<string | null>(null)
+  const dragPointerIdRef = useRef<number | null>(null)
+  const [dragPath, setDragPath] = useState<string | null>(null)
+  const [previewTabs, setPreviewTabs] = useState<OpenFileTab[] | null>(null)
 
   // 同步标签容器的横向滚动量，驱动自定义滚动条滑块；窗口/标签变化时重算。
   useEffect(() => {
@@ -121,31 +133,82 @@ export function FileViewerPanel(
     el.scrollLeft += event.deltaY
   }
 
-  // 标签拖拽排序：记录源标签，drop 到目标标签时回调重排（拖到自身忽略）。
-  const handleDragStart = (
-    event: React.DragEvent<HTMLDivElement>,
+  // 标签拖拽排序（pointer events 自绘）：
+  // pointerdown 记录被拖标签并捕获指针；pointermove 实时按目标标签中心
+  // 计算插入位置；pointerup/cancel 提交新顺序。
+  const handleTabPointerDown = (
+    event: React.PointerEvent<HTMLDivElement>,
     path: string,
   ): void => {
-    draggedPathRef.current = path
-    event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.setData('text/plain', path)
-  }
-
-  const handleDragOver = (event: React.DragEvent<HTMLDivElement>): void => {
+    if (event.button !== 0) return
     event.preventDefault()
-    event.dataTransfer.dropEffect = 'move'
+    dragPathRef.current = path
+    dragPointerIdRef.current = event.pointerId
+    setDragPath(path)
+    setPreviewTabs(props.openTabs)
+    event.currentTarget.setPointerCapture(event.pointerId)
   }
 
-  const handleDrop = (
-    event: React.DragEvent<HTMLDivElement>,
-    toPath: string,
+  const handleTabPointerMove = (
+    event: React.PointerEvent<HTMLDivElement>,
   ): void => {
-    event.preventDefault()
-    const fromPath =
-      draggedPathRef.current ?? event.dataTransfer.getData('text/plain')
-    if (fromPath === '' || fromPath === toPath) return
-    props.onReorderTabs(fromPath, toPath)
-    draggedPathRef.current = null
+    const path = dragPathRef.current
+    if (path === null) return
+    const el = tabsScrollRef.current
+    if (el === null) return
+    const x = event.clientX
+    setPreviewTabs((current) => {
+      const base = current ?? props.openTabs
+      const moved = base.find((tab) => tab.path === path)
+      if (moved === undefined) return base
+      const rest = base.filter((tab) => tab.path !== path)
+      // 按每个候选标签的横向中心定位插入点：指针越过中心即插入到其后。
+      let insertAt = rest.length
+      for (let i = 0; i < rest.length; i += 1) {
+        const node = el.querySelector<HTMLElement>(
+          `[data-tab-path="${cssEscape(rest[i].path)}"]`,
+        )
+        if (node === null) continue
+        const rect = node.getBoundingClientRect()
+        if (x < rect.left + rect.width / 2) {
+          insertAt = i
+          break
+        }
+      }
+      const next = rest.slice()
+      next.splice(insertAt, 0, moved)
+      return next
+    })
+  }
+
+  const handleTabPointerUp = (): void => {
+    const path = dragPathRef.current
+    if (path === null) return
+    const id = dragPointerIdRef.current
+    dragPathRef.current = null
+    dragPointerIdRef.current = null
+    setPreviewTabs((current) => {
+      const ordered = current ?? props.openTabs
+      if (current !== null) props.onReorderTabs(ordered.map((tab) => tab.path))
+      return null
+    })
+    setDragPath(null)
+    if (id !== null) {
+      const el = tabsScrollRef.current
+      el?.releasePointerCapture(id)
+    }
+  }
+
+  const handleTabPointerCancel = (): void => {
+    const id = dragPointerIdRef.current
+    dragPathRef.current = null
+    dragPointerIdRef.current = null
+    setPreviewTabs(null)
+    setDragPath(null)
+    if (id !== null) {
+      const el = tabsScrollRef.current
+      el?.releasePointerCapture(id)
+    }
   }
 
   if (project === null) {
@@ -159,6 +222,8 @@ export function FileViewerPanel(
     )
   }
 
+  const renderTabs = previewTabs ?? props.openTabs
+
   return (
     <div className="workspace-panel" style={{ width: props.width }}>
       {props.openTabs.length > 0 ? (
@@ -169,19 +234,25 @@ export function FileViewerPanel(
               ref={tabsScrollRef}
               onWheel={handleWheel}
             >
-              {props.openTabs.map((tab) => {
+              {renderTabs.map((tab) => {
                 const active = tab.path === props.activePath
+                const dragging = tab.path === dragPath
                 const fileName = tab.path.split('/').pop() ?? tab.path
                 return (
                   <div
                     key={tab.path}
-                    className={`file-tab${active ? ' active' : ''}`}
+                    data-tab-path={tab.path}
+                    className={`file-tab${active ? ' active' : ''}${
+                      dragging ? ' dragging' : ''
+                    }`}
                     role="tab"
                     aria-selected={active}
-                    draggable
-                    onDragStart={(event) => handleDragStart(event, tab.path)}
-                    onDragOver={handleDragOver}
-                    onDrop={(event) => handleDrop(event, tab.path)}
+                    onPointerDown={(event) =>
+                      handleTabPointerDown(event, tab.path)
+                    }
+                    onPointerMove={handleTabPointerMove}
+                    onPointerUp={handleTabPointerUp}
+                    onPointerCancel={handleTabPointerCancel}
                   >
                     <button
                       type="button"

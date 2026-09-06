@@ -78,14 +78,6 @@ export default function App() {
   const [workspaceOpen, setWorkspaceOpen] = useState(
     () => localStorage.getItem('reflexion.workspacePanel') !== '0',
   )
-  // 对话右侧任务计划面板：与文件工作区复用同一分栏，默认关闭。
-  const [planOpen, setPlanOpen] = useState(
-    () => localStorage.getItem('reflexion.planPanel') === '1',
-  )
-  const [planWidth, setPlanWidth] = useState(() => {
-    const stored = Number(localStorage.getItem('reflexion.planWidth'))
-    return Number.isFinite(stored) && stored >= 260 ? stored : 340
-  })
   // 右侧查看器可拖拽宽度。
   const [workspaceWidth, setWorkspaceWidth] = useState(() => {
     const stored = Number(localStorage.getItem('reflexion.workspaceWidth'))
@@ -121,14 +113,6 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('reflexion.workspacePanel', workspaceOpen ? '1' : '0')
   }, [workspaceOpen])
-
-  useEffect(() => {
-    localStorage.setItem('reflexion.planPanel', planOpen ? '1' : '0')
-  }, [planOpen])
-
-  useEffect(() => {
-    localStorage.setItem('reflexion.planWidth', String(planWidth))
-  }, [planWidth])
 
   useEffect(() => {
     localStorage.setItem('reflexion.workspaceWidth', String(workspaceWidth))
@@ -250,18 +234,6 @@ export default function App() {
   const handleConfirm = useCallback(() => settleConfirm(true), [settleConfirm])
   const handleCancel = useCallback(() => settleConfirm(false), [settleConfirm])
 
-  /** 右侧面板互斥：工作计划与文件工作区共用同一分栏，打开一个收起另一个。 */
-  const toggleWorkspace = (): void => {
-    const next = !workspaceOpen
-    setWorkspaceOpen(next)
-    if (next) setPlanOpen(false)
-  }
-  const togglePlan = (): void => {
-    const next = !planOpen
-    setPlanOpen(next)
-    if (next) setWorkspaceOpen(false)
-  }
-
   const openSession = (sessionId: string): void => {
     setActiveSessionId(sessionId)
     resetStreaming()
@@ -348,7 +320,6 @@ export default function App() {
       return tabs
     })
     setActiveFilePath(path)
-    setPlanOpen(false)
     setWorkspaceOpen(true)
   }, [])
 
@@ -372,14 +343,15 @@ export default function App() {
     setActiveFilePath(path)
   }, [])
 
-  const reorderTabs = useCallback((fromPath: string, toPath: string): void => {
+  /** 按拖拽结果重新排序标签：paths 为新的打开顺序。 */
+  const reorderTabs = useCallback((paths: string[]): void => {
     setOpenTabs((tabs) => {
-      const fromIndex = tabs.findIndex((tab) => tab.path === fromPath)
-      const toIndex = tabs.findIndex((tab) => tab.path === toPath)
-      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return tabs
-      const next = tabs.slice()
-      const [moved] = next.splice(fromIndex, 1)
-      next.splice(toIndex, 0, moved)
+      const byPath = new Map(tabs.map((tab) => [tab.path, tab]))
+      const next: OpenFileTab[] = []
+      for (const path of paths) {
+        const tab = byPath.get(path)
+        if (tab !== undefined) next.push(tab)
+      }
       return next
     })
   }, [])
@@ -531,30 +503,16 @@ export default function App() {
           <span className="topbar-title">{contextTitle}</span>
           <span className="spacer" />
           {view === 'chat' && (
-            <>
-              <button
-                type="button"
-                className={`topbar-toggle${workspaceOpen ? ' active' : ''}`}
-                title={workspaceOpen ? '收起工作区面板' : '展开工作区面板'}
-                aria-label="工作区面板"
-                aria-pressed={workspaceOpen}
-                onClick={toggleWorkspace}
-              >
-                <FolderIcon />
-              </button>
-              {activeSessionId !== null && (
-                <button
-                  type="button"
-                  className={`topbar-toggle${planOpen ? ' active' : ''}`}
-                  title={planOpen ? '收起计划面板' : '展开计划面板'}
-                  aria-label="任务计划面板"
-                  aria-pressed={planOpen}
-                  onClick={togglePlan}
-                >
-                  <ListIcon />
-                </button>
-              )}
-            </>
+            <button
+              type="button"
+              className={`topbar-toggle${workspaceOpen ? ' active' : ''}`}
+              title={workspaceOpen ? '收起工作区面板' : '展开工作区面板'}
+              aria-label="工作区面板"
+              aria-pressed={workspaceOpen}
+              onClick={() => setWorkspaceOpen((open) => !open)}
+            >
+              <FolderIcon />
+            </button>
           )}
           {memoryNotice && (
             <span className="badge badge-memory">{memoryNotice}</span>
@@ -673,22 +631,6 @@ export default function App() {
                 onCloseTab={closeTab}
                 onReorderTabs={reorderTabs}
                 width={workspaceWidth}
-              />
-            </>
-          )}
-          {view === 'chat' && activeSessionId !== null && planOpen && (
-            <>
-              <ResizeHandle
-                onResize={(delta) =>
-                  setPlanWidth((width) =>
-                    Math.max(260, Math.min(700, width - delta)),
-                  )
-                }
-              />
-              <PlanPanel
-                plans={sessionData?.plans ?? []}
-                onClose={() => setPlanOpen(false)}
-                width={planWidth}
               />
             </>
           )}

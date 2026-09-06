@@ -660,6 +660,13 @@
   cursor: grabbing;
 }
 
+.file-tab.dragging {
+  opacity: 0.5;
+  background: var(--bg-active);
+  outline: 1px dashed var(--text-muted);
+  outline-offset: -1px;
+}
+
 .file-tab.active {
   color: var(--text);
   background: var(--bg-active);
