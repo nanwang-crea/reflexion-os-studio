@@ -147,6 +147,15 @@ export function Composer(props: ComposerProps): React.JSX.Element {
           element.style.height = `${Math.min(element.scrollHeight, 200)}px`
         }}
         onKeyDown={(event) => {
+          // 中文输入法组合状态下（拼音/五笔未上屏）按 Enter 是候选词上屏，
+          // 不应触发发送。isComposing 覆盖 Chrome/Edge/Firefox，
+          // keyCode 229 兜底 Safari（macOS/iOS 输入法 Enter 时 keyCode 恒为 229）。
+          if (
+            event.nativeEvent.isComposing ||
+            event.nativeEvent.keyCode === 229
+          ) {
+            return
+          }
           if (slashOpen) {
             if (event.key === 'ArrowDown') {
               event.preventDefault()
