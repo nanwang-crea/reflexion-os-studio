@@ -4,6 +4,7 @@ import {
   MemorySchema,
   MemoryStatusSchema,
   MessageSchema,
+  RunEventSchema,
   ProviderCapabilitySchema,
   ProviderProfileSchema,
   ProjectSchema,
@@ -139,6 +140,7 @@ export const CommandSchemaRegistry = {
       toolCalls: z.array(ToolCallSchema),
       // 会话内全部计划（跨 Run 汇总），供 UI 呈现计划轨迹。
       plans: z.array(PlanSchema),
+      runEvents: z.array(RunEventSchema),
     }),
   },
   'message.send': {

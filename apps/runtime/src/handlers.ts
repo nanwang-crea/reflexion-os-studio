@@ -92,6 +92,7 @@ export const commandHandlers: Record<string, CommandHandler> = {
       runs: store.runs.listBySession(sessionId),
       toolCalls: store.toolCalls.listBySession(sessionId),
       plans: store.plans.listBySession(sessionId),
+      runEvents: store.runEvents.listBySession(sessionId),
     }
   },
   'session.rename': (p, { store }) => {

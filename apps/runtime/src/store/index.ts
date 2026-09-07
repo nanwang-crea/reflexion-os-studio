@@ -16,6 +16,7 @@ import { AssetStore } from './assets.js'
 import { PlanStore } from './plans.js'
 import { AgentStore } from './agents.js'
 import { DelegationStore } from './delegations.js'
+import { RunEventStore } from './runEvents.js'
 
 export { DEFAULT_SESSION_TITLE, resolveDataDir } from './shared.js'
 
@@ -39,6 +40,7 @@ export class Store {
   readonly plans: PlanStore
   readonly agents: AgentStore
   readonly delegations: DelegationStore
+  readonly runEvents: RunEventStore
 
   constructor(dir: string) {
     mkdirSync(dir, { recursive: true })
@@ -65,6 +67,7 @@ export class Store {
     this.plans = new PlanStore(this.db)
     this.agents = new AgentStore(this.db)
     this.delegations = new DelegationStore(this.db)
+    this.runEvents = new RunEventStore(this.db)
     this.agents.upsert({
       id: 'worker',
       name: 'Worker Agent',

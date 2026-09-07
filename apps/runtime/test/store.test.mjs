@@ -620,6 +620,58 @@ test('run usage accumulates across turns', () => {
   store.close()
 })
 
+test('run events survive round-trip, order, and session cascade', () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
+  const session = store.sessions.create(project.id)
+  const run = store.runs.create({
+    sessionId: session.id,
+    providerId: 'prov1',
+    model: 'mock-model',
+  })
+
+  store.runEvents.createRetrying({
+    sessionId: session.id,
+    runId: run.id,
+    attempt: 1,
+    maxRetries: 5,
+    reason: 'provider responded 503',
+  })
+  store.runEvents.createFailed({
+    sessionId: session.id,
+    runId: run.id,
+    errorCode: 'provider',
+    errorMessage: 'provider responded 503: model_not_found',
+  })
+
+  const events = store.runEvents.listBySession(session.id)
+  assert.equal(events.length, 2)
+  assert.equal(events[0].type, 'retrying')
+  assert.equal(events[0].attempt, 1)
+  assert.equal(events[0].maxRetries, 5)
+  assert.equal(events[0].reason, 'provider responded 503')
+  assert.equal(events[1].type, 'failed')
+  assert.equal(events[1].errorCode, 'provider')
+  assert.equal(
+    events[1].errorMessage,
+    'provider responded 503: model_not_found',
+  )
+  // retry 事件不携带错误字段，failed 事件不携带重试字段。
+  assert.equal(events[0].errorCode, null)
+  assert.equal(events[0].errorMessage, null)
+  assert.equal(events[1].attempt, null)
+  assert.equal(events[1].maxRetries, null)
+  assert.equal(events[1].reason, null)
+  assert.ok(events[0].id)
+  assert.ok(events[0].createdAt)
+  assert.ok(events[1].id)
+
+  // 会话删除级联清理事件（按 run 的 session 归属）。
+  store.sessions.delete(session.id)
+  assert.equal(store.runEvents.listBySession(session.id).length, 0)
+  store.close()
+})
+
 test('agent settings default and round-trip', () => {
   const store = freshStore()
   assert.deepEqual(store.agentSettings.get(), {

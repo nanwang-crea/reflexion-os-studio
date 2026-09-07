@@ -227,6 +227,13 @@ export class RunRunner {
                 streamingMarked = false
                 reasoningSeq = 0
                 this.store.messages.resetPending(draft.id)
+                this.store.runEvents.createRetrying({
+                  sessionId: run.sessionId,
+                  runId: run.id,
+                  attempt,
+                  maxRetries,
+                  reason,
+                })
                 emitter.next({
                   type: 'run.retrying',
                   attempt,
@@ -483,10 +490,17 @@ export class RunRunner {
           this.store.runs.finalize(run.id, 'failed', reason.code)
           this.finishPlan(run, emitter, 'failed', reason.message)
           input.onFailure?.(reason)
+          this.store.runEvents.createFailed({
+            sessionId: run.sessionId,
+            runId: run.id,
+            errorCode: reason.code,
+            errorMessage: reason.message,
+          })
           emitter.next({
             type: 'run.failed',
             error: { code: reason.code, message: reason.message },
           })
+
           return
         }
         cancelInFlightToolCalls()
@@ -507,6 +521,12 @@ export class RunRunner {
       finalizePendingTurn('failed')
       this.store.runs.finalize(run.id, 'failed', code)
       this.finishPlan(run, emitter, 'failed', message)
+      this.store.runEvents.createFailed({
+        sessionId: run.sessionId,
+        runId: run.id,
+        errorCode: code,
+        errorMessage: message,
+      })
       emitter.next({ type: 'run.failed', error: { code, message } })
     }
   }

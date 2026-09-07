@@ -190,6 +190,23 @@ export const RunSchema = z.object({
 })
 export type Run = z.infer<typeof RunSchema>
 
+export const RunEventTypeSchema = z.enum(['retrying', 'failed'])
+export type RunEventType = z.infer<typeof RunEventTypeSchema>
+
+export const RunEventSchema = z.object({
+  id: z.string().min(1),
+  sessionId: z.string().min(1),
+  runId: z.string().min(1),
+  type: RunEventTypeSchema,
+  attempt: z.number().int().positive().nullable(),
+  maxRetries: z.number().int().nonnegative().nullable(),
+  reason: z.string().nullable(),
+  errorCode: z.string().nullable(),
+  errorMessage: z.string().nullable(),
+  createdAt: IsoDateTimeSchema,
+})
+export type RunEvent = z.infer<typeof RunEventSchema>
+
 /** Stable definition of an agent available for delegation. */
 export const AgentDefinitionSchema = z.object({
   id: z.string().min(1),

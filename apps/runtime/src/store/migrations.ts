@@ -76,6 +76,20 @@ CREATE TABLE IF NOT EXISTS plan_steps (
 CREATE INDEX IF NOT EXISTS idx_plans_session ON plans(session_id, created_at);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_plans_one_active_session ON plans(session_id) WHERE status = 'active';
 CREATE INDEX IF NOT EXISTS idx_plan_steps_plan ON plan_steps(plan_id, created_at);
+CREATE TABLE IF NOT EXISTS run_events (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  attempt INTEGER,
+  max_retries INTEGER,
+  reason TEXT,
+  error_code TEXT,
+  error_message TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_run_events_session ON run_events(session_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_run_events_run ON run_events(run_id, created_at);
 CREATE TABLE IF NOT EXISTS tool_calls (
   id TEXT PRIMARY KEY,
   run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
@@ -217,7 +231,7 @@ CREATE TABLE IF NOT EXISTS assets (
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 17
+export const LATEST_SCHEMA_VERSION = 18
 
 const SESSIONS_TABLE_V1 = `
 CREATE TABLE sessions (
