@@ -86,6 +86,7 @@ export const MessageStatusSchema = z.enum([
   'completed',
   'interrupted',
   'failed',
+  'superseded',
 ])
 export type MessageStatus = z.infer<typeof MessageStatusSchema>
 
@@ -179,6 +180,7 @@ export const RunSchema = z.object({
   completedAt: IsoDateTimeSchema.nullable(),
   errorCode: z.string().nullable(),
   retryOfRunId: z.string().min(1).nullable(),
+  supersededByRunId: z.string().min(1).nullable(),
   // 执行该 Run 的 Agent；多 Agent 委派链路字段，Primary Agent 为 null。
   agentId: z.string().min(1).nullable(),
   parentRunId: z.string().min(1).nullable(),

@@ -94,6 +94,7 @@ test('RunSchema carries agent delegation fields and awaiting_approval', () => {
     completedAt: null,
     errorCode: null,
     retryOfRunId: null,
+    supersededByRunId: null,
     agentId: null,
     parentRunId: null,
     delegationId: null,
