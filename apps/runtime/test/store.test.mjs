@@ -419,7 +419,7 @@ test('replaceWithRetry preserves original run and marks it superseded', () => {
     providerId: 'prov1',
     model: 'm',
   })
-  const userMessage = store.messages.create({
+  store.messages.create({
     sessionId: session.id,
     runId: run.id,
     role: 'user',
@@ -444,7 +444,9 @@ test('replaceWithRetry preserves original run and marks it superseded', () => {
 
   let supersededRunId = null
   const mockMessages = {
-    markSupersededByRun: (runId) => { supersededRunId = runId },
+    markSupersededByRun: (runId) => {
+      supersededRunId = runId
+    },
   }
 
   const retry = store.transaction(() =>
