@@ -96,10 +96,14 @@ export function useWorkspacePanel(): WorkspacePanelState {
     ): void => {
       const nonce = Date.now()
       setOpenTabs((tabs) => {
-        const existing = tabs.find((tab) => tab.path === path && tab.mode === 'diff')
+        const existing = tabs.find(
+          (tab) => tab.path === path && tab.mode === 'diff',
+        )
         if (existing) {
           return tabs.map((tab) =>
-            tab === existing ? { ...tab, ...options, nonce, mode: 'diff' } : tab,
+            tab === existing
+              ? { ...tab, ...options, nonce, mode: 'diff' }
+              : tab,
           )
         }
         return [...tabs, { path, mode: 'diff', nonce, ...options }]
