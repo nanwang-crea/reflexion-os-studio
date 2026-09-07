@@ -6,6 +6,7 @@ import type {
   SkillManifest,
   ToolCall,
   Delegation,
+  RunEvent,
 } from '@reflexion-os-studio/runtime-client'
 import { Composer, type ComposerModelOption } from '../../components/Composer'
 import { CopyButton } from '../../components/CopyButton'
@@ -16,6 +17,7 @@ import { RunBlock } from './RunBlock'
 import type { ProcessItem } from './RunProcess'
 import { QueueBar } from './QueueBar'
 import { PlanCard } from './PlanCard'
+import { RunEventCard } from './RunEventCard'
 import type { SessionData } from '../../api/sessions'
 import type { PendingApproval, RunActivity } from '../../hooks/useAppBootstrap'
 
@@ -270,37 +272,51 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
               const finalMessage =
                 block.finalItem?.message ??
                 block.processItems[block.processItems.length - 1]?.message
+              const runEvents = (props.sessionData?.runEvents ?? []).filter(
+                (event: RunEvent) => event.runId === block.runId,
+              )
+              const failureDetail = runEvents.find(
+                (event: RunEvent) => event.type === 'failed',
+              )
               return (
-                <RunBlock
-                  key={block.runId}
-                  processItems={block.processItems}
-                  finalItem={block.finalItem}
-                  delegations={props.delegations.filter(
-                    (entry) => entry.parentRunId === block.runId,
-                  )}
-                  runActive={activeRunIds.has(block.runId)}
-                  runActivity={props.runActivities[block.runId]}
-                  streaming={props.streaming}
-                  streamingReasoning={props.streamingReasoning}
-                  runDurationMs={
-                    finalMessage
-                      ? computeRunDurationMs(runs, finalMessage)
-                      : null
-                  }
-                  runUsage={run?.usage ?? null}
-                  canRetry={
-                    lastRetryableRun !== undefined &&
-                    lastRetryableRun.id === block.runId
-                  }
-                  onRetry={handleRetry}
-                  onResourceClick={props.onResourceClick}
-                  onOpenDiff={props.onOpenDiff}
-                  projectId={props.sessionData?.session?.projectId ?? ''}
-                />
+                <div key={block.runId}>
+                  {runEvents.map((event) => (
+                    <RunEventCard key={event.id} event={event} />
+                  ))}
+                  <RunBlock
+                    processItems={block.processItems}
+                    finalItem={block.finalItem}
+
+                    delegations={props.delegations.filter(
+                      (entry) => entry.parentRunId === block.runId,
+                    )}
+                    runActive={activeRunIds.has(block.runId)}
+                    runActivity={props.runActivities[block.runId]}
+                    streaming={props.streaming}
+                    streamingReasoning={props.streamingReasoning}
+                    runDurationMs={
+                      finalMessage
+                        ? computeRunDurationMs(runs, finalMessage)
+                        : null
+                    }
+                    runUsage={run?.usage ?? null}
+                    runFailed={run?.status === 'failed'}
+                    failureDetail={failureDetail?.errorMessage ?? null}
+                    canRetry={
+                      lastRetryableRun !== undefined &&
+                      lastRetryableRun.id === block.runId
+                    }
+                    onRetry={handleRetry}
+                    onResourceClick={props.onResourceClick}
+                    onOpenDiff={props.onOpenDiff}
+                    projectId={props.sessionData?.session?.projectId ?? ''}
+                  />
+                </div>
               )
             }
 
             const { message, toolCalls } = block.item
+
             if (
               message.role === 'assistant' &&
               message.status === 'completed' &&

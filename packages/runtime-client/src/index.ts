@@ -42,6 +42,8 @@ export type {
   AgentDefinition,
   Delegation,
   DelegationStatus,
+  RunEvent,
+  RunEventType,
 } from '@reflexion-os-studio/contracts'
 
 export {

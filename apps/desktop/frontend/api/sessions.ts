@@ -4,6 +4,7 @@ import type {
   Session,
   ToolCall,
   Plan,
+  RunEvent,
 } from '@reflexion-os-studio/runtime-client'
 import { request, requestList } from './client'
 
@@ -14,6 +15,7 @@ export interface SessionData {
   runs: Run[]
   toolCalls: ToolCall[]
   plans: Plan[]
+  runEvents: RunEvent[]
 }
 
 /**

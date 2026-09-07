@@ -326,6 +326,9 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           return
         }
         if (event.type === 'run.retrying') {
+          deps.setNotice(
+            `重试（第 ${event.attempt}/${event.maxRetries} 次）：${event.reason}`,
+          )
           setRunActivity(event.runId, {
             phase: 'thinking',
             retry: {
@@ -387,6 +390,9 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
               }, 1600)
             }
             if (event.type === 'run.failed') {
+              deps.setNotice(
+                `对话失败（${event.error.code}）：${event.error.message}`,
+              )
               setFailedSessionIds((ids) =>
                 ids.includes(sessionId) ? ids : [...ids, sessionId],
               )

@@ -20,6 +20,10 @@ interface RunBlockProps {
   streamingReasoning: Record<string, string>
   runDurationMs: number | null
   runUsage: Usage | null
+  /** Run 最终状态为 failed（非进行中）时用“运行失败”替代“处理完成”。 */
+  runFailed: boolean
+  /** 该 Run 的失败事件（含错误码与完整错误信息）；无失败或无记录时为 null。 */
+  failureDetail?: string | null
   canRetry: boolean
   onRetry: () => void
   onResourceClick?: (link: ResourceLink) => void
@@ -62,9 +66,7 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
     const reasoning =
       props.streamingReasoning[props.finalItem.message.id] ??
       props.finalItem.message.reasoning
-    return reasoning !== ''
-      ? new Set([props.finalItem.message.id])
-      : undefined
+    return reasoning !== '' ? new Set([props.finalItem.message.id]) : undefined
   }, [props.finalItem, props.streamingReasoning])
   const hasProcess = processItems.length > 0
 
@@ -80,9 +82,11 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
     ? props.runActivity?.retry !== undefined
       ? `正在重试（第 ${props.runActivity.retry.attempt}/${props.runActivity.retry.maxRetries} 次）…`
       : '正在处理…'
-    : props.runDurationMs !== null
-      ? `工作了 ${formatDuration(props.runDurationMs)}`
-      : '处理完成'
+    : props.runFailed
+      ? '运行失败'
+      : props.runDurationMs !== null
+        ? `工作了 ${formatDuration(props.runDurationMs)}`
+        : '处理完成'
 
   return (
     <div className="run-block">
@@ -129,6 +133,7 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
           }
           runDurationMs={props.runDurationMs}
           runUsage={props.runUsage}
+          failureDetail={props.failureDetail}
           canRetry={props.canRetry}
           onRetry={props.onRetry}
           onResourceClick={props.onResourceClick}

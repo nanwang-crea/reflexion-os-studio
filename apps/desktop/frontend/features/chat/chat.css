@@ -355,6 +355,30 @@
   }
 }
 
+/* ---------- Run 事件卡（重试 / 失败） ---------- */
+.run-event-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.run-event-retry {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.run-event-failure {
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  color: var(--danger);
+}
+
 /* ---------- Run 过程折叠与思考摘要 ---------- */
 .run-block {
   display: flex;

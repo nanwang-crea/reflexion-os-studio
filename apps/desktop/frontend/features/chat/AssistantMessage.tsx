@@ -46,6 +46,8 @@ interface AssistantMessageProps {
   runDurationMs: number | null
   /** 该消息所属 Run 的 token 用量（各模型轮合计）；无数据时为 null。 */
   runUsage: Usage | null
+  /** 该 Run 的失败事件详情；失败但无记录时为 undefined。 */
+  failureDetail?: string | null
   /** 该消息属于最近一个可重试的失败 Run 时展示重试入口。 */
   canRetry: boolean
   onRetry: () => void
@@ -126,7 +128,11 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
             <span className="assistant-error-icon" aria-hidden="true">
               <AlertIcon size={15} />
             </span>
-            <span className="assistant-error-text">{statusLabel}</span>
+            <span className="assistant-error-text">
+              {props.message.status === 'failed' && props.failureDetail
+                ? props.failureDetail
+                : statusLabel}
+            </span>
             {props.canRetry && (
               <button
                 type="button"
