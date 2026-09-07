@@ -231,7 +231,7 @@ CREATE TABLE IF NOT EXISTS assets (
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 18
+export const LATEST_SCHEMA_VERSION = 19
 
 const SESSIONS_TABLE_V1 = `
 CREATE TABLE sessions (
@@ -487,6 +487,17 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
       migrateMcpEnvSecrets(db, dir)
     }
     // v17: agents/delegations tables are additive and created by SCHEMA.
+    if (version < 19) {
+      const runColumns = tableColumns(db, 'runs').map((c) => c.name)
+      if (!runColumns.includes('superseded_by_run_id'))
+        db.exec('ALTER TABLE runs ADD COLUMN superseded_by_run_id TEXT')
+      db.exec(
+        'CREATE INDEX IF NOT EXISTS idx_runs_retry_of ON runs(retry_of_run_id)',
+      )
+      db.exec(
+        'CREATE INDEX IF NOT EXISTS idx_runs_superseded_by ON runs(superseded_by_run_id)',
+      )
+    }
     db.exec('COMMIT')
     // 迁移全部执行完毕才推进版本号；否则下次启动会重复进入迁移分支。
     version = LATEST_SCHEMA_VERSION

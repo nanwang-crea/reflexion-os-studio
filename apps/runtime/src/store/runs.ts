@@ -39,6 +39,7 @@ export class RunStore {
       completedAt: null,
       errorCode: null,
       retryOfRunId: input.retryOfRunId ?? null,
+      supersededByRunId: null,
       agentId: input.agentId ?? null,
       parentRunId: input.parentRunId ?? null,
       delegationId: input.delegationId ?? null,
@@ -49,7 +50,7 @@ export class RunStore {
     }
     this.db
       .prepare(
-        'INSERT INTO runs (id, session_id, status, provider_id, model, started_at, completed_at, error_code, retry_of_run_id, agent_id, parent_run_id, delegation_id, skill_id, plan_id, plan_step_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO runs (id, session_id, status, provider_id, model, started_at, completed_at, error_code, retry_of_run_id, superseded_by_run_id, agent_id, parent_run_id, delegation_id, skill_id, plan_id, plan_step_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .run(
         run.id,
@@ -61,6 +62,7 @@ export class RunStore {
         run.completedAt,
         run.errorCode,
         run.retryOfRunId,
+        run.supersededByRunId,
         run.agentId,
         run.parentRunId,
         run.delegationId,
@@ -168,6 +170,10 @@ export class RunStore {
       errorCode: row.error_code == null ? null : String(row.error_code),
       retryOfRunId:
         row.retry_of_run_id == null ? null : String(row.retry_of_run_id),
+      supersededByRunId:
+        row.superseded_by_run_id == null
+          ? null
+          : String(row.superseded_by_run_id),
       agentId: row.agent_id == null ? null : String(row.agent_id),
       parentRunId: row.parent_run_id == null ? null : String(row.parent_run_id),
       delegationId:
