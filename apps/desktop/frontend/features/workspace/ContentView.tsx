@@ -18,7 +18,7 @@ export function ContentView(props: ContentViewProps): React.JSX.Element {
       projectId={props.projectId}
       path={props.path}
       initialLine={props.initialLine}
-readOnly={props.readOnly ?? true}
+      readOnly={props.readOnly ?? true}
       onClose={props.onClose}
     />
   )
