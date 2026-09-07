@@ -156,6 +156,10 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
     )
   }, [props.sessionData])
   const runs = useMemo(() => props.sessionData?.runs ?? [], [props.sessionData])
+  const visibleRuns = useMemo(
+    () => runs.filter((run) => run.supersededByRunId === null),
+    [runs],
+  )
   const toolCalls = useMemo(
     () => props.sessionData?.toolCalls ?? [],
     [props.sessionData],
@@ -178,7 +182,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
   )
   const runActive =
     sessionApprovals.length > 0 ||
-    runs.some(
+    visibleRuns.some(
       (run) =>
         run.status === 'created' ||
         run.status === 'running' ||
@@ -210,7 +214,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
     () => buildChatBlocks(messages, toolCallsByMessage),
     [messages, toolCallsByMessage],
   )
-  const lastRetryableRun = [...runs]
+  const lastRetryableRun = [...visibleRuns]
     .reverse()
     .find(
       (run) =>
