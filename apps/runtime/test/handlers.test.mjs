@@ -141,21 +141,20 @@ test('task tool rejects without starter and validates arguments', async () => {
       }),
     /task is required/,
   )
-  await assert.rejects(
-    () =>
-      tool.execute({
-        args: { task: 'do' },
-        signal: new AbortController().signal,
-      }),
-    /agentId is required/,
-  )
+  // agentId 可选：缺省时回退 'default'（与工具 schema required: ['task'] 一致）。
+  const defaulted = await tool.execute({
+    args: { task: 'do' },
+    signal: new AbortController().signal,
+  })
+  assert.deepEqual(defaulted, { content: 'done', isError: false })
+  assert.equal(starterCalls[0].agentId, 'default')
   const result = await tool.execute({
     args: { task: ' do ', agentId: ' agent-1 ' },
     signal: new AbortController().signal,
   })
   assert.deepEqual(result, { content: 'done', isError: false })
-  assert.equal(starterCalls[0].parentRunId, 'run-1')
-  assert.equal(starterCalls[0].agentId, 'agent-1')
+  assert.equal(starterCalls[1].parentRunId, 'run-1')
+  assert.equal(starterCalls[1].agentId, 'agent-1')
 })
 
 test('tool registry: child has no task and allowedTools filters tools', () => {

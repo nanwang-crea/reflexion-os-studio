@@ -3,9 +3,9 @@ import { defineConfig } from 'vite'
 import MonacoEditorPlugin from 'vite-plugin-monaco-editor'
 
 // vite-plugin-monaco-editor exports CJS with .default wrapper; resolve to the actual plugin function
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const monacoEditorPlugin =
-  (MonacoEditorPlugin as any).default ?? MonacoEditorPlugin
+  (MonacoEditorPlugin as unknown as { default?: typeof MonacoEditorPlugin })
+    .default ?? MonacoEditorPlugin
 
 export default defineConfig({
   root: '.',

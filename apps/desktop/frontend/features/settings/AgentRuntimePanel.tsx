@@ -110,6 +110,8 @@ function toDraft(settings: AgentSettings): Record<string, string> {
 export function AgentRuntimePanel(): React.JSX.Element {
   const [draft, setDraft] = useState<Record<string, string> | null>(null)
   const initialRef = useRef<Record<string, string> | null>(null)
+  // enableChildRuns 是布尔开关，不进数字草稿；保存时原样带回，避免被重置。
+  const enableChildRunsRef = useRef<boolean>(false)
   const [busy, setBusy] = useState(false)
   const [savedAt, setSavedAt] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -119,6 +121,7 @@ export function AgentRuntimePanel(): React.JSX.Element {
     void getAgentSettings()
       .then((result) => {
         if (disposed) return
+        enableChildRunsRef.current = result.settings.enableChildRuns
         const next = toDraft(result.settings)
         initialRef.current = next
         setDraft(next)
@@ -138,9 +141,18 @@ export function AgentRuntimePanel(): React.JSX.Element {
     setBusy(true)
     setError(null)
     try {
-      const settings = Object.fromEntries(
-        FIELDS.map((field) => [field.key, parseNumber(draft[field.key])]),
-      ) as AgentSettings
+      const settings: AgentSettings = {
+        maxTurns: parseNumber(draft.maxTurns),
+        reflectionThreshold: parseNumber(draft.reflectionThreshold),
+        requestRetries: parseNumber(draft.requestRetries),
+        requestTimeoutSec: parseNumber(draft.requestTimeoutSec),
+        maxDepth: parseNumber(draft.maxDepth),
+        maxChildRuns: parseNumber(draft.maxChildRuns),
+        maxParallelChildren: parseNumber(draft.maxParallelChildren),
+        maxChildTimeoutSec: parseNumber(draft.maxChildTimeoutSec),
+        maxChildTotalTokens: parseNumber(draft.maxChildTotalTokens),
+        enableChildRuns: enableChildRunsRef.current,
+      }
       await updateAgentSettings(settings)
       setSavedAt(new Date().toLocaleTimeString())
     } catch (caught) {
