@@ -190,7 +190,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
     )
   const activeRunIds = useMemo(() => {
     const ids = new Set(
-      runs
+      visibleRuns
         .filter(
           (run) =>
             run.status === 'created' ||
@@ -200,7 +200,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
         .map((run) => run.id),
     )
     for (const runId of Object.keys(props.runActivities)) {
-      const run = runs.find((candidate) => candidate.id === runId)
+      const run = visibleRuns.find((candidate) => candidate.id === runId)
       if (
         run === undefined ||
         !['completed', 'failed', 'cancelled'].includes(run.status)
@@ -209,7 +209,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
       }
     }
     return ids
-  }, [runs, props.runActivities])
+  }, [visibleRuns, props.runActivities])
   const chatBlocks = useMemo(
     () => buildChatBlocks(messages, toolCallsByMessage),
     [messages, toolCallsByMessage],
