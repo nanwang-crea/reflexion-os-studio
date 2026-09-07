@@ -158,6 +158,48 @@ export class RunStore {
     this.db.prepare('DELETE FROM runs WHERE id = ?').run(id)
   }
 
+  markSuperseded(originalId: string, replacementId: string): void {
+    this.db
+      .prepare('UPDATE runs SET superseded_by_run_id = ? WHERE id = ?')
+      .run(replacementId, originalId)
+  }
+
+  replaceWithRetry(
+    originalId: string,
+    input: {
+      sessionId: string
+      providerId: string | null
+      model: string | null
+      skillId: string | null
+      planId: string | null
+      planStepId: string | null
+    },
+    messages: { markSupersededByRun(runId: string): void },
+  ): Run {
+    const original = this.get(originalId)
+    if (!original) {
+      throw new Error(`run not found: ${originalId}`)
+    }
+    if (original.status === 'created' || original.status === 'running') {
+      throw new Error('原 Run 仍在进行中，无法重试')
+    }
+
+    const run = this.create({
+      sessionId: input.sessionId,
+      providerId: input.providerId,
+      model: input.model,
+      retryOfRunId: originalId,
+      skillId: input.skillId,
+      planId: input.planId,
+      planStepId: input.planStepId,
+    })
+
+    this.markSuperseded(originalId, run.id)
+    messages.markSupersededByRun(originalId)
+
+    return run
+  }
+
   private toRun(row: Row): Run {
     return {
       id: String(row.id),

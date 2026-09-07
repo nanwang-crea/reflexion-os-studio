@@ -410,7 +410,7 @@ test('recovery marks unfinished runs/messages/tool calls on reopen', () => {
   assert.equal(reopened.toolCalls.get(toolCall.id).status, 'cancelled')
 })
 
-test('retry replacement deletes assistant messages + run but keeps user question', () => {
+test('replaceWithRetry preserves original run and marks it superseded', () => {
   const store = freshStore()
   const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
   const session = store.sessions.create(project.id)
@@ -440,18 +440,38 @@ test('retry replacement deletes assistant messages + run but keeps user question
     args: { path: 'a.ts' },
     status: 'completed',
   })
+  store.runs.finalize(run.id, 'failed', 'network')
 
-  // 模拟重试替换：事务内删助手消息 + 删 Run（级联清工具调用），保留用户消息。
-  store.transaction(() => {
-    store.messages.deleteByRun(run.id, 'assistant')
-    store.runs.delete(run.id)
-  })
+  let supersededRunId = null
+  const mockMessages = {
+    markSupersededByRun: (runId) => { supersededRunId = runId },
+  }
 
-  const remaining = store.messages.listBySession(session.id)
-  assert.equal(remaining.length, 1)
-  assert.equal(remaining[0].id, userMessage.id)
-  assert.equal(store.runs.get(run.id), null)
-  assert.equal(store.toolCalls.get(toolCall.id), null)
+  const retry = store.transaction(() =>
+    store.runs.replaceWithRetry(
+      run.id,
+      {
+        sessionId: session.id,
+        providerId: 'prov1',
+        model: 'm',
+        skillId: null,
+        planId: null,
+        planStepId: null,
+      },
+      mockMessages,
+    ),
+  )
+
+  const originalPersisted = store.runs.get(run.id)
+  assert.ok(originalPersisted)
+  assert.equal(originalPersisted.supersededByRunId, retry.id)
+
+  assert.equal(retry.retryOfRunId, run.id)
+  assert.equal(retry.supersededByRunId, null)
+
+  assert.equal(supersededRunId, run.id)
+
+  assert.ok(store.toolCalls.get(toolCall.id) !== null)
 })
 
 test('provider profile upsert keeps capabilities when omitted on edit', () => {
