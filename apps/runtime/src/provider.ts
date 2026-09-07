@@ -453,14 +453,15 @@ export async function streamChatCompletion(
       }
     } catch (error) {
       if (error instanceof StreamCallbackError) throw error.cause
-      // attempt 的硬超时发生在流读取阶段时不重试，避免已发送增量重复。
-      if (isTimeout(error) || isAbort(error)) throw error
+      if (isAbort(error)) throw error
       if (attempt < maxRetries) {
         attempt += 1
         options.onRetry?.({
           attempt,
           maxRetries,
-          reason: `stream failure: ${String(error)}`,
+          reason: isTimeout(error)
+            ? `timeout: ${String(error)}`
+            : `stream failure: ${String(error)}`,
         })
         await sleep(
           RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)],
@@ -469,7 +470,7 @@ export async function streamChatCompletion(
         continue attempts
       }
       throw new ProviderError(
-        'network',
+        isTimeout(error) ? 'timeout' : 'network',
         `provider stream failed: ${String(error)}`,
       )
     }
