@@ -4,6 +4,7 @@ interface ContentViewProps {
   projectId: string
   path: string
   initialLine?: number
+  readOnly?: boolean
   onClose: () => void
 }
 
@@ -17,7 +18,7 @@ export function ContentView(props: ContentViewProps): React.JSX.Element {
       projectId={props.projectId}
       path={props.path}
       initialLine={props.initialLine}
-      readOnly
+readOnly={props.readOnly ?? true}
       onClose={props.onClose}
     />
   )
