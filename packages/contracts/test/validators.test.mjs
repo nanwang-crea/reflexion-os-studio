@@ -373,7 +373,7 @@ test('provider.configure accepts models and optional capabilities', () => {
   assert.equal(params.safeParse({ ...base }).success, false)
 })
 
-test('session.get result carries session, messages, runs, toolCalls and plans', () => {
+test('session.get result carries session, messages, runs, toolCalls, plans and runEvents', () => {
   const result = CommandSchemaRegistry['session.get'].result
   assert.equal(
     result.safeParse({
@@ -382,6 +382,7 @@ test('session.get result carries session, messages, runs, toolCalls and plans', 
       runs: [],
       toolCalls: [],
       plans: [],
+      runEvents: [],
     }).success,
     true,
   )
@@ -392,6 +393,17 @@ test('session.get result carries session, messages, runs, toolCalls and plans', 
     result.safeParse({ session: null, messages: [], runs: [] }).success,
     false,
   )
+  // runEvents 为必填：无事件时是空数组，而不是缺字段。
+  assert.equal(
+    result.safeParse({
+      session: null,
+      messages: [],
+      runs: [],
+      toolCalls: [],
+      plans: [],
+    }).success,
+    false,
+  )
   // plans 为必填：无计划时是空数组，而不是缺字段。
   assert.equal(
     result.safeParse({
@@ -399,6 +411,7 @@ test('session.get result carries session, messages, runs, toolCalls and plans', 
       messages: [],
       runs: [],
       toolCalls: [],
+      runEvents: [],
     }).success,
     false,
   )
@@ -433,6 +446,7 @@ test('session.get result carries session, messages, runs, toolCalls and plans', 
       runs: [],
       toolCalls: [],
       plans: [plan],
+      runEvents: [],
     }).success,
     true,
   )
