@@ -54,14 +54,13 @@ export function listDir(
 export function readFile(
   projectId: string,
   path: string,
-  offset?: number,
-  limit?: number,
+  options?: { offset?: number; limit?: number },
 ): Promise<WorkspaceReadResult> {
   return request<WorkspaceReadResult>('workspace.read_file', {
     projectId,
     path,
-    ...(offset !== undefined ? { offset } : {}),
-    ...(limit !== undefined ? { limit } : {}),
+    ...(options?.offset !== undefined ? { offset: options.offset } : {}),
+    ...(options?.limit !== undefined ? { limit: options.limit } : {}),
   })
 }
 

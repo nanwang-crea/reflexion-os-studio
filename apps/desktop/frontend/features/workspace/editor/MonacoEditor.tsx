@@ -31,7 +31,7 @@ export function MonacoEditor(props: MonacoEditorProps): React.JSX.Element {
     setError(null)
     void (async () => {
       try {
-        const result = await readFile(projectId, path)
+        const result = await readFile(projectId, path, { limit: 50000 })
         if (disposed) return
         setContent(result.content)
         setBaseline(result.content)

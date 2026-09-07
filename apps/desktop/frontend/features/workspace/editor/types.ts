@@ -23,5 +23,5 @@ export interface MonacoDiffEditorProps {
 /** 编辑器配置常量。 */
 export const EDITOR_CONFIG = {
   /** 超过此大小进入只读模式（字节）。 */
-  EDIT_READ_ONLY_THRESHOLD: 2 * 1024 * 1024,
+  EDIT_READ_ONLY_THRESHOLD: 500 * 1024, // 500KB — matches Rust file.read limit
 } as const
