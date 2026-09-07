@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { DiffEditor } from '@monaco-editor/react'
 import type { DiffOnMount } from '@monaco-editor/react'
-import { gitDiff } from '../../../api/workspace'
+import { gitDiff, readFile } from '../../../api/workspace'
 import { getLanguageForFile, getFileName } from './language'
 import { THEME_NAME, THEME_DATA } from './monaco'
 import type { MonacoDiffEditorProps } from './types'
@@ -40,10 +40,23 @@ export function MonacoDiffEditor(
         setLoading(false)
         return
       }
-      // 解析 unified diff 提取原始/修改内容
-      const { orig, mod } = parseUnifiedDiff(result.diff)
-      setOriginal(orig)
-      setModified(mod)
+
+      if (!result.diff || result.diff.trim() === '') {
+        setOriginal('')
+        setModified('')
+        setLoading(false)
+        return
+      }
+
+      // 获取当前文件内容（modified）
+      const currentFile = await readFile(projectId, path)
+      const modifiedContent = currentFile.content
+
+      // 通过反向应用 diff 重建原始内容
+      const originalContent = reverseDiff(result.diff, modifiedContent)
+
+      setOriginal(originalContent)
+      setModified(modifiedContent)
       setLoading(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -116,17 +129,35 @@ export function MonacoDiffEditor(
   )
 }
 
-/** 解析 unified diff 文本，提取原始/修改内容。 */
-function parseUnifiedDiff(diff: string): {
-  orig: string
-  mod: string
-} {
-  const origLines: string[] = []
-  const modLines: string[] = []
+interface DiffHunk {
+  oldStart: number
+  oldCount: number
+  newStart: number
+  newCount: number
+  lines: Array<{ type: '+' | '-' | ' '; content: string }>
+  contextLineCount: number
+}
 
-  for (const line of diff.split('\n')) {
-    const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line)
-    if (hunk) continue
+/** 解析 unified diff 为结构化 hunks。 */
+function parseHunks(diff: string): DiffHunk[] {
+  const hunks: DiffHunk[] = []
+  const lines = diff.split('\n')
+  let current: DiffHunk | null = null
+
+  for (const line of lines) {
+    const hunkMatch = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(line)
+    if (hunkMatch) {
+      if (current) hunks.push(current)
+      current = {
+        oldStart: parseInt(hunkMatch[1], 10),
+        oldCount: hunkMatch[2] ? parseInt(hunkMatch[2], 10) : 1,
+        newStart: parseInt(hunkMatch[3], 10),
+        newCount: hunkMatch[4] ? parseInt(hunkMatch[4], 10) : 1,
+        lines: [],
+        contextLineCount: 0,
+      }
+      continue
+    }
     if (
       line.startsWith('+++') ||
       line.startsWith('---') ||
@@ -135,16 +166,80 @@ function parseUnifiedDiff(diff: string): {
     )
       continue
 
+    if (!current) continue
+
     if (line.startsWith('+')) {
-      modLines.push(line.slice(1))
+      current.lines.push({ type: '+', content: line.slice(1) })
     } else if (line.startsWith('-')) {
-      origLines.push(line.slice(1))
+      current.lines.push({ type: '-', content: line.slice(1) })
     } else if (line.startsWith(' ')) {
-      const text = line.slice(1)
-      origLines.push(text)
-      modLines.push(text)
+      current.lines.push({ type: ' ', content: line.slice(1) })
+      current.contextLineCount++
     }
   }
+  if (current) hunks.push(current)
+  return hunks
+}
 
-  return { orig: origLines.join('\n'), mod: modLines.join('\n') }
+/** 在 modified 内容中定位 hunk 的起始行号。 */
+function findHunkStart(modLines: string[], hunk: DiffHunk): number {
+  const firstContext = hunk.lines.find((l) => l.type === ' ')
+  if (!firstContext) return -1
+
+  const searchStart = Math.max(0, hunk.newStart - 10)
+  const searchEnd = Math.min(modLines.length, hunk.newStart + 20)
+
+  for (let i = searchStart; i < searchEnd; i++) {
+    if (modLines[i] === firstContext.content) {
+      let match = true
+      let ctxIdx = 0
+      for (const line of hunk.lines) {
+        if (line.type === ' ') {
+          if (modLines[i + ctxIdx] !== line.content) {
+            match = false
+            break
+          }
+          ctxIdx++
+        }
+      }
+      if (match) return i
+    }
+  }
+  return -1
+}
+
+/**
+ * 反向应用 unified diff 到 modified 内容，重建 original 内容。
+ * 对每个 hunk，在 modified 中定位并用 removed 行替换 added 行。
+ */
+function reverseDiff(diff: string, modifiedContent: string): string {
+  const hunks = parseHunks(diff)
+  if (hunks.length === 0) return modifiedContent
+
+  const modLines = modifiedContent.split('\n')
+
+  // 逆序处理 hunks 以保持行号稳定
+  for (let i = hunks.length - 1; i >= 0; i--) {
+    const hunk = hunks[i]
+    const startPos = findHunkStart(modLines, hunk)
+    if (startPos === -1) continue
+
+    const replacement: string[] = []
+    for (const line of hunk.lines) {
+      if (line.type === ' ' || line.type === '-') {
+        replacement.push(line.content)
+      }
+      // '+' 行在 modified 中存在但不在 original 中，跳过
+    }
+
+    // 计算 hunk 在 modified 中占据的行数（context + added）
+    let spanLength = 0
+    for (const line of hunk.lines) {
+      if (line.type === ' ' || line.type === '+') spanLength++
+    }
+
+    modLines.splice(startPos, spanLength, ...replacement)
+  }
+
+  return modLines.join('\n')
 }
