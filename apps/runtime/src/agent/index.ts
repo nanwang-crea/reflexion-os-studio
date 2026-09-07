@@ -320,7 +320,6 @@ export class ChatAgent {
     return { messageId: assistantMessage.id, runId: run.id }
   }
 
-  /** 基于原 Run 重新生成一次回复；原 Run 与其消息保持不变。 */
   startRetry(params: { requestId: string; runId: string }): {
     messageId: string
     runId: string
@@ -337,30 +336,27 @@ export class ChatAgent {
       throw new CommandError('invalid_request', '原 Run 仍在进行中，无法重试')
     }
     const originalSession = this.requireSession(original.sessionId)
-    // 重试沿用原 Run 的 Provider/模型/Skill；旧 Run 未记录时回退到当前启用配置。
     const { profile, apiKey, model } = this.resolveProvider(
       original.providerId ?? undefined,
       original.model ?? undefined,
     )
     this.requireIdleSession(original.sessionId)
 
-    // 替换式重试：先把失败 Run 的助手消息与 Run 本体（工具调用随级联清理）移除，
-    // 保留用户问题，让重试结果原地取代失败回复，而非并列显示两条。
-    this.store.transaction(() => {
-      this.store.messages.deleteByRun(original.id, 'assistant')
-      // runs 删除时 tool_calls 经外键 ON DELETE CASCADE 一并清理。
-      this.store.runs.delete(original.id)
-    })
+    const run = this.store.transaction(() =>
+      this.store.runs.replaceWithRetry(
+        original.id,
+        {
+          sessionId: original.sessionId,
+          providerId: profile.id,
+          model,
+          skillId: original.skillId,
+          planId: original.planId,
+          planStepId: original.planStepId,
+        },
+        this.store.messages,
+      ),
+    )
 
-    const run = this.store.runs.create({
-      sessionId: original.sessionId,
-      providerId: profile.id,
-      model,
-      retryOfRunId: original.id,
-      skillId: original.skillId,
-      planId: original.planId,
-      planStepId: original.planStepId,
-    })
     this.store.sessions.touch(original.sessionId)
     const assistantMessage = this.createAssistantMessage(
       original.sessionId,
