@@ -612,6 +612,8 @@ export const AgentSettingsSchema = z.object({
   maxChildTimeoutSec: z.number().int().min(10).max(3600).nullable(),
   // 单次子 Agent 最大输出 token 数。
   maxChildTotalTokens: z.number().int().min(1000).max(1000000).nullable(),
+  // 子 Agent 启用子 Run；默认 false，由前端/UI 开关控制。
+  enableChildRuns: z.boolean().default(false),
 })
 export type AgentSettings = z.infer<typeof AgentSettingsSchema>
 

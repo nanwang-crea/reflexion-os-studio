@@ -309,12 +309,9 @@ export class ChatAgent {
       skill,
       assistantMessage,
       emitter,
-      childRunStarter: this.createChildRunStarter(
-        run,
-        session,
-        profile,
-        apiKey,
-      ),
+      childRunStarter: this.store.agentSettings.get().enableChildRuns
+        ? this.createChildRunStarter(run, session, profile, apiKey)
+        : undefined,
     })
 
     return { messageId: assistantMessage.id, runId: run.id }
@@ -378,12 +375,9 @@ export class ChatAgent {
         original.skillId === null ? null : builtinSkills.get(original.skillId),
       assistantMessage,
       emitter,
-      childRunStarter: this.createChildRunStarter(
-        run,
-        originalSession,
-        profile,
-        apiKey,
-      ),
+      childRunStarter: this.store.agentSettings.get().enableChildRuns
+        ? this.createChildRunStarter(run, originalSession, profile, apiKey)
+        : undefined,
     })
 
     return {

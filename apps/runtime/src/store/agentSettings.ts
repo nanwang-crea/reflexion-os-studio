@@ -12,6 +12,7 @@ export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   maxParallelChildren: 2,
   maxChildTimeoutSec: 120,
   maxChildTotalTokens: 12000,
+  enableChildRuns: false,
 }
 
 /**
@@ -81,6 +82,10 @@ export class AgentSettingsStore {
           typeof parsed.maxChildTotalTokens === 'number'
             ? parsed.maxChildTotalTokens
             : DEFAULT_AGENT_SETTINGS.maxChildTotalTokens,
+        enableChildRuns:
+          typeof parsed.enableChildRuns === 'boolean'
+            ? parsed.enableChildRuns
+            : DEFAULT_AGENT_SETTINGS.enableChildRuns,
       }
     } catch {
       return { ...DEFAULT_AGENT_SETTINGS }

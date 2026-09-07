@@ -37,10 +37,10 @@ export function createTaskTool(ctx: ToolContext): ToolDefinition {
       if (typeof input.task !== 'string' || !input.task.trim()) {
         throw new Error('task is required')
       }
-      if (typeof input.agentId !== 'string' || !input.agentId.trim()) {
-        throw new Error('agentId is required')
-      }
-      const agentId = input.agentId.trim()
+      const agentId =
+        typeof input.agentId === 'string' && input.agentId.trim()
+          ? input.agentId.trim()
+          : 'default'
       try {
         const result = await ctx.childRunStarter({
           task: input.task,
