@@ -411,7 +411,7 @@ export function FileViewerPanel(
         <div className="workspace-preview">
           {activeTab.mode === 'diff' ? (
             <DiffViewer
-              key={`${activeTab.path}#diff#${activeTab.nonce ?? 0}`}
+              key={`${activeTab.path}#diff`}
               projectId={project.id}
               path={activeTab.path}
               staged={activeTab.staged}
@@ -423,7 +423,7 @@ export function FileViewerPanel(
             />
           ) : (
             <ContentView
-              key={`${activeTab.path}#${activeTab.nonce ?? 0}`}
+              key={activeTab.path}
               projectId={project.id}
               path={activeTab.path}
               initialLine={activeTab.line}

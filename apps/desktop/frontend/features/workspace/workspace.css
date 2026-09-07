@@ -300,6 +300,15 @@
   height: 100%;
 }
 
+/* Monaco 注入全局 -webkit-font-smoothing 影响文件树渲染，
+   在文件树与面板容器上重置为项目默认值 */
+.workspace-panel,
+.file-tree,
+.tree-row {
+  -webkit-font-smoothing: unset;
+  -moz-osx-font-smoothing: unset;
+}
+
 .content-error-inline {
   color: var(--danger);
   font-size: 12px;
