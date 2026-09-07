@@ -183,6 +183,10 @@ export class RunStore {
     if (original.status === 'created' || original.status === 'running') {
       throw new Error('原 Run 仍在进行中，无法重试')
     }
+    // 已被替代的 Run 已在重试链上，再重试会分叉出第二条链。
+    if (original.supersededByRunId !== null) {
+      throw new Error(`run already superseded: ${originalId}`)
+    }
 
     const run = this.create({
       sessionId: input.sessionId,

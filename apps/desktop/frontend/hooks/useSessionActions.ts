@@ -214,13 +214,15 @@ export function useSessionActions(deps: SessionActionsDeps): {
 
   const retryRun = async (): Promise<void> => {
     if (!deps.activeSessionId || !deps.sessionData) return
+    // 已被替代（supersededByRunId 非空）的 Run 已在重试链上，再选会分叉链条。
     const lastFinishedBadly = [...deps.sessionData.runs]
       .reverse()
       .find(
         (run) =>
-          run.status === 'failed' ||
-          run.status === 'interrupted' ||
-          run.status === 'cancelled',
+          run.supersededByRunId === null &&
+          (run.status === 'failed' ||
+            run.status === 'interrupted' ||
+            run.status === 'cancelled'),
       )
     if (!lastFinishedBadly) return
     try {

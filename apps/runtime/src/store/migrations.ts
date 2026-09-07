@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS runs (
   completed_at TEXT,
   error_code TEXT,
   retry_of_run_id TEXT,
+  superseded_by_run_id TEXT,
   agent_id TEXT,
   parent_run_id TEXT,
   delegation_id TEXT,

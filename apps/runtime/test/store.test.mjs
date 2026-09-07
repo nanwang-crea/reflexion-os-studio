@@ -442,13 +442,6 @@ test('replaceWithRetry preserves original run and marks it superseded', () => {
   })
   store.runs.finalize(run.id, 'failed', 'network')
 
-  let supersededRunId = null
-  const mockMessages = {
-    markSupersededByRun: (runId) => {
-      supersededRunId = runId
-    },
-  }
-
   const retry = store.transaction(() =>
     store.runs.replaceWithRetry(
       run.id,
@@ -460,7 +453,7 @@ test('replaceWithRetry preserves original run and marks it superseded', () => {
         planId: null,
         planStepId: null,
       },
-      mockMessages,
+      store.messages,
     ),
   )
 
@@ -471,9 +464,126 @@ test('replaceWithRetry preserves original run and marks it superseded', () => {
   assert.equal(retry.retryOfRunId, run.id)
   assert.equal(retry.supersededByRunId, null)
 
-  assert.equal(supersededRunId, run.id)
+  // 真实集成路径：旧助手消息在事务内被标记为 superseded。
+  const supersededMessage = store.messages
+    .listBySession(session.id, true)
+    .find((m) => m.id === assistantMessage.id)
+  assert.ok(supersededMessage)
+  assert.equal(supersededMessage.status, 'superseded')
 
   assert.ok(store.toolCalls.get(toolCall.id) !== null)
+})
+
+test('replaceWithRetry rejects an already superseded run', () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
+  const session = store.sessions.create(project.id)
+  const runA = store.runs.create({
+    sessionId: session.id,
+    providerId: null,
+    model: null,
+  })
+  store.runs.finalize(runA.id, 'failed', 'network')
+  const input = {
+    sessionId: session.id,
+    providerId: null,
+    model: null,
+    skillId: null,
+    planId: null,
+    planStepId: null,
+  }
+
+  const runB = store.transaction(() =>
+    store.runs.replaceWithRetry(runA.id, input, store.messages),
+  )
+  store.runs.finalize(runB.id, 'failed', 'network')
+
+  assert.throws(() =>
+    store.runs.replaceWithRetry(runA.id, input, store.messages),
+  )
+})
+
+test('retry chain of three keeps bidirectional links intact', () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
+  const session = store.sessions.create(project.id)
+  const input = {
+    sessionId: session.id,
+    providerId: null,
+    model: null,
+    skillId: null,
+    planId: null,
+    planStepId: null,
+  }
+
+  const runA = store.runs.create({
+    sessionId: session.id,
+    providerId: null,
+    model: null,
+  })
+  store.runs.finalize(runA.id, 'failed', 'network')
+
+  const runB = store.transaction(() =>
+    store.runs.replaceWithRetry(runA.id, input, store.messages),
+  )
+  store.runs.finalize(runB.id, 'failed', 'network')
+
+  const runC = store.transaction(() =>
+    store.runs.replaceWithRetry(runB.id, input, store.messages),
+  )
+
+  // A -> B -> C：每环 retryOfRunId 与 supersededByRunId 双向闭合。
+  assert.equal(store.runs.get(runA.id).supersededByRunId, runB.id)
+  assert.equal(store.runs.get(runB.id).retryOfRunId, runA.id)
+  assert.equal(store.runs.get(runB.id).supersededByRunId, runC.id)
+  assert.equal(store.runs.get(runC.id).retryOfRunId, runB.id)
+  assert.equal(store.runs.get(runC.id).supersededByRunId, null)
+})
+
+test('replaceWithRetry failure inside transaction leaves original untouched', () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
+  const session = store.sessions.create(project.id)
+  const run = store.runs.create({
+    sessionId: session.id,
+    providerId: null,
+    model: null,
+  })
+  const assistantMessage = store.messages.create({
+    sessionId: session.id,
+    runId: run.id,
+    role: 'assistant',
+    content: '',
+    status: 'failed',
+  })
+  store.runs.finalize(run.id, 'failed', 'network')
+
+  // session_id 外键约束使 create 失败，整个事务应回滚。
+  assert.throws(() =>
+    store.transaction(() =>
+      store.runs.replaceWithRetry(
+        run.id,
+        {
+          sessionId: 'no-such-session',
+          providerId: null,
+          model: null,
+          skillId: null,
+          planId: null,
+          planStepId: null,
+        },
+        store.messages,
+      ),
+    ),
+  )
+
+  const original = store.runs.get(run.id)
+  assert.ok(original)
+  assert.equal(original.supersededByRunId, null)
+  const message = store.messages
+    .listBySession(session.id, true)
+    .find((m) => m.id === assistantMessage.id)
+  assert.ok(message)
+  assert.equal(message.status, 'failed')
 })
 
 test('markSupersededByRun hides old assistant messages from default query', () => {
