@@ -140,7 +140,9 @@ export const CommandSchemaRegistry = {
       toolCalls: z.array(ToolCallSchema),
       // 会话内全部计划（跨 Run 汇总），供 UI 呈现计划轨迹。
       plans: z.array(PlanSchema),
-      runEvents: z.array(RunEventSchema),
+      // 运行事件（重试/失败）。旧版 Runtime snapshot 缺该字段：默认空数组，
+      // 避免响应校验失败导致整个会话数据被丢弃（前端消息消失）。
+      runEvents: z.array(RunEventSchema).default([]),
     }),
   },
   'message.send': {

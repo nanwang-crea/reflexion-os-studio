@@ -393,17 +393,8 @@ test('session.get result carries session, messages, runs, toolCalls, plans and r
     result.safeParse({ session: null, messages: [], runs: [] }).success,
     false,
   )
-  // runEvents 为必填：无事件时是空数组，而不是缺字段。
-  assert.equal(
-    result.safeParse({
-      session: null,
-      messages: [],
-      runs: [],
-      toolCalls: [],
-      plans: [],
-    }).success,
-    false,
-  )
+  // runEvents 向后兼容可选：旧 Runtime snapshot 缺字段时接受并默认空数组，
+  // 由下方专用测试覆盖。
   // plans 为必填：无计划时是空数组，而不是缺字段。
   assert.equal(
     result.safeParse({
@@ -451,6 +442,21 @@ test('session.get result carries session, messages, runs, toolCalls, plans and r
     true,
   )
   assert.equal(PlanSchema.safeParse({ ...plan, status: 'done' }).success, false)
+})
+
+// 新字段向后兼容：旧版 Runtime snapshot 不包含 runEvents 时必须仍能通过校验
+// （transport 校验失败会导致整个 session.get 响应被丢弃，前端消息全部消失）。
+test('session.get result tolerates missing runEvents from legacy runtimes', () => {
+  const result = CommandSchemaRegistry['session.get'].result
+  const parsed = result.safeParse({
+    session: null,
+    messages: [],
+    runs: [],
+    toolCalls: [],
+    plans: [],
+  })
+  assert.equal(parsed.success, true)
+  assert.deepEqual(parsed.data.runEvents, [])
 })
 
 test('tool and approval events validate envelope payloads', () => {
