@@ -512,6 +512,17 @@ export const CommandSchemaRegistry = {
       branches: z.array(z.string().min(1)),
     }),
   },
+  'workspace.write_file': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+      path: z.string().min(1),
+      content: z.string(),
+    }),
+    result: z.object({
+      writtenBytes: z.number().int().nonnegative(),
+    }),
+  },
   // ---------- Asset（Phase 1B 第二阶段）：内容入 Store，引用与元数据落库 ----------
   'asset.import': {
     params: z.object({

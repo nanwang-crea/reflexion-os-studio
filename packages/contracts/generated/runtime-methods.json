@@ -53,6 +53,7 @@
     "workspace.index.status",
     "workspace.list_dir",
     "workspace.read_file",
-    "workspace.search_files"
+    "workspace.search_files",
+    "workspace.write_file"
   ]
 }

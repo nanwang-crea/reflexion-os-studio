@@ -154,6 +154,20 @@ export const workspaceCommandHandlers: Record<string, CommandHandler> = {
       branches: result.branches ?? [],
     }
   },
+  'workspace.write_file': async (p, { store, system }) => {
+    const project = requireWorkspaceProject(
+      store,
+      requireString(p, 'projectId'),
+    )
+    const path = assertRelativePath(requireString(p, 'path'))
+    const content = typeof p.content === 'string' ? p.content : ''
+    const result = (await requestSystem(system, 'file.write', {
+      workspaceRoot: project.folderPath,
+      path,
+      content,
+    })) as { writtenBytes?: number }
+    return { writtenBytes: result.writtenBytes ?? 0 }
+  },
 }
 
 function requireWorkspaceProject(

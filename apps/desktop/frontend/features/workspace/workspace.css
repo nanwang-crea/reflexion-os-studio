@@ -276,47 +276,34 @@
 
 .content-body {
   flex: 1;
-  overflow: auto;
+  overflow: hidden;
   min-height: 0;
   background: var(--bg-inset);
 }
 
-.content-text {
-  margin: 0;
-  padding: 8px 0;
-  font-family: var(--mono);
-  font-size: 12px;
-  line-height: 20px; /* 与 LINE_HEIGHT_PX 对应，跳转行依赖 */
-}
-
-.content-line {
+.monaco-editor-container {
   display: flex;
-  white-space: pre;
-  min-width: 100%;
-  width: fit-content;
-  padding-right: 16px;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
 }
 
-.content-line:hover {
-  background: var(--bg-hover);
+.monaco-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.content-no {
-  width: 48px;
-  padding-right: 10px;
-  text-align: right;
-  color: var(--text-muted);
+.monaco-editor-instance {
+  width: 100%;
+  height: 100%;
+}
+
+.content-error-inline {
+  color: var(--danger);
+  font-size: 12px;
   flex: none;
-  user-select: none;
-}
-
-.content-code {
-  color: var(--text);
-}
-
-.content-md {
-  padding: 12px 16px;
-  background: var(--bg-inset);
 }
 
 .content-error {
@@ -897,14 +884,6 @@
 
 /* ---------- 双栏 Diff 预览 ---------- */
 
-.diff-view {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-}
-
 .diff-mode {
   flex: none;
   padding: 1px 8px;
@@ -913,86 +892,4 @@
   font-size: 11px;
   color: var(--text-secondary);
   white-space: nowrap;
-}
-
-.diff-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  background: var(--bg-inset);
-}
-
-.diff-columns {
-  display: flex;
-  align-items: stretch;
-  min-width: 100%;
-  min-height: 100%;
-}
-
-.diff-column {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.diff-column + .diff-column {
-  border-left: 1px solid var(--border-subtle);
-}
-
-.diff-column-title {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  padding: 5px 10px;
-  font-size: 11px;
-  color: var(--text-muted);
-  background: var(--bg);
-  border-bottom: 1px solid var(--border-subtle);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.diff-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  padding: 0 10px;
-  font-family: var(--mono);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.diff-row code {
-  flex: 1;
-  min-width: 0;
-  white-space: pre-wrap;
-  word-break: break-all;
-  color: var(--text-secondary);
-}
-
-.diff-no {
-  flex: none;
-  width: 36px;
-  text-align: right;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-  user-select: none;
-}
-
-.diff-add {
-  background: rgba(74, 161, 90, 0.14);
-}
-
-.diff-add code {
-  color: #4aa15a;
-}
-
-.diff-del {
-  background: rgba(214, 90, 78, 0.12);
-}
-
-.diff-del code {
-  color: #d65a4e;
 }

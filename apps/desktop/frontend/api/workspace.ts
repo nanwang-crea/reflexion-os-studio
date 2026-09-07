@@ -4,6 +4,7 @@ import type {
   WorkspaceEntry,
   WorkspaceIndexSnapshot,
   WorkspaceReadResult,
+  FileWriteResult,
 } from '@reflexion-os-studio/runtime-client'
 
 export interface WorkspaceListResult {
@@ -61,6 +62,19 @@ export function readFile(
     path,
     ...(offset !== undefined ? { offset } : {}),
     ...(limit !== undefined ? { limit } : {}),
+  })
+}
+
+/** 写入文本文件到工作区；Rust 侧强制 workspace 边界与大小限制。 */
+export function writeFile(
+  projectId: string,
+  path: string,
+  content: string,
+): Promise<FileWriteResult> {
+  return request<FileWriteResult>('workspace.write_file', {
+    projectId,
+    path,
+    content,
   })
 }
 
