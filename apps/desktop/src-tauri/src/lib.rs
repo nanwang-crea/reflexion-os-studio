@@ -8,6 +8,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::{Emitter, Manager};
 
+mod orphan_cleanup;
+
 #[cfg(unix)]
 static TERMINATED_RUNTIME_PID: AtomicUsize = AtomicUsize::new(0);
 
@@ -158,11 +160,7 @@ fn observe_stderr(name: &'static str, stderr: impl std::io::Read + Send + 'stati
     });
 }
 
-fn monitor_exit(
-    app: tauri::AppHandle,
-    state: Arc<SupervisorState>,
-    cfg: Arc<RuntimeLaunchConfig>,
-) {
+fn monitor_exit(app: tauri::AppHandle, state: Arc<SupervisorState>, cfg: Arc<RuntimeLaunchConfig>) {
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_millis(300));
         let Ok(mut guard) = state.runtime.lock() else {
@@ -397,7 +395,12 @@ fn resolve_runtime_launch_config(
             )]
         })
         .unwrap_or_default();
-    Some(RuntimeLaunchConfig { node, args, cwd, envs })
+    Some(RuntimeLaunchConfig {
+        node,
+        args,
+        cwd,
+        envs,
+    })
 }
 
 /// 拉起一次 TS Runtime，并为其挂单代 exit 监控（意外退出时清槽位 + 有限重启）。
@@ -433,12 +436,54 @@ fn launch_runtime(
     }
 }
 
+/// 孤儿清理 marker：同时收录仓库路径的原始形态与规范化形态——宿主 spawn 的
+/// sidecar 命令行带未规范化的 `../..`（repo_root 原样拼接），孤儿恰是该形态；
+/// 手动/其他来源的进程则是干净路径。resource_dir 由 Tauri 返回时已规范化。
+/// 终端用户机器上仓库路径不存在，dev marker 无进程命中，天然无害。
+fn orphan_cleanup_markers(resources: Option<&Path>) -> Vec<String> {
+    let mut markers = vec![repo_root().display().to_string()];
+    if let Ok(canon) = std::fs::canonicalize(repo_root()) {
+        markers.push(canon.display().to_string());
+    }
+    if let Some(resources) = resources {
+        if let Ok(canon) = std::fs::canonicalize(resources) {
+            markers.push(canon.display().to_string());
+        }
+    }
+    markers.sort();
+    markers.dedup();
+    markers
+}
+
 fn start_sidecars(app: &tauri::AppHandle, state: Arc<SupervisorState>) {
     let root = repo_root();
     // 安装包内资源目录：打包态存在并作为 sidecar 首要来源；开发态缺失走仓库回退。
-    let resources = app.path().resource_dir().ok();
+    // debug 构建（pnpm dev / cargo run）一律视为开发态：忽略打包资源，
+    // 回退仓库 dist 与 PATH node。否则上次打包遗留的过期 pkg 快照
+    // （与最新契约不同步）会在开发态被优先加载，造成前后端协议错位。
+    let resources = if cfg!(debug_assertions) {
+        None
+    } else {
+        app.path().resource_dir().ok()
+    };
+    // 先清掉上次宿主异常死亡残留的孤儿 sidecar（持 SQLite 锁会卡死本次启动），
+    // 再拉起自家 sidecar；顺序不可颠倒。
+    let killed = orphan_cleanup::cleanup_orphans(&orphan_cleanup_markers(resources.as_deref()));
+    if killed.is_empty() {
+        eprintln!("[host] orphan cleanup: nothing to kill");
+    } else {
+        eprintln!(
+            "[host] orphan cleanup: killed {} process(es): {killed:?}",
+            killed.len()
+        );
+    }
     let Some(cfg) = resolve_runtime_launch_config(resources.as_deref(), &root) else {
-        update_state(app, &state, "error", Some("Runtime entry not found".to_string()));
+        update_state(
+            app,
+            &state,
+            "error",
+            Some("Runtime entry not found".to_string()),
+        );
         return;
     };
     if cfg.envs.is_empty() {
@@ -615,6 +660,15 @@ fn install_terminate_signal_handler() {
         );
         libc::signal(
             libc::SIGINT,
+            on_terminate_signal as *const () as libc::sighandler_t,
+        );
+        // 终端关闭/挂断等场景同样会孤儿化 sidecar，与 TERM/INT 同路收割。
+        libc::signal(
+            libc::SIGHUP,
+            on_terminate_signal as *const () as libc::sighandler_t,
+        );
+        libc::signal(
+            libc::SIGQUIT,
             on_terminate_signal as *const () as libc::sighandler_t,
         );
     }
