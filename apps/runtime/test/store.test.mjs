@@ -474,6 +474,43 @@ test('replaceWithRetry preserves original run and marks it superseded', () => {
   assert.ok(store.toolCalls.get(toolCall.id) !== null)
 })
 
+test('markSupersededByRun hides old assistant messages from default query', () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
+  const session = store.sessions.create(project.id)
+  const run = store.runs.create({
+    sessionId: session.id,
+    providerId: null,
+    model: null,
+  })
+  const userMsg = store.messages.create({
+    sessionId: session.id,
+    runId: run.id,
+    role: 'user',
+    content: 'hello',
+    status: 'completed',
+  })
+  const oldAssistant = store.messages.create({
+    sessionId: session.id,
+    runId: run.id,
+    role: 'assistant',
+    content: 'old reply',
+    status: 'failed',
+  })
+
+  store.messages.markSupersededByRun(run.id)
+
+  const filtered = store.messages.listBySession(session.id)
+  assert.equal(filtered.length, 1)
+  assert.equal(filtered[0].id, userMsg.id)
+
+  const includeSuperseded = store.messages.listBySession(session.id, true)
+  assert.equal(includeSuperseded.length, 2)
+  const restored = includeSuperseded.find((m) => m.id === oldAssistant.id)
+  assert.ok(restored)
+  assert.equal(restored.status, 'superseded')
+})
+
 test('provider profile upsert keeps capabilities when omitted on edit', () => {
   const store = freshStore()
   const created = store.providers.upsert({

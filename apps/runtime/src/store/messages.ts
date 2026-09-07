@@ -18,12 +18,15 @@ function textParts(content: string): ContentPart[] {
 export class MessageStore {
   constructor(private readonly db: DatabaseSync) {}
 
-  listBySession(sessionId: string): Message[] {
+  listBySession(sessionId: string, includeSuperseded = false): Message[] {
     // 同毫秒创建的两条消息（user+assistant）created_at 相同，id 是随机 UUID
     // 不可作次序依据；rowid 即插入顺序，保证稳定的会话内排序。
+    const where = includeSuperseded
+      ? 'session_id = ?'
+      : "session_id = ? AND status <> 'superseded'"
     return this.db
       .prepare(
-        'SELECT * FROM messages WHERE session_id = ? ORDER BY created_at ASC, rowid ASC',
+        `SELECT * FROM messages WHERE ${where} ORDER BY created_at ASC, rowid ASC`,
       )
       .all(sessionId)
       .map((row) => this.toMessage(row as Row))
@@ -122,6 +125,14 @@ export class MessageStore {
     this.db
       .prepare('DELETE FROM messages WHERE run_id = ? AND role = ?')
       .run(runId, role)
+  }
+
+  markSupersededByRun(runId: string): void {
+    this.db
+      .prepare(
+        "UPDATE messages SET status = 'superseded' WHERE run_id = ? AND role = 'assistant'",
+      )
+      .run(runId)
   }
 
   private toMessage(row: Row): Message {
