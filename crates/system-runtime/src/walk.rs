@@ -9,6 +9,26 @@ use serde::Serialize;
 pub const MAX_WALK_FILES: usize = 20_000;
 pub const MAX_WALK_DEPTH: usize = 32;
 
+/// 默认忽略目录：版本控制、依赖、构建产物与缓存。
+/// 与 TS 侧工作区索引器（apps/runtime/src/workspace/walker.ts）保持一致，
+/// 避免依赖/产物目录挤占遍历预算，导致真实源码在搜索中被整体丢弃。
+pub const IGNORED_DIR_NAMES: &[&str] = &[
+    ".git",
+    "node_modules",
+    "dist",
+    "dist-frontend",
+    "target",
+    ".next",
+    ".nuxt",
+    ".svelte-kit",
+    ".cache",
+    "__pycache__",
+    ".pytest_cache",
+    ".venv",
+    "venv",
+    ".turbo",
+];
+
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct FileEntry {
@@ -39,7 +59,14 @@ fn walk_files_with_limits(
         files: Vec::new(),
         truncated: false,
     };
-    walk_dir(start_dir, start_relative, 0, max_files, max_depth, &mut state);
+    walk_dir(
+        start_dir,
+        start_relative,
+        0,
+        max_files,
+        max_depth,
+        &mut state,
+    );
     state.files.sort_by(|a, b| a.path.cmp(&b.path));
     Walked {
         files: state.files,
@@ -79,10 +106,15 @@ fn walk_dir(
         if file_type.is_symlink() {
             continue;
         }
+        let file_name = entry.file_name().to_string_lossy().into_owned();
+        // 隐藏目录内的文件（.git/依赖/构建产物）不入索引，预算留给真实源码。
+        if file_type.is_dir() && IGNORED_DIR_NAMES.contains(&file_name.as_str()) {
+            continue;
+        }
         let child_relative = if relative.is_empty() {
-            entry.file_name().to_string_lossy().into_owned()
+            file_name.clone()
         } else {
-            format!("{relative}/{}", entry.file_name().to_string_lossy())
+            format!("{relative}/{file_name}")
         };
         if file_type.is_dir() {
             walk_dir(

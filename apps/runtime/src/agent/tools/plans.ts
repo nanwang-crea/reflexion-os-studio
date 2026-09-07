@@ -6,85 +6,52 @@ import type { JsonValue, PlanStepStatus } from '@reflexion-os-studio/contracts'
 import { PlanError } from '../../store/plans.js'
 import type { ToolContext } from './shared.js'
 
-/** manage_plan 的 canonical 参数声明（见 docs/UPDATE-PLAN-TOOL-REDESIGN.md 方案 B）。 */
+/**
+ * manage_plan 的 canonical 参数声明。
+ * 采用扁平 object schema（与仓库其它工具一致）：oneOf 判别联合会让 OpenAI 兼容
+ * 端点误解 schema，导致模型以空参数 {} 调用并收到 invalid_request（见
+ * docs/UPDATE-PLAN-TOOL-REDESIGN.md）。跨 action 的参数约束由运行时
+ * executeManagePlan 校验，schema 只约束字段格式与 action 枚举。
+ */
 const MANAGE_PLAN_SCHEMA: JsonValue = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
-  oneOf: [
-    {
-      title: 'CreatePlan',
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        action: { const: 'create' },
-        goal: { type: 'string', minLength: 1 },
-        steps: {
-          type: 'array',
-          minItems: 1,
-          items: {
-            type: 'object',
-            additionalProperties: false,
-            properties: {
-              id: { type: 'string', minLength: 1 },
-              title: { type: 'string', minLength: 1 },
-            },
-            required: ['id', 'title'],
-          },
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    action: {
+      type: 'string',
+      enum: [
+        'create',
+        'update_step',
+        'complete_plan',
+        'fail_plan',
+        'cancel_plan',
+      ],
+    },
+    goal: { type: 'string', minLength: 1 },
+    steps: {
+      type: 'array',
+      minItems: 1,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', minLength: 1 },
+          title: { type: 'string', minLength: 1 },
         },
+        required: ['id', 'title'],
       },
-      required: ['action', 'goal', 'steps'],
     },
-    {
-      title: 'UpdateStep',
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        action: { const: 'update_step' },
-        planId: { type: 'string', minLength: 1 },
-        stepId: { type: 'string', minLength: 1 },
-        status: {
-          type: 'string',
-          enum: ['in_progress', 'completed', 'failed', 'skipped', 'cancelled'],
-        },
-        note: { type: 'string' },
-      },
-      required: ['action', 'planId', 'stepId', 'status'],
+    planId: { type: 'string', minLength: 1 },
+    stepId: { type: 'string', minLength: 1 },
+    status: {
+      type: 'string',
+      enum: ['in_progress', 'completed', 'failed', 'skipped', 'cancelled'],
     },
-    {
-      title: 'CompletePlan',
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        action: { const: 'complete_plan' },
-        planId: { type: 'string', minLength: 1 },
-        summary: { type: 'string' },
-      },
-      required: ['action', 'planId'],
-    },
-    {
-      title: 'FailPlan',
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        action: { const: 'fail_plan' },
-        planId: { type: 'string', minLength: 1 },
-        summary: { type: 'string' },
-        note: { type: 'string' },
-      },
-      required: ['action', 'planId'],
-    },
-    {
-      title: 'CancelPlan',
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        action: { const: 'cancel_plan' },
-        planId: { type: 'string', minLength: 1 },
-        summary: { type: 'string' },
-        note: { type: 'string' },
-      },
-      required: ['action', 'planId'],
-    },
-  ],
+    note: { type: 'string' },
+    summary: { type: 'string' },
+  },
+  required: ['action'],
 }
 
 const MANAGE_PLAN_DESCRIPTION = `管理当前任务的活动计划及其步骤。仅在任务确实包含多个需要跟踪的步骤时使用；简单任务不要创建计划。

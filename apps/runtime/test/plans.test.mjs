@@ -52,22 +52,24 @@ function preparedCtx(store, overrides = {}) {
   })
 }
 
-test('manage_plan tool definition carries final name, description and oneOf schema', () => {
+test('manage_plan tool definition carries final name, description and flat schema', () => {
   const tool = createManagePlanTool(baseCtx(freshStore()))
   assert.equal(tool.name, 'manage_plan')
   assert.ok(tool.description.includes('同一任务同一时刻最多存在一个活动计划'))
   assert.ok(tool.description.includes('不要自创 action'))
   const schema = tool.parameters
-  assert.ok(Array.isArray(schema.oneOf))
-  assert.equal(schema.oneOf.length, 5)
-  const titles = schema.oneOf.map((variant) => variant.title)
-  assert.deepEqual(titles, [
-    'CreatePlan',
-    'UpdateStep',
-    'CompletePlan',
-    'FailPlan',
-    'CancelPlan',
+  // oneOf 判别联合会让 OpenAI 兼容端点误解 schema 导致空参调用（invalid_request），
+  // 必须用与仓库其它工具一致的扁平 object schema。
+  assert.equal(schema.type, 'object')
+  assert.equal(schema.oneOf, undefined)
+  assert.deepEqual(schema.properties.action.enum, [
+    'create',
+    'update_step',
+    'complete_plan',
+    'fail_plan',
+    'cancel_plan',
   ])
+  assert.deepEqual(schema.required, ['action'])
 })
 
 test('legacy update_plan alias maps to the same implementation', async () => {

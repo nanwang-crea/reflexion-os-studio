@@ -54,7 +54,13 @@
 - 状态流转属于运行时状态机，调用参数 schema 只能校验字段格式，不能替代运行时校验。
 ```
 
-## 3. 方案 B：JSON Schema（最终版）
+## 3. 方案 B：JSON Schema（已修订为扁平 schema，弃用 oneOf）
+
+> **修订记录（2026-09-07）**：最初按本文落地的是 `oneOf` 判别联合。实测中 OpenAI 兼容
+> 端点对 `oneOf` 支持不佳，模型读不到必填 `action`，一律以空参数 `{}` 调用工具，连续
+> 触发 `invalid_request`（数据库 `tool_calls` 中 `args_json` 全为 `{}`）。故 schema 改回
+> 与仓库其它工具一致的**扁平 `type: object`**：只声明字段格式与 `action` 枚举，跨 action
+> 的必填/互斥约束由运行时 `executeManagePlan` 校验（该实现本就存在，不受影响）。
 
 ```json
 {
@@ -62,85 +68,51 @@
   "description": "管理当前任务的活动计划及其步骤。仅多步骤任务使用。每个任务最多一个活动计划；已有计划时禁止重复 create，必须使用已有 planId 的 update_step。action 只能是 create、update_step、complete_plan、fail_plan、cancel_plan。步骤状态必须按 pending → in_progress → completed 依次流转；不得跳过中间状态；终止状态不可回退。工具报错后先修正参数，不要用相同参数盲目重试。",
   "input_schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "oneOf": [
-      {
-        "title": "CreatePlan",
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "action": { "const": "create" },
-          "goal": { "type": "string", "minLength": 1 },
-          "steps": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "id": { "type": "string", "minLength": 1 },
-                "title": { "type": "string", "minLength": 1 }
-              },
-              "required": ["id", "title"]
-            }
-          }
-        },
-        "required": ["action", "goal", "steps"]
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": [
+          "create",
+          "update_step",
+          "complete_plan",
+          "fail_plan",
+          "cancel_plan"
+        ]
       },
-      {
-        "title": "UpdateStep",
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "action": { "const": "update_step" },
-          "planId": { "type": "string", "minLength": 1 },
-          "stepId": { "type": "string", "minLength": 1 },
-          "status": {
-            "type": "string",
-            "enum": ["in_progress", "completed", "failed", "skipped", "cancelled"]
+      "goal": { "type": "string", "minLength": 1 },
+      "steps": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "title": { "type": "string", "minLength": 1 }
           },
-          "note": { "type": "string" }
-        },
-        "required": ["action", "planId", "stepId", "status"]
+          "required": ["id", "title"]
+        }
       },
-      {
-        "title": "CompletePlan",
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "action": { "const": "complete_plan" },
-          "planId": { "type": "string", "minLength": 1 },
-          "summary": { "type": "string" }
-        },
-        "required": ["action", "planId"]
+      "planId": { "type": "string", "minLength": 1 },
+      "stepId": { "type": "string", "minLength": 1 },
+      "status": {
+        "type": "string",
+        "enum": ["in_progress", "completed", "failed", "skipped", "cancelled"]
       },
-      {
-        "title": "FailPlan",
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "action": { "const": "fail_plan" },
-          "planId": { "type": "string", "minLength": 1 },
-          "summary": { "type": "string" },
-          "note": { "type": "string" }
-        },
-        "required": ["action", "planId"]
-      },
-      {
-        "title": "CancelPlan",
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "action": { "const": "cancel_plan" },
-          "planId": { "type": "string", "minLength": 1 },
-          "summary": { "type": "string" },
-          "note": { "type": "string" }
-        },
-        "required": ["action", "planId"]
-      }
-    ]
+      "note": { "type": "string" },
+      "summary": { "type": "string" }
+    },
+    "required": ["action"]
   }
 }
 ```
+
+> 注：扁平 schema 只能约束字段格式，无法表达"create 必须带 goal/steps"、"update_step
+> 必须带 planId/stepId/status"等按 action 区分的必填关系；这些由运行时校验返回结构化
+> 错误码，模型据错误自纠。这不是功能回退——原来的 `oneOf` 版本同样没有运行时校验能力，
+> 而空参问题已实测比"让模型理解判别联合"更值得优先解决。
 
 ### Schema 不能解决的约束
 
@@ -205,11 +177,22 @@
 ```
 
 ```json
-{ "action": "update_step", "planId": "pl_123", "stepId": "plan-s1-scan", "status": "in_progress" }
+{
+  "action": "update_step",
+  "planId": "pl_123",
+  "stepId": "plan-s1-scan",
+  "status": "in_progress"
+}
 ```
 
 ```json
-{ "action": "update_step", "planId": "pl_123", "stepId": "plan-s1-scan", "status": "completed", "note": "扫描完成，发现 2 处问题" }
+{
+  "action": "update_step",
+  "planId": "pl_123",
+  "stepId": "plan-s1-scan",
+  "status": "completed",
+  "note": "扫描完成，发现 2 处问题"
+}
 ```
 
 只有在后续步骤也完成后，才能调用：
