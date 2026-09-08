@@ -1,10 +1,12 @@
 import type {
-  FinishReason,
   RuntimeErrorCode,
   ToolSpec,
   Usage,
 } from '@reflexion-os-studio/contracts'
-import type { ModelMessage } from '@reflexion-os-studio/agent-core'
+import type {
+  ModelFinishReason,
+  ModelMessage,
+} from '@reflexion-os-studio/agent-core'
 
 const DEFAULT_TIMEOUT_MS = 120_000
 /** 请求建立阶段失败(网络/限流/服务端短暂故障)的自动重试次数与退避。 */
@@ -98,7 +100,8 @@ export interface StreamChatOptions {
 export interface StreamChatResult {
   content: string
   reasoning: string
-  finishReason: FinishReason
+  /** 严格校验后的终止原因；缺失/未知值以 provider_protocol 失败，不会出现。 */
+  finishReason: ModelFinishReason
   usage?: Usage
   toolCalls: StreamedToolCall[]
 }
@@ -113,7 +116,7 @@ function mapHttpStatus(code: number): RuntimeErrorCode {
 
 function mapFinishReason(
   reason: string | null | undefined,
-): FinishReason | null {
+): ModelFinishReason | null {
   if (
     reason === 'stop' ||
     reason === 'length' ||
@@ -349,7 +352,9 @@ export async function streamChatCompletion(
 
     let content = ''
     let reasoning = ''
-    let finishReason: FinishReason = 'stop'
+    // 严格 finish reason：初值 null（缺失），流结束后未读到合法值即协议违规。
+    let finishReason: ModelFinishReason | null = null
+    let rawFinishReason: string | null | undefined
     let usage: Usage | undefined
     const toolCallByIndex = new Map<number, StreamedToolCall>()
     const reader = response.body.getReader()
@@ -425,7 +430,8 @@ export async function streamChatCompletion(
         }
         toolCallByIndex.set(index, existing)
       }
-      const mapped = mapFinishReason(parsed.choices?.[0]?.finish_reason)
+      rawFinishReason = parsed.choices?.[0]?.finish_reason
+      const mapped = mapFinishReason(rawFinishReason)
       if (mapped) finishReason = mapped
       if (parsed.usage) {
         usage = {
@@ -477,6 +483,14 @@ export async function streamChatCompletion(
         ...toolCall,
         name: providerToCanonical.get(toolCall.name) ?? toolCall.name,
       }))
+
+    // finish reason 严格校验：缺失或未知值不得默认为 stop（Agent Loop Hardening）。
+    if (finishReason === null) {
+      throw new ProviderError(
+        'provider_protocol',
+        `stream ended without a valid finish_reason (raw: ${String(rawFinishReason).slice(0, 40)})`,
+      )
+    }
 
     return { content, reasoning, finishReason, usage, toolCalls }
   }

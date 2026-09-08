@@ -1,11 +1,13 @@
 import {
+  ModelProtocolError,
+  requireModelTurnDisposition,
   type ModelMessage,
   type ModelTurn,
   type ToolRegistry,
 } from '@reflexion-os-studio/agent-core'
 import type { Message, Run } from '@reflexion-os-studio/contracts'
 import { RunEventEmitter } from '../events.js'
-import { streamChatCompletion } from '../provider.js'
+import { ProviderError, streamChatCompletion } from '../provider.js'
 import type { Store } from '../store/index.js'
 import { compactInRun, type ProviderRuntimeConfig } from './context.js'
 import { ChildLimitError } from './errors.js'
@@ -145,6 +147,47 @@ export async function executeModelTurn(
   const normalized = session
     ? normalizeContent(result.content, session, store)
     : { content: result.content, parts: [] }
+
+  // 状态机判定先于终态落库：协议违规以 provider_protocol 失败，
+  // 草稿不落 completed、不发 message.completed（由 run.failed 关闭 RunBlock）。
+  let disposition: ReturnType<typeof requireModelTurnDisposition>
+  try {
+    disposition = requireModelTurnDisposition(
+      result.finishReason,
+      result.toolCalls,
+    )
+  } catch (error) {
+    if (error instanceof ModelProtocolError) {
+      throw new ProviderError('provider_protocol', error.message)
+    }
+    throw error
+  }
+
+  if (disposition.kind === 'blocked') {
+    // content_filter：草稿落 failed，不发 message.completed；usage 照实累计。
+    store.messages.finalize(
+      draft.id,
+      normalized.content,
+      'failed',
+      result.reasoning,
+      normalized.parts,
+    )
+    state.turn = null
+    if (result.usage) {
+      store.runs.addUsage(run.id, result.usage)
+    }
+    return {
+      turn: {
+        content: result.content,
+        reasoning: result.reasoning,
+        toolCalls: result.toolCalls,
+        finishReason: result.finishReason,
+        usage: result.usage,
+      },
+      finalContent: normalized.content,
+    }
+  }
+
   store.messages.finalize(
     draft.id,
     normalized.content,
@@ -152,6 +195,7 @@ export async function executeModelTurn(
     result.reasoning,
     normalized.parts,
   )
+  // length 是已完成模型轮而非 Run 完成：照常发 message.completed(length)。
   emitter.next({
     type: 'message.completed',
     messageId: draft.id,

@@ -22,9 +22,14 @@ export interface ModelTurn {
   /** 思考内容仅用于持久化展示，不回传给模型。 */
   reasoning: string
   toolCalls: AssistantToolCall[]
-  finishReason: string
+  /** Provider 已校验的终止原因；未知/缺失值不允许进入循环。 */
+  finishReason: ModelFinishReason
   usage?: { promptTokens: number; completionTokens: number }
 }
+
+/** Provider 终止原因（严格校验后的联合类型）。 */
+export type ModelFinishReason =
+  'stop' | 'length' | 'content_filter' | 'tool_calls'
 
 export interface ToolCallRequest {
   id: string
@@ -64,6 +69,7 @@ export interface AgentLoopOptions {
   /** 起始上下文（含 system prompt 与历史）。 */
   history: ModelMessage[]
   callModel(messages: ModelMessage[], signal: AbortSignal): Promise<ModelTurn>
+  /** 单个工具调用执行（由 Runtime 注入；调度细节由宿主负责）。 */
   executeTool(
     request: ToolCallRequest,
     signal: AbortSignal,
@@ -76,13 +82,40 @@ export interface AgentLoopOptions {
   reflectionThreshold?: number
 }
 
-export interface AgentLoopOutcome {
-  status: 'completed' | 'max_turns_exhausted'
-  turns: number
-  /** status=completed 时的最终回复。 */
-  finalTurn: ModelTurn | null
-  /** 完整消息流（含收官 assistant 轮）；含反思消息等运行时注入内容，未持久化。 */
-  messages: ModelMessage[]
-}
+/** 模型轮次判定结果：finish reason 状态机的输出。 */
+export type ModelTurnDisposition =
+  | { kind: 'final' }
+  | { kind: 'tools' }
+  | { kind: 'truncated' }
+  | { kind: 'blocked'; reason: 'content_filtered' }
+  | { kind: 'protocol_error'; detail: string }
+
+/** Run 因任务语义（而非异常）停止的稳定原因；统一映射为 failed + errorCode。 */
+export type AgentStopReason =
+  | 'max_turns'
+  | 'output_truncated'
+  | 'content_filtered'
+  | 'provider_protocol'
+  | 'no_progress'
+  | 'run_timeout'
+  | 'run_token_budget'
+  | 'tool_call_budget'
+
+export type AgentLoopOutcome =
+  | {
+      status: 'completed'
+      turns: number
+      finalTurn: ModelTurn
+      messages: ModelMessage[]
+    }
+  | {
+      status: 'stopped'
+      turns: number
+      /** 稳定停止原因；统一由宿主映射为 failed + errorCode。 */
+      reason: AgentStopReason
+      messages: ModelMessage[]
+    }
 
 export const DEFAULT_MAX_TURNS = 16
+/** length 续写的最大连续轮次：超过即 output_truncated。 */
+export const DEFAULT_MAX_CONTINUATION_TURNS = 2

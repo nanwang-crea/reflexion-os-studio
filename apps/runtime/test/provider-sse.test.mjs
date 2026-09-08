@@ -125,7 +125,10 @@ test('canonical ToolSpec is projected into OpenAI function tools', async () => {
     request.on('end', () => {
       requestBody = JSON.parse(raw)
       response.writeHead(200, { 'content-type': 'text/event-stream' })
-      response.end('data: [DONE]\n\n')
+      // 严格 finish reason：mock 流必须携带合法终止原因。
+      response.end(
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+      )
     })
   })
   const port = server.address().port
@@ -267,7 +270,10 @@ test('canonical ModelMessage projects to OpenAI wire dialect', async () => {
     request.on('end', () => {
       requestBody = JSON.parse(raw)
       response.writeHead(200, { 'content-type': 'text/event-stream' })
-      response.end('data: [DONE]\n\n')
+      // 严格 finish reason：mock 流必须携带合法终止原因。
+      response.end(
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+      )
     })
   })
   const port = server.address().port
@@ -399,7 +405,7 @@ test('retries a stream failure from a fresh attempt', async () => {
       return
     }
     response.end(
-      'data: {"choices":[{"delta":{"content":"retry-success"}}]}\n\ndata: [DONE]\n\n',
+      'data: {"choices":[{"delta":{"content":"retry-success"}}]}\n\ndata: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
     )
   })
   const retries = []
@@ -492,7 +498,7 @@ test('retries malformed SSE data and returns only the successful attempt', async
       return
     }
     response.end(
-      'data: {"choices":[{"delta":{"content":"valid"}}]}\n\ndata: [DONE]\n\n',
+      'data: {"choices":[{"delta":{"content":"valid"}}]}\n\ndata: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
     )
   })
   const retries = []
@@ -553,7 +559,9 @@ test('retries a successful response without a body', async () => {
       return
     }
     response.writeHead(200, { 'content-type': 'text/event-stream' })
-    response.end('data: [DONE]\n\n')
+    response.end(
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+    )
   })
   const retries = []
   const result = await streamChatCompletion(
@@ -856,4 +864,58 @@ test('does not retry authentication errors', async () => {
   )
   server.close()
   assert.equal(calls, 1)
+})
+
+test('strict finish reason: missing finish_reason fails with provider_protocol', async () => {
+  const server = await startServer((request, response) => {
+    response.writeHead(200, { 'content-type': 'text/event-stream' })
+    response.end(
+      'data: {"choices":[{"delta":{"content":"looks complete"}}]}\n\ndata: [DONE]\n\n',
+    )
+  })
+  await assert.rejects(
+    streamChatCompletion(
+      {
+        baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
+        apiKey: 'sk-test',
+        model: 'mock-model',
+        messages: [{ role: 'user', content: 'hi' }],
+        signal: new AbortController().signal,
+        maxRetries: 0,
+      },
+      () => {},
+    ),
+    (error) =>
+      error instanceof ProviderError && error.code === 'provider_protocol',
+  )
+  server.close()
+})
+
+test('strict finish reason: unknown finish_reason value fails with provider_protocol', async () => {
+  const server = await startServer((request, response) => {
+    response.writeHead(200, { 'content-type': 'text/event-stream' })
+    response.end(
+      'data: {"choices":[{"delta":{"content":"x"}},{"choices":[]}]}\n\n'.replace(
+        ',"choices":[]',
+        '',
+      ) +
+        'data: {"choices":[{"delta":{},"finish_reason":"mystery"}]}\n\ndata: [DONE]\n\n',
+    )
+  })
+  await assert.rejects(
+    streamChatCompletion(
+      {
+        baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
+        apiKey: 'sk-test',
+        model: 'mock-model',
+        messages: [{ role: 'user', content: 'hi' }],
+        signal: new AbortController().signal,
+        maxRetries: 0,
+      },
+      () => {},
+    ),
+    (error) =>
+      error instanceof ProviderError && error.code === 'provider_protocol',
+  )
+  server.close()
 })

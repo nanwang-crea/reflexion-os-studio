@@ -43,7 +43,7 @@ test('trusted run executes file.write without approval and signs trusted grant',
     response.writeHead(200, { 'content-type': 'text/event-stream' })
     if (requests === 1) {
       response.write(
-        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-1","function":{"name":"file.write","arguments":"{\\"path\\":\\"a.txt\\",\\"content\\":\\"hi\\"}"}}]}},{"delta":{},"finish_reason":"tool_calls"}]}\n\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-1","function":{"name":"file.write","arguments":"{\\"path\\":\\"a.txt\\",\\"content\\":\\"hi\\"}"}}]},"finish_reason":"tool_calls"}]}\n\n',
       )
       response.end('data: [DONE]\n\n')
       return

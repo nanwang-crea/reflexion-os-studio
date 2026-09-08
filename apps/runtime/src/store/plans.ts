@@ -237,6 +237,18 @@ export class PlanStore {
     return this.finish(planId, 'cancelled', summary)
   }
 
+  /**
+   * 把 Plan 的未完成步骤（pending/in_progress）收敛为 failed。
+   * 供 Run Finalizer 失败收敛使用；只改步骤不改 Plan 本身状态。
+   */
+  failPendingSteps(planId: string): void {
+    this.db
+      .prepare(
+        "UPDATE plan_steps SET status = 'failed', note = ?, updated_at = ? WHERE plan_id = ? AND status IN ('pending', 'in_progress')",
+      )
+      .run('Run 终止时该步骤未完成', nowIso(), planId)
+  }
+
   private finish(
     planId: string,
     status: PlanStatus,
