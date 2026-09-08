@@ -355,7 +355,7 @@
   }
 }
 
-/* ---------- Run 事件卡（重试 / 失败） ---------- */
+/* ---------- Run 事件卡（失败） ---------- */
 .run-event-card {
   display: flex;
   align-items: center;
@@ -365,12 +365,6 @@
   font-size: 12.5px;
   line-height: 1.4;
   word-break: break-word;
-}
-
-.run-event-retry {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-secondary);
 }
 
 .run-event-failure {

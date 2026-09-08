@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { JsonValue, ToolCall } from '@reflexion-os-studio/runtime-client'
-import type { RunPhase } from '../../hooks/useAppBootstrap'
+import type { RunPhase } from '../../hooks/useRunActivity'
 import { ChevronIcon } from '../../ui/icons'
 
 const TOOL_LABELS: Record<string, string> = {

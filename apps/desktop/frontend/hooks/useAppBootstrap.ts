@@ -4,6 +4,10 @@ import { listen } from '@tauri-apps/api/event'
 import type { RefObject } from 'react'
 import type { RuntimeEvent } from '@reflexion-os-studio/runtime-client'
 import { transport } from '../lib/transport'
+import { useInitialDataLoad } from './useInitialDataLoad'
+import type { RunActivity } from './useRunActivity'
+import { useRunActivity } from './useRunActivity'
+import { useStreamingCache } from './useStreamingCache'
 
 export interface BootstrapSnapshot {
   state: string
@@ -18,24 +22,6 @@ export interface PendingApproval {
   runId: string
   operation: string
   summary: string
-}
-
-/** Run 级活动阶段：由事件驱动，对齐 Codex——不靠“内容长什么样”猜状态。 */
-export type RunPhase = 'thinking' | 'answering' | 'tool'
-export interface RunActivity {
-  phase: RunPhase
-  /** phase === 'tool' 时正在执行的工具名。 */
-  toolName?: string
-  /** 当前正在进行的 Provider 重试。 */
-  retry?: {
-    attempt: number
-    maxRetries: number
-    reason: string
-    /** 本次重试前的退避等待时长（毫秒）；缺省为旧版事件，不展示倒计时。 */
-    waitMs?: number
-    /** 收到重试事件时的本地时间戳，用于倒计时换算。 */
-    startedAt?: number
-  }
 }
 
 /** Run 结束类事件：触发会话数据与列表刷新（标题可能已被自动命名）。 */
@@ -63,7 +49,7 @@ interface AppBootstrapDeps {
 
 /**
  * 应用引导与 Runtime 接线：宿主状态快照、sidecar 事件订阅、
- * 流式 delta 缓存（正文 + 思考）、启动期初始数据拉取（失败降级为通知并自动重试一次）。
+ * Run 级活动阶段与审批等待；流式缓存与启动拉取拆分在专属 hook。
  */
 export function useAppBootstrap(deps: AppBootstrapDeps): {
   bootstrap: BootstrapSnapshot | null
@@ -79,28 +65,16 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
   failedSessionIds: string[]
   retryTick: number
 } {
-  const [bootstrap, setBootstrap] = useState<BootstrapSnapshot | null>(null)
-  const [streaming, setStreaming] = useState<Record<string, string>>({})
-  const streamingRef = useRef<Record<string, string>>({})
-  const [streamingReasoning, setStreamingReasoning] = useState<
-    Record<string, string>
-  >({})
-  const streamingReasoningRef = useRef<Record<string, string>>({})
-  const streamRunRef = useRef<Record<string, string>>({})
-  const streamingFlushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const streamingFlushPending = useRef(false)
-  const flushStreaming = useCallback((): void => {
-    streamingFlushTimer.current = null
-    if (!streamingFlushPending.current) return
-    streamingFlushPending.current = false
-    setStreaming({ ...streamingRef.current })
-    setStreamingReasoning({ ...streamingReasoningRef.current })
-  }, [])
-  const scheduleStreamingFlush = useCallback((): void => {
-    streamingFlushPending.current = true
-    if (streamingFlushTimer.current !== null) return
-    streamingFlushTimer.current = setTimeout(flushStreaming, 16)
-  }, [flushStreaming])
+  const { bootstrap, setBootstrap } = useBootstrapSnapshot()
+  const cache = useStreamingCache()
+  const activity = useRunActivity()
+  const loadInitialData = useInitialDataLoad({
+    refreshProfiles: deps.refreshProfiles,
+    refreshProjects: deps.refreshProjects,
+    refreshStandaloneSessions: deps.refreshStandaloneSessions,
+    setNotice: deps.setNotice,
+  })
+
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>(
     [],
   )
@@ -112,7 +86,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
   const runSessionsRef = useRef<Record<string, string>>({})
   const activeSessionRunsRef = useRef<Record<string, number>>({})
   const memoryNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const initialRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const toolRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const showMemoryNotice = useCallback((text: string): void => {
     if (memoryNoticeTimer.current) clearTimeout(memoryNoticeTimer.current)
     setMemoryNotice(text)
@@ -122,7 +96,6 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     }, 6000)
   }, [])
   // 工具事件触发的防抖刷新：Run 进行中让轨迹卡状态跟进，不必等 Run 结束。
-  const toolRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scheduleToolRefresh = useCallback((): void => {
     if (toolRefreshTimer.current) clearTimeout(toolRefreshTimer.current)
     toolRefreshTimer.current = setTimeout(() => {
@@ -152,67 +125,18 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     [deps],
   )
 
-  const fail = useCallback(
-    (error: unknown): void => {
-      deps.setNotice(error instanceof Error ? error.message : String(error))
-    },
-    [deps],
-  )
-
-  // Run 级活动阶段（对齐 Codex）：由事件驱动，终态才清除（锁存）。
-  // 用 ref 承载当前值，避免事件回调里的闭包读到过期 state。
-  const [runActivities, setRunActivities] = useState<
-    Record<string, RunActivity>
-  >({})
-  const runActivitiesRef = useRef<Record<string, RunActivity>>({})
-  const setRunActivity = useCallback((runId: string, activity: RunActivity) => {
-    const next = {
-      ...runActivitiesRef.current,
-      [runId]: activity,
-    }
-    runActivitiesRef.current = next
-    setRunActivities(next)
-  }, [])
-  const clearRunActivity = useCallback((runId: string) => {
-    if (!(runId in runActivitiesRef.current)) return
-    const next = { ...runActivitiesRef.current }
-    delete next[runId]
-    runActivitiesRef.current = next
-    setRunActivities(next)
-  }, [])
-  // 重试倒计时心跳：RunActivity 里有 retry 时按固定节拍触发 tick，
-  // 消费方用 Date.now() - startedAt 换算剩余秒数。
-  const [retryTick, setRetryTick] = useState(0)
-  const hasRetryActivity = Object.values(runActivities).some(
-    (activity) => activity.retry !== undefined,
-  )
-  useEffect(() => {
-    if (!hasRetryActivity) return
-    const timer = setInterval(() => setRetryTick((value) => value + 1), 250)
-    return () => clearInterval(timer)
-  }, [hasRetryActivity])
-
-  const resetStreaming = useCallback((): void => {
-    streamingRef.current = {}
-    setStreaming({})
-    streamingReasoningRef.current = {}
-    setStreamingReasoning({})
-    streamRunRef.current = {}
-    if (streamingFlushTimer.current !== null) {
-      clearTimeout(streamingFlushTimer.current)
-      streamingFlushTimer.current = null
-    }
-    streamingFlushPending.current = false
-    runActivitiesRef.current = {}
-    setRunActivities({})
-  }, [])
-
   /** Run 终态时清理该 Run 遗留的审批等待（取消/失败路径的兜底）。 */
   const clearPendingApprovals = useCallback((runId: string): void => {
     setPendingApprovals((pending) =>
       pending.filter((entry) => entry.runId !== runId),
     )
   }, [])
+
+  /** 会话切换/重置：清空流式缓存与全部 Run 活动状态。 */
+  const resetStreaming = useCallback((): void => {
+    cache.reset()
+    activity.clearAllRunActivities()
+  }, [cache, activity])
 
   /**
    * Run 结束后的会话数据刷新 + 流式缓存清理。
@@ -222,77 +146,18 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
    */
   const refreshAndPrune = useCallback(
     (runId: string, messageId?: string): void => {
-      const belongsToScope = (id: string): boolean =>
-        messageId !== undefined
-          ? id === messageId
-          : streamRunRef.current[id] === runId
-      const staleContent = Object.keys(streamingRef.current).filter(
-        belongsToScope,
-      )
-      const staleReasoning = Object.keys(streamingReasoningRef.current).filter(
-        belongsToScope,
-      )
+      const prune = cache.collectStalePrune(runId, messageId)
       const sessionId = deps.activeSessionRef.current
       const refresh =
         sessionId !== null
           ? deps.refreshSessionData(sessionId).catch(() => undefined)
           : Promise.resolve()
       void refresh.finally(() => {
-        if (messageId === undefined) clearRunActivity(runId)
-        let contentChanged = false
-        for (const id of staleContent) {
-          if (id in streamingRef.current && belongsToScope(id)) {
-            delete streamingRef.current[id]
-            delete streamRunRef.current[id]
-            contentChanged = true
-          }
-        }
-        let reasoningChanged = false
-        for (const id of staleReasoning) {
-          if (id in streamingReasoningRef.current && belongsToScope(id)) {
-            delete streamingReasoningRef.current[id]
-            delete streamRunRef.current[id]
-            reasoningChanged = true
-          }
-        }
-        if (contentChanged) setStreaming({ ...streamingRef.current })
-        if (reasoningChanged)
-          setStreamingReasoning({ ...streamingReasoningRef.current })
+        if (messageId === undefined) activity.clearRunActivity(runId)
+        prune()
       })
     },
-    [deps, clearRunActivity],
-  )
-
-  /** 启动期初始数据：并行拉取，失败自动重试一次后降级为通知（非致命）。 */
-  const loadInitialData = useCallback(
-    async (retry = true): Promise<void> => {
-      const fetchAll = () =>
-        Promise.allSettled([
-          deps.refreshProfiles(),
-          deps.refreshProjects(),
-          deps.refreshStandaloneSessions(),
-        ])
-      const findFailure = (
-        settled: PromiseSettledResult<void>[],
-      ): PromiseRejectedResult | undefined =>
-        settled.find(
-          (result): result is PromiseRejectedResult =>
-            result.status === 'rejected',
-        )
-      let failure = findFailure(await fetchAll())
-      if (failure && retry) {
-        // sidecar 就绪竞态等瞬时错误：稍等后自动重试一次
-        await new Promise<void>((resolve) => {
-          initialRetryTimer.current = setTimeout(() => {
-            initialRetryTimer.current = null
-            resolve()
-          }, 2000)
-        })
-        failure = findFailure(await fetchAll())
-      }
-      if (failure) fail(failure.reason)
-    },
-    [deps, fail],
+    [deps, cache, activity],
   )
 
   useEffect(() => {
@@ -306,37 +171,21 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
       unlistenEvents = transport.onEvent((event: RuntimeEvent) => {
         if (disposed) return
         if (event.type === 'message.reset') {
-          delete streamingRef.current[event.messageId]
-          delete streamingReasoningRef.current[event.messageId]
-          setStreaming({ ...streamingRef.current })
-          setStreamingReasoning({ ...streamingReasoningRef.current })
+          cache.applyReset(event.messageId)
           return
         }
         if (event.type === 'message.delta') {
-          setRunActivity(event.runId, { phase: 'answering' })
-          streamRunRef.current[event.messageId] = event.runId
-          streamingRef.current = {
-            ...streamingRef.current,
-            [event.messageId]:
-              (streamingRef.current[event.messageId] ?? '') + event.delta,
-          }
-          scheduleStreamingFlush()
+          activity.setRunActivity(event.runId, { phase: 'answering' })
+          cache.applyDelta(event.messageId, event.runId, event.delta)
           return
         }
         if (event.type === 'message.reasoning_delta') {
-          setRunActivity(event.runId, { phase: 'thinking' })
-          streamRunRef.current[event.messageId] = event.runId
-          streamingReasoningRef.current = {
-            ...streamingReasoningRef.current,
-            [event.messageId]:
-              (streamingReasoningRef.current[event.messageId] ?? '') +
-              event.delta,
-          }
-          scheduleStreamingFlush()
+          activity.setRunActivity(event.runId, { phase: 'thinking' })
+          cache.applyReasoningDelta(event.messageId, event.runId, event.delta)
           return
         }
         if (event.type === 'run.started') {
-          setRunActivity(event.runId, { phase: 'thinking' })
+          activity.setRunActivity(event.runId, { phase: 'thinking' })
           runSessionsRef.current[event.runId] = event.run.sessionId
           const sessionId = event.run.sessionId
           activeSessionRunsRef.current[sessionId] =
@@ -346,17 +195,9 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           return
         }
         if (event.type === 'run.retrying') {
-          // 通知里的秒数是静态提示（通知不会逐秒刷新）；活倒计时在 RunBlock 标签上。
-          const retryWaitSeconds =
-            event.waitMs !== undefined ? Math.round(event.waitMs / 1000) : null
-          deps.setNotice(
-            `重试（第 ${event.attempt}/${event.maxRetries} 次）：${event.reason}${
-              retryWaitSeconds !== null
-                ? `（约 ${retryWaitSeconds} 秒后自动重试）`
-                : ''
-            }`,
-          )
-          setRunActivity(event.runId, {
+          // 重试不走全局 notice：活倒计时内联在 RunBlock 标签上，
+          // 恢复后由后续事件整体覆盖 retry 字段自动消失。
+          activity.setRunActivity(event.runId, {
             phase: 'thinking',
             retry: {
               attempt: event.attempt,
@@ -370,7 +211,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           return
         }
         if (event.type === 'tool.requested') {
-          setRunActivity(event.runId, {
+          activity.setRunActivity(event.runId, {
             phase: 'tool',
             toolName: event.toolName,
           })
@@ -420,9 +261,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
               }, 1600)
             }
             if (event.type === 'run.failed') {
-              deps.setNotice(
-                `对话失败（${event.error.code}）：${event.error.message}`,
-              )
+              // 失败信息由时间线失败卡 + 重试按钮完整呈现，不重复弹全局 notice。
               setFailedSessionIds((ids) =>
                 ids.includes(sessionId) ? ids : [...ids, sessionId],
               )
@@ -454,12 +293,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
         if (EVENT_TYPES_TRIGGERING_REFRESH.has(event.type)) {
           if (event.type === 'message.completed') {
             // 最终正文先落缓存占位，等刷新落地后再由 prune 清理，避免闪空。
-            streamRunRef.current[event.messageId] = event.runId
-            streamingRef.current = {
-              ...streamingRef.current,
-              [event.messageId]: event.content,
-            }
-            scheduleStreamingFlush()
+            cache.applyCompleted(event.messageId, event.runId, event.content)
           }
           // run.failed 已在上方完成状态更新；这里仅负责刷新会话数据。
           // Run 结束后标题可能已被自动命名，会话列表一并刷新。
@@ -487,9 +321,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
       const snapshot = await invoke<BootstrapSnapshot>('bootstrap_get_state')
       if (disposed) return
       setBootstrap(snapshot)
-      // 启动期数据拉取不属于引导本身：失败只降级为通知并自动重试一次，
-      // 不把整个应用打成启动失败（sidecar 就绪竞态、瞬时错误都能自愈）。
-      void loadInitialData()
+      loadInitialData()
     }
 
     void start().catch((error: unknown) => {
@@ -506,37 +338,29 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
       disposed = true
       if (toolRefreshTimer.current) clearTimeout(toolRefreshTimer.current)
       if (memoryNoticeTimer.current) clearTimeout(memoryNoticeTimer.current)
-      if (streamingFlushTimer.current) {
-        clearTimeout(streamingFlushTimer.current)
-        streamingFlushTimer.current = null
-      }
-      streamingFlushPending.current = false
-      if (initialRetryTimer.current) {
-        clearTimeout(initialRetryTimer.current)
-        initialRetryTimer.current = null
-      }
+      if (delegationRefreshTimer.current)
+        clearTimeout(delegationRefreshTimer.current)
       unlistenState?.()
       unlistenEvents?.()
     }
   }, [
     deps,
-    fail,
+    cache,
+    activity,
     loadInitialData,
     refreshAndPrune,
     clearPendingApprovals,
-    clearRunActivity,
     scheduleToolRefresh,
     scheduleDelegationRefresh,
-    scheduleStreamingFlush,
-    setRunActivity,
     showMemoryNotice,
+    setBootstrap,
   ])
 
   return {
     bootstrap,
-    streaming,
-    streamingReasoning,
-    runActivities,
+    streaming: cache.streaming,
+    streamingReasoning: cache.streamingReasoning,
+    runActivities: activity.runActivities,
     resetStreaming,
     pendingApprovals,
     clearPendingApprovals,
@@ -544,6 +368,15 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     runningSessionIds,
     completedSessionIds,
     failedSessionIds,
-    retryTick,
+    retryTick: activity.retryTick,
   }
+}
+
+/** 宿主引导状态快照：bootstrap:state 事件 + 初始 invoke 双通道。 */
+function useBootstrapSnapshot(): {
+  bootstrap: BootstrapSnapshot | null
+  setBootstrap: (snapshot: BootstrapSnapshot | null) => void
+} {
+  const [bootstrap, setBootstrap] = useState<BootstrapSnapshot | null>(null)
+  return { bootstrap, setBootstrap }
 }

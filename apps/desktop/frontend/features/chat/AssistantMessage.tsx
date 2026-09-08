@@ -21,7 +21,7 @@ import { AlertIcon } from '../../ui/icons'
 import { MessageMarkdown } from '../../components/markdown/MessageMarkdown'
 import { ReasoningBlock } from './ReasoningBlock'
 import { ToolTrace } from './ToolTrace'
-import type { RunActivity } from '../../hooks/useAppBootstrap'
+import type { RunActivity } from '../../hooks/useRunActivity'
 
 const MESSAGE_STATUS_LABELS: Record<string, string> = {
   interrupted: '已中断',
@@ -87,9 +87,11 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
   // 正文流式光标：只看该消息是否仍在流式增量（不参与阶段判断）。
   const answerStreaming = props.runActive && props.streamingText !== undefined
   // Run 级阶段由事件驱动（runActivity），不再靠内容有无猜测阶段。
-  // 连接 Provider 后首个增量到达前的空窗：用呼吸点告知“没有卡住”。
+  // 连接 Provider 后首个增量到达前的空窗：用呼吸点告知“没有卡住”；
+  // Provider 重试期间改由 RunBlock 的重试状态行表达，避免双状态指示。
   const waiting =
     props.runActive &&
+    props.runActivity?.retry === undefined &&
     contentText === '' &&
     reasoningText === '' &&
     props.streamingText === undefined &&

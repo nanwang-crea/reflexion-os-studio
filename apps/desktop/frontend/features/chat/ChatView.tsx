@@ -19,7 +19,8 @@ import { QueueBar } from './QueueBar'
 import { PlanCard } from './PlanCard'
 import { RunEventCard } from './RunEventCard'
 import type { SessionData } from '../../api/sessions'
-import type { PendingApproval, RunActivity } from '../../hooks/useAppBootstrap'
+import type { PendingApproval } from '../../hooks/useAppBootstrap'
+import type { RunActivity } from '../../hooks/useRunActivity'
 import type { PermissionModeValue } from '../../hooks/usePermissionMode'
 
 interface ChatViewProps {
@@ -279,12 +280,12 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
               const finalMessage =
                 block.finalItem?.message ??
                 block.processItems[block.processItems.length - 1]?.message
+              // 重试事件只作内联活状态，不进时间线；失败事件渲染为失败卡。
               const runEvents = (props.sessionData?.runEvents ?? []).filter(
-                (event: RunEvent) => event.runId === block.runId,
+                (event: RunEvent) =>
+                  event.runId === block.runId && event.type === 'failed',
               )
-              const failureDetail = runEvents.find(
-                (event: RunEvent) => event.type === 'failed',
-              )
+              const failureDetail = runEvents[0]
               return (
                 <div key={block.runId}>
                   {runEvents.map((event) => (

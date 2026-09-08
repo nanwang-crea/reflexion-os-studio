@@ -5,6 +5,7 @@ import type {
   Usage,
 } from '@reflexion-os-studio/runtime-client'
 import { ChevronIcon } from '../../ui/icons'
+import type { RunActivity } from '../../hooks/useRunActivity'
 import { AssistantMessage } from './AssistantMessage'
 import { RunProcess, type ProcessItem } from './RunProcess'
 import { ChangedFiles } from './ChangedFiles'
@@ -15,7 +16,7 @@ interface RunBlockProps {
   finalItem: ProcessItem | null
   delegations: Delegation[]
   runActive: boolean
-  runActivity?: import('../../hooks/useAppBootstrap').RunActivity
+  runActivity?: RunActivity
   /** 重试倒计时心跳：父级在有活重试时按节拍自增，驱动本组件重算剩余秒数。 */
   retryTick: number
   streaming: Record<string, string>
@@ -108,6 +109,17 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
 
   return (
     <div className="run-block">
+      {/* 请求建立阶段失败（如 429）时 Run 尚无任何流程项：只渲染重试状态行，
+          避免与 AssistantMessage 的等待点重复表达“进行中”。 */}
+      {!hasProcess && props.runActive && retry !== undefined && (
+        <div className="run-process">
+          <span
+            className={`run-process-label${props.runActive ? ' shimmer' : ''}`}
+          >
+            {label}
+          </span>
+        </div>
+      )}
       {hasProcess && (
         <div className="run-process">
           <button
