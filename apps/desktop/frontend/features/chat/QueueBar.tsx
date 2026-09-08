@@ -119,6 +119,14 @@ export function QueueBar(props: QueueBarProps): React.JSX.Element {
                   : entry.content}
               </span>
             )}
+            {entry.trusted && editingId !== entry.id && (
+              <span
+                className="queue-trusted-badge"
+                title="该条消息发送时开启了信任开关：文件写入与命令执行将自动放行"
+              >
+                信任放行
+              </span>
+            )}
             <span className="queue-actions">
               {editingId === entry.id ? (
                 <>

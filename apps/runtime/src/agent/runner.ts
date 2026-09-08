@@ -24,6 +24,7 @@ import type { ApprovalGateway, PermissionGate } from './permissions.js'
 import {
   buildOnceGrant,
   buildSessionGrant,
+  requiresRustGrant,
   summarizeArgs,
 } from './permissions.js'
 import { capToolResultForModel, parseToolResultPayload } from './toolResults.js'
@@ -424,6 +425,18 @@ export class RunRunner {
           } else if (decision === 'ask') {
             grant = buildSessionGrant({
               grantId: `session:${request.name}`,
+              requestId: row.id,
+              sessionId: run.sessionId,
+              workspaceRoot: input.workspaceRoot,
+              operation: request.name,
+            })
+            this.store.toolCalls.markStatus(row.id, 'running', grant)
+          } else if (requiresRustGrant(request.name)) {
+            // 信任开关放行的写/Shell：决策走 automatic、不经审批，但 Rust 侧
+            // require_grant 仍要求非空凭据。签发会话级稳定引用凭据（复用
+            // buildSessionGrant 的校验语义），grantId 前缀区分审计来源。
+            grant = buildSessionGrant({
+              grantId: `trusted:${request.name}`,
               requestId: row.id,
               sessionId: run.sessionId,
               workspaceRoot: input.workspaceRoot,

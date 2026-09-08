@@ -96,3 +96,19 @@ test('queue update keeps explicit skillId and re-resolves slash skill', async ()
   assert.equal(updated?.params.skillId, 'web-research')
   assert.equal(service.list('s1')[0].skillId, 'web-research')
 })
+
+test('queue entry carries trusted flag and defaults to false', () => {
+  const { service } = freshQueue()
+  // 未传 trusted（旧客户端/落地页路径）→ false。
+  const plain = service.enqueue('s1', params('普通消息'))
+  assert.equal(service.list('s1').find((e) => e.id === plain.id).trusted, false)
+  // 显式 trusted: true → 快照可见（QueueBar 信任徽标依据）。
+  const trusted = service.enqueue('s1', {
+    ...params('信任消息'),
+    trusted: true,
+  })
+  assert.equal(
+    service.list('s1').find((e) => e.id === trusted.id).trusted,
+    true,
+  )
+})

@@ -1,22 +1,37 @@
 import { useCallback, useState } from 'react'
 
 const PERMISSION_STORAGE_KEY = 'reflexion.permission-mode'
-const VALID_MODES = ['workspace', 'read-only']
 
-function initialMode(): string {
-  const stored = localStorage.getItem(PERMISSION_STORAGE_KEY)
-  return stored !== null && VALID_MODES.includes(stored) ? stored : 'workspace'
+/** Composer 权限下拉的取值：workspace / read-only 持久化，trusted 仅内存态。 */
+export type PermissionModeValue = 'workspace' | 'read-only' | 'trusted'
+
+function initialMode(): PermissionModeValue {
+  // trusted（本会话完全允许）不持久化：存储里只会出现前两档，回落 workspace。
+  return localStorage.getItem(PERMISSION_STORAGE_KEY) === 'read-only'
+    ? 'read-only'
+    : 'workspace'
 }
 
-/** 工具权限 Profile 偏好（workspace / read-only）；持久化在 localStorage。 */
+/**
+ * 工具权限模式偏好：workspace（工作区读写）/ read-only（只读）持久化在
+ * localStorage；trusted（完全允许）为会话级内存态，不持久化。
+ */
 export function usePermissionMode(): {
-  permissionMode: string
-  changePermissionMode: (value: string) => void
+  permissionMode: PermissionModeValue
+  changePermissionMode: (value: PermissionModeValue) => void
 } {
-  const [permissionMode, setPermissionMode] = useState<string>(initialMode)
-  const changePermissionMode = useCallback((value: string): void => {
-    setPermissionMode(value)
-    localStorage.setItem(PERMISSION_STORAGE_KEY, value)
-  }, [])
+  const [permissionMode, setPermissionMode] =
+    useState<PermissionModeValue>(initialMode)
+  const changePermissionMode = useCallback(
+    (value: PermissionModeValue): void => {
+      setPermissionMode(value)
+      if (value === 'trusted') {
+        localStorage.removeItem(PERMISSION_STORAGE_KEY)
+      } else {
+        localStorage.setItem(PERMISSION_STORAGE_KEY, value)
+      }
+    },
+    [],
+  )
   return { permissionMode, changePermissionMode }
 }

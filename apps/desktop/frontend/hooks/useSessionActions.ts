@@ -17,7 +17,7 @@ interface SessionActionsDeps {
   activeProjectId: string | null
   selectedModelKey: string | null
   sessionData: SessionData | null
-  /** 工具权限 Profile（随 message.send 传给 Runtime）。 */
+  /** 工具权限模式（workspace / read-only / trusted，随 message.send 传给 Runtime）。 */
   permissionMode: string
   // 与渲染同步的 refs
   activeSessionRef: RefObject<string | null>
@@ -155,6 +155,8 @@ export function useSessionActions(deps: SessionActionsDeps): {
       modelKey && separator > 0 ? modelKey.slice(separator + 2) : undefined
     const permissionMode =
       deps.permissionMode === 'read-only' ? 'read-only' : undefined
+    // 完全允许档：workspace Profile 之上附加 trusted 标志（写/Shell 自动放行）。
+    const trusted = deps.permissionMode === 'trusted' ? true : undefined
     try {
       let sessionId = deps.activeSessionId
       if (!sessionId) {
@@ -166,6 +168,7 @@ export function useSessionActions(deps: SessionActionsDeps): {
           providerId,
           model,
           permissionMode,
+          trusted,
         })
         sessionId = created.session.id
         deps.setActiveSessionId(sessionId)
@@ -176,6 +179,7 @@ export function useSessionActions(deps: SessionActionsDeps): {
           providerId,
           model,
           permissionMode,
+          trusted,
         })
       }
       await deps.refreshSessionData(sessionId)

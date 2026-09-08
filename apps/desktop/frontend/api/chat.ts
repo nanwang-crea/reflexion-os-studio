@@ -17,6 +17,8 @@ export function sendMessage(input: {
   model?: string
   /** 工具权限 Profile；缺省 workspace（Runtime 侧默认）。 */
   permissionMode?: 'workspace' | 'read-only'
+  /** 会话信任开关：true 时文件写入与 Shell 自动放行（不弹审批）。 */
+  trusted?: boolean
 }): Promise<SendMessageResult> {
   return request<SendMessageResult>('message.send', input)
 }

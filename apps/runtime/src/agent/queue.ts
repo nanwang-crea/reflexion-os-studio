@@ -104,6 +104,7 @@ export class QueueService {
       providerId: entry.params.providerId ?? null,
       model: entry.params.model ?? null,
       permissionMode: entry.params.permissionMode ?? null,
+      trusted: entry.params.trusted ?? false,
       skillId: entry.params.skillId ?? null,
       position,
     }

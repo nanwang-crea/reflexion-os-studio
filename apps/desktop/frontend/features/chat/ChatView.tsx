@@ -20,6 +20,7 @@ import { PlanCard } from './PlanCard'
 import { RunEventCard } from './RunEventCard'
 import type { SessionData } from '../../api/sessions'
 import type { PendingApproval, RunActivity } from '../../hooks/useAppBootstrap'
+import type { PermissionModeValue } from '../../hooks/usePermissionMode'
 
 interface ChatViewProps {
   sessionData: SessionData | null
@@ -31,8 +32,8 @@ interface ChatViewProps {
   /** 重试倒计时心跳：有活重试时按节拍自增，驱动 RunBlock 重算剩余秒数。 */
   retryTick: number
   hasEnabledProvider: boolean
-  permissionValue: string
-  onPermissionChange: (value: string) => void
+  permissionValue: PermissionModeValue
+  onPermissionChange: (value: PermissionModeValue) => void
   modelOptions: ComposerModelOption[]
   selectedModelKey: string | null
   onModelChange: (key: string) => void

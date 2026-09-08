@@ -53,14 +53,33 @@ export function isToolOperation(toolName: string): toolName is ToolOperation {
   return TOOL_OPERATIONS.has(toolName)
 }
 
+/** Rust 侧 require_grant 强制校验凭据的操作（写类 + Shell）；读取类不受约束。 */
+const RUST_GRANT_OPERATIONS = new Set<ToolOperation>([
+  'file.write',
+  'file.edit',
+  'file.delete',
+  'file.move',
+  'file.mkdir',
+  'shell.execute',
+])
+
+/** 该工具调用是否必须携带 Rust 凭据（含信任开关自动放行的写/Shell）。 */
+export function requiresRustGrant(toolName: string): boolean {
+  return isToolOperation(toolName) && RUST_GRANT_OPERATIONS.has(toolName)
+}
+
 /**
  * 单次 Run 的策略闸门：决定工具调用 automatic / ask / denied。
  * 无工作区（独立会话）时文件/Shell 一律拒绝；Rust 侧另有硬边界兜底。
+ * trusted 为会话信任开关：workspace 策略内的写/Shell ask 项改为 automatic
+ *（read-only 与无工作区不受影响），写/Shell 执行仍受 Rust require_grant 约束，
+ * 凭据由 runner 以 trusted 会话凭据签发（见 buildSessionGrant 调用点）。
  */
 export class PermissionGate {
   constructor(
     private readonly mode: PermissionMode,
     private readonly hasWorkspace: boolean,
+    private readonly trusted: boolean = false,
   ) {}
 
   decisionFor(toolName: string): DecisionMode {
@@ -69,7 +88,11 @@ export class PermissionGate {
       return AUTOMATIC_OTHER_TOOLS.has(toolName) ? 'automatic' : 'ask'
     }
     if (!this.hasWorkspace) return 'denied'
-    return policyFor(this.mode)[toolName]
+    const decision = policyFor(this.mode)[toolName]
+    if (decision === 'ask' && this.trusted && this.mode === 'workspace') {
+      return 'automatic'
+    }
+    return decision
   }
 }
 

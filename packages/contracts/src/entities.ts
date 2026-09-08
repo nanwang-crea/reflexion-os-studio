@@ -586,6 +586,8 @@ export const QueueEntrySchema = z.object({
   providerId: z.string().min(1).nullable(),
   model: z.string().min(1).nullable(),
   permissionMode: z.enum(['workspace', 'read-only']).nullable(),
+  // 发送时是否启用会话信任开关（文件写入与 Shell 自动放行）。
+  trusted: z.boolean(),
   skillId: z.string().min(1).nullable(),
   /** 0 起位置；出队发送时该项即消失。 */
   position: z.number().int().nonnegative(),

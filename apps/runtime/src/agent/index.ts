@@ -178,6 +178,7 @@ export class ChatAgent {
       temperature: params.temperature,
       maxTokens: params.maxTokens,
       permissionMode: params.permissionMode,
+      trusted: params.trusted,
       skillId: params.skillId,
     }
     const entry = this.queues.enqueue(params.sessionId, rest)
@@ -306,6 +307,7 @@ export class ChatAgent {
       model,
       sampling,
       permissionMode: params.permissionMode,
+      trusted: params.trusted,
       skill,
       assistantMessage,
       emitter,
@@ -371,6 +373,8 @@ export class ChatAgent {
       model,
       sampling: this.resolveSampling(profile, {}),
       permissionMode: undefined,
+      // 重试不继承信任开关：与 permissionMode 同口径，按默认审批模式重跑。
+      trusted: undefined,
       skill:
         original.skillId === null ? null : builtinSkills.get(original.skillId),
       assistantMessage,
@@ -414,6 +418,8 @@ export class ChatAgent {
     model: string
     sampling: { temperature?: number; maxTokens?: number }
     permissionMode: ChatCommand['permissionMode']
+    /** 会话信任开关：workspace Profile 下写/Shell 自动放行（不弹审批）。 */
+    trusted: ChatCommand['trusted']
     skill: SkillDefinition | null
     systemPrompt?: string
     assistantMessage: Message
@@ -487,6 +493,7 @@ export class ChatAgent {
     const gate = new PermissionGate(
       input.permissionMode ?? 'workspace',
       workspaceRoot !== null,
+      input.trusted ?? false,
     )
     void this.runner
       .execute({
@@ -635,8 +642,10 @@ export class ChatAgent {
             apiKey,
             model: profile.models[0] ?? profile.models[0]!,
             sampling: this.resolveSampling(profile, {}),
-            // 继承父权限模式，只降不升：read-only 父的子 Run 仍 read-only。
+            // 继承父权限模式，只降不升：read-only 父的子 Run 仍 read-only；
+            // 信任开关不继承（子 Run 白名单本就无写/Shell，不能放大）。
             permissionMode: parentMode,
+            trusted: false,
             depth: childDepth,
             skill: null,
             systemPrompt: agent.systemPrompt,

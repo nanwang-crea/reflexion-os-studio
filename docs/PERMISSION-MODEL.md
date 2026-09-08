@@ -12,7 +12,17 @@ Phase 1 采用主流桌面 Agent 的简单模型：**Permission Profile + Chat A
 
 允许在当前 Workspace 内读取、搜索（glob/grep）、写入/编辑/删除/移动/建目录和执行 Shell。Shell 的 cwd 必须位于 Workspace；危险命令仍按操作策略请求审批。`workspace` 是默认推荐 Profile。
 
-不在 Phase 1 提供 `full-access` Profile。
+不提供全局 `full-access` Profile。
+
+### 完全允许（Trusted，权限下拉第三档）
+
+在 `workspace` Profile 之上提供**信任档**（Composer 权限下拉的第三档，随 `message.send` 的 `trusted` 参数下发）：
+
+- 开启后，本次发送的 Run 对 `file.write/edit/delete/move/mkdir` 与 `shell.execute` 自动放行（决策从 `ask` 变为 `automatic`），不再弹出审批卡。
+- **Shell 不受工作区边界限制**：文件操作的 workspace 边界由 Rust 强制，但 Shell 执行任意命令无法真正限制在 Workspace 内；下拉选项与 title 必须如实标注该风险。
+- 范围与生效：仅对 `workspace` Profile 且有工作区的 Run 生效；`read-only` 优先于 trusted；MCP 工具与未知工具仍走 `ask`；子 Run 工具白名单本就无写/Shell，不受信任档放大。
+- 生命周期：trusted 档不持久化（前端内存态），刷新/重启后回落"工作区读写"；排队消息各自携带发送时的 trusted 值（UI 以"信任放行"徽标提示）；`run.retry` 不继承（与 permissionMode 同口径）。
+- 凭据语义不变：信任放行的写/Shell 调用仍由 Runtime 签发会话级 grant（grantId 形如 `trusted:<operation>`），Rust 侧 `require_grant` 校验照常生效。
 
 ## 操作策略
 

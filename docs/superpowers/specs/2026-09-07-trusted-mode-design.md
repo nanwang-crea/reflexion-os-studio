@@ -11,7 +11,7 @@
 
 1. **覆盖范围**：`file.write/edit/delete/move/mkdir` + `shell.execute` 自动放行。MCP 工具保持 ask（外部进程，不在本次范围）。
 2. **Shell 边界如实标注**：shell.execute 无法真正限制在工作区内（Rust 只强制文件路径边界），信任开关 UI 必须明确告知"Shell 命令不受工作区限制"，不假装有边界。
-3. **归属与生命周期**：开关是**会话级临时状态，前端内存态、不持久化**；切换会话时回落到该会话自身状态（每个会话独立，初始为关）。重启后全部回到默认审批模式。
+3. **归属与生命周期**：开关是**会话级临时状态**；UI 上并入 Composer 权限下拉第三档（"完全允许"，与工作区读写/只读互斥单选）。工作区读写/只读两档照旧持久化在 localStorage；"完全允许"档不持久化，刷新/重启后回落工作区读写。
 
 ## 方案（A：信任标志随消息发送）
 
@@ -44,12 +44,21 @@ Rust `require_grant` 当前拒绝空 grant。为避免"trusted 模式下写操�
 
 ## 前端变更（apps/desktop/frontend）
 
-- 新增 `hooks/useTrustedSessions.ts`：`Record<sessionId, boolean>` 内存态；`isTrusted(sessionId)`、`setTrusted(sessionId, value)`；切换会话不重置（各自记各自），App 生命周期内有效。
-- `components/Composer.tsx`：新增独立 props（`trustedEnabled?` / `onTrustedChange?`），渲染一个**会话内信任开关**（composer bar 内小型 toggle/checkbox，文案"本会话完全允许"）。仅在 ChatView（有活动会话）传入并显示；LandingView 不传（新建会话的首条消息默认 false，进入会话后可开启）。
-  - 开关状态来自 `useTrustedSessions`（per-session），**不写 localStorage**；刷新后全部回落关闭。
-  - title 文案如实标注："自动允许文件写入与命令执行；Shell 命令不受工作区限制；仅本次运行期间有效，重启后自动关闭；只读模式下无效"。
-- `useSessionActions.sendMessage`：deps 新增 `trusted: boolean`（当前活动会话的信任态），发送时 `trusted: deps.trusted ? true : undefined`；落地页新建会话路径 trusted 恒为 undefined。
-- App.tsx 装配 useTrustedSessions，向 ChatView → Composer 传递，向 useSessionActions 传递当前会话的 trusted 值。
+> 实施修订：最初设计为 ChatView 内的独立勾选框（useTrustedSessions per-session
+> Record）。按用户后续决定改为**权限下拉第三档**（与工作区读写/只读同一下拉），
+> 其余语义不变。此处记录修订后形态。
+
+- `hooks/usePermissionMode.ts`：取值扩展为 `workspace | read-only | trusted`；
+  前两档照旧持久化 localStorage，trusted 不持久化（change 时移除存储键，
+  刷新后回落 workspace）。导出类型 `PermissionModeValue`。
+- `components/Composer.tsx`：权限下拉新增第三档 `<option value="trusted">完全允许</option>`，
+  title 如实标注"Shell 不受工作区限制、重启后回落工作区读写"。
+- `useSessionActions.sendMessage`：从 permissionMode 派生——`read-only` 档传
+  `permissionMode: 'read-only'`；`trusted` 档传 `trusted: true`（permissionMode
+  省略即 Runtime 默认 workspace）。
+- 落地页与聊天页共用同一下拉值（与既有 permissionMode 全局偏好行为一致）。
+- `QueueBar.tsx`：排队项按发送时快照显示"信任放行"徽标（entry.trusted），
+  提示该条出队后写/Shell 会自动放行（即使此刻已切回其它档）。
 
 ## 事件与 UI 呈现
 
@@ -59,8 +68,8 @@ Rust `require_grant` 当前拒绝空 grant。为避免"trusted 模式下写操�
 ## 错误处理
 
 - `trusted: true` 但会话无工作区（独立会话）：gate 仍全 denied（现有 hasWorkspace 逻辑），模型收到 permission_denied，用户会看到失败原因。
-- `trusted: true` 且 `permissionMode: 'read-only'`：read-only 优先，trusted 无效果（决策：不报错，静默以 read-only 为准；UI 上 read-only 全局模式与 per-session 信任开关可同时选中，属正常路径）。
-- 前端 localStorage 兼容：老值 `workspace`/`read-only` 原样解析；新下拉若存过 `trusted`（不会发生，因为 trusted 不写 localStorage）无需清理。
+- `trusted: true` 且 `permissionMode: 'read-only'`：read-only 优先，trusted 无效果（决策：不报错，静默以 read-only 为准；下拉单选下正常路径不会同时传，仅防御性语义）。
+- 前端 localStorage 兼容：老值 `workspace`/`read-only` 原样解析；trusted 不写 localStorage（change 时移除键），刷新后回落 workspace。
 
 ## 测试
 
@@ -75,4 +84,11 @@ Rust `require_grant` 当前拒绝空 grant。为避免"trusted 模式下写操�
 
 ## 明确不做（YAGNI）
 
-- 不做按项目持久化信任、不做全局信任模式、不做 MCP 信任、不做审批卡批量授权、不做信任模式徽标。
+- 不做按项目持久化信任、不做 MCP 信任、不做审批卡批量授权、不做 Run 行信任徽标。
+
+## 与最初设计的差异记录
+
+- UI 形态：独立勾选框 → 权限下拉第三档"完全允许"（用户决定，交互更集中）。
+- 生命周期随之调整：per-session 内存 Record → 全局下拉值（trusted 档仍不持久化，
+  刷新回落 workspace；切换会话不再各自记忆——同一时刻全局只有一个档位生效，
+  与既有 permissionMode 的全局语义保持一致）。

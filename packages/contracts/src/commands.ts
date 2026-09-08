@@ -42,6 +42,9 @@ export const MessageSendParamsSchema = z.object({
   maxTokens: z.number().int().positive().optional(),
   // 本次会话执行的工具权限 Profile；缺省 workspace。
   permissionMode: z.enum(['workspace', 'read-only']).optional(),
+  // 会话信任开关：true 时本次发送的 Run 对文件写入与 Shell 自动放行（不弹审批）。
+  // 仅在 workspace Profile 且有工作区时生效；read-only 优先于 trusted。
+  trusted: z.boolean().optional(),
   // 显式激活的 Skill；内容以 /<skillId> 开头时也可隐式激活（显式优先）。
   skillId: z.string().min(1).optional(),
 })

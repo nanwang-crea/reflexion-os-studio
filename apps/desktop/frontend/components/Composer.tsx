@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { SkillManifest } from '@reflexion-os-studio/runtime-client'
+import type { PermissionModeValue } from '../hooks/usePermissionMode'
 import { ChevronIcon, SendIcon, ShieldIcon, StopIcon } from '../ui/icons'
 
 export interface ComposerModelOption {
@@ -15,9 +16,9 @@ interface ComposerProps {
   /** 有 Run 进行中时为 true：显示停止按钮并阻止提交。 */
   busy?: boolean
   autoFocus?: boolean
-  /** 权限 Profile（workspace / read-only），随工具能力上线生效。 */
-  permissionValue?: string
-  onPermissionChange?: (value: string) => void
+  /** 权限模式（workspace / read-only / trusted），随发送生效。 */
+  permissionValue?: PermissionModeValue
+  onPermissionChange?: (value: PermissionModeValue) => void
   modelOptions?: ComposerModelOption[]
   selectedModelKey?: string | null
   onModelChange?: (key: string) => void
@@ -190,17 +191,20 @@ export function Composer(props: ComposerProps): React.JSX.Element {
         {props.permissionValue !== undefined && props.onPermissionChange && (
           <label
             className="composer-select permission"
-            title="工具权限模式（随工具能力上线生效）"
+            title="工具权限模式：工作区读写（写/命令逐次审批）、只读、完全允许（写/命令自动放行；Shell 不受工作区限制；重启后回落工作区读写）"
           >
             <ShieldIcon />
             <select
               value={props.permissionValue}
               onChange={(event) =>
-                props.onPermissionChange?.(event.target.value)
+                props.onPermissionChange?.(
+                  event.target.value as PermissionModeValue,
+                )
               }
             >
               <option value="workspace">工作区读写</option>
               <option value="read-only">只读</option>
+              <option value="trusted">完全允许</option>
             </select>
             <ChevronIcon />
           </label>
