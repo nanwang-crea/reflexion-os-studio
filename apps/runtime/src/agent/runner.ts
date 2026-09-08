@@ -18,6 +18,7 @@ import type { ApprovalGateway, PermissionGate } from './permissions.js'
 import { createRunExecutionState } from './run-state.js'
 import { RunFinalizer, type RunTerminalDecision } from './run-finalizer.js'
 import { executeToolCall } from './tool-executor.js'
+import { executeToolBatch, type SchedulerDeps } from './tool-scheduler.js'
 
 export interface RunStreamInput {
   run: Run
@@ -135,21 +136,34 @@ export class RunRunner {
           }
           return result.turn
         },
-        executeTool: (request, signal) =>
-          executeToolCall(
-            {
-              store: this.store,
-              state,
-              run,
-              gate: input.gate,
-              approvals: input.approvals,
-              workspaceRoot: input.workspaceRoot,
-              registry,
-              emitter,
-            },
-            request,
-            signal,
-          ),
+        executeToolBatch: (requests, signal) => {
+          const deps: SchedulerDeps = {
+            store: this.store,
+            state,
+            run,
+            gate: input.gate,
+            approvals: input.approvals,
+            workspaceRoot: input.workspaceRoot,
+            registry,
+            emitter,
+            executeOne: (request, oneSignal) =>
+              executeToolCall(
+                {
+                  store: this.store,
+                  state,
+                  run,
+                  gate: input.gate,
+                  approvals: input.approvals,
+                  workspaceRoot: input.workspaceRoot,
+                  registry,
+                  emitter,
+                },
+                request,
+                oneSignal,
+              ),
+          }
+          return executeToolBatch(deps, requests, signal)
+        },
       })
 
       if (outcome.status === 'completed') {

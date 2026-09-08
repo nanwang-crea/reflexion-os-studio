@@ -41,6 +41,7 @@ export type {
   ToolCallRequest,
   ToolDefinition,
   ToolExecutionArgs,
+  ToolExecutionPolicy,
   ToolResult,
 } from './types.js'
 export { DEFAULT_MAX_CONTINUATION_TURNS, DEFAULT_MAX_TURNS } from './types.js'

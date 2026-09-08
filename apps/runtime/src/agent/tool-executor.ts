@@ -7,6 +7,7 @@ import {
   JsonValueSchema,
   type JsonValue,
   type Run,
+  type ToolCall,
 } from '@reflexion-os-studio/contracts'
 import type { RunEventEmitter } from '../events.js'
 import type { Store } from '../store/index.js'
@@ -33,8 +34,8 @@ export interface ToolExecutorInput {
 }
 
 /**
- * 单次工具调用：权限决策 → 调用行落库 → 审批流程（ask）→ 授权凭据签发 →
- * 注册表执行 → 结果截断回填与终态持久化。
+ * 单次工具调用：权限决策 → 消费预建 ToolCall 行（无则按需创建）→
+ * 审批流程（ask）→ 授权凭据签发 → 注册表执行 → 结果截断回填与终态持久化。
  */
 export async function executeToolCall(
   input: ToolExecutorInput,
@@ -45,18 +46,45 @@ export async function executeToolCall(
   const args = parseToolArgs(request.arguments)
   const decision = input.gate.decisionFor(request.name)
 
-  // 策略拒绝：落一条失败的调用记录，让模型知道原因而不是静默失败。
-  if (decision === 'denied') {
-    const row = store.toolCalls.create({
+  // W3：消费模型轮预建的 ToolCall 行；无预建行（旧路径/权限拒绝兜底）时按需创建。
+  const precreatedId = state.precreatedToolCallRows.get(request.id)
+  const ensureRow = (status: 'running' | 'awaiting_approval'): ToolCall => {
+    if (precreatedId !== undefined) {
+      store.toolCalls.markStatus(precreatedId, status)
+      const row = store.toolCalls.get(precreatedId)
+      if (row !== null) return row
+    }
+    return store.toolCalls.create({
       runId: run.id,
       messageId: state.lastAssistantMessageId,
       toolName: request.name,
       args,
-      status: 'failed',
+      status,
     })
+  }
+
+  // 策略拒绝：落一条失败的调用记录，让模型知道原因而不是静默失败。
+  if (decision === 'denied') {
+    const deniedRow =
+      precreatedId !== undefined
+        ? (store.toolCalls.get(precreatedId) ??
+          store.toolCalls.create({
+            runId: run.id,
+            messageId: state.lastAssistantMessageId,
+            toolName: request.name,
+            args,
+            status: 'pending',
+          }))
+        : store.toolCalls.create({
+            runId: run.id,
+            messageId: state.lastAssistantMessageId,
+            toolName: request.name,
+            args,
+            status: 'pending',
+          })
     emitter.next({
       type: 'tool.requested',
-      toolCallId: row.id,
+      toolCallId: deniedRow.id,
       toolName: request.name,
       args,
     })
@@ -64,7 +92,7 @@ export async function executeToolCall(
       store,
       state,
       emitter,
-      row.id,
+      deniedRow.id,
       'failed',
       'permission_denied',
     )
@@ -83,20 +111,16 @@ export async function executeToolCall(
       sessionId: run.sessionId,
       workspaceRoot: input.workspaceRoot,
     })
-  const row = store.toolCalls.create({
-    runId: run.id,
-    messageId: state.lastAssistantMessageId,
-    toolName: request.name,
-    args,
-    status: askNeeded ? 'awaiting_approval' : 'running',
-  })
+  const row = ensureRow(askNeeded ? 'awaiting_approval' : 'running')
+  if (precreatedId === undefined) {
+    emitter.next({
+      type: 'tool.requested',
+      toolCallId: row.id,
+      toolName: request.name,
+      args,
+    })
+  }
   state.toolCallRowIds.add(row.id)
-  emitter.next({
-    type: 'tool.requested',
-    toolCallId: row.id,
-    toolName: request.name,
-    args,
-  })
 
   // 授权引用：ask 批准后以本次调用为 once 凭据；会话级授权用稳定引用。
   let grant: string | undefined
@@ -192,7 +216,7 @@ export async function executeToolCall(
   return modelResult
 }
 
-function parseToolArgs(arguments_: string): JsonValue {
+export function parseToolArgs(arguments_: string): JsonValue {
   try {
     const parsed: unknown =
       arguments_.trim() === '' ? {} : JSON.parse(arguments_)

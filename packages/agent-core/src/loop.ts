@@ -116,18 +116,19 @@ export async function runAgentLoop(
       toolCalls: turn.toolCalls,
     })
 
-    // 同轮多个工具调用并行执行（与主流 Agent 一致），结果按调用顺序回填，
-    // 保证回传给模型的 role=tool 消息与 tool_calls 一一对应、顺序稳定。
-    const results = await Promise.all(
-      turn.toolCalls.map(async (call) => {
-        if (signal.aborted) {
-          throw new DOMException('The operation was aborted.', 'AbortError')
-        }
-        const result = await options.executeTool(call, signal)
-        return { call, result }
-      }),
+    // 批量执行：Runtime 注入的副作用调度器负责并行/串行批次与顺序回填，
+    // 结果数组与 toolCalls 一一对应，保证 role=tool 消息与 tool_calls 稳定配对。
+    const results = await options.executeToolBatch(
+      turn.toolCalls.map((call) => ({
+        id: call.id,
+        name: call.name,
+        arguments: call.arguments,
+      })),
+      signal,
     )
-    for (const { call, result } of results) {
+    for (let i = 0; i < turn.toolCalls.length; i += 1) {
+      const call = turn.toolCalls[i]
+      const result = results[i]
       messages.push({
         role: 'tool',
         toolCallId: call.id,

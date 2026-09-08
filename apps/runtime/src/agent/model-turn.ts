@@ -6,6 +6,7 @@ import {
   type ToolRegistry,
 } from '@reflexion-os-studio/agent-core'
 import type { Message, Run } from '@reflexion-os-studio/contracts'
+import { JsonValueSchema, type JsonValue } from '@reflexion-os-studio/contracts'
 import { RunEventEmitter } from '../events.js'
 import { ProviderError, streamChatCompletion } from '../provider.js'
 import type { Store } from '../store/index.js'
@@ -207,6 +208,13 @@ export async function executeModelTurn(
   if (result.usage) {
     store.runs.addUsage(run.id, result.usage)
   }
+  // W3 ToolCall 批量预建：provider 返回合法 tool_calls 后，一个事务内
+  // 按声明顺序创建全部 ToolCall（初始 pending）并在提交后发 tool.requested。
+  // 即使进程在第一个工具开始前退出，全部声明过的调用仍可审计。
+  if (result.toolCalls.length > 0) {
+    state.precreatedToolCallRows.clear()
+    precreateToolCalls(store, state, run, emitter, result.toolCalls)
+  }
   state.turn = null
   // 子 Run token 预算：累计输出超限以稳定错误码中止(而非父取消)。
   // 放在 turn 置空之后，避免把已完成轮次误标为 failed。
@@ -231,5 +239,48 @@ export async function executeModelTurn(
       usage: result.usage,
     },
     finalContent: normalized.content,
+  }
+}
+
+/** 批量预建本模型轮声明的全部 ToolCall（单事务），提交后发 tool.requested。 */
+function precreateToolCalls(
+  store: Store,
+  state: RunExecutionState,
+  run: Run,
+  emitter: RunEventEmitter,
+  calls: { id: string; name: string; arguments: string }[],
+): void {
+  const rows = store.transaction(() =>
+    calls.map((call) =>
+      store.toolCalls.create({
+        runId: run.id,
+        messageId: state.lastAssistantMessageId,
+        toolName: call.name,
+        args: parseToolArgsForPrecreate(call.arguments),
+        status: 'pending',
+      }),
+    ),
+  )
+  for (let i = 0; i < rows.length; i += 1) {
+    state.precreatedToolCallRows.set(calls[i].id, rows[i].id)
+  }
+  for (let i = 0; i < rows.length; i += 1) {
+    emitter.next({
+      type: 'tool.requested',
+      toolCallId: rows[i].id,
+      toolName: calls[i].name,
+      args: rows[i].args,
+    })
+  }
+}
+
+function parseToolArgsForPrecreate(arguments_: string): JsonValue {
+  try {
+    const parsed: unknown =
+      arguments_.trim() === '' ? {} : JSON.parse(arguments_)
+    const result = JsonValueSchema.safeParse(parsed)
+    return result.success ? result.data : {}
+  } catch {
+    return {}
   }
 }

@@ -39,10 +39,11 @@ test('loop completes a task across multiple tool turns', async () => {
       }
       return turns.shift()
     },
-    executeTool: async (request) => {
-      executed.push(request.name)
-      return { content: `ok:${request.name}`, isError: false }
-    },
+    executeToolBatch: async (requests) =>
+      requests.map((request) => {
+        executed.push(request.name)
+        return { content: `ok:${request.name}`, isError: false }
+      }),
   })
 
   assert.equal(outcome.status, 'completed')
@@ -79,7 +80,8 @@ test('loop stops at max turns and reports exhaustion', async () => {
         toolCalls: [{ id: `c${calls}`, name: 'clock', arguments: '{}' }],
       }
     },
-    executeTool: () => ({ content: 'ok', isError: false }),
+    executeToolBatch: (requests) =>
+      requests.map(() => ({ content: 'ok', isError: false })),
   })
   assert.equal(outcome.status, 'stopped')
   assert.equal(outcome.reason, 'max_turns')
@@ -101,7 +103,8 @@ test('loop propagates abort between turns', async () => {
         toolCalls: [{ id: 'c1', name: 'clock', arguments: '{}' }],
       }
     },
-    executeTool: () => ({ content: 'ok', isError: false }),
+    executeToolBatch: (requests) =>
+      requests.map(() => ({ content: 'ok', isError: false })),
   })
   await assert.rejects(pending, (error) => error.name === 'AbortError')
 })
@@ -236,14 +239,17 @@ test('loop executes parallel tool calls and preserves result order', async () =>
       }
       return { content: '完成', finishReason: 'stop', toolCalls: [] }
     },
-    executeTool: async (request) => {
-      const args = JSON.parse(request.arguments)
-      if (active.size > 0) overlaps.push([...active])
-      active.add(request.name)
-      await new Promise((resolve) => setTimeout(resolve, args.ms))
-      active.delete(request.name)
-      return { content: `ok:${request.id}`, isError: false }
-    },
+    executeToolBatch: async (requests) =>
+      Promise.all(
+        requests.map(async (request) => {
+          const args = JSON.parse(request.arguments)
+          if (active.size > 0) overlaps.push([...active])
+          active.add(request.name)
+          await new Promise((resolve) => setTimeout(resolve, args.ms))
+          active.delete(request.name)
+          return { content: `ok:${request.id}`, isError: false }
+        }),
+      ),
   })
 
   assert.equal(outcome.status, 'completed')
@@ -361,11 +367,12 @@ test('loop injects reflection message after repeated tool failures', async () =>
       }
       return { content: '放弃了', finishReason: 'stop', toolCalls: [] }
     },
-    executeTool: async () => ({
-      content: '失败',
-      isError: true,
-      code: 'tool_error',
-    }),
+    executeToolBatch: async (requests) =>
+      requests.map(() => ({
+        content: '失败',
+        isError: true,
+        code: 'tool_error',
+      })),
   })
 
   assert.equal(outcome.status, 'completed')
@@ -399,11 +406,12 @@ test('reflectionThreshold=0 disables reflection injection', async () => {
         toolCalls: [{ id: `c${calls}`, name: 'boom', arguments: '{}' }],
       }
     },
-    executeTool: async () => ({
-      content: '失败',
-      isError: true,
-      code: 'tool_error',
-    }),
+    executeToolBatch: async (requests) =>
+      requests.map(() => ({
+        content: '失败',
+        isError: true,
+        code: 'tool_error',
+      })),
   })
 
   for (const messages of seenMessages) {
@@ -542,7 +550,7 @@ test('length continuation: two truncated fragments then stop completes', async (
       seen.push([...messages])
       return turns.shift()
     },
-    executeTool: () => {
+    executeToolBatch: () => {
       throw new Error('should not execute tools')
     },
   })
@@ -568,7 +576,8 @@ test('length continuation exhausts budget and stops with output_truncated', asyn
     history: [userMessage('写不完的长文')],
     signal: new AbortController().signal,
     callModel: async () => truncated,
-    executeTool: () => ({ content: '', isError: false }),
+    executeToolBatch: (requests) =>
+      requests.map(() => ({ content: '', isError: false })),
   })
   assert.equal(outcome.status, 'stopped')
   assert.equal(outcome.reason, 'output_truncated')
@@ -585,7 +594,7 @@ test('content_filter stops the run without tool execution', async () => {
       finishReason: 'content_filter',
       toolCalls: [],
     }),
-    executeTool: () => {
+    executeToolBatch: () => {
       throw new Error('should not execute tools')
     },
   })
@@ -604,7 +613,8 @@ test('protocol violations throw ModelProtocolError instead of completing', async
           finishReason: 'stop',
           toolCalls: [{ id: 'c1', name: 'clock', arguments: '{}' }],
         }),
-        executeTool: () => ({ content: '', isError: false }),
+        executeToolBatch: (requests) =>
+          requests.map(() => ({ content: '', isError: false })),
       }),
     (error) => error instanceof ModelProtocolError,
   )

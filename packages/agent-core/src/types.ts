@@ -63,17 +63,35 @@ export interface ToolDefinition {
   /** JSON Schema 形式的参数声明（canonical ToolSpec.parameters）。 */
   parameters: JsonValue
   execute(args: ToolExecutionArgs): Promise<ToolResult> | ToolResult
+  /**
+   * 副作用感知调度元数据（Runtime 内部使用；不进入 Provider ToolSpec 投影）。
+   * 缺省按保守 state 处理（串行执行）。
+   */
+  execution?: ToolExecutionPolicy
+}
+
+/** 工具副作用分类与资源键：决定同轮调度的并行/串行批次。 */
+export interface ToolExecutionPolicy {
+  /** pure/read 可并行；write/shell/state 串行且阻止后续 read 交叉。 */
+  effect: 'pure' | 'read' | 'write' | 'shell' | 'state'
+  /** 资源冲突键（如 workspace:path）；同 key 的调用保持声明顺序执行。 */
+  resourceKeys?: (args: JsonValue) => string[]
+  /** 幂等标记；供 Loop Guard 的重复副作用判断参考。 */
+  idempotent?: boolean
 }
 
 export interface AgentLoopOptions {
   /** 起始上下文（含 system prompt 与历史）。 */
   history: ModelMessage[]
   callModel(messages: ModelMessage[], signal: AbortSignal): Promise<ModelTurn>
-  /** 单个工具调用执行（由 Runtime 注入；调度细节由宿主负责）。 */
-  executeTool(
-    request: ToolCallRequest,
+  /**
+   * 一轮全部工具调用的批量执行（由 Runtime 注入副作用调度器）：
+   * 结果数组与请求顺序一一对应。单请求宿主可直接顺序执行。
+   */
+  executeToolBatch(
+    requests: ToolCallRequest[],
     signal: AbortSignal,
-  ): Promise<ToolResult> | ToolResult
+  ): Promise<ToolResult[]>
   /** 模型调用/工具执行共享的取消信号。 */
   signal: AbortSignal
   /** 最大模型调用轮次；超出即停止，避免无限循环。 */

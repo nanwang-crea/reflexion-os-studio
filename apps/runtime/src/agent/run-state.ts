@@ -9,7 +9,7 @@ export interface TurnDraft {
   reasoning: string
 }
 
-/** 单次 Run 执行期的可变状态：轮次草稿 + 未收尾工具调用行。 */
+/** 单次 Run 执行期的可变状态：轮次草稿 + 未收尾工具调用行 + 预建行映射。 */
 export interface RunExecutionState {
   /** 流式中断/失败时未落终态的当前轮次草稿。 */
   turn: TurnDraft | null
@@ -17,6 +17,8 @@ export interface RunExecutionState {
   toolCallRowIds: Set<string>
   /** 最近一条 assistant 消息（工具调用行的关联消息）。 */
   lastAssistantMessageId: string | null
+  /** 预建 ToolCall 行：provider call id → row id（W3 批量预建）。 */
+  precreatedToolCallRows: Map<string, string>
 }
 
 export function createRunExecutionState(): RunExecutionState {
@@ -24,6 +26,7 @@ export function createRunExecutionState(): RunExecutionState {
     turn: null,
     toolCallRowIds: new Set(),
     lastAssistantMessageId: null,
+    precreatedToolCallRows: new Map(),
   }
 }
 

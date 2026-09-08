@@ -3,6 +3,13 @@ import {
   type ToolDefinition,
 } from '@reflexion-os-studio/agent-core'
 import {
+  READ_POLICY,
+  STATE_POLICY,
+  SHELL_POLICY,
+  WEB_READ_POLICY,
+  WRITE_POLICY,
+} from '../tool-policies.js'
+import {
   createFileEditTool,
   createFileDeleteTool,
   createFileMkdirTool,
@@ -34,21 +41,53 @@ export type { ToolContext } from './shared.js'
  */
 export function createToolRegistry(ctx: ToolContext): ToolRegistry {
   const registry = new ToolRegistry()
-  const tools = [...alwaysAvailableTools(ctx), ...mcpTools(ctx)]
-  if (
-    ctx.system !== null &&
+  const tools = [
+    ...alwaysAvailableTools(ctx),
+    ...mcpTools(ctx),
+    ...(ctx.system !== null &&
     ctx.system.available &&
     ctx.workspaceRoot !== null
-  ) {
-    tools.push(...workspaceTools(ctx.system, ctx.workspaceRoot))
-  }
-  for (const tool of tools) {
+      ? workspaceTools(ctx.system, ctx.workspaceRoot)
+      : []),
+  ]
+  for (let tool of tools) {
     if (ctx.allowedTools != null && !ctx.allowedTools.has(tool.name)) {
       continue
     }
+    tool = withExecutionPolicy(tool)
     registry.register(tool)
   }
   return registry
+}
+
+/** 按工具名附加副作用调度元数据（W3）；MCP 工具保守串行。 */
+function withExecutionPolicy(tool: ToolDefinition): ToolDefinition {
+  if (tool.execution !== undefined) return tool
+  if (tool.name.includes('/')) {
+    // MCP 工具：无 readOnlyHint 信息前保守按 state 串行（ask 审批不受影响）。
+    return { ...tool, execution: STATE_POLICY }
+  }
+  const policy = BUILTIN_POLICIES[tool.name]
+  return policy === undefined ? tool : { ...tool, execution: policy }
+}
+
+const BUILTIN_POLICIES: Record<string, ToolDefinition['execution']> = {
+  get_current_time: { effect: 'pure' },
+  'web.fetch': WEB_READ_POLICY,
+  'skill.use': { effect: 'read', resourceKeys: () => [] },
+  manage_plan: STATE_POLICY,
+  update_plan: STATE_POLICY,
+  task: STATE_POLICY,
+  'file.read': READ_POLICY(),
+  'file.list': READ_POLICY(),
+  'file.glob': READ_POLICY(false),
+  'file.grep': READ_POLICY(false),
+  'file.write': WRITE_POLICY,
+  'file.edit': WRITE_POLICY,
+  'file.delete': WRITE_POLICY,
+  'file.move': WRITE_POLICY,
+  'file.mkdir': WRITE_POLICY,
+  'shell.execute': SHELL_POLICY,
 }
 
 function alwaysAvailableTools(ctx: ToolContext): ToolDefinition[] {
