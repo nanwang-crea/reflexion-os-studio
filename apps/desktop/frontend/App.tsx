@@ -145,6 +145,7 @@ export default function App() {
     runningSessionIds,
     completedSessionIds,
     failedSessionIds,
+    retryTick,
   } = useAppBootstrap(bootstrapDeps)
 
   const {
@@ -395,6 +396,7 @@ export default function App() {
                 streaming={streaming}
                 streamingReasoning={streamingReasoning}
                 runActivities={runActivities}
+                retryTick={retryTick}
                 hasEnabledProvider={hasEnabledProvider}
                 permissionValue={permissionMode}
                 onPermissionChange={changePermissionMode}

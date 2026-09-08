@@ -28,6 +28,8 @@ interface ChatViewProps {
   streamingReasoning: Record<string, string>
   /** Run 级活动阶段（事件驱动，对齐 Codex）：决定状态行文案与折叠。 */
   runActivities: Record<string, RunActivity>
+  /** 重试倒计时心跳：有活重试时按节拍自增，驱动 RunBlock 重算剩余秒数。 */
+  retryTick: number
   hasEnabledProvider: boolean
   permissionValue: string
   onPermissionChange: (value: string) => void
@@ -296,6 +298,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
                     )}
                     runActive={activeRunIds.has(block.runId)}
                     runActivity={props.runActivities[block.runId]}
+                    retryTick={props.retryTick}
                     streaming={props.streaming}
                     streamingReasoning={props.streamingReasoning}
                     runDurationMs={

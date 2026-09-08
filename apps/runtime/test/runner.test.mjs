@@ -92,6 +92,7 @@ test('runner resets retry draft in order and restarts chunk sequence', async () 
   assert.equal(events[resetIndex].messageId, firstAssistantMessage.id)
   assert.equal(events[retryingIndex].attempt, 1)
   assert.equal(events[retryingIndex].maxRetries, 1)
+  assert.equal(events[retryingIndex].waitMs, 1000)
 
   const deltas = events.filter((event) => event.type === 'message.delta')
   assert.deepEqual(

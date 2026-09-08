@@ -88,6 +88,8 @@ export interface StreamChatOptions {
     attempt: number
     maxRetries: number
     reason: string
+    /** 本次重试前的退避等待时长（毫秒）。 */
+    waitMs: number
   }) => void
   /** Agent 侧 canonical 工具声明；适配层投影为 OpenAI function 格式。 */
   tools?: ToolSpec[]
@@ -207,6 +209,18 @@ export async function streamChatCompletion(
   // (已吐出的 delta 无法回滚),避免 UI 文本重复。
   const maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES
 
+  // 统一的重试退避：先通知调用方（携带本次等待时长，供 UI 展示倒计时），再等待。
+  const backoffAfterRetry = async (input: {
+    attempt: number
+    maxRetries: number
+    reason: string
+  }): Promise<void> => {
+    const waitMs =
+      RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)]
+    options.onRetry?.({ ...input, waitMs })
+    await sleep(waitMs, options.signal)
+  }
+
   // canonical 名 ⇄ Provider 清洗名的双向映射：同一请求内固定，只构建一次。
   // 清洗后可能重名(canonical 点号/斜杠不同但清洗结果相同)，冲突时追加数字后缀。
   const canonicalToProvider = new Map<string, string>()
@@ -287,17 +301,11 @@ export async function streamChatCompletion(
         if (isAbort(error)) throw error
         if (attempt < maxRetries) {
           attempt += 1
-          options.onRetry?.({
+          await backoffAfterRetry({
             attempt,
             maxRetries,
             reason: `${isTimeout(error) ? 'timeout' : 'network'}: ${String(error)}`,
           })
-          await sleep(
-            RETRY_BACKOFF_MS[
-              Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)
-            ],
-            options.signal,
-          )
           continue
         }
         throw new ProviderError(
@@ -310,15 +318,11 @@ export async function streamChatCompletion(
       const detail = await response.text().catch(() => '')
       if (shouldRetryStatus(response.status, detail) && attempt < maxRetries) {
         attempt += 1
-        options.onRetry?.({
+        await backoffAfterRetry({
           attempt,
           maxRetries,
           reason: `HTTP ${response.status}`,
         })
-        await sleep(
-          RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)],
-          options.signal,
-        )
         continue
       }
       throw new ProviderError(
@@ -330,15 +334,11 @@ export async function streamChatCompletion(
       const error = new Error('provider response has no body')
       if (attempt < maxRetries) {
         attempt += 1
-        options.onRetry?.({
+        await backoffAfterRetry({
           attempt,
           maxRetries,
           reason: `stream failure: ${String(error)}`,
         })
-        await sleep(
-          RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)],
-          options.signal,
-        )
         continue
       }
       throw new ProviderError(
@@ -456,17 +456,13 @@ export async function streamChatCompletion(
       if (isAbort(error)) throw error
       if (attempt < maxRetries) {
         attempt += 1
-        options.onRetry?.({
+        await backoffAfterRetry({
           attempt,
           maxRetries,
           reason: isTimeout(error)
             ? `timeout: ${String(error)}`
             : `stream failure: ${String(error)}`,
         })
-        await sleep(
-          RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)],
-          options.signal,
-        )
         continue attempts
       }
       throw new ProviderError(

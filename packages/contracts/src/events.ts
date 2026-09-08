@@ -88,6 +88,9 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     attempt: z.number().int().positive(),
     maxRetries: z.number().int().nonnegative(),
     reason: z.string(),
+    // 本次重试前的退避等待时长（毫秒）；UI 用它展示倒计时。
+    // 可选：旧版 runtime 事件与持久化的 run_events 历史记录不含该字段。
+    waitMs: z.number().int().nonnegative().optional(),
   }),
   RuntimeEventEnvelopeSchema.extend({
     type: z.literal('run.failed'),

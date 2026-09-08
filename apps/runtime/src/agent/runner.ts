@@ -220,7 +220,7 @@ export class RunRunner {
               ...(input.provider.timeoutMs !== undefined
                 ? { timeoutMs: input.provider.timeoutMs }
                 : {}),
-              onRetry: ({ attempt, maxRetries, reason }) => {
+              onRetry: ({ attempt, maxRetries, reason, waitMs }) => {
                 draft.content = ''
                 draft.reasoning = ''
                 chunkSeq = 0
@@ -239,6 +239,7 @@ export class RunRunner {
                   attempt,
                   maxRetries,
                   reason,
+                  waitMs,
                 })
                 emitter.next({
                   type: 'message.reset',

@@ -16,6 +16,8 @@ interface RunBlockProps {
   delegations: Delegation[]
   runActive: boolean
   runActivity?: import('../../hooks/useAppBootstrap').RunActivity
+  /** 重试倒计时心跳：父级在有活重试时按节拍自增，驱动本组件重算剩余秒数。 */
+  retryTick: number
   streaming: Record<string, string>
   streamingReasoning: Record<string, string>
   runDurationMs: number | null
@@ -78,9 +80,25 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
     }
   }, [props.runActive])
 
+  // 活重试的倒计时：由事件携带的退避时长与本地起始时间戳换算剩余秒数。
+  // retryTick 只用于触发重算；归零后回落为“正在重试”，等下一次事件覆盖。
+  const retry = props.runActivity?.retry
+  const retryCountdown =
+    retry !== undefined &&
+    retry.waitMs !== undefined &&
+    retry.startedAt !== undefined
+      ? Math.max(
+          0,
+          Math.ceil((retry.waitMs - (Date.now() - retry.startedAt)) / 1000),
+        )
+      : null
   const label = props.runActive
-    ? props.runActivity?.retry !== undefined
-      ? `正在重试（第 ${props.runActivity.retry.attempt}/${props.runActivity.retry.maxRetries} 次）…`
+    ? retry !== undefined
+      ? retryCountdown !== null
+        ? retryCountdown > 0
+          ? `正在重试（第 ${retry.attempt}/${retry.maxRetries} 次）… ${retryCountdown} 秒后自动重试`
+          : '正在重试…'
+        : `正在重试（第 ${retry.attempt}/${retry.maxRetries} 次）…`
       : '正在处理…'
     : props.runFailed
       ? '运行失败'

@@ -27,7 +27,15 @@ export interface RunActivity {
   /** phase === 'tool' 时正在执行的工具名。 */
   toolName?: string
   /** 当前正在进行的 Provider 重试。 */
-  retry?: { attempt: number; maxRetries: number; reason: string }
+  retry?: {
+    attempt: number
+    maxRetries: number
+    reason: string
+    /** 本次重试前的退避等待时长（毫秒）；缺省为旧版事件，不展示倒计时。 */
+    waitMs?: number
+    /** 收到重试事件时的本地时间戳，用于倒计时换算。 */
+    startedAt?: number
+  }
 }
 
 /** Run 结束类事件：触发会话数据与列表刷新（标题可能已被自动命名）。 */
@@ -69,6 +77,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
   runningSessionIds: string[]
   completedSessionIds: string[]
   failedSessionIds: string[]
+  retryTick: number
 } {
   const [bootstrap, setBootstrap] = useState<BootstrapSnapshot | null>(null)
   const [streaming, setStreaming] = useState<Record<string, string>>({})
@@ -171,6 +180,17 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     runActivitiesRef.current = next
     setRunActivities(next)
   }, [])
+  // 重试倒计时心跳：RunActivity 里有 retry 时按固定节拍触发 tick，
+  // 消费方用 Date.now() - startedAt 换算剩余秒数。
+  const [retryTick, setRetryTick] = useState(0)
+  const hasRetryActivity = Object.values(runActivities).some(
+    (activity) => activity.retry !== undefined,
+  )
+  useEffect(() => {
+    if (!hasRetryActivity) return
+    const timer = setInterval(() => setRetryTick((value) => value + 1), 250)
+    return () => clearInterval(timer)
+  }, [hasRetryActivity])
 
   const resetStreaming = useCallback((): void => {
     streamingRef.current = {}
@@ -326,8 +346,15 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           return
         }
         if (event.type === 'run.retrying') {
+          // 通知里的秒数是静态提示（通知不会逐秒刷新）；活倒计时在 RunBlock 标签上。
+          const retryWaitSeconds =
+            event.waitMs !== undefined ? Math.round(event.waitMs / 1000) : null
           deps.setNotice(
-            `重试（第 ${event.attempt}/${event.maxRetries} 次）：${event.reason}`,
+            `重试（第 ${event.attempt}/${event.maxRetries} 次）：${event.reason}${
+              retryWaitSeconds !== null
+                ? `（约 ${retryWaitSeconds} 秒后自动重试）`
+                : ''
+            }`,
           )
           setRunActivity(event.runId, {
             phase: 'thinking',
@@ -335,6 +362,9 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
               attempt: event.attempt,
               maxRetries: event.maxRetries,
               reason: event.reason,
+              ...(event.waitMs !== undefined
+                ? { waitMs: event.waitMs, startedAt: Date.now() }
+                : {}),
             },
           })
           return
@@ -514,5 +544,6 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     runningSessionIds,
     completedSessionIds,
     failedSessionIds,
+    retryTick,
   }
 }

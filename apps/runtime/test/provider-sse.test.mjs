@@ -382,7 +382,9 @@ test('retries request establishment on 429 then succeeds', async () => {
   )
   server.close()
   assert.equal(calls, 2)
-  assert.deepEqual(retries, [{ attempt: 1, maxRetries: 5, reason: 'HTTP 429' }])
+  assert.deepEqual(retries, [
+    { attempt: 1, maxRetries: 5, reason: 'HTTP 429', waitMs: 1000 },
+  ])
   assert.equal(result.content, 'Hello')
 })
 
@@ -798,7 +800,9 @@ test('retries recoverable HTTP 400 errors', async () => {
   server.close()
   assert.equal(result.content, 'Hello')
   assert.equal(calls, 2)
-  assert.deepEqual(retries, [{ attempt: 1, maxRetries: 1, reason: 'HTTP 400' }])
+  assert.deepEqual(retries, [
+    { attempt: 1, maxRetries: 1, reason: 'HTTP 400', waitMs: 1000 },
+  ])
 })
 
 test('does not retry non-recoverable HTTP 400 errors', async () => {
