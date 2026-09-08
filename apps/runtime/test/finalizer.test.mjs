@@ -273,7 +273,10 @@ test('max turns stops with stable max_turns code through the finalizer', async (
     model: 'model',
   })
   // 每轮都请求工具（get_current_time 自动放行，未知工具会卡审批）：触发 max_turns。
+  // tool call id 每轮唯一（与真实 Provider 一致；全局重复会被序列校验拒绝）。
+  let callSeq = 0
   const server = await startServer((_req, res) => {
+    callSeq += 1
     res.writeHead(200, { 'content-type': 'text/event-stream' })
     res.end(
       sseChunk({
@@ -283,7 +286,7 @@ test('max turns stops with stable max_turns code through the finalizer', async (
               tool_calls: [
                 {
                   index: 0,
-                  id: 'c1',
+                  id: `c${callSeq}`,
                   function: { name: 'get_current_time', arguments: '{}' },
                 },
               ],

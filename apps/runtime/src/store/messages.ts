@@ -32,6 +32,16 @@ export class MessageStore {
       .map((row) => this.toMessage(row as Row))
   }
 
+  /** 某 Run 内仍未终态（pending/streaming）的消息；Finalizer 收扫用。 */
+  listPendingByRun(runId: string): Message[] {
+    return this.db
+      .prepare(
+        "SELECT * FROM messages WHERE run_id = ? AND status IN ('pending', 'streaming') ORDER BY created_at ASC, rowid ASC",
+      )
+      .all(runId)
+      .map((row) => this.toMessage(row as Row))
+  }
+
   create(input: {
     sessionId: string
     runId: string | null

@@ -154,8 +154,19 @@ export class RunFinalizer {
   ): CommittedOutcome {
     return this.store.transaction(() => {
       // 1. 收尾当前 assistant 草稿：取消 → interrupted，失败 → failed。
-      if (snapshot.turn !== null) {
-        const draft = snapshot.turn
+      //    另清扫 Run 内其它未终态消息（如首轮请求前失败悬挂的 pending 草稿）。
+      const drafts = [
+        ...(snapshot.turn !== null ? [snapshot.turn] : []),
+        ...this.store.messages
+          .listPendingByRun(run.id)
+          .map((message) => ({
+            id: message.id,
+            content: message.content,
+            reasoning: message.reasoning,
+          }))
+          .filter((draft) => draft.id !== snapshot.turn?.id),
+      ]
+      for (const draft of drafts) {
         const status =
           decision.status === 'cancelled'
             ? 'interrupted'

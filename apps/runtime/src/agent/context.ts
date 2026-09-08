@@ -1,18 +1,22 @@
-import type {
-  AssistantToolCall,
-  ModelMessage,
-} from '@reflexion-os-studio/agent-core'
 import {
-  boundMessagesForModel,
-  compactMessages,
+  FrameError,
+  type ContextFrame,
+  type ModelMessage,
+  boundFramesForModel,
+  compactFrames,
+  estimateFrameTokens,
   estimateMessageTokens,
+  framesToMessages,
+  messagesToFrames,
 } from '@reflexion-os-studio/agent-core'
-import type { ToolCall } from '@reflexion-os-studio/contracts'
 import type { Store } from '../store/index.js'
 import { streamChatCompletion } from '../provider.js'
 import { buildMemoryBlock } from './memory/recall.js'
 import { HISTORY_COMPACTOR_SYSTEM_PROMPT } from './prompts/index.js'
-import { capToolResultForModel } from './toolResults.js'
+import {
+  framesToValidatedMessages,
+  reconstructSessionFrames,
+} from './context-frames.js'
 
 /**
  * 上下文预算上限（token 数）：超过即触发摘要压缩。
@@ -20,8 +24,8 @@ import { capToolResultForModel } from './toolResults.js'
  */
 export const DEFAULT_CONTEXT_BUDGET_LIMIT = 64_000
 
-/** 压缩时始终原样保留的最近消息条数（含工具结果轮次）。 */
-export const KEEP_RECENT_MESSAGES = 12
+/** 压缩时始终原样保留的最近 Frame 数（工具轮整体计一，不拆分）。 */
+export const KEEP_RECENT_FRAMES = 8
 
 export interface ProviderRuntimeConfig {
   baseUrl: string
@@ -56,15 +60,15 @@ export function contextBudgetFor(provider: ProviderRuntimeConfig): number {
 }
 
 /**
- * 一组消息的模型摘要（启动压缩与轮内压缩共用）：
- * HISTORY_COMPACTOR_SYSTEM_PROMPT + transcript,一次补全调用。
+ * 一组 Frame 的模型摘要（启动压缩用）：HISTORY_COMPACTOR_SYSTEM_PROMPT +
+ * transcript，一次补全调用。输入为 Frame 投影的消息序列。
  */
-export function summarizeMessages(
+export function summarizeFrames(
   provider: ProviderRuntimeConfig,
-  oldMessages: ModelMessage[],
+  stableFrames: ContextFrame[],
   signal: AbortSignal,
 ): Promise<string> {
-  const transcript = oldMessages
+  const transcript = framesToMessages(stableFrames)
     .map((message) => `${message.role}: ${message.content}`)
     .join('\n')
   return streamChatCompletion(
@@ -85,9 +89,11 @@ export function summarizeMessages(
 }
 
 /**
- * 轮内压缩管线：超预算 → 模型摘要压缩窗口外轮次（信息保留优先）；
- * 摘要失败或仍超 → 零成本裁剪兜底（折叠工具对/截断/收缩）。
- * 每轮最多一次摘要调用；任何失败写 stderr 并降级，绝不阻塞对话。
+ * 轮内压缩管线：把循环内存消息流转为 Frame 后按预算压缩。
+ * 超预算 → 模型摘要压缩窗口外 Frame（信息保留优先，工具轮不拆）；
+ * 摘要失败或仍超 → 零成本 Frame 裁剪兜底。每轮最多一次摘要调用；
+ * 摘要失败写 stderr 并降级，绝不阻塞对话。转换出悬空引用（循环 bug
+ * 或损坏数据）时按序列校验失败处理，不发送 Provider。
  */
 export async function compactInRun(
   messages: ModelMessage[],
@@ -95,25 +101,36 @@ export async function compactInRun(
   signal: AbortSignal,
 ): Promise<ModelMessage[]> {
   const budget = contextBudgetFor(provider)
-  let payload = messages
-  if (estimateMessageTokens(payload) > budget) {
-    try {
-      const { messages: compacted } = await compactMessages({
-        messages: payload,
-        budgetTokens: budget,
-        keepRecent: KEEP_RECENT_MESSAGES,
-        summarize: (oldMessages) =>
-          summarizeMessages(provider, oldMessages, signal),
-      })
-      payload = compacted
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') throw error
+  let frames: ContextFrame[]
+  try {
+    frames = messagesToFrames(messages)
+  } catch (error) {
+    if (error instanceof FrameError) {
       process.stderr.write(
-        `[runtime] in-run compaction failed, falling back to trimming: ${String(error)}\n`,
+        `[runtime] in-run frame conversion failed, refusing provider request: ${error.message}\n`,
       )
     }
+    throw error
   }
-  return boundMessagesForModel(payload, budget)
+  if (estimateFrameTokens(frames) <= budget) {
+    return messages
+  }
+  try {
+    const { frames: compacted } = await compactFrames({
+      frames,
+      budgetTokens: budget,
+      keepRecentFrames: KEEP_RECENT_FRAMES,
+      summarize: (stable) => summarizeFrames(provider, stable, signal),
+    })
+    return framesToValidatedMessages(boundFramesForModel(compacted, budget))
+  } catch (error) {
+    if (error instanceof FrameError) throw error
+    if (error instanceof Error && error.name === 'AbortError') throw error
+    process.stderr.write(
+      `[runtime] in-run compaction failed, falling back to frame trimming: ${String(error)}\n`,
+    )
+    return framesToValidatedMessages(boundFramesForModel(frames, budget))
+  }
 }
 
 /** 会话历史的重建与压缩；Run 启动时由 runner 调用一次。 */
@@ -121,8 +138,9 @@ export class ContextBuilder {
   constructor(private readonly store: Store) {}
 
   /**
-   * 从 canonical 存储重建会话历史（system + 记忆块 → 摘要 → 最近轮次），
-   * 超出预算时用压缩 prompt 做一次静默摘要调用；摘要失败则退化为截断，不阻塞对话。
+   * 从 canonical 存储重建 Frame 历史（system + 记忆块 → 摘要 → 最近 Frame），
+   * 超出预算时用压缩 prompt 做一次静默摘要调用；摘要失败则退化为 Frame 裁剪，
+   * 不阻塞对话。本地数据损坏（FrameError）直接失败为 internal，不降级。
    */
   async build(
     sessionId: string,
@@ -136,97 +154,41 @@ export class ContextBuilder {
     )
     const effectiveSystem =
       memoryBlock === '' ? systemPrompt : `${systemPrompt}\n\n${memoryBlock}`
-    const history = this.reconstruct(sessionId, effectiveSystem)
+    const frames = reconstructSessionFrames(
+      this.store,
+      sessionId,
+      effectiveSystem,
+    )
+    const budget = contextBudgetFor(provider)
     try {
-      const { messages } = await compactMessages({
-        messages: history,
-        budgetTokens: contextBudgetFor(provider),
-        keepRecent: KEEP_RECENT_MESSAGES,
-        summarize: (oldMessages) =>
-          summarizeMessages(provider, oldMessages, signal),
+      const { frames: compacted } = await compactFrames({
+        frames,
+        budgetTokens: budget,
+        keepRecentFrames: KEEP_RECENT_FRAMES,
+        summarize: (stable) => summarizeFrames(provider, stable, signal),
       })
-      return messages
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') throw error
-      // 压缩失败（网络/Provider 异常）不拦任务：退化为保留 system + 最近窗口。
-      process.stderr.write(
-        `[runtime] context compaction failed, falling back to truncation: ${String(error)}\n`,
+      return framesToValidatedMessages(
+        boundFramesForModel(compacted, budget, KEEP_RECENT_FRAMES),
       )
-      return truncateToRecent(history, KEEP_RECENT_MESSAGES)
+    } catch (error) {
+      if (error instanceof FrameError) throw error
+      if (error instanceof Error && error.name === 'AbortError') throw error
+      // 摘要失败（网络/Provider 异常）不拦任务：退化为确定性 Frame 裁剪。
+      process.stderr.write(
+        `[runtime] context compaction failed, falling back to frame trimming: ${String(error)}\n`,
+      )
+      return framesToValidatedMessages(
+        boundFramesForModel(frames, budget, KEEP_RECENT_FRAMES),
+      )
     }
   }
 
   /** 当前历史的 token 估算，暴露给诊断与未来预算策略。 */
   estimate(sessionId: string, systemPrompt: string): number {
-    return estimateMessageTokens(this.reconstruct(sessionId, systemPrompt))
+    return estimateMessageTokens(
+      framesToMessages(
+        reconstructSessionFrames(this.store, sessionId, systemPrompt),
+      ),
+    )
   }
-
-  private reconstruct(sessionId: string, systemPrompt: string): ModelMessage[] {
-    const messages: ModelMessage[] = [{ role: 'system', content: systemPrompt }]
-    for (const message of this.store.messages.listBySession(sessionId)) {
-      if (message.role === 'system') continue
-      const text = message.parts
-        .filter((part) => part.type === 'text')
-        .map((part) => part.text)
-        .join('')
-      if (message.role === 'user') {
-        if (text !== '') messages.push({ role: 'user', content: text })
-        continue
-      }
-      if (message.role !== 'assistant' || message.status !== 'completed') {
-        continue
-      }
-      const toolCallRows = this.store.toolCalls.listByMessage(message.id)
-      if (toolCallRows.length === 0) {
-        if (text === '') continue
-        messages.push({ role: 'assistant', content: text, toolCalls: [] })
-        continue
-      }
-      // 工具轮次：assistant.toolCalls 与 role=tool 结果按 row id 重建，
-      // 保证跨 Run 恢复会话时方言一致（live 轮次用 Provider 侧 id，落库后统一为本表 id）。
-      messages.push({
-        role: 'assistant',
-        content: text,
-        toolCalls: toolCallRows.map(toAssistantToolCall),
-      })
-      for (const row of toolCallRows) {
-        messages.push({
-          role: 'tool',
-          toolCallId: row.id,
-          content: toolResultText(row),
-          isError: row.status !== 'completed',
-        })
-      }
-    }
-    return messages
-  }
-}
-function toAssistantToolCall(row: ToolCall): AssistantToolCall {
-  return {
-    id: row.id,
-    name: row.toolName,
-    arguments: JSON.stringify(row.args ?? {}),
-  }
-}
-
-function toolResultText(row: ToolCall): string {
-  if (row.status === 'completed') {
-    // 历史重建与实时回填保持同一截断边界，避免重启前后上下文口径不一致。
-    return capToolResultForModel(JSON.stringify(row.result ?? null))
-  }
-  return `工具执行失败${row.errorCode ? `（${row.errorCode}）` : ''}`
-}
-
-function truncateToRecent(
-  messages: ModelMessage[],
-  keepRecent: number,
-): ModelMessage[] {
-  const system = messages[0]?.role === 'system' ? messages[0] : null
-  const body = system !== null ? messages.slice(1) : messages
-  const recent = body.slice(Math.max(0, body.length - keepRecent))
-  const notice: ModelMessage = {
-    role: 'user',
-    content: '[更早的历史已因上下文超长被截断]',
-  }
-  return system !== null ? [system, notice, ...recent] : [notice, ...recent]
 }
