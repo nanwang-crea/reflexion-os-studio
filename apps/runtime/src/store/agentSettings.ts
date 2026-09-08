@@ -18,6 +18,9 @@ export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
 /**
  * Agent 运行时全局设置(单行 JSON 表):仅存覆盖值,null 回退内置默认。
  * 领域门面同 Store 其它对象一致,业务代码不直接写 SQL。
+ *
+ * Phase 3 边界：enableChildRuns 在读取与默认值处均强制 false（见 parse），
+ * 设置保存通道也不再暴露该开关。
  */
 export class AgentSettingsStore {
   constructor(private readonly db: DatabaseSync) {}
@@ -82,10 +85,9 @@ export class AgentSettingsStore {
           typeof parsed.maxChildTotalTokens === 'number'
             ? parsed.maxChildTotalTokens
             : DEFAULT_AGENT_SETTINGS.maxChildTotalTokens,
-        enableChildRuns:
-          typeof parsed.enableChildRuns === 'boolean'
-            ? parsed.enableChildRuns
-            : DEFAULT_AGENT_SETTINGS.enableChildRuns,
+        // Phase 3 未启动：无论存储值如何，读取时强制关闭，
+        // 保证旧 settings JSON 中 enableChildRuns=true 也不会注册 task 工具。
+        enableChildRuns: false,
       }
     } catch {
       return { ...DEFAULT_AGENT_SETTINGS }

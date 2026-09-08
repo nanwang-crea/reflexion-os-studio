@@ -38,6 +38,8 @@ Rust File/Shell Service、Workspace 边界、read-only/workspace Profile、Chat 
 
 Agent Registry、Worker/Research/Coding/Review Agent、顺序/并行/层级委派、Context 隔离、结构化结果聚合、预算和恢复。
 
+> 阶段隔离现状：delegation 表与查询命令保留用于历史诊断；`delegation.create/update/attach_child_run` 写命令返回 unsupported；`enableChildRuns` 在 Store 读取层强制 false（旧数据也为 false），Primary Agent 不注册 task 工具；设置页隐藏子 Agent 委派分组。正式启用须先完成本阶段设计评审并更新路线图，不得靠设置开关绕过。
+
 ## Phase 4：Workflow Engine（未开始）
 
 Node SDK、Workflow Definition、DAG 校验、调度、checkpoint、React Flow 画布以及 Asset/File/Document/Browser 节点。

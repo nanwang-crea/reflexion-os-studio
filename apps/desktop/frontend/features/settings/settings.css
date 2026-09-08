@@ -561,25 +561,6 @@
   line-height: 1.6;
 }
 
-.delegation-note {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 18px;
-  padding: 12px 14px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: var(--bg-elevated);
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.delegation-note strong {
-  color: var(--text);
-  font-size: 13px;
-}
-
 .agent-runtime-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));

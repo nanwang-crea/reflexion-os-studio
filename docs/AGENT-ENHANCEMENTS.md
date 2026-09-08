@@ -87,6 +87,7 @@
 ### #11 多 Agent 委派 ⬜（Phase 3 边界,不得提前实现）
 
 - 差 subagent 委派(Claude Code subagents / AutoGen 式);`RunSchema` 的 agentId/parentRunId/delegationId 字段已预留,仅契约级占位。
+- **阶段隔离(2026-09-08)**:历史遗留的实验性委派代码已收敛为生产不可达——`delegation.create/update/attach_child_run` 写命令返回 unsupported(查询保留用于诊断)、`enableChildRuns` 在 Store 读取层强制 false、Primary Agent 不再注册 `task` 工具、设置页隐藏委派分组。delegation 表与契约保留,避免破坏兼容。
 
 ### #12 浏览器工具 / 多模态 / 附件 ⬜（Phase 2/5）
 

@@ -32,39 +32,10 @@ const FIELDS: {
     placeholder: '120（默认）',
     hint: '单次 Provider 请求超时；流式输出期间也受此约束。',
   },
-  {
-    key: 'maxDepth',
-    label: '最大深度',
-    placeholder: '1（默认）',
-    hint: '委派链最多嵌套层数，防止无限递归。',
-  },
-  {
-    key: 'maxChildRuns',
-    label: '最大数量',
-    placeholder: '4（默认）',
-    hint: '一次 Run 最多创建的子 Agent 数量。',
-  },
-  {
-    key: 'maxParallelChildren',
-    label: '最大并行数',
-    placeholder: '2（默认）',
-    hint: '同时运行的子 Agent 数量上限。',
-  },
-  {
-    key: 'maxChildTimeoutSec',
-    label: '执行超时（秒）',
-    placeholder: '120（默认）',
-    hint: '单个子 Agent 的最长运行时间。',
-  },
-  {
-    key: 'maxChildTotalTokens',
-    label: '输出 Token 上限',
-    placeholder: '12000（默认）',
-    hint: '单个子 Agent 的输出 token 上限。',
-  },
 ]
 
 /** 字段分组：每个小组独立小标题 + 分隔线，改善视觉密度。 */
+// Phase 3 未启动：子 Agent 委派设置分组整体隐藏，仅保留循环与网络。
 const GROUPS: {
   id: string
   title: string
@@ -79,17 +50,6 @@ const GROUPS: {
     id: 'network',
     title: '网络',
     keys: ['requestRetries', 'requestTimeoutSec'],
-  },
-  {
-    id: 'delegation',
-    title: '子 Agent 委派',
-    keys: [
-      'maxDepth',
-      'maxChildRuns',
-      'maxParallelChildren',
-      'maxChildTimeoutSec',
-      'maxChildTotalTokens',
-    ],
   },
 ]
 
@@ -110,8 +70,6 @@ function toDraft(settings: AgentSettings): Record<string, string> {
 export function AgentRuntimePanel(): React.JSX.Element {
   const [draft, setDraft] = useState<Record<string, string> | null>(null)
   const initialRef = useRef<Record<string, string> | null>(null)
-  // enableChildRuns 是布尔开关，不进数字草稿；保存时原样带回，避免被重置。
-  const enableChildRunsRef = useRef<boolean>(false)
   const [busy, setBusy] = useState(false)
   const [savedAt, setSavedAt] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -121,7 +79,6 @@ export function AgentRuntimePanel(): React.JSX.Element {
     void getAgentSettings()
       .then((result) => {
         if (disposed) return
-        enableChildRunsRef.current = result.settings.enableChildRuns
         const next = toDraft(result.settings)
         initialRef.current = next
         setDraft(next)
@@ -151,7 +108,8 @@ export function AgentRuntimePanel(): React.JSX.Element {
         maxParallelChildren: parseNumber(draft.maxParallelChildren),
         maxChildTimeoutSec: parseNumber(draft.maxChildTimeoutSec),
         maxChildTotalTokens: parseNumber(draft.maxChildTotalTokens),
-        enableChildRuns: enableChildRunsRef.current,
+        // Phase 3 未启动：委派设置不可编辑，保存时强制回 false。
+        enableChildRuns: false,
       }
       await updateAgentSettings(settings)
       setSavedAt(new Date().toLocaleTimeString())
@@ -182,20 +140,9 @@ export function AgentRuntimePanel(): React.JSX.Element {
       </div>
       <div className="agent-runtime-body">
         {GROUPS.map((group) => {
-          const delegationNote =
-            group.id === 'delegation' ? (
-              <div className="delegation-note">
-                <strong>复用父 Provider</strong>
-                <span>
-                  子 Agent 复用父 Provider
-                  的模型与密钥配置，无需单独配置供应商。
-                </span>
-              </div>
-            ) : null
           return (
             <section className="runtime-group" key={group.id}>
               <h4 className="runtime-group-title">{group.title}</h4>
-              {delegationNote}
               <div className="agent-runtime-grid">
                 {group.keys.map((key) => {
                   const field = FIELD_BY_KEY.get(key)!

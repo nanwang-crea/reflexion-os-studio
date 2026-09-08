@@ -10,7 +10,6 @@ import { DEFAULT_SESSION_TITLE, type Store } from '../store/index.js'
 import type { SystemRuntimeClient } from '../system.js'
 import type { McpManager } from '../mcp/manager.js'
 import { ContextBuilder } from './context.js'
-import { createChildRunStarter } from './delegation.js'
 import { CommandError } from './errors.js'
 import { createPendingAssistantMessage, RunLauncher } from './launcher.js'
 import { MemoryService } from './memory/service.js'
@@ -324,27 +323,14 @@ export class ChatAgent {
     return { accepted: this.launcher.cancel(runId) }
   }
 
-  /** 组装并后台启动一次 Run（childRunStarter 受设置开关控制）。 */
+  /** 组装并后台启动一次 Run（Phase 3 未启动：child task 强制不可达）。 */
   private launch(
     input: Omit<Parameters<RunLauncher['launch']>[0], 'childRunStarter'>,
   ): void {
-    const settings = this.store.agentSettings.get()
-    this.launcher.launch({
-      ...input,
-      childRunStarter: settings.enableChildRuns
-        ? createChildRunStarter(
-            {
-              store: this.store,
-              notifier: this.notifier,
-              launcher: this.launcher,
-              profile: input.profile,
-              apiKey: input.apiKey,
-            },
-            input.run,
-            input.session,
-          )
-        : undefined,
-    })
+    // Phase 3 边界：子 Agent 委派未正式启用。即使旧 settings JSON 中
+    // enableChildRuns=true 也不得给 Primary Agent 注册 task 工具。
+    // 重新启用需先完成 ROADMAP Phase 3 设计评审，不得靠设置开关绕过。
+    this.launcher.launch({ ...input, childRunStarter: undefined })
   }
 
   /** 消息发送的 Skill 激活解析；显式 skillId 未知视为 invalid_request。 */

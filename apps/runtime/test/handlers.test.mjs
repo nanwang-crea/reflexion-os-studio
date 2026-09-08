@@ -7,7 +7,7 @@ import { Store } from '../dist/store/index.js'
 import { dispatchCommand } from '../dist/handlers.js'
 import { createTaskTool } from '../dist/agent/tools/task.js'
 import { createToolRegistry } from '../dist/agent/tools/index.js'
-import { ChatAgent } from '../dist/agent/index.js'
+import { createChildRunStarter } from '../dist/agent/delegation.js'
 
 function freshStore() {
   return new Store(mkdtempSync(join(tmpdir(), 'reflexion-handlers-')))
@@ -117,7 +117,7 @@ test('agent_settings.update passes nested settings to agent', async () => {
 
 test('child task starter rejects disabled agents before creating a delegation', async () => {
   const store = freshStore()
-  const agent = new ChatAgent(store, () => {}, null)
+  const notifier = () => {}
   const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
   const session = store.sessions.create(project.id)
   const parentRun = store.runs.create({
@@ -132,11 +132,21 @@ test('child task starter rejects disabled agents before creating a delegation', 
     systemPrompt: '',
     enabled: false,
   })
-  const starter = agent.createChildRunStarter(
+  const launcher = {
+    depthOf: () => 0,
+    permissionModeOf: () => 'workspace',
+    launch: () => {},
+  }
+  const starter = createChildRunStarter(
+    {
+      store,
+      notifier,
+      launcher,
+      profile: { id: 'provider', models: ['model'] },
+      apiKey: 'unused',
+    },
     parentRun,
     session,
-    { id: 'provider', models: ['model'] },
-    'unused',
   )
   await assert.rejects(
     () =>
@@ -280,4 +290,65 @@ test('provider.configure forwards tuning fields with omitted, null, and value se
   assert.equal(cleared.profile.maxTokens, null)
   assert.equal(cleared.profile.contextWindow, null)
   assert.equal(cleared.profile.contextBudget, null)
+})
+
+test('phase 3 isolation: enableChildRuns=true in stored settings is forced off on read', () => {
+  const store = freshStore()
+  // 模拟旧数据直接写入 enableChildRuns=true（绕过契约层的落库形态）。
+  store.agentSettings.upsert({
+    maxTurns: 8,
+    reflectionThreshold: null,
+    requestRetries: null,
+    requestTimeoutSec: null,
+    maxDepth: 2,
+    maxChildRuns: 2,
+    maxParallelChildren: 1,
+    maxChildTimeoutSec: 60,
+    maxChildTotalTokens: 8000,
+    enableChildRuns: true,
+  })
+  const settings = store.agentSettings.get()
+  assert.equal(settings.enableChildRuns, false)
+  assert.equal(settings.maxTurns, 8)
+})
+
+test('phase 3 isolation: delegation write commands are unsupported, queries still work', async () => {
+  const store = freshStore()
+  await assert.rejects(
+    () => dispatchCommand('delegation.create', {}, { store }),
+    /unsupported|Phase 3/,
+  )
+  await assert.rejects(
+    () => dispatchCommand('delegation.update', {}, { store }),
+    /unsupported|Phase 3/,
+  )
+  await assert.rejects(
+    () => dispatchCommand('delegation.attach_child_run', {}, { store }),
+    /unsupported|Phase 3/,
+  )
+  // 查询命令保留：返回空列表而不是报错。
+  const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
+  const session = store.sessions.create(project.id)
+  const listed = await dispatchCommand(
+    'delegation.list',
+    { sessionId: session.id },
+    { store },
+  )
+  assert.deepEqual(listed, { delegations: [] })
+})
+
+test('phase 3 isolation: tool registry never registers task without starter', () => {
+  const baseCtx = () => ({
+    store: {},
+    sessionId: 's',
+    messageId: 'm',
+    runId: 'r',
+    emitter: {},
+    system: null,
+    workspaceRoot: null,
+    skills: { get: () => null, list: () => [] },
+    mcp: null,
+  })
+  const registry = createToolRegistry(baseCtx())
+  assert.equal(registry.has('task'), false)
 })

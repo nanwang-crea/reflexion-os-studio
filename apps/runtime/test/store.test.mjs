@@ -869,7 +869,8 @@ test('agent settings default and round-trip', () => {
   })
   assert.deepEqual(store.agentSettings.get(), updated)
   assert.equal(updated.maxTurns, 32)
-  assert.equal(updated.enableChildRuns, true)
+  // Phase 3 阶段隔离：即使写入 true，读取也强制 false（见 agentSettings.ts）。
+  assert.equal(updated.enableChildRuns, false)
   // 非法 JSON 容错回默认。
   const db = store
   assert.equal(db.agentSettings.get().maxTurns, 32)
