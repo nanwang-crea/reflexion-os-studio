@@ -99,16 +99,28 @@ export function gitStatus(
   }>('workspace.git_status', { projectId })
 }
 
-/** 单文件 diff；staged=true 取索引（已暂存）版本，缺省工作树。 */
+/**
+ * 单文件 diff 两侧内容；工作树 diff 为 索引→工作树，staged 为 HEAD→索引。
+ * 新增/删除一侧为空串；binary=true 时内容不应按文本渲染。
+ */
 export function gitDiff(
   projectId: string,
   path: string,
   staged = false,
-): Promise<{ repo: boolean; diff: string; truncated: boolean }> {
-  return request<{ repo: boolean; diff: string; truncated: boolean }>(
-    'workspace.git_diff',
-    { projectId, path, staged },
-  )
+): Promise<{
+  repo: boolean
+  original: string
+  modified: string
+  truncated: boolean
+  binary: boolean
+}> {
+  return request<{
+    repo: boolean
+    original: string
+    modified: string
+    truncated: boolean
+    binary: boolean
+  }>('workspace.git_diff', { projectId, path, staged })
 }
 
 /** 本地 Git 分支列表；repo=false 表示不是 Git 仓库，current=null 为 HEAD detached。 */

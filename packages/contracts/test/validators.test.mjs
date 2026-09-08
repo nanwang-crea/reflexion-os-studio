@@ -679,6 +679,42 @@ test('workspace.list_dir carries pagination params and truncation result metadat
   )
 })
 
+test('workspace.git_diff returns two-sided content instead of diff text', () => {
+  const result = CommandSchemaRegistry['workspace.git_diff'].result
+  assert.equal(
+    result.safeParse({
+      repo: true,
+      original: 'old content',
+      modified: 'new content',
+      truncated: false,
+      binary: false,
+    }).success,
+    true,
+  )
+  // 新增文件：original 为空串；删除文件：modified 为空串。
+  assert.equal(
+    result.safeParse({
+      repo: true,
+      original: '',
+      modified: 'whole file',
+      truncated: false,
+      binary: false,
+    }).success,
+    true,
+  )
+  // 旧契约的 diff 文本字段不再是合法结果（反向还原机制已移除）。
+  assert.equal(
+    result.safeParse({ repo: true, diff: '...diff text...', truncated: false })
+      .success,
+    false,
+  )
+  // binary/truncated 必填。
+  assert.equal(
+    result.safeParse({ repo: true, original: '', modified: '' }).success,
+    false,
+  )
+})
+
 test('parseResourceUri normalizes backslashes in workspace paths', () => {
   const link = parseResourceUri('workspace:///src\\agent\\runner.ts#L418-L426')
   assert.equal(link.kind, 'workspaceFile')

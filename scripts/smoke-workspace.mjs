@@ -1,9 +1,10 @@
 // Phase 1B Workspace Surface 冒烟：索引生命周期 + 文件树/查看器按需加载。
 // 覆盖：project.create → index.start → status 轮询到 completed（忽略目录不计入）
 //   → list_dir 根目录 → read_file 内容 → .. 越权被拒 → idle 时 cancel 为 false →
-//   runtime 干净退出。
+//   git.diff 两侧内容（untracked/删除/staged）→ runtime 干净退出。
 // 用法：先 pnpm build:packages（+ cargo build），再 node scripts/smoke-workspace.mjs
 import { spawn } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -79,6 +80,83 @@ function startRuntime(dataDir) {
       }
     },
   }
+}
+
+/** git diff 两侧内容冒烟：untracked（全新增）/ 删除（全移除）/ staged（HEAD→索引）。 */
+async function checkGitDiff(runtime, projectId, wsRoot) {
+  try {
+    execFileSync('git', ['--version'], { stdio: 'pipe' })
+  } catch {
+    console.log('SKIP git_diff checks — git not available')
+    return
+  }
+  const git = (args) => {
+    execFileSync('git', args, { cwd: wsRoot, stdio: 'pipe' })
+  }
+  git(['init', '-q'])
+  writeFileSync(join(wsRoot, 'tracked.txt'), 'old content\n')
+  git(['add', '.'])
+  git([
+    '-c',
+    'user.name=t',
+    '-c',
+    'user.email=t@example.com',
+    'commit',
+    '-qm',
+    'init',
+  ])
+  writeFileSync(
+    join(wsRoot, 'src', 'app.ts'),
+    'export const x = 42\nmodified\n',
+  )
+  writeFileSync(join(wsRoot, 'untracked.txt'), 'whole new file\n')
+  rmSync(join(wsRoot, 'README.md'))
+
+  const modified = await runtime.request(20, 'workspace.git_diff', {
+    projectId,
+    path: 'src/app.ts',
+  })
+  check(
+    'git_diff modified file: index → worktree',
+    modified.result?.repo === true &&
+      modified.result?.original === 'export const x = 42\n' &&
+      modified.result?.modified === 'export const x = 42\nmodified\n',
+    JSON.stringify(modified.result ?? modified.error),
+  )
+
+  const untracked = await runtime.request(21, 'workspace.git_diff', {
+    projectId,
+    path: 'untracked.txt',
+  })
+  check(
+    'git_diff untracked file: empty → full content',
+    untracked.result?.original === '' &&
+      untracked.result?.modified === 'whole new file\n',
+    JSON.stringify(untracked.result ?? untracked.error),
+  )
+
+  git(['add', 'untracked.txt'])
+  const staged = await runtime.request(22, 'workspace.git_diff', {
+    projectId,
+    path: 'untracked.txt',
+    staged: true,
+  })
+  check(
+    'git_diff staged new file: HEAD absent → index content',
+    staged.result?.original === '' &&
+      staged.result?.modified === 'whole new file\n',
+    JSON.stringify(staged.result ?? staged.error),
+  )
+
+  const deleted = await runtime.request(23, 'workspace.git_diff', {
+    projectId,
+    path: 'README.md',
+  })
+  check(
+    'git_diff deleted file: index content → empty',
+    deleted.result?.original === '# smoke\n' && deleted.result?.modified === '',
+    JSON.stringify(deleted.result ?? deleted.error),
+  )
 }
 
 ;(async () => {
@@ -176,6 +254,8 @@ function startRuntime(dataDir) {
         'cancel for idle index returns accepted=false',
         cancelIdle.result?.accepted === false,
       )
+
+      await checkGitDiff(runtime, project.id, wsRoot)
 
       await runtime.request(9, 'runtime.shutdown')
       const exitCode = await Promise.race([

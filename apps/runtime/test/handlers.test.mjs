@@ -55,6 +55,45 @@ test('workspace.list_dir forwards pagination and preserves metadata', async () =
   })
 })
 
+test('workspace.git_diff forwards staged flag and returns two-sided content', async () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/workspace' })
+  const calls = []
+  const result = await dispatchCommand(
+    'workspace.git_diff',
+    { projectId: project.id, path: 'src/a.ts', staged: true },
+    {
+      store,
+      system: {
+        available: true,
+        request: async (method, params) => {
+          calls.push({ method, params })
+          return {
+            repo: true,
+            original: 'head content',
+            modified: 'index content',
+            truncated: false,
+            binary: false,
+          }
+        },
+      },
+    },
+  )
+  assert.deepEqual(calls, [
+    {
+      method: 'git.diff',
+      params: { workspaceRoot: '/workspace', path: 'src/a.ts', staged: true },
+    },
+  ])
+  assert.deepEqual(result, {
+    repo: true,
+    original: 'head content',
+    modified: 'index content',
+    truncated: false,
+    binary: false,
+  })
+})
+
 test('agent_settings.update passes nested settings to agent', async () => {
   const received = []
   const result = await dispatchCommand(

@@ -495,13 +495,17 @@ export const CommandSchemaRegistry = {
       requestId: RequestIdSchema,
       projectId: z.string().min(1),
       path: z.string().min(1),
-      // 缺省为工作树 diff；true 取索引（已暂存）版本。
+      // 缺省为工作树 diff；true 对比 HEAD 与索引（已暂存）。
       staged: z.boolean().optional(),
     }),
+    // 两侧内容直接取自 git 对象/磁盘：工作树 diff 为 索引→工作树，
+    // 已暂存为 HEAD→索引；新增侧为空串，删除侧为空串。
     result: z.object({
       repo: z.boolean(),
-      diff: z.string(),
+      original: z.string(),
+      modified: z.string(),
       truncated: z.boolean(),
+      binary: z.boolean(),
     }),
   },
   'workspace.git_branches': {

@@ -131,13 +131,17 @@ export const workspaceCommandHandlers: Record<string, CommandHandler> = {
     if (typeof p.staged === 'boolean') params.staged = p.staged
     const result = (await requestSystem(system, 'git.diff', params)) as {
       repo: boolean
-      diff?: string
+      original?: string
+      modified?: string
       truncated?: boolean
+      binary?: boolean
     }
     return {
       repo: result.repo,
-      diff: result.diff ?? '',
+      original: result.original ?? '',
+      modified: result.modified ?? '',
       truncated: result.truncated ?? false,
+      binary: result.binary ?? false,
     }
   },
   'workspace.git_branches': async (p, { store, system }) => {
