@@ -24,18 +24,18 @@ React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
 
 ## 2. 目录结构与职责
 
-| 路径                       | 职责                                                                                     |
-| -------------------------- | ---------------------------------------------------------------------------------------- |
-| `apps/desktop/frontend/`   | WebView 前端（Vite + TypeScript），通过 `@tauri-apps/api` 的 `invoke`/`listen` 通信      |
-| `apps/desktop/src-tauri/`  | Tauri Rust 宿主：窗口、白名单 command/event、sidecar supervisor                          |
-| `apps/runtime/`            | TypeScript Runtime（Node sidecar，stdio JSON-RPC）                                       |
-| `packages/contracts/`      | 跨进程协议类型的**唯一真源**，新增协议先改这里                                           |
-| `packages/agent-core/`     | Agent 循环内核（内部 SDK）：runAgentLoop / ToolRegistry / 上下文压缩，不碰 SQLite 与传输 |
-| `packages/runtime-client/` | 前端唯一 typed facade，不得绕过它直连任何进程                                            |
-| `packages/*`（其余）       | 仅 README 占位，不要在其中堆放实现代码                                                   |
-| `crates/system-runtime/`   | Rust System Runtime sidecar（独立 Cargo workspace，根目录 `Cargo.toml` 不存在）          |
-| `scripts/`                 | bash 构建编排                                                                            |
-| `docs/`                    | 设计文档；改架构先改文档                                                                 |
+| 路径                       | 职责                                                                                                                                                     |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/desktop/frontend/`   | WebView 前端（Vite + TypeScript），通过 `@tauri-apps/api` 的 `invoke`/`listen` 通信                                                                      |
+| `apps/desktop/src-tauri/`  | Tauri Rust 宿主：窗口 + supervisor（`lib.rs` 只做装配与命令注册，`supervisor.rs` / `sidecar_paths.rs` / `shutdown.rs` / `orphan_cleanup.rs` 按职责拆分） |
+| `apps/runtime/`            | TypeScript Runtime（Node sidecar，stdio JSON-RPC）                                                                                                       |
+| `packages/contracts/`      | 跨进程协议类型的**唯一真源**，新增协议先改这里                                                                                                           |
+| `packages/agent-core/`     | Agent 循环内核（内部 SDK）：runAgentLoop / ToolRegistry / 上下文压缩，不碰 SQLite 与传输                                                                 |
+| `packages/runtime-client/` | 前端唯一 typed facade，不得绕过它直连任何进程                                                                                                            |
+| `packages/*`（其余）       | 仅 README 占位，不要在其中堆放实现代码                                                                                                                   |
+| `crates/system-runtime/`   | Rust System Runtime sidecar（独立 Cargo workspace，根目录 `Cargo.toml` 不存在；`git/` 子模块按 status/diff/exec 拆分）                                   |
+| `scripts/`                 | bash 构建编排                                                                                                                                            |
+| `docs/`                    | 设计文档；改架构先改文档                                                                                                                                 |
 
 依赖方向硬约束：`contracts → all`；`desktop → runtime-client`；`runtime → contracts/SDK`。反向依赖即返工。
 
@@ -63,8 +63,9 @@ React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
 - **前端访问 Runtime 的唯一通道**：`runtime-client` 的 `RuntimeTransport`（Tauri 白名单 command `runtime_request` + `bootstrap:message` 事件按 id 关联）；新增业务命令需同步更新 Rust 侧白名单数组。
 - **按职责拆分（硬规则，新代码先拆再写）**：不先写大文件再事后补拆。
   - 一个文件只承载一个职责；TypeScript 单文件超过约 300 行即应拆分，**500 行是硬上限**；本次变更中发现超纲文件就在当次拆掉，不留"以后再拆"。
-  - **Runtime 存储**：`store/` 按领域分文件（projects / sessions / messages / runs / providers / toolCalls 各一个类），schema 与版本迁移独立在 `store/migrations.ts`，共享工具在 `store/shared.ts`，`store/index.ts` 只做门面（连接、事务边界、启动恢复编排）。业务代码只调领域方法（如 `store.sessions.list(null)`），不直接写 SQL。
-  - **Runtime Agent**：`agent/` 按职责分文件——`prompts/`（一个 prompt 一个文件，禁止在代码里内联长 prompt）、`context.ts`（历史重建与压缩）、`permissions.ts`（权限策略表 + ApprovalGateway + PermissionGate）、`tools.ts`（按 Run 装配工具，Rust 工具经 SystemRuntimeClient）、`runner.ts`（Run 编排：循环+持久化+事件+审批+取消）、`errors.ts`、`title.ts`，`agent/index.ts` 只做命令门面。循环算法本身在 `packages/agent-core`，不得把 SQLite/传输细节漏进去。
+  - **Runtime 存储**：`store/` 按领域分文件（projects / sessions / messages / runs / providers / toolCalls 各一个类），schema DDL 与当前版本号在 `store/schema.ts`，版本迁移逻辑在 `store/migrations.ts`，共享工具在 `store/shared.ts`，`store/index.ts` 只做门面（连接、事务边界、启动恢复编排）。业务代码只调领域方法（如 `store.sessions.list(null)`），不直接写 SQL。
+  - **Runtime Agent**：`agent/` 按职责分文件——`prompts/`（一个 prompt 一个文件，禁止在代码里内联长 prompt）、`context.ts`（历史重建与压缩）、`permissions.ts`（权限策略表 + ApprovalGateway + PermissionGate）、`tools/`（按 Run 装配工具，Rust 工具经 SystemRuntimeClient）、`runner.ts`（Run 编排编排入口：循环调度+终态收敛；轮次持久化在 `model-turn.ts`，工具执行在 `tool-executor.ts`，共享状态在 `run-state.ts`）、`launcher.ts`（Run 装配：工具注册表+权限闸门+Provider 配置）、`delegation.ts`（子 Agent 委派）、`provider-resolver.ts`（Provider/采样解析）、`errors.ts`、`title.ts`，`agent/index.ts` 只做命令门面。循环算法本身在 `packages/agent-core`，不得把 SQLite/传输细节漏进去。
+  - **Runtime 命令与域目录**：命令 handler 跟随各自域目录——`agent/memory/handlers.ts`、`workspace/handlers.ts`、`assets/handlers.ts`、`mcp/handlers.ts`；`handlers.ts` 只保留 chat 核心（project/session/message/queue/run/approval/skill）与 `commandHandlers` 合并注册，`handlers-providers.ts` / `handlers-agents.ts` 拆出 provider 与 agent/delegation 命令。跨域基础设施（`events.ts` / `secrets.ts` / `system.ts` / `provider.ts` / `command-utils.ts`）留根目录，不归属单一 feature。
   - **前端请求**：组件不得直接 `transport.request`。统一走 `api/` 层并按功能分文件（projects / sessions / chat / providers / client），`requestId` 由 api 层自动注入；组件调用具名函数（如 `createSession(projectId)`）。
   - **前端目录结构**：`apps/desktop/frontend/` 按功能模块分包，禁止根目录平铺组件/样式/hooks。
     - `features/<name>/`：一个功能模块一个目录（chat / landing / memories / skills / settings / automations），模块内放页面组件 + 仅该模块使用的子组件 + 该模块 CSS（如 `features/chat/chat.css`、`features/settings/settings.css`）。

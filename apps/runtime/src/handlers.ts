@@ -1,29 +1,29 @@
 import { basename } from 'node:path'
-import type {
-  ChatCommand,
-  ProviderCapability,
-} from '@reflexion-os-studio/contracts'
+import type { ChatCommand } from '@reflexion-os-studio/contracts'
 import { CommandError } from './agent/index.js'
-import { streamChatCompletion } from './provider.js'
-import { deleteSecret, loadSecret, saveSecret } from './secrets.js'
+import { builtinSkills } from './skills/index.js'
 import {
   requireString,
   type CommandContext,
   type CommandHandler,
   type CommandResult,
 } from './command-utils.js'
-import { memoryCommandHandlers } from './handlers-memory.js'
-import { workspaceCommandHandlers } from './handlers-workspace.js'
-import { assetCommandHandlers } from './handlers-assets.js'
-import { mcpCommandHandlers } from './handlers-mcp.js'
-import { builtinSkills } from './skills/index.js'
+import { memoryCommandHandlers } from './agent/memory/handlers.js'
+import { workspaceCommandHandlers } from './workspace/handlers.js'
+import { assetCommandHandlers } from './assets/handlers.js'
+import { mcpCommandHandlers } from './mcp/handlers.js'
+import {
+  providerCommandHandlers,
+  testProviderConnection,
+} from './handlers-providers.js'
+import { agentCommandHandlers } from './handlers-agents.js'
 
 /**
- * 已通过 contracts schema 校验的命令分发。
- * 返回值即 JSON-RPC result；抛出 CommandError 转为业务错误响应。
- * memory.* 命令独立在 handlers-memory.ts，此处合并注册。
+ * Chat 核心命令：项目/会话/消息发送/队列/Run/审批/Skills 清单。
+ * 各领域命令独立注册：memory/workspace/asset/mcp 在各自域目录，
+ * provider 与 agent/delegation 在 handlers-providers.ts / handlers-agents.ts。
  */
-export const commandHandlers: Record<string, CommandHandler> = {
+const chatCommandHandlers: Record<string, CommandHandler> = {
   'project.list': (_params, { store }) => ({
     projects: store.projects.list(),
   }),
@@ -186,113 +186,20 @@ export const commandHandlers: Record<string, CommandHandler> = {
       p.scope === 'session' ? 'session' : 'once',
     ),
   }),
-  'provider.list': (_p, { store }) => ({
-    profiles: store.providers.list(),
-  }),
-  'provider.configure': (p, { store }) => {
-    let secretRef =
-      typeof p.secretRef === 'string' && p.secretRef !== ''
-        ? p.secretRef
-        : undefined
-    if (typeof p.secret === 'string' && p.secret !== '') {
-      // 明文 Key 只在此处出现一次，落盘后从内存语义上丢弃。
-      secretRef = saveSecret(p.secret)
-    }
-    if (!secretRef) {
-      throw new CommandError(
-        'invalid_request',
-        'provider.configure 需要 secret 或 secretRef',
-      )
-    }
-    const models = (Array.isArray(p.models) ? p.models : [])
-      .map((item) => (typeof item === 'string' ? item.trim() : ''))
-      .filter((item) => item !== '')
-    if (models.length === 0) {
-      throw new CommandError(
-        'invalid_request',
-        'provider.configure 至少需要一个模型',
-      )
-    }
-    const id = typeof p.id === 'string' && p.id !== '' ? p.id : undefined
-    const existing = id ? store.providers.get(id) : null
-    const profile = store.providers.upsert({
-      id,
-      name: requireString(p, 'name'),
-      baseUrl: requireString(p, 'baseUrl'),
-      models: [...new Set(models)],
-      // capabilities 省略时由 store 保留原值（新建缺省 ['chat']）。
-      capabilities: Array.isArray(p.capabilities)
-        ? (p.capabilities as ProviderCapability[])
-        : undefined,
-      secretRef,
-      enabled: p.enabled === undefined ? true : p.enabled === true,
-      // Keep the three-state semantics: omitted=preserve, null=clear, value=set.
-      temperature: p.temperature as number | null | undefined,
-      maxTokens: p.maxTokens as number | null | undefined,
-      contextWindow: p.contextWindow as number | null | undefined,
-      contextBudget: p.contextBudget as number | null | undefined,
-    })
-    // 换 Key 后清理被替换的旧密钥，secrets.json 不留孤儿条目。
-    if (existing && existing.secretRef !== profile.secretRef) {
-      deleteSecret(existing.secretRef)
-    }
-    return { profile }
-  },
-  'provider.delete': (p, { store }) => {
-    const id = requireString(p, 'id')
-    const profile = store.providers.get(id)
-    if (!profile) return { removed: false }
-    const removed = store.providers.delete(id)
-    // 配置行已删则其密钥引用也不应残留；secret 文件里其余条目不受影响。
-    deleteSecret(profile.secretRef)
-    return { removed }
-  },
   'skill.list': () => ({ skills: builtinSkills.list() }),
-  'agent.list': (_p, { store }) => ({ agents: store.agents.list() }),
-  'delegation.list': (p, { store }) => ({
-    delegations: store.delegations.listBySession(requireString(p, 'sessionId')),
-  }),
-  'delegation.create': (p, { store }) => ({
-    delegation: store.delegations.create({
-      sessionId: requireString(p, 'sessionId'),
-      parentRunId: requireString(p, 'parentRunId'),
-      agentId: requireString(p, 'agentId'),
-      task: requireString(p, 'task'),
-    }),
-  }),
-  'delegation.list_by_parent': (p, { store }) => ({
-    delegations: store.delegations.listByParentRun(
-      requireString(p, 'parentRunId'),
-    ),
-  }),
-  'delegation.get_by_child_run': (p, { store }) => ({
-    delegation: store.delegations.getByChildRun(requireString(p, 'childRunId')),
-  }),
-  'delegation.attach_child_run': (p, { store }) => ({
-    delegation: store.delegations.attachChildRun(
-      requireString(p, 'delegationId'),
-      requireString(p, 'childRunId'),
-    ),
-  }),
-  'delegation.update': (p, { store }) => ({
-    delegation: store.delegations.update(
-      requireString(p, 'delegationId'),
-      p.status as Parameters<typeof store.delegations.update>[1],
-      p.result as string | null | undefined,
-      p.error as string | null | undefined,
-    ),
-  }),
-  'agent_settings.get': (_p, { agent }) => agent.getSettings(),
-  'agent_settings.update': (p, { agent }) =>
-    agent.updateSettings(
-      p.settings as Parameters<typeof agent.updateSettings>[0],
-    ),
 }
 
-Object.assign(commandHandlers, memoryCommandHandlers)
-Object.assign(commandHandlers, workspaceCommandHandlers)
-Object.assign(commandHandlers, assetCommandHandlers)
-Object.assign(commandHandlers, mcpCommandHandlers)
+export const commandHandlers: Record<string, CommandHandler> = {
+  ...chatCommandHandlers,
+  ...memoryCommandHandlers,
+  ...workspaceCommandHandlers,
+  ...assetCommandHandlers,
+  ...mcpCommandHandlers,
+  ...providerCommandHandlers,
+  ...agentCommandHandlers,
+}
+
+export { testProviderConnection }
 
 export async function dispatchCommand(
   method: string,
@@ -304,57 +211,4 @@ export async function dispatchCommand(
     throw new CommandError('unsupported', `unsupported command: ${method}`)
   }
   return handler(params, ctx)
-}
-
-/**
- * 供应商连接测试：发起一次 1 token 的补全，把 Provider 的
- * 鉴权/网络/模型错误原样返回给 UI（不落盘、不写库）。
- * 涉及网络等待，由 index.ts 异步调度、完成后单独回包。
- */
-export async function testProviderConnection(
-  params: Record<string, unknown>,
-): Promise<CommandResult> {
-  const baseUrl = requireString(params, 'baseUrl')
-  const model = requireString(params, 'model')
-  const secret =
-    typeof params.secret === 'string' && params.secret !== ''
-      ? params.secret
-      : undefined
-  const secretRef =
-    typeof params.secretRef === 'string' && params.secretRef !== ''
-      ? params.secretRef
-      : undefined
-  const apiKey = secret ?? (secretRef ? loadSecret(secretRef) : undefined)
-  if (!apiKey) {
-    throw new CommandError(
-      'invalid_request',
-      '缺少 API Key：请填写或先保存配置',
-    )
-  }
-  const startedAt = Date.now()
-  try {
-    await streamChatCompletion(
-      {
-        baseUrl,
-        apiKey,
-        model,
-        messages: [{ role: 'user', content: 'ping' }],
-        maxTokens: 1,
-        timeoutMs: 15_000,
-        // 连接测试要快速给出结论,不做限流/网络重试。
-        maxRetries: 0,
-        signal: new AbortController().signal,
-      },
-      () => {},
-    )
-    return { ok: true, latencyMs: Date.now() - startedAt, model, error: null }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    return {
-      ok: false,
-      latencyMs: Date.now() - startedAt,
-      model,
-      error: message,
-    }
-  }
 }

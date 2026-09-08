@@ -9,7 +9,7 @@ import type {
   RunEvent,
 } from '@reflexion-os-studio/runtime-client'
 import { Composer, type ComposerModelOption } from '../../components/Composer'
-import { CopyButton } from '../../components/CopyButton'
+import { CopyButton } from './CopyButton'
 import { ArrowDownIcon, SparkIcon } from '../../ui/icons'
 import { ApprovalCard } from './ApprovalCard'
 import { AssistantMessage } from './AssistantMessage'

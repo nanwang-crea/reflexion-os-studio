@@ -7,6 +7,11 @@ import { transport } from '../lib/transport'
 import { useInitialDataLoad } from './useInitialDataLoad'
 import type { RunActivity } from './useRunActivity'
 import { useRunActivity } from './useRunActivity'
+import {
+  usePendingApprovals,
+  type PendingApproval,
+} from './usePendingApprovals'
+import { useRunSessionTracking } from './useRunSessionTracking'
 import { useStreamingCache } from './useStreamingCache'
 
 export interface BootstrapSnapshot {
@@ -16,13 +21,7 @@ export interface BootstrapSnapshot {
   detail?: string
 }
 
-/** 等待用户审批的工具调用（approval.required → approval.resolved 之间可见）。 */
-export interface PendingApproval {
-  toolCallId: string
-  runId: string
-  operation: string
-  summary: string
-}
+export type { PendingApproval }
 
 /** Run 结束类事件：触发会话数据与列表刷新（标题可能已被自动命名）。 */
 const EVENT_TYPES_TRIGGERING_REFRESH = new Set([
@@ -74,17 +73,11 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     refreshStandaloneSessions: deps.refreshStandaloneSessions,
     setNotice: deps.setNotice,
   })
+  const approvals = usePendingApprovals()
+  const sessionTracking = useRunSessionTracking()
 
-  const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>(
-    [],
-  )
   // A2 Memory：非打断式写入提示（顶栏角标，自动消失），不用弹窗。
   const [memoryNotice, setMemoryNotice] = useState<string | null>(null)
-  const [runningSessionIds, setRunningSessionIds] = useState<string[]>([])
-  const [completedSessionIds, setCompletedSessionIds] = useState<string[]>([])
-  const [failedSessionIds, setFailedSessionIds] = useState<string[]>([])
-  const runSessionsRef = useRef<Record<string, string>>({})
-  const activeSessionRunsRef = useRef<Record<string, number>>({})
   const memoryNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const toolRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const showMemoryNotice = useCallback((text: string): void => {
@@ -124,13 +117,6 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     },
     [deps],
   )
-
-  /** Run 终态时清理该 Run 遗留的审批等待（取消/失败路径的兜底）。 */
-  const clearPendingApprovals = useCallback((runId: string): void => {
-    setPendingApprovals((pending) =>
-      pending.filter((entry) => entry.runId !== runId),
-    )
-  }, [])
 
   /** 会话切换/重置：清空流式缓存与全部 Run 活动状态。 */
   const resetStreaming = useCallback((): void => {
@@ -186,12 +172,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
         }
         if (event.type === 'run.started') {
           activity.setRunActivity(event.runId, { phase: 'thinking' })
-          runSessionsRef.current[event.runId] = event.run.sessionId
-          const sessionId = event.run.sessionId
-          activeSessionRunsRef.current[sessionId] =
-            (activeSessionRunsRef.current[sessionId] ?? 0) + 1
-          setRunningSessionIds(Object.keys(activeSessionRunsRef.current))
-          setFailedSessionIds((ids) => ids.filter((id) => id !== sessionId))
+          sessionTracking.onRunStarted(event.runId, event.run.sessionId)
           return
         }
         if (event.type === 'run.retrying') {
@@ -219,21 +200,16 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           return
         }
         if (event.type === 'approval.required') {
-          setPendingApprovals((pending) => [
-            ...pending.filter((entry) => entry.toolCallId !== event.toolCallId),
-            {
-              toolCallId: event.toolCallId,
-              runId: event.runId,
-              operation: event.operation,
-              summary: event.summary,
-            },
-          ])
+          approvals.onApprovalRequired({
+            toolCallId: event.toolCallId,
+            runId: event.runId,
+            operation: event.operation,
+            summary: event.summary,
+          })
           return
         }
         if (event.type === 'approval.resolved') {
-          setPendingApprovals((pending) =>
-            pending.filter((entry) => entry.toolCallId !== event.toolCallId),
-          )
+          approvals.onApprovalResolved(event.toolCallId)
           return
         }
         if (
@@ -241,32 +217,8 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           event.type === 'run.failed' ||
           event.type === 'run.cancelled'
         ) {
-          const sessionId = runSessionsRef.current[event.runId]
-          if (sessionId !== undefined) {
-            const nextCount = Math.max(
-              0,
-              (activeSessionRunsRef.current[sessionId] ?? 1) - 1,
-            )
-            if (nextCount === 0) delete activeSessionRunsRef.current[sessionId]
-            else activeSessionRunsRef.current[sessionId] = nextCount
-            setRunningSessionIds(Object.keys(activeSessionRunsRef.current))
-            if (event.type === 'run.completed') {
-              setCompletedSessionIds((ids) =>
-                ids.includes(sessionId) ? ids : [...ids, sessionId],
-              )
-              window.setTimeout(() => {
-                setCompletedSessionIds((ids) =>
-                  ids.filter((id) => id !== sessionId),
-                )
-              }, 1600)
-            }
-            if (event.type === 'run.failed') {
-              // 失败信息由时间线失败卡 + 重试按钮完整呈现，不重复弹全局 notice。
-              setFailedSessionIds((ids) =>
-                ids.includes(sessionId) ? ids : [...ids, sessionId],
-              )
-            }
-            delete runSessionsRef.current[event.runId]
+          if (event.type !== 'run.cancelled') {
+            sessionTracking.onRunSettled(event.type, event.runId)
           }
           // 继续进入统一刷新路径，确保失败/取消时持久化的消息状态及时落到前端。
         }
@@ -300,7 +252,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           void deps.refreshStandaloneSessions()
           const projectId = deps.activeProjectRef.current
           if (projectId) void deps.refreshProjectSessions(projectId)
-          clearPendingApprovals(event.runId)
+          approvals.clearForRun(event.runId)
           refreshAndPrune(
             event.runId,
             event.type === 'message.completed' ? event.messageId : undefined,
@@ -349,7 +301,8 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     activity,
     loadInitialData,
     refreshAndPrune,
-    clearPendingApprovals,
+    approvals,
+    sessionTracking,
     scheduleToolRefresh,
     scheduleDelegationRefresh,
     showMemoryNotice,
@@ -362,12 +315,12 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     streamingReasoning: cache.streamingReasoning,
     runActivities: activity.runActivities,
     resetStreaming,
-    pendingApprovals,
-    clearPendingApprovals,
+    pendingApprovals: approvals.pendingApprovals,
+    clearPendingApprovals: approvals.clearForRun,
     memoryNotice,
-    runningSessionIds,
-    completedSessionIds,
-    failedSessionIds,
+    runningSessionIds: sessionTracking.runningSessionIds,
+    completedSessionIds: sessionTracking.completedSessionIds,
+    failedSessionIds: sessionTracking.failedSessionIds,
     retryTick: activity.retryTick,
   }
 }

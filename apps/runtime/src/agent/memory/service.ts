@@ -1,6 +1,6 @@
 import type { Memory, Run, Session } from '@reflexion-os-studio/contracts'
 import type { RunEventEmitter } from '../../events.js'
-import { embedTexts, resolveEmbeddingProvider } from '../../embedding.js'
+import { embedTexts, resolveEmbeddingProvider } from './embedding.js'
 import type { Store } from '../../store/index.js'
 import type { ProviderRuntimeConfig } from '../context.js'
 import {

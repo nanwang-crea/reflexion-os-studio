@@ -1,6 +1,6 @@
-import { CommandError } from './agent/errors.js'
-import { requireString, type CommandHandler } from './command-utils.js'
-import type { SystemRuntimeClient } from './system.js'
+import { CommandError } from '../agent/errors.js'
+import { requireString, type CommandHandler } from '../command-utils.js'
+import type { SystemRuntimeClient } from '../system.js'
 
 /**
  * Phase 1B Workspace 命令：索引生命周期 + 文件树/查看器（只读）。

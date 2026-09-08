@@ -1,6 +1,6 @@
-import { CommandError } from './agent/index.js'
-import { deleteSecret, saveSecret } from './secrets.js'
-import { requireString, type CommandHandler } from './command-utils.js'
+import { CommandError } from '../agent/errors.js'
+import { deleteSecret, saveSecret } from '../secrets.js'
+import { requireString, type CommandHandler } from '../command-utils.js'
 
 export const mcpCommandHandlers: Record<string, CommandHandler> = {
   'mcp.list': (_params, { mcp }) => {

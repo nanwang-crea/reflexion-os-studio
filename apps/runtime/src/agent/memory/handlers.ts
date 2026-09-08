@@ -1,5 +1,5 @@
-import { requireString, type CommandHandler } from './command-utils.js'
 import type { MemoryScope } from '@reflexion-os-studio/contracts'
+import { requireString, type CommandHandler } from '../../command-utils.js'
 
 /** A2 Memory 管理命令：列表（供记忆页）、编辑/固定、删除（撤销自动写入）。 */
 export const memoryCommandHandlers: Record<string, CommandHandler> = {

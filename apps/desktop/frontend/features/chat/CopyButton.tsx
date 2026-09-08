@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CheckIcon, CopyIcon } from '../ui/icons'
+import { CheckIcon, CopyIcon } from '../../ui/icons'
 
 interface CopyButtonProps {
   /** 点击后写入剪贴板的文本。 */

@@ -16,9 +16,9 @@ type MessagePart = { type: 'text'; text: string } | ResourcePart
 function resourceFromPart(part: ResourcePart): ResourceLink {
   return 'link' in part ? part.link : part.resource_link
 }
-import { CopyButton } from '../../components/CopyButton'
+import { CopyButton } from './CopyButton'
 import { AlertIcon } from '../../ui/icons'
-import { MessageMarkdown } from '../../components/markdown/MessageMarkdown'
+import { MessageMarkdown } from './markdown/MessageMarkdown'
 import { ReasoningBlock } from './ReasoningBlock'
 import { ToolTrace } from './ToolTrace'
 import type { RunActivity } from '../../hooks/useRunActivity'

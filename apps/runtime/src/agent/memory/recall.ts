@@ -1,5 +1,5 @@
 import type { Store } from '../../store/index.js'
-import { embedTexts, resolveEmbeddingProvider } from '../../embedding.js'
+import { embedTexts, resolveEmbeddingProvider } from './embedding.js'
 import type { Memory } from '@reflexion-os-studio/contracts'
 
 /** 注入上下文的记忆 token 预算与条数上限。 */

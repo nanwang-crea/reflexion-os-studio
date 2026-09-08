@@ -1,4 +1,4 @@
-import { requireString, type CommandHandler } from './command-utils.js'
+import { requireString, type CommandHandler } from '../command-utils.js'
 
 /**
  * Asset 命令（Phase 1B 第二阶段）：导入（工作区相对路径 → Store 复制+落元数据）、

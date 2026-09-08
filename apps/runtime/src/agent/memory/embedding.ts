@@ -1,6 +1,6 @@
-import { ProviderError } from './provider.js'
-import { loadSecret } from './secrets.js'
-import type { Store } from './store/index.js'
+import { ProviderError } from '../../provider.js'
+import { loadSecret } from '../../secrets.js'
+import type { Store } from '../../store/index.js'
 
 const DEFAULT_TIMEOUT_MS = 30_000
 
