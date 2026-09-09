@@ -20,13 +20,7 @@ const MANAGE_PLAN_SCHEMA: JsonValue = {
   properties: {
     action: {
       type: 'string',
-      enum: [
-        'create',
-        'update_step',
-        'complete_plan',
-        'fail_plan',
-        'cancel_plan',
-      ],
+      enum: ['create', 'update_step', 'complete_plan', 'cancel_plan'],
     },
     goal: { type: 'string', minLength: 1 },
     steps: {
@@ -46,7 +40,7 @@ const MANAGE_PLAN_SCHEMA: JsonValue = {
     stepId: { type: 'string', minLength: 1 },
     status: {
       type: 'string',
-      enum: ['in_progress', 'completed', 'failed', 'skipped', 'cancelled'],
+      enum: ['in_progress', 'completed', 'skipped', 'cancelled'],
     },
     note: { type: 'string' },
     summary: { type: 'string' },
@@ -59,7 +53,7 @@ const MANAGE_PLAN_DESCRIPTION = `管理当前任务的活动计划及其步骤�
 核心约束：
 - 同一任务同一时刻最多存在一个活动计划。
 - 如果已经存在活动计划，禁止再次 create；必须沿用已有 planId，使用 update_step 推进步骤。
-- 不要自创 action。action 只能是：create、update_step、complete_plan、fail_plan、cancel_plan。
+- 不要自创 action。action 只能是：create、update_step、complete_plan、cancel_plan。
 - 工具返回错误时，先根据错误信息修正参数，再重试；禁止使用相同参数盲目重试。
 
 动作：
@@ -73,23 +67,20 @@ const MANAGE_PLAN_DESCRIPTION = `管理当前任务的活动计划及其步骤�
    推进已有计划中的一个步骤。必须提供 planId、stepId 和 status。
    正常步骤必须按 pending → in_progress → completed 依次流转；禁止从 pending 直接变为
    completed，已 completed 的步骤不可回退或重新打开。
-   status 也可以是 failed、skipped 或 cancelled，但这些是终止状态；终止状态不可再次推进。
-   可选 note 记录该步骤的进展、结果或失败原因。
+   status 也可以是 skipped 或 cancelled，用于明确放弃某个步骤；这些是终止状态，不可再次推进。
+   某次尝试受挫时步骤保持 in_progress，修正后重试即可；可选 note 记录进展或结果。
 
 3. complete_plan
    在所有必要步骤都已 completed 或 skipped 后结束计划。必须提供 planId；可选 summary。
    不得在仍有未处理步骤时调用。
 
-4. fail_plan
-   在计划无法继续时将计划标记为失败。必须提供 planId；可选 summary 或 note。
-
-5. cancel_plan
-   在用户或系统取消任务时将计划标记为取消。必须提供 planId；可选 summary 或 note。
+4. cancel_plan
+   在用户明确放弃整个任务时将计划标记为取消。必须提供 planId；可选 summary 或 note。
 
 状态规则：
-- 计划状态：active → completed、failed 或 cancelled；终止状态不可回退。
+- 计划状态：active → completed 或 cancelled；终止状态不可回退。
 - 步骤状态：pending → in_progress → completed；也可从 pending 或 in_progress 进入
-  failed、skipped 或 cancelled。
+  skipped 或 cancelled。
 - 状态流转属于运行时状态机，调用参数 schema 只能校验字段格式，不能替代运行时校验。`
 
 function errorResult(code: string, message: string): ToolResult {
@@ -185,11 +176,7 @@ async function executeManagePlan(
       return mapPlanError(error)
     }
   }
-  if (
-    action === 'complete_plan' ||
-    action === 'fail_plan' ||
-    action === 'cancel_plan'
-  ) {
+  if (action === 'complete_plan' || action === 'cancel_plan') {
     // summary 可选；未提供时回退到 note（Plan 实体只有 summary 一个收尾字段）。
     const summary =
       (typeof input.summary === 'string' && input.summary.trim()
@@ -202,9 +189,7 @@ async function executeManagePlan(
       const finished =
         action === 'complete_plan'
           ? ctx.store.plans.complete(planId, summary)
-          : action === 'fail_plan'
-            ? ctx.store.plans.fail(planId, summary)
-            : ctx.store.plans.cancel(planId, summary)
+          : ctx.store.plans.cancel(planId, summary)
       ctx.emitter.next({ type: 'plan.updated', plan: finished })
       return { content: JSON.stringify(finished), isError: false }
     } catch (error) {

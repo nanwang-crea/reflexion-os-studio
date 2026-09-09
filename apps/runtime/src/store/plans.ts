@@ -83,7 +83,7 @@ export class PlanStore {
       if (active)
         throw new PlanError(
           'PLAN_ALREADY_EXISTS',
-          '当前会话已存在活动计划；请沿用已有 planId 使用 update_step，或先 complete/fail/cancel 已有计划',
+          '当前会话已存在活动计划；请沿用已有 planId 使用 update_step，或先 complete/cancel 已有计划，然后在创建新的计划',
         )
       this.db
         .prepare(
@@ -115,28 +115,6 @@ export class PlanStore {
           `步骤 id 与历史计划冲突（plan_steps.id 全局唯一）：${input.steps.map((step) => step.id).join(', ')}；请使用带唯一前缀的步骤 id`,
         )
       }
-      throw error
-    }
-  }
-
-  /** 启动恢复：进程退出时 active 计划及其未完成步骤统一失败收敛。 */
-  recoverActive(): void {
-    const now = nowIso()
-    this.db.exec('BEGIN IMMEDIATE')
-    try {
-      this.db
-        .prepare(
-          "UPDATE plan_steps SET status = 'failed', note = ?, updated_at = ? WHERE status IN ('pending', 'in_progress') AND plan_id IN (SELECT id FROM plans WHERE status = 'active')",
-        )
-        .run('Runtime restarted before plan completion', now)
-      this.db
-        .prepare(
-          "UPDATE plans SET status = 'failed', summary = ?, updated_at = ?, completed_at = ? WHERE status = 'active'",
-        )
-        .run('Runtime restarted before plan completion', now, now)
-      this.db.exec('COMMIT')
-    } catch (error) {
-      this.db.exec('ROLLBACK')
       throw error
     }
   }
@@ -177,12 +155,11 @@ export class PlanStore {
         `计划 ${planId} 中不存在步骤 ${stepId}`,
       )
     const previous = String(current.status) as PlanStepStatus
-    // 终止状态（completed/failed/skipped/cancelled）不可回退、不可再次推进。
+    // 终止状态（completed/skipped/cancelled）不可回退、不可再次推进。
     const allowed: Record<PlanStepStatus, PlanStepStatus[]> = {
-      pending: ['in_progress', 'failed', 'skipped', 'cancelled'],
-      in_progress: ['completed', 'failed', 'skipped', 'cancelled'],
+      pending: ['in_progress', 'skipped', 'cancelled'],
+      in_progress: ['completed', 'skipped', 'cancelled'],
       completed: [],
-      failed: [],
       skipped: [],
       cancelled: [],
     }
@@ -229,24 +206,8 @@ export class PlanStore {
     return this.get(planId)!
   }
 
-  fail(planId: string, summary: string | null): Plan {
-    return this.finish(planId, 'failed', summary)
-  }
-
   cancel(planId: string, summary: string | null): Plan {
     return this.finish(planId, 'cancelled', summary)
-  }
-
-  /**
-   * 把 Plan 的未完成步骤（pending/in_progress）收敛为 failed。
-   * 供 Run Finalizer 失败收敛使用；只改步骤不改 Plan 本身状态。
-   */
-  failPendingSteps(planId: string): void {
-    this.db
-      .prepare(
-        "UPDATE plan_steps SET status = 'failed', note = ?, updated_at = ? WHERE plan_id = ? AND status IN ('pending', 'in_progress')",
-      )
-      .run('Run 终止时该步骤未完成', nowIso(), planId)
   }
 
   private finish(

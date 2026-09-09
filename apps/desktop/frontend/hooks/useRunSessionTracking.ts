@@ -2,14 +2,17 @@ import { useCallback, useRef, useState } from 'react'
 
 /**
  * 会话级 Run 状态跟踪：运行中计数、最近完成闪烁（1.6s 自动消退）、失败标记。
- * 由 bootstrap 事件回调驱动（run.started / run.completed / run.failed）。
+ * 由 bootstrap 事件回调驱动（run.started / run.completed / run.failed / run.cancelled）。
  */
 export function useRunSessionTracking(): {
   runningSessionIds: string[]
   completedSessionIds: string[]
   failedSessionIds: string[]
   onRunStarted: (runId: string, sessionId: string) => void
-  onRunSettled: (status: 'run.completed' | 'run.failed', runId: string) => void
+  onRunSettled: (
+    status: 'run.completed' | 'run.failed' | 'run.cancelled',
+    runId: string,
+  ) => void
 } {
   const [runningSessionIds, setRunningSessionIds] = useState<string[]>([])
   const [completedSessionIds, setCompletedSessionIds] = useState<string[]>([])
@@ -26,7 +29,10 @@ export function useRunSessionTracking(): {
   }, [])
 
   const onRunSettled = useCallback(
-    (status: 'run.completed' | 'run.failed', runId: string): void => {
+    (
+      status: 'run.completed' | 'run.failed' | 'run.cancelled',
+      runId: string,
+    ): void => {
       const sessionId = runSessionsRef.current[runId]
       if (sessionId === undefined) return
       const nextCount = Math.max(
@@ -43,7 +49,7 @@ export function useRunSessionTracking(): {
         window.setTimeout(() => {
           setCompletedSessionIds((ids) => ids.filter((id) => id !== sessionId))
         }, 1600)
-      } else {
+      } else if (status === 'run.failed') {
         // 失败信息由时间线失败卡 + 重试按钮完整呈现，不重复弹全局 notice。
         setFailedSessionIds((ids) =>
           ids.includes(sessionId) ? ids : [...ids, sessionId],

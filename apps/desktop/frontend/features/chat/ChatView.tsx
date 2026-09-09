@@ -207,7 +207,9 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
       const run = visibleRuns.find((candidate) => candidate.id === runId)
       if (
         run === undefined ||
-        !['completed', 'failed', 'cancelled'].includes(run.status)
+        !['completed', 'failed', 'cancelled', 'interrupted'].includes(
+          run.status,
+        )
       ) {
         ids.add(runId)
       }

@@ -234,7 +234,6 @@ export class RunRunner {
             errorCode: null,
             errorMessage: null,
             pendingMessage: null,
-            planDisposition: 'keep',
             enqueueMemoryJob: true,
             resultContent: joinFinalFragments(finalFragments),
           })
@@ -249,7 +248,6 @@ export class RunRunner {
           errorCode: outcome.reason,
           errorMessage: message,
           pendingMessage: null,
-          planDisposition: 'fail',
           enqueueMemoryJob: false,
         })
       } finally {
@@ -264,7 +262,6 @@ export class RunRunner {
             errorCode: reason.code,
             errorMessage: reason.message,
             pendingMessage: null,
-            planDisposition: 'fail',
             enqueueMemoryJob: false,
           })
           return
@@ -274,7 +271,6 @@ export class RunRunner {
           errorCode: null,
           errorMessage: null,
           pendingMessage: null,
-          planDisposition: 'cancel',
           enqueueMemoryJob: false,
         })
         return
@@ -286,7 +282,6 @@ export class RunRunner {
           errorCode: error.code,
           errorMessage: error.message,
           pendingMessage: null,
-          planDisposition: 'fail',
           enqueueMemoryJob: false,
         })
         return
@@ -306,7 +301,6 @@ export class RunRunner {
         errorCode: code,
         errorMessage: message,
         pendingMessage: null,
-        planDisposition: 'fail',
         enqueueMemoryJob: false,
       })
     }

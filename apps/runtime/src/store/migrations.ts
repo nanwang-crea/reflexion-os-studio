@@ -276,6 +276,18 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
     // v20: context_checkpoints / memory_jobs 为加法迁移，全新表由 SCHEMA
     // 创建，升级只推进版本号；不回填历史 Checkpoint，也不为历史 Run
     // 自动创建 Memory Job。
+    if (version < 21) {
+      // v21：Plan 移除失败态（计划是任务进度板，"失败"的只是某次 Run）。
+      // 存量 failed 计划/步骤改写为 cancelled，summary/note 保留作历史记录。
+      const stepUpdate = db.prepare(
+        "UPDATE plan_steps SET status = 'cancelled', updated_at = ? WHERE status = 'failed'",
+      )
+      stepUpdate.run(nowIso())
+      const planUpdate = db.prepare(
+        "UPDATE plans SET status = 'cancelled', updated_at = ? WHERE status = 'failed'",
+      )
+      planUpdate.run(nowIso())
+    }
     db.exec('COMMIT')
     // 迁移全部执行完毕才推进版本号；否则下次启动会重复进入迁移分支。
     version = LATEST_SCHEMA_VERSION

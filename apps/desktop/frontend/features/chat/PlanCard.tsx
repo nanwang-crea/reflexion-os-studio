@@ -10,7 +10,6 @@ const stepLabels: Record<PlanStepStatus, string> = {
   pending: '待处理',
   in_progress: '进行中',
   completed: '已完成',
-  failed: '失败',
   skipped: '已跳过',
   cancelled: '已取消',
 }
@@ -18,7 +17,6 @@ const stepLabels: Record<PlanStepStatus, string> = {
 const statusLabels: Record<Plan['status'], string> = {
   active: '进行中',
   completed: '已完成',
-  failed: '失败',
   cancelled: '已取消',
 }
 
@@ -38,7 +36,7 @@ function currentStep(steps: PlanStep[]): PlanStep | null {
  */
 export function PlanCard({ plan }: { plan: Plan }): React.JSX.Element {
   const [open, setOpen] = useState(() => plan.status === 'active')
-  // 进度口径：completed/skipped/cancelled 均已了结，failed 留给计划整体状态表达。
+  // 进度口径：completed/skipped/cancelled 均已了结。
   const finished = plan.steps.filter(
     (step) =>
       step.status === 'completed' ||

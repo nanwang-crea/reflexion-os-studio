@@ -84,12 +84,12 @@ export class Store {
     })
 
     // 启动恢复：上次进程未走完的生命周期统一落为 interrupted/cancelled。
+    // 计划是任务进度板，跨重启保持 active 供后续 Run 隐式继续。
     this.runs.recoverInterrupted()
     this.delegations.recoverInterrupted()
     this.messages.recoverInterrupted()
     this.toolCalls.recoverUnfinished()
     this.workspaceIndex.recoverInterrupted()
-    this.plans.recoverActive()
     this.memoryJobs.recoverRunning()
   }
 

@@ -217,9 +217,8 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           event.type === 'run.failed' ||
           event.type === 'run.cancelled'
         ) {
-          if (event.type !== 'run.cancelled') {
-            sessionTracking.onRunSettled(event.type, event.runId)
-          }
+          // 三种终态都结算侧边栏运行计数；cancelled 只递减，不闪完成/失败标。
+          sessionTracking.onRunSettled(event.type, event.runId)
           // 继续进入统一刷新路径，确保失败/取消时持久化的消息状态及时落到前端。
         }
         // 委派事件：更新当前会话对应的委派树（task 子 Run 创建/状态推进）。

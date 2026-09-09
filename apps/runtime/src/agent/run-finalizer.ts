@@ -1,4 +1,4 @@
-import type { ContentPart, Plan, Run } from '@reflexion-os-studio/contracts'
+import type { ContentPart, Run } from '@reflexion-os-studio/contracts'
 import type { RunEventEmitter } from '../events.js'
 import type { Store } from '../store/index.js'
 import type { RunExecutionState } from './run-state.js'
@@ -18,8 +18,6 @@ export interface RunTerminalDecision {
   errorMessage: string | null
   /** 失败/取消时可选地把模型可见内容随草稿收尾；completed 无待收尾草稿。 */
   pendingMessage: PendingMessageFinalization | null
-  /** 关联活动计划的处置：completed 保留；失败置 failed；取消置 cancelled。 */
-  planDisposition: 'keep' | 'fail' | 'cancel'
   /** 仅 completed Run 触发 Memory 提取。 */
   enqueueMemoryJob: boolean
   /** completed 时回传给 onResult 的最终结果文本。 */
@@ -37,13 +35,13 @@ export interface FinalizeContext {
 
 interface CommittedOutcome {
   cancelledToolCallIds: string[]
-  updatedPlan: Plan | null
 }
 
 /**
  * Atomic Run Finalizer：全部 Run 终态的唯一生产入口。
  * 一个 SQLite 事务内完成 pending 消息收尾、未终态 ToolCall 取消、
- * 计划收敛、Run 终态与失败事件写入；事务提交后按序发出事件并执行回调。
+ * Run 终态与失败事件写入；事务提交后按序发出事件并执行回调。
+ * 计划是任务进度板，不随 Run 终态收敛，仅由 manage_plan 驱动。
  * 回调最多执行一次；通知器抛错不吞回调，避免子 Run Promise 永久 pending。
  */
 export class RunFinalizer {
@@ -84,9 +82,6 @@ export class RunFinalizer {
           status: 'cancelled',
           errorCode: null,
         })
-      }
-      if (committed.updatedPlan !== null) {
-        emitter.next({ type: 'plan.updated', plan: committed.updatedPlan })
       }
       if (decision.status === 'completed') {
         emitter.next({ type: 'run.completed' })
@@ -180,18 +175,13 @@ export class RunFinalizer {
       for (const id of cancelledToolCallIds) {
         this.store.toolCalls.finalize(id, 'cancelled')
       }
-      // 3. 收敛关联活动计划。
-      const updatedPlan =
-        decision.planDisposition === 'keep'
-          ? null
-          : this.convergePlan(run, decision)
-      // 4. Run 终态。
+      // 3. Run 终态。
       this.store.runs.finalize(
         run.id,
         decision.status,
         decision.errorCode ?? undefined,
       )
-      // 5. 失败事件持久化。
+      // 4. 失败事件持久化。
       if (decision.status === 'failed') {
         this.store.runEvents.createFailed({
           sessionId: run.sessionId,
@@ -200,40 +190,8 @@ export class RunFinalizer {
           errorMessage: decision.errorMessage ?? 'Run failed',
         })
       }
-      return { cancelledToolCallIds, updatedPlan }
+      return { cancelledToolCallIds }
     })
-  }
-
-  /** 计划收敛：返回收敛后的 Plan（用于事件），无可收敛计划返回 null。 */
-  private convergePlan(run: Run, decision: RunTerminalDecision): Plan | null {
-    // Plan linkage may be created by manage_plan during this Run; re-read by runId.
-    const currentRun = this.store.runs.get(run.id)
-    const planId = currentRun?.planId ?? run.planId
-    if (!planId) return null
-    try {
-      const linked = this.store.plans.get(planId)
-      if (
-        !linked ||
-        linked.sessionId !== run.sessionId ||
-        linked.status !== 'active'
-      ) {
-        return null
-      }
-      const summary =
-        decision.errorMessage ??
-        (decision.status === 'cancelled' ? 'Run 已被取消' : 'Run 失败')
-      // 未完成步骤随 Plan 一并收敛（plans.fail 只改 Plan 状态本身）。
-      this.store.plans.failPendingSteps(planId)
-      return decision.planDisposition === 'cancel'
-        ? this.store.plans.cancel(planId, summary)
-        : this.store.plans.fail(planId, summary)
-    } catch (error) {
-      // 计划收敛失败不应掩盖 Run 的真实终态。
-      process.stderr.write(
-        `[runtime] plan convergence skipped (${planId}): ${describeError(error)}\n`,
-      )
-      return null
-    }
   }
 }
 

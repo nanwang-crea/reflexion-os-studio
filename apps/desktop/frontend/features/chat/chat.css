@@ -273,10 +273,6 @@
   background: var(--ok);
 }
 
-.plan-failed .plan-float-dot {
-  background: var(--danger);
-}
-
 .plan-float-status {
   white-space: nowrap;
 }
@@ -329,10 +325,6 @@
 
 .plan-step-completed {
   color: var(--text);
-}
-
-.plan-step-failed {
-  color: var(--danger);
 }
 
 .plan-step small {

@@ -125,19 +125,13 @@ export const UsageSchema = z.object({
 })
 export type Usage = z.infer<typeof UsageSchema>
 
-export const PlanStatusSchema = z.enum([
-  'active',
-  'completed',
-  'failed',
-  'cancelled',
-])
+export const PlanStatusSchema = z.enum(['active', 'completed', 'cancelled'])
 export type PlanStatus = z.infer<typeof PlanStatusSchema>
 
 export const PlanStepStatusSchema = z.enum([
   'pending',
   'in_progress',
   'completed',
-  'failed',
   'skipped',
   'cancelled',
 ])
