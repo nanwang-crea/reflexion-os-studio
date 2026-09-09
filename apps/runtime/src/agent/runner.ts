@@ -14,7 +14,6 @@ import type { Store } from '../store/index.js'
 import type { ProviderRuntimeConfig } from './context.js'
 import { ChildLimitError } from './errors.js'
 import { executeModelTurn } from './model-turn.js'
-import type { MemoryService } from './memory/service.js'
 import type { ApprovalGateway, PermissionGate } from './permissions.js'
 import { createRunExecutionState } from './run-state.js'
 import { RunFinalizer, type RunTerminalDecision } from './run-finalizer.js'
@@ -33,8 +32,8 @@ export interface RunStreamInput {
   approvals: ApprovalGateway
   /** 本轮运行使用的 Agent 全局设置快照。 */
   settings: AgentSettings
-  /** A2 Memory 写侧管线；null 表示禁用（不影响主流程）。 */
-  memory: MemoryService | null
+  /** Run 终态后的 Memory Job 通知（可选；worker 由 ChatAgent 注入）。 */
+  onMemoryJob?: () => void
   controller: AbortController
   emitter: RunEventEmitter
   /** 门面预建的首轮 assistant 消息（保持 message.send 返回 messageId 的契约）。 */
@@ -119,20 +118,22 @@ export class RunRunner {
         signal,
       )
 
-    const finalize = (decision: RunTerminalDecision): void =>
+    const finalize = (decision: RunTerminalDecision): void => {
       finalizer.finalize(
         {
           run,
           state,
           emitter,
-          memory: input.memory,
-          provider: input.provider,
           onResult: input.onResult,
           onFailure: input.onFailure,
           onCancel: input.onCancel,
         },
         decision,
       )
+      if (decision.status === 'completed' && decision.enqueueMemoryJob) {
+        input.onMemoryJob?.()
+      }
+    }
 
     try {
       // Run 总时限：到点中止（ChildLimitError 语义区分取消与预算失败）。

@@ -13,6 +13,7 @@ import { ContextBuilder } from './context.js'
 import { CommandError } from './errors.js'
 import { createPendingAssistantMessage, RunLauncher } from './launcher.js'
 import { MemoryService } from './memory/service.js'
+import { MemoryWorker } from './memory/worker.js'
 import { ApprovalGateway } from './permissions.js'
 import { resolveProvider, resolveSampling } from './provider-resolver.js'
 import { QueueService } from './queue.js'
@@ -32,6 +33,7 @@ export class ChatAgent {
   private readonly contextBuilder: ContextBuilder
   private readonly runner: RunRunner
   private readonly memory: MemoryService
+  private readonly memoryWorker: MemoryWorker
   private readonly queues: QueueService
   private readonly launcher: RunLauncher
 
@@ -44,6 +46,7 @@ export class ChatAgent {
     this.contextBuilder = new ContextBuilder(store)
     this.runner = new RunRunner(store)
     this.memory = new MemoryService(store)
+    this.memoryWorker = new MemoryWorker(store, this.memory)
     this.queues = new QueueService(notifier)
     this.launcher = new RunLauncher(
       {
@@ -55,7 +58,10 @@ export class ChatAgent {
         memory: this.memory,
         approvals: this.approvals,
       },
-      { onRunSettled: (sessionId) => this.pumpQueue(sessionId) },
+      {
+        onRunSettled: (sessionId) => this.pumpQueue(sessionId),
+        onMemoryJob: () => this.memoryWorker.schedule(),
+      },
     )
   }
 
@@ -227,6 +233,8 @@ export class ChatAgent {
       run,
     )
 
+    // 前台优先：新 Run 到达时中止后台 Memory 提取（worker 抢占语义）。
+    this.memoryWorker.preempt()
     const emitter = new RunEventEmitter(run.id, this.notifier)
     emitter.next({ type: 'run.started', run })
     emitter.next({ type: 'message.created', message: userMessage })

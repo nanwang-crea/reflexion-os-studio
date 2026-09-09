@@ -8,6 +8,7 @@ import {
   extractMemoryCandidates,
   type MemoryCandidate,
 } from './extractor.js'
+import { resolveProviderForRun } from './job-provider.js'
 import {
   decideMerges,
   findSimilarExisting,
@@ -16,8 +17,9 @@ import {
 
 /**
  * A2 Memory 服务：mem0 式「提取 → 合并 → 存储 → 召回」管线的写侧编排。
- * Run 成功完成后由 runner 异步触发（fire-and-forget）；任何失败只写 stderr，
- * 绝不影响主对话。召回见 recall.ts（ContextBuilder 注入）。
+ * W6 起写入走持久化 memory_jobs（worker.ts 消费，可恢复/可重试/可降级），
+ * 不再 fire-and-forget；任何失败只写 stderr 与 job.last_error，绝不影响主对话。
+ * 召回见 recall.ts（ContextBuilder 注入）。
  *
  * 写入策略（AGENT-PLATFORM-PLAN §5）：session/project 自动写入、记忆页可撤销；
  * user 级需确认，待确认流程落地前提取器不产出 user 候选。
@@ -25,19 +27,31 @@ import {
 export class MemoryService {
   constructor(private readonly store: Store) {}
 
-  async processRun(input: {
+  /**
+   * 消费一个持久化 job（MemoryWorker 调用）：解析当前 Provider 配置 →
+   * 提取 → 合并落地。可重试错误抛出由 worker 记退避；永久失败直接标记。
+   */
+  async processJob(input: {
     run: Run
-    provider: ProviderRuntimeConfig
-    emitter: RunEventEmitter
+    signal: AbortSignal
+    /** 记忆写入事件（可选；job 消费路径在 Run 结束后，事件发给该 Run 通道）。 */
+    emitter?: RunEventEmitter
   }): Promise<void> {
-    const { run, provider, emitter } = input
+    const { run, signal, emitter } = input
     const session = this.store.sessions.get(run.sessionId)
     if (!session) return
-
+    const provider = resolveProviderForRun(this.store, run)
+    if (provider === null) {
+      throw new Error('no embedding provider configured for memory job')
+    }
     const transcript = buildRunTranscript(this.store, run)
     if (transcript.trim() === '') return
 
-    const candidates = await extractMemoryCandidates(transcript, provider)
+    const candidates = await extractMemoryCandidates(
+      transcript,
+      provider,
+      signal,
+    )
     if (candidates.length === 0) return
 
     const written = await this.applyCandidates(
@@ -47,7 +61,13 @@ export class MemoryService {
       provider,
     )
     if (written.length === 0) return
-    emitter.next({ type: 'memory.written', memories: written })
+    if (emitter !== undefined) {
+      try {
+        emitter.next({ type: 'memory.written', memories: written })
+      } catch {
+        // 事件失败不影响记忆已落库的事实。
+      }
+    }
   }
 
   /** 合并决策落地：事务内完成 UPDATE/SUPERSEDE/ADD，随后异步补算向量。 */

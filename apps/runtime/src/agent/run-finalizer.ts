@@ -1,8 +1,6 @@
 import type { ContentPart, Plan, Run } from '@reflexion-os-studio/contracts'
 import type { RunEventEmitter } from '../events.js'
 import type { Store } from '../store/index.js'
-import type { ProviderRuntimeConfig } from './context.js'
-import type { MemoryService } from './memory/service.js'
 import type { RunExecutionState } from './run-state.js'
 
 /** 待收尾的 assistant 轮次草稿：内容与 reasoning 随终态一并落库。 */
@@ -32,10 +30,6 @@ export interface FinalizeContext {
   run: Run
   state: RunExecutionState
   emitter: RunEventEmitter
-  /** A2 Memory 写侧管线；null 表示禁用。 */
-  memory: MemoryService | null
-  /** 本次 Run 的 Provider 配置（Memory 提取用）。 */
-  provider: ProviderRuntimeConfig
   onResult?: (content: string) => void
   onFailure?: (error: Error) => void
   onCancel?: () => void
@@ -76,6 +70,10 @@ export class RunFinalizer {
     // 提交成功：清理内存态。
     state.turn = null
     state.toolCallRowIds.clear()
+    // 成功 Run 幂等创建持久化 Memory Job（事务内，保证 Run completed ⇒ job 存在）。
+    if (decision.status === 'completed' && decision.enqueueMemoryJob) {
+      this.store.memoryJobs.enqueue(run.id)
+    }
 
     // 事务已提交：按序发出终态事件（通知器抛错只记 stderr，不阻断回调）。
     try {
@@ -107,21 +105,6 @@ export class RunFinalizer {
       process.stderr.write(
         `[runtime] terminal event emission failed (${run.id}): ${describeError(error)}\n`,
       )
-    }
-
-    // Memory 提取仅对成功 Run 触发；失败/取消不进入提取管线。
-    if (
-      decision.status === 'completed' &&
-      decision.enqueueMemoryJob &&
-      context.memory
-    ) {
-      void context.memory
-        .processRun({ run, provider: context.provider, emitter })
-        .catch((error: unknown) => {
-          process.stderr.write(
-            `[runtime] memory extraction failed: ${describeError(error)}\n`,
-          )
-        })
     }
 
     // settled 语义：回调最多执行一次且必须执行（异常也不跳过其它收尾）。

@@ -143,6 +143,16 @@ export class RunStore {
     return row ? this.toRun(row as Row) : null
   }
 
+  /** 任意会话存在进行中 Run（Memory Worker 空闲调度判定用）。 */
+  activeForAny(): Run | null {
+    const row = this.db
+      .prepare(
+        "SELECT * FROM runs WHERE status IN ('created', 'running', 'awaiting_approval') LIMIT 1",
+      )
+      .get()
+    return row ? this.toRun(row as Row) : null
+  }
+
   /** 启动恢复：未结束的 Run 标记为 interrupted；等待审批的 Run 不自动放行。 */
   recoverInterrupted(): void {
     this.db

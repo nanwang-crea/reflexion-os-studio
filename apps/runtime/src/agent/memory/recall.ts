@@ -74,9 +74,11 @@ export function ftsScoreFromRank(rank: number): number {
 }
 
 /**
- * 混合召回：FTS 关键词 + embedding 余弦 + recency 衰减，pinned 置顶。
- * 无 embedding 配置（或模型不一致）时自动退化为 FTS + recency；
- * 任何失败都应向上抛出由调用方兜底——召回失败只影响记忆注入，不影响对话。
+ * 混合召回（W6 复合版）：FTS 关键词 + embedding 余弦 + recency 衰减，
+ * pinned 置顶。查询文本为复合拼接（当前用户消息 + 最近 3 条用户消息 +
+ * 当前 Checkpoint goal/pending + 活动 Plan 目标），短消息（"继续"）仍能
+ * 带上真实任务语义。embedding 查询 500ms deadline：超时立即用
+ * FTS + recency + pinned 返回，不等待。无 embedding 配置时自动退化。
  */
 export async function recallMemories(
   store: Store,
@@ -96,10 +98,7 @@ export async function recallMemories(
   const candidates = store.memories.listRecallCandidates(scopes)
   if (candidates.length === 0) return []
 
-  const latestUser = [...store.messages.listBySession(sessionId)]
-    .reverse()
-    .find((message) => message.role === 'user')
-  const query = latestUser?.content ?? ''
+  const query = buildCompositeQuery(store, sessionId)
 
   const scores = new Map<string, number>()
   if (query !== '') {
@@ -112,22 +111,27 @@ export async function recallMemories(
     }
   }
 
-  // 查询向量：仅当候选中确实存在向量时才发起网络调用。
+  // 查询向量：仅当候选中确实存在向量时才发起网络调用；500ms deadline 硬限。
   const embedding = resolveEmbeddingProvider(store)
   let queryVector: number[] | null = null
   if (embedding && candidates.some((item) => item.vector !== null)) {
+    const embeddingController = new AbortController()
+    const deadline = setTimeout(() => embeddingController.abort(), 500)
     try {
       const [vector] = await embedTexts({
         baseUrl: embedding.baseUrl,
         apiKey: embedding.apiKey,
         model: embedding.model,
         inputs: [query === '' ? sessionId : query],
-        timeoutMs: 10_000,
+        timeoutMs: 500,
+        signal: embeddingController.signal,
       })
       queryVector = vector ?? null
     } catch {
-      // embedding 失败不阻塞召回：退化为 FTS + recency。
+      // embedding 失败/超时不阻塞召回：退化为 FTS + recency。
       queryVector = null
+    } finally {
+      clearTimeout(deadline)
     }
   }
 
@@ -178,6 +182,39 @@ export function renderMemoryBlock(memories: Memory[]): string {
       `- [${SCOPE_LABELS[memory.scope] ?? memory.scope}] ${memory.content}`,
   )
   return `[相关记忆 · 自动召回]\n${lines.join('\n')}`
+}
+
+/**
+ * 复合召回查询（§9.5）：当前用户消息 + 最近 3 条用户消息 +
+ * Checkpoint goal/pending + 活动 Plan goal。总长截断 1200 字符——
+ * "继续"/"按刚才说的做"等短消息仍能携带真实任务语义。
+ */
+export function buildCompositeQuery(store: Store, sessionId: string): string {
+  const parts: string[] = []
+  const messages = store.messages
+    .listBySession(sessionId)
+    .filter((message) => message.role === 'user' && message.content !== '')
+  const recentUsers = messages.slice(-3).reverse()
+  if (recentUsers.length > 0) {
+    parts.push(recentUsers[0].content)
+  }
+  for (const older of recentUsers.slice(1)) {
+    parts.push(older.content)
+  }
+  const checkpoint = store.contextCheckpoints.get(sessionId)
+  if (checkpoint !== null) {
+    if (checkpoint.summary.goal !== null) parts.push(checkpoint.summary.goal)
+    parts.push(...checkpoint.summary.pending)
+  }
+  const plan = store.plans
+    .listBySession(sessionId)
+    .find((candidate) => candidate.status === 'active')
+  if (plan !== undefined) {
+    parts.push(plan.goal)
+    const inProgress = plan.steps.find((step) => step.status === 'in_progress')
+    if (inProgress !== undefined) parts.push(inProgress.title)
+  }
+  return parts.join('\n').slice(0, 1200)
 }
 
 /** 便捷入口：召回 + 渲染；异常吞掉返回空串（记忆失败不拦对话）。 */

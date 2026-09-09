@@ -156,7 +156,7 @@ const failedHashes = new Set<string>()
 export async function ensureCheckpoint(
   options: CheckpointOptions,
 ): Promise<CheckpointOutcome> {
-  const { store, sessionId, stableFrames, signal } = options
+  const { sessionId, stableFrames } = options
   const sourceHash = computeSourceHash(stableFrames)
   if (stableFrames.length === 0) {
     return {
@@ -184,8 +184,7 @@ async function runEnsure(
   sourceHash: string,
   flightKey: string,
 ): Promise<CheckpointOutcome> {
-  const { store, sessionId, stableFrames, throughMessageId, provider } =
-    options
+  const { store, sessionId, stableFrames, throughMessageId, provider } = options
   // source hash 变化（retry/supersede/删除/重放差异）→ 旧 Checkpoint 失效。
   const existingRow = store.contextCheckpoints.get(sessionId)
   if (

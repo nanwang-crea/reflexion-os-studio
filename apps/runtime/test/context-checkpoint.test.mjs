@@ -130,12 +130,14 @@ test('summary content change invalidates old checkpoint (hash mismatch)', async 
     }),
   )
   assert.equal(calls.length, 1)
-  assert.equal(fixture.store.contextCheckpoints.get(fixture.session.id) !== null, true)
+  assert.equal(
+    fixture.store.contextCheckpoints.get(fixture.session.id) !== null,
+    true,
+  )
 })
 
 test('summarizer failure caches: same hash does not retry within process', async () => {
   const fixture = freshStore()
-  const { store } = fixture
   let calls = 0
   const make = () =>
     options(fixture, {
@@ -153,7 +155,6 @@ test('summarizer failure caches: same hash does not retry within process', async
 
 test('concurrent ensure with same key single-flights the model call', async () => {
   const fixture = freshStore()
-  const { store } = fixture
   let calls = 0
   const make = () =>
     options(fixture, {

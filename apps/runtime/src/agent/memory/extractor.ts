@@ -20,7 +20,12 @@ const TRANSCRIPT_MAX_CHARS = 12_000
 const KINDS = new Set(['fact', 'preference', 'procedure'])
 
 /**
- * 构建 Run 的提取用对话记录：user/assistant 正文 + 工具调用摘要。
+ * 构建 Run 的提取用对话记录（W6 脱敏版）：
+ * - user/assistant 正文；
+ * - 工具名 + 脱敏参数摘要（长文本/疑似机密折叠）；
+ * - ToolCall 状态与 errorCode；
+ * - 结果以截断摘要进入（不是完整原文）。
+ * 不包含 reasoning、ApprovalGrant、密钥或完整大文件内容。
  * 记录截断到尾部（最近的交互最有价值）。
  */
 export function buildRunTranscript(store: Store, run: Run): string {
@@ -30,8 +35,16 @@ export function buildRunTranscript(store: Store, run: Run): string {
   const toolCallsByMessage = new Map<string, string[]>()
   for (const call of store.toolCalls.listByRun(run.id)) {
     if (call.messageId === null) continue
+    const status =
+      call.status === 'completed'
+        ? 'ok'
+        : call.status === 'failed'
+          ? `error(${call.errorCode ?? 'tool_error'})`
+          : call.status
     const lines = toolCallsByMessage.get(call.messageId) ?? []
-    lines.push(`[工具] ${call.toolName} ${JSON.stringify(call.args ?? {})}`)
+    lines.push(
+      `[工具] ${call.toolName}(${summarizeArgsForTranscript(call.args)}) → ${status} ${summarizeResultForTranscript(call)}`,
+    )
     toolCallsByMessage.set(call.messageId, lines)
   }
   const lines: string[] = []
@@ -54,13 +67,51 @@ export function buildRunTranscript(store: Store, run: Run): string {
     : transcript
 }
 
+/** 工具参数脱敏摘要：只保留短标量键值，长文本/嵌套折叠；疑似机密整体折叠。 */
+function summarizeArgsForTranscript(args: unknown): string {
+  if (typeof args !== 'object' || args === null) return ''
+  const parts: string[] = []
+  for (const [key, value] of Object.entries(args as Record<string, unknown>)) {
+    if (typeof value === 'string') {
+      if (containsSecretLike(value)) {
+        parts.push(`${key}: <redacted>`)
+      } else {
+        parts.push(
+          `${key}: ${value.length > 80 ? `${value.slice(0, 80)}…` : value}`,
+        )
+      }
+    } else if (typeof value === 'number' || typeof value === 'boolean') {
+      parts.push(`${key}: ${value}`)
+    } else {
+      parts.push(`${key}: <${typeof value}>`)
+    }
+  }
+  return parts.join(', ')
+}
+
+/** 工具结果摘要：ok 折叠为短摘要，error 保留错误码；疑似机密折叠。 */
+function summarizeResultForTranscript(call: {
+  status: string
+  result: unknown
+}): string {
+  if (call.status !== 'completed') return ''
+  const text =
+    typeof call.result === 'string'
+      ? call.result
+      : JSON.stringify(call.result ?? '')
+  if (text === '' || text === 'null') return ''
+  const clipped = text.length > 120 ? `${text.slice(0, 120)}…` : text
+  return containsSecretLike(clipped) ? '<redacted>' : clipped
+}
+
 /**
  * 提取候选记忆（一次 LLM 调用）。失败与解析异常由调用方决定降级——
- * 记忆提取永远不能影响主对话。
+ * 记忆提取永远不能影响主对话。signal 支持前台抢占（W6 worker）。
  */
 export async function extractMemoryCandidates(
   transcript: string,
   provider: ProviderRuntimeConfig,
+  signal: AbortSignal = new AbortController().signal,
 ): Promise<MemoryCandidate[]> {
   const userMessage: ModelMessage = {
     role: 'user',
@@ -75,7 +126,7 @@ export async function extractMemoryCandidates(
         { role: 'system', content: MEMORY_EXTRACTOR_SYSTEM_PROMPT },
         userMessage,
       ],
-      signal: new AbortController().signal,
+      signal,
       timeoutMs: 60_000,
     },
     () => {},
