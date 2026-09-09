@@ -387,7 +387,15 @@ export async function streamChatCompletion(
           }
           finish_reason?: string | null
         }[]
-        usage?: { prompt_tokens?: number; completion_tokens?: number }
+        usage?: {
+          prompt_tokens?: number
+          completion_tokens?: number
+          /** OpenAI 规范形状：prompt token 明细（前缀缓存命中数）。 */
+          prompt_tokens_details?: { cached_tokens?: number }
+          /** DeepSeek 形状：缓存命中/未命中 token 顶层字段。 */
+          prompt_cache_hit_tokens?: number
+          prompt_cache_miss_tokens?: number
+        }
       }
       if (payload === '') return
       try {
@@ -434,9 +442,17 @@ export async function streamChatCompletion(
       const mapped = mapFinishReason(rawFinishReason)
       if (mapped) finishReason = mapped
       if (parsed.usage) {
+        // 缓存命中数：OpenAI 规范（prompt_tokens_details.cached_tokens）与
+        // DeepSeek 顶层（prompt_cache_hit_tokens）双形状兜底；都缺失则不带该字段。
+        const cachedTokens =
+          parsed.usage.prompt_cache_hit_tokens ??
+          parsed.usage.prompt_tokens_details?.cached_tokens
         usage = {
           promptTokens: parsed.usage.prompt_tokens ?? 0,
           completionTokens: parsed.usage.completion_tokens ?? 0,
+          ...(typeof cachedTokens === 'number'
+            ? { cachedPromptTokens: cachedTokens }
+            : {}),
         }
       }
     }

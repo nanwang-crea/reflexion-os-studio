@@ -122,6 +122,8 @@ export type RunStatus = z.infer<typeof RunStatusSchema>
 export const UsageSchema = z.object({
   promptTokens: z.number().int().nonnegative(),
   completionTokens: z.number().int().nonnegative(),
+  /** Provider 回传的命中前缀缓存的 prompt token 数；缺省表示端点未报告缓存信息。 */
+  cachedPromptTokens: z.number().int().nonnegative().optional(),
 })
 export type Usage = z.infer<typeof UsageSchema>
 

@@ -77,6 +77,13 @@ const MANAGE_PLAN_DESCRIPTION = `管理当前任务的活动计划及其步骤�
 4. cancel_plan
    在用户明确放弃整个任务时将计划标记为取消。必须提供 planId；可选 summary 或 note。
 
+计划卫生（必读）：
+- 创建前检查：create 之前先在上下文中确认当前没有活动计划；已有活动计划时禁止
+  再 create，应沿用该 planId 推进或收尾。
+- 收尾检查：任务收尾时检查活动计划——必要步骤已全部终态则调用 complete_plan；
+  目标已明显失效（被取代、演示完成等）可调用 cancel_plan 并在 note 说明原因；
+  拿不准计划是否还有用时，先询问用户再决定，不要留一个无人推进的活动计划占位。
+
 状态规则：
 - 计划状态：active → completed 或 cancelled；终止状态不可回退。
 - 步骤状态：pending → in_progress → completed；也可从 pending 或 in_progress 进入

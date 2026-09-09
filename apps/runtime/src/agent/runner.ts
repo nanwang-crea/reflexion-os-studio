@@ -135,9 +135,14 @@ export class RunRunner {
       if (decision.status === 'completed' && decision.enqueueMemoryJob) {
         input.onMemoryJob?.()
       }
-      // 诊断指标（§17.1）：stopReason/轮次/工具数/耗时，单行 stderr。
+      // 诊断指标（§17.1）：stopReason/轮次/工具数/耗时/缓存命中，单行 stderr。
+      const usage = this.store.runs.get(run.id)?.usage
+      const cacheHit =
+        usage?.cachedPromptTokens !== undefined
+          ? ` cacheHitTokens:${usage.cachedPromptTokens}/${usage.promptTokens}`
+          : ''
       process.stderr.write(
-        `[metrics] run:${run.id.slice(0, 8)} stopReason:${decision.errorCode ?? decision.status} modelCallCount:${modelTurnsUsed} toolCallCount:${toolCallsUsed} runElapsedMs:${Date.now() - runStartedAt}\n`,
+        `[metrics] run:${run.id.slice(0, 8)} stopReason:${decision.errorCode ?? decision.status} modelCallCount:${modelTurnsUsed} toolCallCount:${toolCallsUsed} runElapsedMs:${Date.now() - runStartedAt}${cacheHit}\n`,
       )
     }
 
