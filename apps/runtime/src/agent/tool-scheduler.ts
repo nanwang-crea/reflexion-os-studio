@@ -10,6 +10,7 @@ import type { Run } from '@reflexion-os-studio/contracts'
 import type { Store } from '../store/index.js'
 import type { RunEventEmitter } from '../events.js'
 import { parseToolArgs } from './tool-executor.js'
+import { ChildLimitError } from './errors.js'
 import type { ApprovalGateway, PermissionGate } from './permissions.js'
 
 /**
@@ -35,6 +36,20 @@ export interface SchedulerDeps {
     request: ToolCallRequest,
     signal: AbortSignal,
   ) => Promise<ToolResult>
+  /** Loop Guard（W4）：重复 mutation 拦截与无进展指纹；缺省不启用。 */
+  guard?: {
+    admit(request: ToolCallRequest): {
+      verdict: 'allow' | 'block'
+      code?: string
+      message?: string
+    }
+    recordExecution(
+      request: ToolCallRequest,
+      result: ToolResult,
+      mutation: boolean,
+    ): void
+    recordBlocked(request: ToolCallRequest): void
+  }
 }
 
 interface PlannedCall {
@@ -109,6 +124,48 @@ export function planBatches(calls: PlannedCall[]): PlannedCall[][] {
   return batches
 }
 
+/** 单请求包装：Loop Guard admit → 执行 → record；被拦截不执行、返回稳定错误。 */
+async function guardedExecuteOne(
+  deps: SchedulerDeps,
+  planned: PlannedCall,
+  signal: AbortSignal,
+): Promise<ToolResult> {
+  if (deps.guard !== undefined) {
+    const admission = deps.guard.admit(planned.request)
+    if (admission.verdict === 'block') {
+      deps.guard.recordBlocked(planned.request)
+      // no_progress：模型已自纠一次仍重复，Run 立即以稳定错误码收敛，
+      // 不再回传让模型继续。duplicate_side_effect 仍作为工具错误回传
+      // （模型有机会先修改环境再重做）。
+      if (admission.code === 'no_progress') {
+        const limit = new ChildLimitError(
+          'no_progress',
+          admission.message ?? '检测到重复无进展的执行循环，已停止',
+        )
+        throw limit
+      }
+      return {
+        content: admission.message ?? 'loop guard blocked this call',
+        isError: true,
+        code: admission.code ?? 'no_progress',
+      }
+    }
+  }
+  const result = await deps.executeOne(planned.request, signal)
+  if (deps.guard !== undefined) {
+    deps.guard.recordExecution(
+      planned.request,
+      result,
+      isMutation(planned.effect),
+    )
+  }
+  return result
+}
+
+function isMutation(effect: PlannedCall['effect']): boolean {
+  return effect === 'write' || effect === 'shell' || effect === 'state'
+}
+
 /**
  * 批量执行入口：供 AgentLoopOptions.executeToolBatch 注入。
  * 返回结果数组与请求顺序一一对应。
@@ -130,12 +187,12 @@ export async function executeToolBatch(
       }
       if (batch.length === 1) {
         const call = batch[0]
-        results[call.index] = await deps.executeOne(call.request, signal)
+        results[call.index] = await guardedExecuteOne(deps, call, signal)
         continue
       }
       // 只读并行批次：Promise.all 保持请求顺序回填（结果数组按下标归位）。
       const settled = await Promise.all(
-        batch.map((call) => deps.executeOne(call.request, signal)),
+        batch.map((call) => guardedExecuteOne(deps, call, signal)),
       )
       for (let i = 0; i < batch.length; i += 1) {
         results[batch[i].index] = settled[i]

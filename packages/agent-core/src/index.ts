@@ -28,6 +28,7 @@ export {
   requireModelTurnDisposition,
 } from './disposition.js'
 export { runAgentLoop } from './loop.js'
+export { LoopGuard, canonicalJson } from './loop-guard.js'
 export { ToolRegistry } from './registry.js'
 export type {
   AgentLoopOptions,

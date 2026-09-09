@@ -604,6 +604,15 @@ export const AgentSettingsSchema = z.object({
   requestRetries: z.number().int().min(0).max(15).nullable(),
   // Provider 请求超时(秒)。
   requestTimeoutSec: z.number().int().min(10).max(600).nullable(),
+  // —— W4 Run 预算：null 表示使用内置默认，而不是无限制 ——
+  // Run 总时长上限（秒）。
+  maxRunTimeoutSec: z.number().int().min(10).max(7200).nullable(),
+  // Run 累计 token 总量上限（prompt+completion，来自 Provider usage）。
+  maxRunTotalTokens: z.number().int().min(1000).max(10_000_000).nullable(),
+  // Run 全程工具调用次数上限。
+  maxToolCalls: z.number().int().min(1).max(4096).nullable(),
+  // length 续写最大连续轮次。
+  maxContinuationTurns: z.number().int().min(0).max(8).nullable(),
   // 子 Agent 最大委派深度。
   maxDepth: z.number().int().min(1).max(8).nullable(),
   // 单次 Run 最多创建的子 Agent 数量。

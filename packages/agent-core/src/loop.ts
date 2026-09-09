@@ -40,6 +40,8 @@ export async function runAgentLoop(
 ): Promise<AgentLoopOutcome> {
   const { history, signal } = options
   const maxTurns = options.maxTurns ?? DEFAULT_MAX_TURNS
+  const maxContinuationTurns =
+    options.maxContinuationTurns ?? DEFAULT_MAX_CONTINUATION_TURNS
   const reflectionThreshold =
     options.reflectionThreshold ?? DEFAULT_REFLECTION_THRESHOLD
   const messages: ModelMessage[] = [...history]
@@ -81,7 +83,7 @@ export async function runAgentLoop(
     }
 
     if (disposition.kind === 'truncated') {
-      if (continuationTurns >= DEFAULT_MAX_CONTINUATION_TURNS) {
+      if (continuationTurns >= maxContinuationTurns) {
         return {
           status: 'stopped',
           turns,
@@ -116,8 +118,8 @@ export async function runAgentLoop(
       toolCalls: turn.toolCalls,
     })
 
-    // 批量执行：Runtime 注入的副作用调度器负责并行/串行批次与顺序回填，
-    // 结果数组与 toolCalls 一一对应，保证 role=tool 消息与 tool_calls 稳定配对。
+    // 批量执行：Runtime 注入的副作用调度器负责并行/串行批次、顺序回填与
+    // Loop Guard 拦截；结果数组与 toolCalls 一一对应。
     const results = await options.executeToolBatch(
       turn.toolCalls.map((call) => ({
         id: call.id,

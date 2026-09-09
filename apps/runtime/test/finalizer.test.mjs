@@ -273,7 +273,7 @@ test('max turns stops with stable max_turns code through the finalizer', async (
     model: 'model',
   })
   // 每轮都请求工具（get_current_time 自动放行，未知工具会卡审批）：触发 max_turns。
-  // tool call id 每轮唯一（与真实 Provider 一致；全局重复会被序列校验拒绝）。
+  // 参数每轮唯一（避免 Loop Guard 先以 no_progress 拦截），id 也每轮唯一。
   let callSeq = 0
   const server = await startServer((_req, res) => {
     callSeq += 1
@@ -287,7 +287,10 @@ test('max turns stops with stable max_turns code through the finalizer', async (
                 {
                   index: 0,
                   id: `c${callSeq}`,
-                  function: { name: 'get_current_time', arguments: '{}' },
+                  function: {
+                    name: 'get_current_time',
+                    arguments: JSON.stringify({ n: callSeq }),
+                  },
                 },
               ],
             },
@@ -543,4 +546,56 @@ test('cancelled run converges its active plan to cancelled and draft to interrup
     'interrupted',
   )
   assert.equal(cancels, 1)
+})
+
+test('no-progress loop stops before the third identical call with stable code', async () => {
+  const store = freshStore()
+  const session = store.sessions.create(
+    store.projects.create({ name: 'p', folderPath: '/w' }).id,
+  )
+  const run = store.runs.create({
+    sessionId: session.id,
+    providerId: 'provider',
+    model: 'model',
+  })
+  // 每轮返回完全相同的 grep 调用（相同 id 会违反 call id 全局唯一——
+  // 用不同 id + 相同参数，指纹只看 name+args）。
+  let callSeq = 0
+  const server = await startServer((_req, res) => {
+    callSeq += 1
+    res.writeHead(200, { 'content-type': 'text/event-stream' })
+    res.end(
+      sseChunk({
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: `g${callSeq}`,
+                  function: {
+                    name: 'get_current_time',
+                    arguments: '{"fixed":"same"}',
+                  },
+                },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+      }) + 'data: [DONE]\n\n',
+    )
+  })
+  try {
+    await new RunRunner(store).execute(
+      baseInput(store, run, {
+        port: server.address().port,
+        settings: { maxTurns: 8 },
+      }),
+    )
+  } finally {
+    server.close()
+  }
+  assert.equal(store.runs.get(run.id).status, 'failed')
+  assert.equal(store.runs.get(run.id).errorCode, 'no_progress')
 })

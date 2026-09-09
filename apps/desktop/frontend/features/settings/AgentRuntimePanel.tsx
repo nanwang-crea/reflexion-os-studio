@@ -32,6 +32,30 @@ const FIELDS: {
     placeholder: '120（默认）',
     hint: '单次 Provider 请求超时；流式输出期间也受此约束。',
   },
+  {
+    key: 'maxRunTimeoutSec',
+    label: 'Run 总时长上限（秒）',
+    placeholder: '900（默认）',
+    hint: '一次回复的总时长上限；到点如实失败（run_timeout），不假装完成。',
+  },
+  {
+    key: 'maxRunTotalTokens',
+    label: 'Run token 总预算',
+    placeholder: '120000（默认）',
+    hint: '各模型轮累计（输入+输出）token 上限；按 Provider 返回的 usage 计。',
+  },
+  {
+    key: 'maxToolCalls',
+    label: '工具调用次数上限',
+    placeholder: '64（默认）',
+    hint: '一次回复最多执行多少次工具调用；超限以稳定错误码失败。',
+  },
+  {
+    key: 'maxContinuationTurns',
+    label: '续写轮次上限',
+    placeholder: '2（默认）',
+    hint: '输出被截断（length）时自动续写的最大连续轮次；耗尽如实失败。',
+  },
 ]
 
 /** 字段分组：每个小组独立小标题 + 分隔线，改善视觉密度。 */
@@ -44,7 +68,14 @@ const GROUPS: {
   {
     id: 'loop',
     title: '循环',
-    keys: ['maxTurns', 'reflectionThreshold'],
+    keys: [
+      'maxTurns',
+      'reflectionThreshold',
+      'maxRunTimeoutSec',
+      'maxRunTotalTokens',
+      'maxToolCalls',
+      'maxContinuationTurns',
+    ],
   },
   {
     id: 'network',
@@ -103,6 +134,10 @@ export function AgentRuntimePanel(): React.JSX.Element {
         reflectionThreshold: parseNumber(draft.reflectionThreshold),
         requestRetries: parseNumber(draft.requestRetries),
         requestTimeoutSec: parseNumber(draft.requestTimeoutSec),
+        maxRunTimeoutSec: parseNumber(draft.maxRunTimeoutSec),
+        maxRunTotalTokens: parseNumber(draft.maxRunTotalTokens),
+        maxToolCalls: parseNumber(draft.maxToolCalls),
+        maxContinuationTurns: parseNumber(draft.maxContinuationTurns),
         maxDepth: parseNumber(draft.maxDepth),
         maxChildRuns: parseNumber(draft.maxChildRuns),
         maxParallelChildren: parseNumber(draft.maxParallelChildren),

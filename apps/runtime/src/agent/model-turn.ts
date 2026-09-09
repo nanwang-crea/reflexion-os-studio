@@ -27,6 +27,8 @@ export interface ModelTurnInput {
   firstAssistantMessage: Message
   /** 子 Run 单次累计输出 token 预算；超出以 child_token_budget 稳定错误码中止。 */
   childTokenBudget?: number
+  /** Run 累计 token 总量预算（W4）；超出以 run_token_budget 中止。 */
+  runTotalTokenBudget?: number
 }
 
 export interface ModelTurnOutcome {
@@ -216,6 +218,21 @@ export async function executeModelTurn(
     precreateToolCalls(store, state, run, emitter, result.toolCalls)
   }
   state.turn = null
+  // Run 累计 token 预算（Provider usage 累计；W4）：以稳定错误码中止。
+  if (input.runTotalTokenBudget != null) {
+    const current = store.runs.get(run.id)
+    const total =
+      (current?.usage?.promptTokens ?? 0) +
+      (current?.usage?.completionTokens ?? 0)
+    if (total > input.runTotalTokenBudget) {
+      const limit = new ChildLimitError(
+        'run_token_budget',
+        `Run 累计 token 超过预算 ${input.runTotalTokenBudget}`,
+      )
+      input.controller.abort(limit)
+      throw new DOMException('run token budget exceeded', 'AbortError')
+    }
+  }
   // 子 Run token 预算：累计输出超限以稳定错误码中止(而非父取消)。
   // 放在 turn 置空之后，避免把已完成轮次误标为 failed。
   if (input.childTokenBudget != null) {

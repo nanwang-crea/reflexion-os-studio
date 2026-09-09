@@ -7,6 +7,10 @@ export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   reflectionThreshold: null,
   requestRetries: null,
   requestTimeoutSec: null,
+  maxRunTimeoutSec: null,
+  maxRunTotalTokens: null,
+  maxToolCalls: null,
+  maxContinuationTurns: null,
   maxDepth: 1,
   maxChildRuns: 4,
   maxParallelChildren: 2,
@@ -63,6 +67,20 @@ export class AgentSettingsStore {
         requestTimeoutSec:
           typeof parsed.requestTimeoutSec === 'number'
             ? parsed.requestTimeoutSec
+            : null,
+        maxRunTimeoutSec:
+          typeof parsed.maxRunTimeoutSec === 'number'
+            ? parsed.maxRunTimeoutSec
+            : null,
+        maxRunTotalTokens:
+          typeof parsed.maxRunTotalTokens === 'number'
+            ? parsed.maxRunTotalTokens
+            : null,
+        maxToolCalls:
+          typeof parsed.maxToolCalls === 'number' ? parsed.maxToolCalls : null,
+        maxContinuationTurns:
+          typeof parsed.maxContinuationTurns === 'number'
+            ? parsed.maxContinuationTurns
             : null,
         // 治理极限优先安全：旧数据/缺失时回退到内置保守默认，绝不落入"不限制"。
         maxDepth:
