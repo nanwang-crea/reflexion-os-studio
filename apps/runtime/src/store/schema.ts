@@ -223,7 +223,32 @@ CREATE TABLE IF NOT EXISTS assets (
   metadata_json TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS context_checkpoints (
+  session_id TEXT PRIMARY KEY
+    REFERENCES sessions(id) ON DELETE CASCADE,
+  through_message_id TEXT
+    REFERENCES messages(id) ON DELETE SET NULL,
+  source_hash TEXT NOT NULL,
+  summary_json TEXT NOT NULL,
+  token_estimate INTEGER NOT NULL,
+  model TEXT NOT NULL,
+  schema_version INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS memory_jobs (
+  run_id TEXT PRIMARY KEY
+    REFERENCES runs(id) ON DELETE CASCADE,
+  status TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at TEXT,
+  last_error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_memory_jobs_status
+  ON memory_jobs(status, next_attempt_at, created_at);
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 19
+export const LATEST_SCHEMA_VERSION = 20

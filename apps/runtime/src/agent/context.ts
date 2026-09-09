@@ -15,8 +15,49 @@ import { buildMemoryBlock } from './memory/recall.js'
 import { HISTORY_COMPACTOR_SYSTEM_PROMPT } from './prompts/index.js'
 import {
   framesToValidatedMessages,
-  reconstructSessionFrames,
+  reconstructSessionFramesWithIds,
 } from './context-frames.js'
+import {
+  ensureCheckpoint,
+  summarizeCheckpointFrames,
+  type ContextCheckpointSummary,
+} from './context-checkpoint.js'
+
+/** Checkpoint 摘要是否有可用内容（全空则退回全文摘要路径）。 */
+function checkpointSummaryHasContent(
+  summary: ContextCheckpointSummary,
+): boolean {
+  return (
+    summary.goal !== null ||
+    summary.completed.length > 0 ||
+    summary.pending.length > 0 ||
+    summary.decisions.length > 0 ||
+    summary.toolFacts.length > 0
+  )
+}
+
+/** Checkpoint 注入块：稳定顺序的结构化上下文（§6.4 第 3 项）。 */
+function formatCheckpointBlock(summary: ContextCheckpointSummary): string {
+  const lines: string[] = ['[上下文摘要]']
+  if (summary.goal !== null) lines.push(`目标：${summary.goal}`)
+  if (summary.constraints.length > 0)
+    lines.push(`约束：\n${summary.constraints.map((c) => `- ${c}`).join('\n')}`)
+  if (summary.decisions.length > 0)
+    lines.push(`已定：\n${summary.decisions.map((c) => `- ${c}`).join('\n')}`)
+  if (summary.completed.length > 0)
+    lines.push(`已完成：\n${summary.completed.map((c) => `- ${c}`).join('\n')}`)
+  if (summary.pending.length > 0)
+    lines.push(`待办：\n${summary.pending.map((c) => `- ${c}`).join('\n')}`)
+  if (summary.toolFacts.length > 0)
+    lines.push(
+      `工具事实：\n${summary.toolFacts.map((c) => `- ${c}`).join('\n')}`,
+    )
+  if (summary.knownErrors.length > 0)
+    lines.push(
+      `已知错误：\n${summary.knownErrors.map((c) => `- ${c}`).join('\n')}`,
+    )
+  return lines.join('\n')
+}
 
 /**
  * 上下文预算上限（token 数）：超过即触发摘要压缩。
@@ -138,9 +179,10 @@ export class ContextBuilder {
   constructor(private readonly store: Store) {}
 
   /**
-   * 从 canonical 存储重建 Frame 历史（system + 记忆块 → 摘要 → 最近 Frame），
-   * 超出预算时用压缩 prompt 做一次静默摘要调用；摘要失败则退化为 Frame 裁剪，
-   * 不阻塞对话。本地数据损坏（FrameError）直接失败为 internal，不降级。
+   * 从 canonical 存储重建 Frame 历史（system + 记忆块 → Checkpoint → 最近
+   * Frame）。超预算时走增量 Checkpoint（相同来源 hash 只摘要一次）；Checkpoint
+   * 失败退化为全文摘要压缩，再失败走确定性 Frame 裁剪，不阻塞对话。
+   * 本地数据损坏（FrameError）直接失败为 internal，不降级。
    */
   async build(
     sessionId: string,
@@ -154,31 +196,70 @@ export class ContextBuilder {
     )
     const effectiveSystem =
       memoryBlock === '' ? systemPrompt : `${systemPrompt}\n\n${memoryBlock}`
-    const frames = reconstructSessionFrames(
+    const { frames, messageIds } = reconstructSessionFramesWithIds(
       this.store,
       sessionId,
       effectiveSystem,
     )
     const budget = contextBudgetFor(provider)
+    if (estimateFrameTokens(frames) <= budget) {
+      return framesToValidatedMessages(frames)
+    }
+    // 超预算：切分稳定/最近窗口（Frame 边界，工具轮不拆）。
+    const head = frames[0]?.kind === 'system' ? 1 : 0
+    const body = frames.slice(head)
+    const bodyIds = messageIds.slice(head)
+    const keep = Math.min(KEEP_RECENT_FRAMES, body.length)
+    const stable = body.slice(0, body.length - keep)
+    const stableIds = bodyIds.slice(0, stable.length)
+    const recent = body.slice(body.length - keep)
+    const throughMessageId =
+      [...stableIds].reverse().find((id) => id !== null) ?? null
     try {
+      const checkpoint = await ensureCheckpoint({
+        store: this.store,
+        sessionId,
+        provider,
+        summarize: (input) => summarizeCheckpointFrames(provider, input),
+        stableFrames: stable,
+        stableIds,
+        throughMessageId,
+        signal,
+      })
+      if (
+        !checkpoint.failed &&
+        checkpointSummaryHasContent(checkpoint.summary)
+      ) {
+        const assembled: ContextFrame[] = [
+          ...(head === 1 ? [frames[0]] : []),
+          {
+            kind: 'user',
+            content: formatCheckpointBlock(checkpoint.summary),
+          },
+          ...recent,
+        ]
+        return framesToValidatedMessages(
+          boundFramesForModel(assembled, budget, KEEP_RECENT_FRAMES),
+        )
+      }
+      throw new Error('checkpoint unavailable')
+    } catch (error) {
+      if (error instanceof FrameError) throw error
+      if (error instanceof Error && error.name === 'AbortError') throw error
+      // Checkpoint 失败（网络/Provider 异常）不拦任务：退化为全文摘要压缩。
+      process.stderr.write(
+        `[runtime] checkpoint compaction failed, falling back to legacy compaction: ${String(error)}\n`,
+      )
+      const { compactFrames } = await import('@reflexion-os-studio/agent-core')
       const { frames: compacted } = await compactFrames({
         frames,
         budgetTokens: budget,
         keepRecentFrames: KEEP_RECENT_FRAMES,
-        summarize: (stable) => summarizeFrames(provider, stable, signal),
+        summarize: (stablePart) =>
+          summarizeFrames(provider, stablePart, signal),
       })
       return framesToValidatedMessages(
         boundFramesForModel(compacted, budget, KEEP_RECENT_FRAMES),
-      )
-    } catch (error) {
-      if (error instanceof FrameError) throw error
-      if (error instanceof Error && error.name === 'AbortError') throw error
-      // 摘要失败（网络/Provider 异常）不拦任务：退化为确定性 Frame 裁剪。
-      process.stderr.write(
-        `[runtime] context compaction failed, falling back to frame trimming: ${String(error)}\n`,
-      )
-      return framesToValidatedMessages(
-        boundFramesForModel(frames, budget, KEEP_RECENT_FRAMES),
       )
     }
   }
@@ -187,7 +268,8 @@ export class ContextBuilder {
   estimate(sessionId: string, systemPrompt: string): number {
     return estimateMessageTokens(
       framesToMessages(
-        reconstructSessionFrames(this.store, sessionId, systemPrompt),
+        reconstructSessionFramesWithIds(this.store, sessionId, systemPrompt)
+          .frames,
       ),
     )
   }

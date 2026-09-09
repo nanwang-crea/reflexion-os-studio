@@ -19,12 +19,17 @@ import { capToolResultForModel } from './toolResults.js'
 /** 参与有效历史的 assistant 消息状态。 */
 const VALID_ASSISTANT_STATUSES = new Set(['completed', 'failed', 'interrupted'])
 
-export function reconstructSessionFrames(
+/**
+ * 重建 Frame 并行携带来源消息 id（watermark 用）：
+ * system 帧为 null；user/assistant 文本帧为消息 id；工具轮为 assistant 消息 id。
+ */
+export function reconstructSessionFramesWithIds(
   store: Store,
   sessionId: string,
   systemPrompt: string,
-): ContextFrame[] {
+): { frames: ContextFrame[]; messageIds: (string | null)[] } {
   const frames: ContextFrame[] = [{ kind: 'system', content: systemPrompt }]
+  const messageIds: (string | null)[] = [null]
   for (const message of store.messages.listBySession(sessionId)) {
     if (message.role === 'system') continue
     const text = message.parts
@@ -32,7 +37,10 @@ export function reconstructSessionFrames(
       .map((part) => part.text)
       .join('')
     if (message.role === 'user') {
-      if (text !== '') frames.push({ kind: 'user', content: text })
+      if (text !== '') {
+        frames.push({ kind: 'user', content: text })
+        messageIds.push(message.id)
+      }
       continue
     }
     if (
@@ -46,6 +54,7 @@ export function reconstructSessionFrames(
       // 非完成的纯文本 assistant（interrupted/failed）不回放正文。
       if (message.status !== 'completed' || text === '') continue
       frames.push({ kind: 'assistant_text', content: text })
+      messageIds.push(message.id)
       continue
     }
     // 工具轮次：assistant.toolCalls 与全部 results 一次生成（不可拆分）。
@@ -64,8 +73,17 @@ export function reconstructSessionFrames(
         isError: row.status !== 'completed',
       })),
     })
+    messageIds.push(message.id)
   }
-  return frames
+  return { frames, messageIds }
+}
+
+export function reconstructSessionFrames(
+  store: Store,
+  sessionId: string,
+  systemPrompt: string,
+): ContextFrame[] {
+  return reconstructSessionFramesWithIds(store, sessionId, systemPrompt).frames
 }
 
 /** framesToMessages + 序列校验：损坏数据在发 Provider 前失败。 */

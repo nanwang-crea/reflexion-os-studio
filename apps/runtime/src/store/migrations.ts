@@ -273,6 +273,9 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
         'CREATE INDEX IF NOT EXISTS idx_runs_superseded_by ON runs(superseded_by_run_id)',
       )
     }
+    // v20: context_checkpoints / memory_jobs 为加法迁移，全新表由 SCHEMA
+    // 创建，升级只推进版本号；不回填历史 Checkpoint，也不为历史 Run
+    // 自动创建 Memory Job。
     db.exec('COMMIT')
     // 迁移全部执行完毕才推进版本号；否则下次启动会重复进入迁移分支。
     version = LATEST_SCHEMA_VERSION

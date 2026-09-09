@@ -658,3 +658,21 @@ export const McpToolSchema = z.object({
   inputSchema: JsonValueSchema,
 })
 export type McpTool = z.infer<typeof McpToolSchema>
+
+/**
+ * Context Checkpoint 结构化摘要（Context Engine V2）：
+ * 每项限制长度与数量，不允许承载 API Key/cookie/token 等凭据或大段工具输出。
+ * canonical 历史仍是事实源；Checkpoint 是可失效、可重建的派生缓存。
+ */
+export const ContextCheckpointSummarySchema = z.object({
+  goal: z.string().max(500).nullable(),
+  constraints: z.array(z.string().max(300)).max(8),
+  decisions: z.array(z.string().max(300)).max(12),
+  completed: z.array(z.string().max(300)).max(12),
+  pending: z.array(z.string().max(300)).max(12),
+  toolFacts: z.array(z.string().max(300)).max(12),
+  knownErrors: z.array(z.string().max(300)).max(8),
+})
+export type ContextCheckpointSummary = z.infer<
+  typeof ContextCheckpointSummarySchema
+>
