@@ -39,11 +39,14 @@ Rust File/Shell Service、Workspace 边界、read-only/workspace Profile、Chat 
 
 Agent Registry、Worker/Research/Coding/Review Agent、顺序/并行/层级委派、Context 隔离、结构化结果聚合、预算和恢复。
 
+> 设计延伸：「自然语言生成结构化节点（每个节点作为一个 Agent）」的契约、生成管线、存储
+> 与分步安排见 `docs/NL-TO-STRUCTURE.md`（草案，待评审）；其 S1–S3 随本阶段落地。
+
 > 阶段隔离现状：delegation 表与查询命令保留用于历史诊断；`delegation.create/update/attach_child_run` 写命令返回 unsupported；`enableChildRuns` 在 Store 读取层强制 false（旧数据也为 false），Primary Agent 不注册 task 工具；设置页隐藏子 Agent 委派分组。正式启用须先完成本阶段设计评审并更新路线图，不得靠设置开关绕过。
 
 ## Phase 4：Workflow Engine（未开始）
 
-Node SDK、Workflow Definition、DAG 校验、调度、checkpoint、React Flow 画布以及 Asset/File/Document/Browser 节点。
+Node SDK、Workflow Definition、DAG 校验、调度、checkpoint、React Flow 画布以及 Asset/File/Document/Browser 节点。NL 生成结构化定义（节点/Agent 的自然语言生成）按 `docs/NL-TO-STRUCTURE.md` 的 S4–S6 随本阶段落地。
 
 ## Phase 5：Multimodal Workflow（未开始）
 

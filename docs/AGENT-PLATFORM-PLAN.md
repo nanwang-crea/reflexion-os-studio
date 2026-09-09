@@ -2,7 +2,8 @@
 
 > 草案，待评审。本文编排 ROADMAP Phase 1A-2 → Phase 6 中"Agent 主线"的实施顺序与关键决策；
 > 领域设计仍以 `AGENT-MODEL.md`、`MEMORY-SYSTEM.md`、`SKILL-SYSTEM.md`、`MULTI-AGENT.md`、
-> `CONTEXT-MANAGEMENT.md`、`DELEGATION-AND-POLICY.md`、`PERMISSION-MODEL.md` 为准，本文不重复其内容，
+> `CONTEXT-MANAGEMENT.md`、`DELEGATION-AND-POLICY.md`、`PERMISSION-MODEL.md`、
+> `NL-TO-STRUCTURE.md` 为准，本文不重复其内容，
 > 只补"实施顺序、契约缺口和待决策项"。
 
 ## 1. 现状与差距
