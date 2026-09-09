@@ -174,6 +174,18 @@ export async function compactInRun(
   }
 }
 
+/** 诊断指标（§17.1）：单行 JSON 写 stderr；hash 只记录短前缀，不含正文。 */
+function emitContextMetrics(
+  sessionId: string,
+  metrics: Record<string, unknown>,
+): void {
+  const payload: string[] = [`sessionId:${sessionId.slice(0, 8)}`]
+  for (const [key, value] of Object.entries(metrics)) {
+    if (value !== undefined) payload.push(`${key}:${String(value)}`)
+  }
+  process.stderr.write(`[metrics] ${payload.join(' ')}\n`)
+}
+
 /** 会话历史的重建与压缩；Run 启动时由 runner 调用一次。 */
 export class ContextBuilder {
   constructor(private readonly store: Store) {}
@@ -190,6 +202,7 @@ export class ContextBuilder {
     provider: ProviderRuntimeConfig,
     signal: AbortSignal,
   ): Promise<ModelMessage[]> {
+    const buildStartedAt = Date.now()
     // A2 Memory 召回：失败/为空都不影响对话，只是没有记忆块。
     const memoryBlock = await buildMemoryBlock(this.store, sessionId).catch(
       () => '',
@@ -202,7 +215,13 @@ export class ContextBuilder {
       effectiveSystem,
     )
     const budget = contextBudgetFor(provider)
+    const metrics: Record<string, unknown> = {}
     if (estimateFrameTokens(frames) <= budget) {
+      emitContextMetrics(sessionId, {
+        contextBuildMs: Date.now() - buildStartedAt,
+        checkpointHit: false,
+        compactionCalls: 0,
+      })
       return framesToValidatedMessages(frames)
     }
     // 超预算：切分稳定/最近窗口（Frame 边界，工具轮不拆）。
@@ -226,6 +245,9 @@ export class ContextBuilder {
         throughMessageId,
         signal,
       })
+      metrics.checkpointHit = checkpoint.hit
+      metrics.checkpointSourceHash = checkpoint.sourceHash.slice(0, 8)
+      metrics.compactionCalls = checkpoint.summarized ? 1 : 0
       if (
         !checkpoint.failed &&
         checkpointSummaryHasContent(checkpoint.summary)
@@ -238,9 +260,14 @@ export class ContextBuilder {
           },
           ...recent,
         ]
-        return framesToValidatedMessages(
+        const messages = framesToValidatedMessages(
           boundFramesForModel(assembled, budget, KEEP_RECENT_FRAMES),
         )
+        emitContextMetrics(sessionId, {
+          ...metrics,
+          contextBuildMs: Date.now() - buildStartedAt,
+        })
+        return messages
       }
       throw new Error('checkpoint unavailable')
     } catch (error) {
@@ -258,9 +285,15 @@ export class ContextBuilder {
         summarize: (stablePart) =>
           summarizeFrames(provider, stablePart, signal),
       })
-      return framesToValidatedMessages(
+      const messages = framesToValidatedMessages(
         boundFramesForModel(compacted, budget, KEEP_RECENT_FRAMES),
       )
+      emitContextMetrics(sessionId, {
+        ...metrics,
+        contextBuildMs: Date.now() - buildStartedAt,
+        compactionCalls: ((metrics.compactionCalls as number) ?? 0) + 1,
+      })
+      return messages
     }
   }
 

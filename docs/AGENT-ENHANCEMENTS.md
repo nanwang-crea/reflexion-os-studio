@@ -6,11 +6,11 @@
 
 ## 状态总览
 
-| 进度           | 当前                                                                                                                                                      |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ✅ done        | #1 并行工具调用、#2 上下文窗口动态感知(含模型窗口元数据)、#3 失败反思、#4 自动重试、#5 验证-修复循环、#6 Plan/Execute(技能级)、#7 usage 展示、#9 模型参数 |
-| 🔨 in-progress | 无                                                                                                                                                        |
-| ⬜ pending     | #8(暂缓,见条目)、#10(Phase 2 排期)、#11/#12(阶段边界)                                                                                                     |
+| 进度           | 当前                                                                                                                                                                                                                                                                                                                                                                           |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ✅ done        | #1 并行工具调用（W3 升级为副作用感知调度）、#2 上下文窗口动态感知（W5 升级为增量 Checkpoint）、#3 失败反思（W4 Loop Guard 保留反思 + 无进展拦截）、#4 自动重试、#5 验证-修复循环、#6 Plan/Execute(技能级)、#7 usage 展示、#9 模型参数、#13 完成状态机与 Atomic Finalizer、#14 Atomic Frames 与序列校验、#15 Loop Guard 与 Run 预算、#16 增量 Checkpoint、#17 持久化 Memory Job |
+| 🔨 in-progress | 无                                                                                                                                                                                                                                                                                                                                                                             |
+| ⬜ pending     | #8(暂缓,见条目)、#10(Phase 2 排期)、#11/#12(阶段边界)                                                                                                                                                                                                                                                                                                                          |
 
 ## 条目
 
@@ -102,3 +102,14 @@
 - 2026-08-31:新增发送队列——会话忙碌时 message.send 自动入队(FIFO),当前回复结束自动泵出;排队项支持修改(`queue.update`,斜杠技能重解析)/删除(`queue.remove`)/立即发送(`queue.send_now`,移队首);`queue.changed` 事件驱动 UI 队列区(展示/编辑/删除/立即发送),队列存内存、重启即弃(排队窗口短)。
 
 - 2026-08-31:MCP 接入完成(见 #10)——协议 client、管理服务、工具桥(默认 ask 审批)、设置页面板、mock server 测试(runtime 65/65)。
+
+## Agent Loop Hardening 与 Context Engine V2（2026-09 批次）
+
+对应方案《Agent Loop Hardening 与 Context Engine V2 实施方案》W0–W7，按工作包独立提交：
+
+- **#13 完成状态机与 Atomic Finalizer ✅**：finish reason 严格校验（缺失/未知/不一致 → `provider_protocol`，不再默认 stop 假成功）；`AgentLoopOutcome` 改判别联合（completed/stopped+稳定 `AgentStopReason`）；`length` 默认 2 轮续写（runtime control 帧不落库）；contracts 新增 8 个稳定错误码；`run-finalizer.ts` 为全部终态唯一生产入口（单事务收尾 pending 消息/未终态 ToolCall/活动 Plan/Run 终态/失败事件/memory job 幂等入队，回调 settled 最多一次）；`max_turns` 不再映射为笼统 `internal`。
+- **#14 Atomic Frames 与序列校验 ✅**：`ToolRoundFrame` 把 assistant tool calls 与全部 results 绑定不可拆分；压缩/窗口/裁剪全部按 Frame；`validateModelMessages` 请求前强制校验；损坏数据（FrameError）失败为 internal 不发 Provider；DB 重建覆盖 failed/interrupted 轮并给 cancelled/failed ToolCall 生成 error result。旧"按消息数量切割"路径删除。
+- **#15 副作用调度与 Loop Guard ✅**：`ToolExecutionPolicy`（pure/read/write/shell/state + resourceKeys）不进 ToolSpec；相邻纯读并行成批、mutation 独占串行批、结果按声明顺序回填；ToolCall 批量预建（模型轮事务内，崩溃可审计）；Loop Guard 指纹（canonicalJson + freshness epoch）、相同只读指纹第三次拦截 `no_progress`、成功 mutation 重放拦截 `duplicate_side_effect`；Run 预算四项（900s/120k tokens/64 工具/2 续写）可配置。
+- **#16 增量 Checkpoint ✅**：v20 `context_checkpoints`；source hash 命中复用、watermark 增量切片（旧摘要+新增帧一次调用）、single-flight、失败缓存；结构化摘要（zod + secret 过滤）；同 source hash 摘要调用严格 ≤1。
+- **#17 持久化 Memory Job ✅**：`memory_jobs` 表 + 单 worker（空闲消费、前台抢占、重启恢复、3 次退避 5s/30s/5min）；成功 Run 终态事务幂等入队；transcript 脱敏（参数摘要、`<redacted>`、状态/errorCode）；复合召回 query（用户消息×3 + Checkpoint goal/pending + Plan）；embedding 500ms deadline 降级。
+- **Phase 3 隔离 ✅（W0）**：`delegation.create/update/attach_child_run` 返回 unsupported；`enableChildRuns` 读取层强制 false；Primary Agent 不注册 task；设置页隐藏委派分组。

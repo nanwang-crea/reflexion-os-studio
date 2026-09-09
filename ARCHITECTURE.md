@@ -108,3 +108,7 @@ Agent、Memory、Skill、Context 和 Delegation/Policy 是一等领域，分别�
 ## 11. 架构验收标准
 
 任何新能力都必须能说明：所属层、输入输出 schema、权限、事件、取消/重试语义、持久化边界和测试方式。核心模块超过约 300–500 行时应重新审视职责切分。详细协议见 `docs/`。
+
+## 12. Agent Loop 内核与终态收敛（2026-09）
+
+`packages/agent-core` 是纯 TypeScript 循环内核（不依赖 SQLite/Provider/Tauri）：完成状态机（finish reason × toolCalls 判定，protocol_error 不得假成功）、length 限次续写、Atomic Context Frames（工具轮不可拆）、请求前序列校验与 Loop Guard 指纹属于内核；持久化、副作用调度、资源冲突、预算执行和事件通知由 Runtime 承担。全部 Run 终态经唯一入口 `run-finalizer.ts` 在单事务内收敛（pending 消息、未终态 ToolCall、活动 Plan、Run 终态、失败事件、memory job 幂等入队），回调最多执行一次。Context 压缩走增量 Checkpoint（`context_checkpoints`，source hash 失效）+ 最近 Frame 保留；Memory 写入走持久化 `memory_jobs`（空闲 worker、可抢占、可恢复）。详见 `docs/CONTEXT-MANAGEMENT.md` 与 `docs/RELIABILITY-AND-RECOVERY.md`。

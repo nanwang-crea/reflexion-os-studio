@@ -31,7 +31,8 @@ Rust File/Shell Service、Workspace 边界、read-only/workspace Profile、Chat 
 
 ## Phase 2：Agent Platform（进行中）
 
-- **已完成子集**：Skills（内置技能注册表、斜杠激活、skill.use）、Memory（提取 → 合并 → 落库 → 召回注入、记忆管理页）、MCP（stdio 协议 client、管理服务、工具桥默认 ask 审批、设置页面板）。
+- **已完成子集**：Skills（内置技能注册表、斜杠激活、skill.use）、Memory（持久化 memory_jobs 管线：终态入队 → 空闲 worker → 提取/合并 → 落库 → 复合召回注入；提取 transcript 脱敏）、MCP（stdio 协议 client、管理服务、工具桥默认 ask 审批、设置页面板）。
+- **已完成（2026-09，Agent Loop Hardening 与 Context Engine V2）**：完成状态机（只有 stop 且无工具才算完成；length 限次续写；provider_protocol 如实失败）、Atomic Run Finalizer（单事务终态收敛）、Atomic Frames 与请求前校验、副作用感知调度（read 并行/mutation 串行/ToolCall 批量预建）、Loop Guard（重复/无进展拦截）、Run 预算（时长/token/工具数/续写）、增量 Context Checkpoint（source hash/single-flight）、AgentSettings 新预算字段与设置页循环分组。
 - **待完成**：Provider/Tool Plugins、Browser Tool、user 级记忆写入确认流程、更完整的资产检索。
 
 ## Phase 3：Multi-Agent Orchestration（未开始）

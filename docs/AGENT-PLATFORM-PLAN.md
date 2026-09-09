@@ -91,14 +91,15 @@ errorCode / grantId`；Run 增加 `agentId / parentRunId / delegationId`（兑�
   - `ToolRegistry`：工具以 JSON Schema 声明 + 注册表统一执行；未知工具/非法参数折叠为
     isError 结果回传模型自纠（unsupported / invalid_request / tool_error），
     不打断 Run；TS 工具与 Rust 工具同一接口。
-  - `compactMessages`：长会话压缩（见下）。
-- **长会话压缩（本轮已落地）**：Run 启动时从 canonical 存储重建历史（含工具方言），
-  超出 token 预算（CJK≈1 token/字，其余 4 字符 1 token 估算）时把保留窗口之外的旧消息
-  交给压缩 prompt 做一次摘要调用，摘要以"[历史摘要]"user 消息接在 system 后；
-  摘要失败退化为截断，不阻塞对话。压缩只在 Run 启动时发生，Run 内不再重算；
-  跨 Run 的摘要缓存与按模型 contextWindow 动态预算属 A2/Memory。
+- **长会话压缩（2026-09 升级，见 docs/CONTEXT-MANAGEMENT.md）**：压缩按 Atomic
+  Context Frames 进行（工具轮不可拆）；超预算走增量 Context Checkpoint
+  （source hash 命中复用、watermark 增量切片、single-flight、失败缓存），
+  同 source hash 摘要调用严格不超过一次；Checkpoint 失败退化为全文摘要压缩，
+  再退化确定性 Frame 裁剪，不阻塞对话。旧"Run 内不再重算/按消息数量切割"
+  的描述已失效。
 - **Prompt 管理（本轮已落地）**：`agent/prompts/` 一个 prompt 一个文件
-  （primary-agent / compactor），新增 Agent 或 Skill 的 prompt 各自成文件。
+  （primary-agent / compactor / checkpoint / memory-extractor / memory-merger），
+  新增 Agent 或 Skill 的 prompt 各自成文件。
 - **待做——Rust System Runtime 实现 File/Shell Service**（G5）：
   workspace-relative 路径规范化、`..`/符号链接拒绝、shell cwd 锁定、超时、输出上限、
   进程树回收（Windows 用 Job Object 兜底，见第 12 节跨平台红线）。
@@ -115,11 +116,14 @@ errorCode / grantId`；Run 增加 `agentId / parentRunId / delegationId`（兑�
 
 > 进展：**A2 核心管线已落地**——`memories` 表（v5 迁移，FTS5 trigram 索引 + Float32 BLOB 向量）
 >
-> - Runtime `agent/memory/` 拆分（extractor / merge / recall / service / filter / similarity）
-> - Provider `/embeddings` 客户端与 embedding 能力解析 + Run 完成后异步提取
->   （LLM 候选抽取 → 机密形态过滤 → 相似比对 + LLM 合并决策 ADD/UPDATE/SUPERSEDE/NOOP →
->   事务落库 → 向量补算 → `memory.written` 事件）+ ContextBuilder 混合召回注入
->   （FTS 关键词 + embedding 余弦 + recency 衰减，pinned 置顶，无 embedding 自动降级）
+> - Runtime `agent/memory/` 拆分（extractor / merge / recall / service / filter / similarity / worker / job-provider）
+> - Provider `/embeddings` 客户端与 embedding 能力解析；**W6 起写入走持久化 memory_jobs**
+>   （成功 Run 终态事务幂等入队 → 单 worker 空闲消费（并发 1、前台 Run 可抢占、重启恢复、
+>   3 次退避 5s/30s/5min）→ LLM 候选抽取（transcript 脱敏：参数摘要/`<redacted>`/错误码）→
+>   机密形态过滤 → 相似比对 + LLM 合并决策（无相似候选直接 ADD 不调 merger）→ 事务落库 →
+>   向量补算 → `memory.written` 事件）+ ContextBuilder 复合召回注入
+>   （复合 query：用户消息×3 + Checkpoint goal/pending + 活动 Plan；FTS 关键词 + embedding
+>   余弦（500ms deadline 超时降级）+ recency 衰减，pinned 置顶，无 embedding 自动降级）
 > - 记忆管理页（按 scope 分组、编辑/固定/删除、`memory.list/update/delete` 命令）。
 >   待做：User(Long-term) 级 propose→confirm 流程（当前提取器不产出 user 候选）、
 >   按模型 contextWindow 动态预算、召回效果调优、sqlite-vec 预留位评估。

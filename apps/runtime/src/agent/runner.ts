@@ -95,8 +95,10 @@ export class RunRunner {
       maxToolCalls: input.settings.maxToolCalls ?? 64,
       maxContinuationTurns: input.settings.maxContinuationTurns ?? 2,
     }
+    const runStartedAt = Date.now()
     let finalFragments: string[] = []
     let toolCallsUsed = 0
+    let modelTurnsUsed = 0
 
     /** 单工具执行（供调度器与预算分支共用）：权限上下文完整。 */
     const executeOneGuarded = (
@@ -133,6 +135,10 @@ export class RunRunner {
       if (decision.status === 'completed' && decision.enqueueMemoryJob) {
         input.onMemoryJob?.()
       }
+      // 诊断指标（§17.1）：stopReason/轮次/工具数/耗时，单行 stderr。
+      process.stderr.write(
+        `[metrics] run:${run.id.slice(0, 8)} stopReason:${decision.errorCode ?? decision.status} modelCallCount:${modelTurnsUsed} toolCallCount:${toolCallsUsed} runElapsedMs:${Date.now() - runStartedAt}\n`,
+      )
     }
 
     try {
@@ -156,6 +162,7 @@ export class RunRunner {
           maxContinuationTurns: budgets.maxContinuationTurns,
           reflectionThreshold: input.settings.reflectionThreshold ?? undefined,
           callModel: async (messages, signal) => {
+            modelTurnsUsed += 1
             // Run 累计 token 预算在 model-turn 内检查（usage 累计后）。
             const result = await executeModelTurn(
               {
