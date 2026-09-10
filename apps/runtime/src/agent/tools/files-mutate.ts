@@ -13,7 +13,7 @@ export function createFileWriteTool(
   return {
     name: 'file.write',
     description:
-      '在工作区内写入/覆盖文本文件（自动创建父目录），返回写入字节数。小改动优先用 file.edit。需要用户审批。',
+      '在工作区内写入/覆盖文本文件（自动创建父目录），返回写入字节数。小改动优先用 file.edit；覆盖已有文件前必须先用 file.read 读取当前内容，基于真实内容确认要保留与要替换的部分，禁止凭记忆盲写整个文件。需要用户审批。',
     parameters: {
       type: 'object',
       properties: {
@@ -44,7 +44,7 @@ export function createFileEditTool(
   return {
     name: 'file.edit',
     description:
-      '对工作区内已有文本文件做精确替换：oldText → newText，只提交被替换的片段。oldText 在文件中出现的次数必须与 expectedCount（默认 1）一致，否则不写入并报错。需要用户审批。',
+      '对工作区内已有文本文件做精确替换：oldText → newText，只提交被替换的片段。oldText 必须逐字符复制自最近一次 file.read 读到的内容（不要凭记忆改写），在文件中出现的次数必须与 expectedCount（默认 1）一致，否则不写入并报错；替换失败时先重新读取文件确认当前内容，再调整片段重试。需要用户审批。',
     parameters: {
       type: 'object',
       properties: {
