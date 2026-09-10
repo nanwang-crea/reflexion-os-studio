@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE TABLE IF NOT EXISTS messages (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-  run_id TEXT,
+  run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
   role TEXT NOT NULL,
   content TEXT NOT NULL,
   parts_json TEXT NOT NULL DEFAULT '[]',
@@ -251,4 +251,4 @@ CREATE INDEX IF NOT EXISTS idx_memory_jobs_status
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 21
+export const LATEST_SCHEMA_VERSION = 22

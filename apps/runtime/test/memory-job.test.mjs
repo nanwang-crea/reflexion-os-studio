@@ -98,21 +98,6 @@ test('startup recovery moves orphaned running jobs back to pending', () => {
   assert.notEqual(store.memoryJobs.claimNext(), null)
 })
 
-test('job deletion cascades with run deletion', () => {
-  const store = freshStore()
-  const session = store.sessions.create(
-    store.projects.create({ name: 'p', folderPath: '/w' }).id,
-  )
-  const run = store.runs.create({
-    sessionId: session.id,
-    providerId: 'p',
-    model: 'm',
-  })
-  store.memoryJobs.enqueue(run.id)
-  store.runs.delete(run.id)
-  assert.equal(store.memoryJobs.get(run.id), null)
-})
-
 test('failed run creates no memory job via finalizer path', async () => {
   // 直接验证 Finalizer 决策语义：只有 completed+enqueueMemoryJob 入队。
   const store = freshStore()

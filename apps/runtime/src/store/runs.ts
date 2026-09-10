@@ -177,11 +177,6 @@ export class RunStore {
       .run(nowIso())
   }
 
-  /** 硬删除某 Run。调用方须自行按正确顺序清理依赖（消息、工具调用）。 */
-  delete(id: string): void {
-    this.db.prepare('DELETE FROM runs WHERE id = ?').run(id)
-  }
-
   markSuperseded(originalId: string, replacementId: string): void {
     this.db
       .prepare('UPDATE runs SET superseded_by_run_id = ? WHERE id = ?')

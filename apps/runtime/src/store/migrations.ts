@@ -39,6 +39,20 @@ CREATE TABLE provider_profiles (
   updated_at TEXT NOT NULL
 )`
 
+const MESSAGES_TABLE_V22 = `
+CREATE TABLE messages (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
+  role TEXT NOT NULL,
+  content TEXT NOT NULL,
+  parts_json TEXT NOT NULL DEFAULT '[]',
+  reasoning TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  completed_at TEXT
+)`
+
 interface TableColumn {
   name: string
   notnull: number | bigint
@@ -66,6 +80,10 @@ function tableColumns(db: DatabaseSync, table: string): TableColumn[] {
  *          环境变量明文直接存进 env_json（Secret Store 化之前），升级时逐条把 value
  *          迁入 Secret Store 并以 secretRef 替换；任一步失败回滚整库并清除已写入的
  *          密钥引用，避免明文残留与孤儿密钥。
+ * v21 → v22：messages.run_id 补外键（runs.id，ON DELETE SET NULL），消除 Run
+ *          消失后消息仍指向它的幽灵引用；消息本体属会话历史（跟随 session 级联），
+ *          不随 Run 删除。升级时先把悬空 run_id 置空（防御性，正常库为空集），
+ *          再重建 messages 表；复制按 (created_at, rowid) 排序保持插入序。
  * 各步骤带形状检测：SCHEMA 刚建好的新库不会空跑重建。
  */
 export function runMigrations(db: DatabaseSync, dir: string): void {
@@ -287,6 +305,31 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
         "UPDATE plans SET status = 'cancelled', updated_at = ? WHERE status = 'failed'",
       )
       planUpdate.run(nowIso())
+    }
+    if (version < 22) {
+      // v22：messages.run_id 补外键。先把悬空 run_id 置空（防御性，正常库为空集），
+      // 再按形状检测决定是否重建表（SCHEMA 新库已带 FK，不空跑）。
+      db.prepare(
+        'UPDATE messages SET run_id = NULL WHERE run_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM runs WHERE runs.id = messages.run_id)',
+      ).run()
+      const messageFks = db
+        .prepare('PRAGMA foreign_key_list(messages)')
+        .all() as unknown as { table: string; from: string }[]
+      const hasRunFk = messageFks.some(
+        (fk) => fk.table === 'runs' && fk.from === 'run_id',
+      )
+      if (!hasRunFk) {
+        db.exec('ALTER TABLE messages RENAME TO messages_v21')
+        db.exec(MESSAGES_TABLE_V22)
+        // 复制按 (created_at, rowid) 排序：listBySession 依赖 rowid 作同毫秒
+        // 插入序，重建后须保持既有次序不变。
+        db.exec(
+          `INSERT INTO messages (id, session_id, run_id, role, content, parts_json, reasoning, status, created_at, completed_at)
+           SELECT id, session_id, run_id, role, content, parts_json, reasoning, status, created_at, completed_at
+           FROM messages_v21 ORDER BY created_at ASC, rowid ASC`,
+        )
+        db.exec('DROP TABLE messages_v21')
+      }
     }
     db.exec('COMMIT')
     // 迁移全部执行完毕才推进版本号；否则下次启动会重复进入迁移分支。
