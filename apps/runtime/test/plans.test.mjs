@@ -63,12 +63,72 @@ test('manage_plan tool definition carries final name, description and flat schem
   assert.equal(schema.type, 'object')
   assert.equal(schema.oneOf, undefined)
   assert.deepEqual(schema.properties.action.enum, [
+    'get',
     'create',
     'update_step',
     'complete_plan',
     'cancel_plan',
   ])
   assert.deepEqual(schema.required, ['action'])
+})
+
+test('get action: read-only lookup of the active plan without context memory', async () => {
+  const store = freshStore()
+  const ctx = preparedCtx(store)
+  const tool = createManagePlanTool(ctx)
+
+  // 无活动计划时返回 null。
+  const empty = await tool.execute({
+    args: { action: 'get' },
+    signal: new AbortController().signal,
+  })
+  assert.equal(empty.isError, false)
+  assert.equal(JSON.parse(empty.content), null)
+
+  const created = await tool.execute({
+    args: {
+      action: 'create',
+      goal: '恢复现场',
+      steps: [{ id: 'plan-get-1', title: '唯一步骤' }],
+    },
+    signal: new AbortController().signal,
+  })
+  assert.equal(created.isError, false)
+  const plan = JSON.parse(created.content)
+
+  // 省略 planId：返回当前会话的活动计划。
+  const active = await tool.execute({
+    args: { action: 'get' },
+    signal: new AbortController().signal,
+  })
+  assert.equal(active.isError, false)
+  const activePlan = JSON.parse(active.content)
+  assert.equal(activePlan.id, plan.id)
+  assert.equal(activePlan.status, 'active')
+  assert.equal(activePlan.steps[0].id, 'plan-get-1')
+  assert.equal(activePlan.steps[0].status, 'pending')
+
+  // 显式 planId：返回该计划详情。
+  const byId = await tool.execute({
+    args: { action: 'get', planId: plan.id },
+    signal: new AbortController().signal,
+  })
+  assert.equal(byId.isError, false)
+  assert.equal(JSON.parse(byId.content).goal, '恢复现场')
+
+  // 其他会话的计划不可读。
+  const otherCtx = preparedCtx(store)
+  const cross = await createManagePlanTool(otherCtx).execute({
+    args: { action: 'get', planId: plan.id },
+    signal: new AbortController().signal,
+  })
+  assert.equal(cross.isError, true)
+  assert.equal(cross.code, 'invalid_request')
+
+  // get 是只读的：不产生事件，活动计划不受影响。
+  assert.deepEqual(ctx.emitter.events.map((event) => event.type), [
+    'plan.created',
+  ])
 })
 
 test('legacy update_plan alias maps to the same implementation', async () => {
@@ -196,7 +256,11 @@ test('store: second active plan in the same session is rejected with PLAN_ALREAD
         steps: [{ id: 'plan-b-1', title: 'b' }],
       }),
     (error) =>
-      error.code === 'PLAN_ALREADY_EXISTS' && error.name === 'PlanError',
+      error.code === 'PLAN_ALREADY_EXISTS' &&
+      error.name === 'PlanError' &&
+      // 错误消息回显活动计划详情（步骤 id 与状态），供模型在丢失上下文时自纠。
+      error.message.includes('plan-a-1') &&
+      error.message.includes('pending'),
   )
 })
 

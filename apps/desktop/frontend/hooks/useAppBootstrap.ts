@@ -47,6 +47,26 @@ interface AppBootstrapDeps {
 }
 
 /**
+ * 主引导 effect（仅挂载一次）经 latest ref 间接读取的易变引用集合：
+ * 这些 hook 返回对象 / 依赖 deps 的回调每次渲染都是新身份，
+ * 一旦进入 effect 依赖数组就会触发「渲染 → 重挂订阅 → setState →
+ * 再渲染」的自激循环（曾致 WebView 空转 ~100% CPU、内存 GB 级）。
+ */
+interface LatestBootstrapRefs {
+  deps: AppBootstrapDeps
+  cache: ReturnType<typeof useStreamingCache>
+  activity: ReturnType<typeof useRunActivity>
+  approvals: ReturnType<typeof usePendingApprovals>
+  sessionTracking: ReturnType<typeof useRunSessionTracking>
+  loadInitialData: () => void
+  refreshAndPrune: (runId: string, messageId?: string) => void
+  scheduleToolRefresh: () => void
+  scheduleDelegationRefresh: (sessionId?: string) => void
+  showMemoryNotice: (text: string) => void
+  setBootstrap: (snapshot: BootstrapSnapshot | null) => void
+}
+
+/**
  * 应用引导与 Runtime 接线：宿主状态快照、sidecar 事件订阅、
  * Run 级活动阶段与审批等待；流式缓存与启动拉取拆分在专属 hook。
  */
@@ -122,12 +142,6 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     [deps],
   )
 
-  /** 会话切换/重置：清空流式缓存与全部 Run 活动状态。 */
-  const resetStreaming = useCallback((): void => {
-    cache.reset()
-    activity.clearAllRunActivities()
-  }, [cache, activity])
-
   /**
    * Run 结束后的会话数据刷新 + 流式缓存清理。
    * 正文/思考的最终值在刷新落地前继续留在缓存里（message.completed 事件
@@ -150,6 +164,43 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     [deps, cache, activity],
   )
 
+  // latest ref：挂载时以当轮值初始化，此后每次提交后同步最新闭包。
+  // 主 effect 依赖数组为空，事件回调一律经 latest.current 读取当轮值。
+  const latest = useRef<LatestBootstrapRefs>({
+    deps,
+    cache,
+    activity,
+    approvals,
+    sessionTracking,
+    loadInitialData,
+    refreshAndPrune,
+    scheduleToolRefresh,
+    scheduleDelegationRefresh,
+    showMemoryNotice,
+    setBootstrap,
+  })
+  useEffect(() => {
+    latest.current = {
+      deps,
+      cache,
+      activity,
+      approvals,
+      sessionTracking,
+      loadInitialData,
+      refreshAndPrune,
+      scheduleToolRefresh,
+      scheduleDelegationRefresh,
+      showMemoryNotice,
+      setBootstrap,
+    }
+  })
+
+  /** 会话切换/重置：清空流式缓存与全部 Run 活动状态。 */
+  const resetStreaming = useCallback((): void => {
+    latest.current.cache.reset()
+    latest.current.activity.clearAllRunActivities()
+  }, [])
+
   useEffect(() => {
     let unlistenState: (() => void) | undefined
     let unlistenEvents: (() => void) | undefined
@@ -160,6 +211,17 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
       if (disposed) return
       unlistenEvents = transport.onEvent((event: RuntimeEvent) => {
         if (disposed) return
+        const {
+          deps,
+          cache,
+          activity,
+          approvals,
+          sessionTracking,
+          refreshAndPrune,
+          scheduleToolRefresh,
+          scheduleDelegationRefresh,
+          showMemoryNotice,
+        } = latest.current
         if (event.type === 'message.reset') {
           cache.applyReset(event.messageId)
           return
@@ -276,7 +338,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
       unlistenState = await listen<BootstrapSnapshot>(
         'bootstrap:state',
         (event) => {
-          if (!disposed) setBootstrap(event.payload)
+          if (!disposed) latest.current.setBootstrap(event.payload)
         },
       )
       if (disposed) {
@@ -286,13 +348,13 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
       }
       const snapshot = await invoke<BootstrapSnapshot>('bootstrap_get_state')
       if (disposed) return
-      setBootstrap(snapshot)
-      loadInitialData()
+      latest.current.setBootstrap(snapshot)
+      latest.current.loadInitialData()
     }
 
     void start().catch((error: unknown) => {
       if (disposed) return
-      setBootstrap({
+      latest.current.setBootstrap({
         state: 'error',
         runtimeReady: false,
         systemReady: false,
@@ -309,19 +371,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
       unlistenState?.()
       unlistenEvents?.()
     }
-  }, [
-    deps,
-    cache,
-    activity,
-    loadInitialData,
-    refreshAndPrune,
-    approvals,
-    sessionTracking,
-    scheduleToolRefresh,
-    scheduleDelegationRefresh,
-    showMemoryNotice,
-    setBootstrap,
-  ])
+  }, [])
 
   return {
     bootstrap,

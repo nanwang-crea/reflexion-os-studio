@@ -75,15 +75,15 @@ export class PlanStore {
     plan.steps = plan.steps.map((step) => ({ ...step, planId: plan.id }))
     this.db.exec('BEGIN IMMEDIATE')
     try {
-      const active = this.db
-        .prepare(
-          "SELECT id FROM plans WHERE session_id = ? AND status = 'active' LIMIT 1",
-        )
-        .get(input.sessionId)
+      // 错误消息回显活动计划详情（planId/goal/各步骤状态），让模型无需依赖
+      // 上下文记忆即可拿到 planId 并沿用（错误通道自纠）。
+      const active = this.getActive(input.sessionId)
       if (active)
         throw new PlanError(
           'PLAN_ALREADY_EXISTS',
-          '当前会话已存在活动计划；请沿用已有 planId 使用 update_step，或先 complete/cancel 已有计划，然后在创建新的计划',
+          `当前会话已存在活动计划：${active.id}（goal：${active.goal}；步骤：${active.steps
+            .map((step) => `${step.id}=${step.status}`)
+            .join('、')}）。请直接沿用该 planId 调用 update_step 推进，或先 complete/cancel 收尾后再 create 新计划`,
         )
       this.db
         .prepare(
@@ -138,6 +138,16 @@ export class PlanStore {
       .all(sessionId)
       .map((row) => this.get(String((row as Row).id))!)
       .filter(Boolean)
+  }
+
+  /** 当前会话的活动计划；create 的事务内检查保证会话级最多一个，此处取第一个即唯一。 */
+  getActive(sessionId: string): Plan | null {
+    const row = this.db
+      .prepare(
+        "SELECT id FROM plans WHERE session_id = ? AND status = 'active' ORDER BY created_at ASC LIMIT 1",
+      )
+      .get(sessionId) as Row | undefined
+    return row ? this.get(String(row.id)) : null
   }
 
   updateStep(
