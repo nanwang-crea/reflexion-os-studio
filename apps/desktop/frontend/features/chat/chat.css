@@ -115,9 +115,16 @@
   flex-shrink: 0;
 }
 
+/* 错误信息可能很长（含原始 JSON 连续字符）：限高 5 行内部上下滚动，
+   并允许长串断行，避免横向撑破聊天列。
+   7em = 13px × 行高 1.4 × 5 行。 */
 .assistant-error-text {
   flex: 1;
   min-width: 0;
+  line-height: 1.4;
+  word-break: break-word;
+  max-height: 7em;
+  overflow-y: auto;
 }
 
 .assistant-retry {
@@ -363,6 +370,17 @@
   background: rgba(248, 113, 113, 0.1);
   border: 1px solid rgba(248, 113, 113, 0.28);
   color: var(--danger);
+}
+
+/* 失败事件卡的错误信息文本：限高 5 行内部上下滚动，与回复下方错误条
+   行为统一，避免长错误串把卡片撑得过高。
+   7em = 12.5px × 行高 1.4 × 5 行。 */
+.run-event-card-text {
+  min-width: 0;
+  line-height: 1.4;
+  word-break: break-word;
+  max-height: 7em;
+  overflow-y: auto;
 }
 
 /* ---------- Run 过程折叠与思考摘要 ---------- */

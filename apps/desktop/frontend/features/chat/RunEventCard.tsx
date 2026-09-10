@@ -6,7 +6,7 @@ export function RunEventCard(props: { event: RunEvent }): React.JSX.Element {
   return (
     <div className="run-event-card run-event-failure" role="alert">
       <AlertIcon size={15} />
-      <span>
+      <span className="run-event-card-text">
         运行失败（{event.errorCode}）：{event.errorMessage}
       </span>
     </div>
