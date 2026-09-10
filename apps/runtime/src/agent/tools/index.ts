@@ -30,6 +30,7 @@ import { createWebFetchTool } from './web.js'
 import { createMcpTool } from './mcp.js'
 import { createLegacyUpdatePlanTool, createManagePlanTool } from './plans.js'
 import { createTaskTool } from './task.js'
+import { FileReadState } from './read-state.js'
 
 export type { ToolContext } from './shared.js'
 
@@ -41,13 +42,15 @@ export type { ToolContext } from './shared.js'
  */
 export function createToolRegistry(ctx: ToolContext): ToolRegistry {
   const registry = new ToolRegistry()
+  // 先读后写凭据状态：file.read 记录，file.write/edit 消费，随 Run 生命周期。
+  const readState = new FileReadState()
   const tools = [
     ...alwaysAvailableTools(ctx),
     ...mcpTools(ctx),
     ...(ctx.system !== null &&
     ctx.system.available &&
     ctx.workspaceRoot !== null
-      ? workspaceTools(ctx.system, ctx.workspaceRoot)
+      ? workspaceTools(ctx.system, ctx.workspaceRoot, readState)
       : []),
   ]
   for (let tool of tools) {
@@ -118,16 +121,17 @@ function mcpTools(ctx: ToolContext): ToolDefinition[] {
 function workspaceTools(
   system: NonNullable<ToolContext['system']>,
   workspaceRoot: string,
+  readState: FileReadState,
 ): ToolDefinition[] {
   return [
-    createFileReadTool(system, workspaceRoot),
+    createFileReadTool(system, workspaceRoot, readState),
     createFileListTool(system, workspaceRoot),
     createFileGlobTool(system, workspaceRoot),
     createFileGrepTool(system, workspaceRoot),
-    createFileWriteTool(system, workspaceRoot),
-    createFileEditTool(system, workspaceRoot),
-    createFileDeleteTool(system, workspaceRoot),
-    createFileMoveTool(system, workspaceRoot),
+    createFileWriteTool(system, workspaceRoot, readState),
+    createFileEditTool(system, workspaceRoot, readState),
+    createFileDeleteTool(system, workspaceRoot, readState),
+    createFileMoveTool(system, workspaceRoot, readState),
     createFileMkdirTool(system, workspaceRoot),
     createShellExecuteTool(system, workspaceRoot),
   ]

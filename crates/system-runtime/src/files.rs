@@ -2,6 +2,7 @@
 //! 路径边界由 paths::resolve_in_workspace 强制；本模块只做能力与体量限制。
 use std::fs;
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 
@@ -25,6 +26,8 @@ pub struct ReadResult {
     pub total_lines: usize,
     /// 本次返回首行的 0-based 行号（整读时为 0）。
     pub offset: usize,
+    /// 读取时刻的文件 mtime（毫秒），作为后续 write/edit 的 readToken 凭据。
+    pub modified_ms: u64,
 }
 
 pub fn read(
@@ -58,11 +61,13 @@ pub fn read(
     }
     let max_lines = limit.unwrap_or(DEFAULT_READ_LIMIT).min(MAX_READ_LIMIT);
     let selected: Vec<&str> = content.lines().skip(start).take(max_lines).collect();
+    let modified_ms = mtime_ms(&path)?;
     Ok(ReadResult {
         content: selected.join("\n"),
         size_bytes: size,
         total_lines,
         offset: start,
+        modified_ms,
     })
 }
 
@@ -139,7 +144,25 @@ pub fn list(
     })
 }
 
-pub fn write(workspace_root: &Path, relative: &str, content: &str) -> Result<u64, String> {
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WriteOutcome {
+    pub written_bytes: u64,
+    /// 目标原不存在、本次为新建时为 true。
+    pub created: bool,
+    /// 写入后的新 mtime（毫秒），调用方记入读取状态供后续编辑使用。
+    pub modified_ms: u64,
+}
+
+/// 写入/覆盖文本文件。覆盖已存在文件必须携带 readToken（一次 file.read 的
+/// mtime 凭据）：未携带视为盲写拒绝；mtime 不一致视为读取后被外部修改。
+/// 新建文件豁免先读约束。
+pub fn write(
+    workspace_root: &Path,
+    relative: &str,
+    content: &str,
+    read_token: Option<u64>,
+) -> Result<WriteOutcome, String> {
     let content_bytes = content.as_bytes();
     if content_bytes.len() > MAX_WRITE_BYTES {
         return Err(format!(
@@ -148,11 +171,75 @@ pub fn write(workspace_root: &Path, relative: &str, content: &str) -> Result<u64
         ));
     }
     let path = resolve_in_workspace(workspace_root, relative)?;
+    let existed = path.exists();
+    if existed {
+        if !path.is_file() {
+            return Err(format!("not a regular file: {relative}"));
+        }
+        let token = read_token.ok_or_else(|| {
+            format!(
+                "refusing to overwrite existing file '{relative}' without a fresh read: \
+                 run file.read on it first, then retry this write"
+            )
+        })?;
+        let current = mtime_ms(&path)?;
+        if current != token {
+            return Err(format!(
+                "file changed since last read (mtime {current} != readToken {token}); \
+                 re-run file.read on '{relative}' before writing"
+            ));
+        }
+    }
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    fs::write(&path, content).map_err(|e| e.to_string())?;
-    Ok(content_bytes.len() as u64)
+    atomic_write(&path, content_bytes)?;
+    let modified_ms = mtime_ms(&path)?;
+    Ok(WriteOutcome {
+        written_bytes: content_bytes.len() as u64,
+        created: !existed,
+        modified_ms,
+    })
+}
+
+/// 文件 mtime（毫秒）；作为先读后写的凭据与陈旧检测依据。
+/// 文件系统时间戳精度低于毫秒时，同毫秒内的外部修改无法检出（尽力而为）。
+pub(crate) fn mtime_ms(path: &Path) -> Result<u64, String> {
+    let modified = fs::metadata(path)
+        .map_err(|e| e.to_string())?
+        .modified()
+        .map_err(|e| e.to_string())?;
+    let since_epoch = modified
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| "file mtime before unix epoch".to_string())?;
+    Ok(since_epoch.as_millis() as u64)
+}
+
+/// 原子写：先写同目录临时文件再 rename 覆盖，进程中断不会留下截断文件。
+/// Unix 上保留原文件权限（临时文件默认权限受 umask 影响）；rename 在
+/// Windows 上等价于 MoveFileExW(REPLACE_EXISTING)，可覆盖已存在目标。
+pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let dir = path
+        .parent()
+        .ok_or_else(|| "path has no parent directory".to_string())?;
+    let name = path
+        .file_name()
+        .ok_or_else(|| "invalid file name".to_string())?
+        .to_string_lossy();
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.subsec_nanos())
+        .unwrap_or(0);
+    let temp = dir.join(format!(".{name}.tmp{nanos}"));
+    fs::write(&temp, bytes).map_err(|e| e.to_string())?;
+    #[cfg(unix)]
+    if let Ok(metadata) = fs::metadata(path) {
+        let _ = fs::set_permissions(&temp, metadata.permissions());
+    }
+    fs::rename(&temp, path).map_err(|e| {
+        let _ = fs::remove_file(&temp);
+        e.to_string()
+    })
 }
 
 #[cfg(test)]
@@ -171,15 +258,35 @@ mod tests {
     #[test]
     fn read_write_roundtrip_inside_workspace() {
         let root = temp_workspace("roundtrip");
-        write(&root, "docs/note.txt", "你好工作区").unwrap();
+        let outcome = write(&root, "docs/note.txt", "你好工作区", None).unwrap();
+        assert!(outcome.created);
         let read = read(&root, "docs/note.txt", None, None).unwrap();
         assert_eq!(read.content, "你好工作区");
         assert_eq!(read.total_lines, 1);
+        assert_eq!(read.modified_ms, outcome.modified_ms);
         let entries = list(&root, ".", false, None, None).unwrap();
         assert_eq!(entries.entries[0].path, "docs");
         assert_eq!(entries.entries[0].kind, "dir");
         assert_eq!(entries.returned_count, 1);
         assert!(!entries.truncated);
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn write_requires_read_token_for_existing_files() {
+        let root = temp_workspace("write-token");
+        let created = write(&root, "a.txt", "v1", None).unwrap();
+        assert!(created.created);
+        // 未携带 readToken 的覆盖写被拒绝。
+        assert!(write(&root, "a.txt", "v2", None).is_err());
+        // 陈旧 readToken 被拒绝。
+        assert!(write(&root, "a.txt", "v2", Some(created.modified_ms + 1)).is_err());
+        // 先读获得凭据后成功覆盖；返回写入后的新 mtime 与 modified 动作依据。
+        let fresh = read(&root, "a.txt", None, None).unwrap();
+        let overwritten = write(&root, "a.txt", "v2", Some(fresh.modified_ms)).unwrap();
+        assert!(!overwritten.created);
+        assert!(overwritten.modified_ms >= fresh.modified_ms);
+        assert_eq!(fs::read_to_string(root.join("a.txt")).unwrap(), "v2");
         fs::remove_dir_all(&root).ok();
     }
 
@@ -195,7 +302,7 @@ mod tests {
     fn read_supports_line_windowing() {
         let root = temp_workspace("window");
         let body = "l0\nl1\nl2\nl3\n";
-        write(&root, "w.txt", body).unwrap();
+        write(&root, "w.txt", body, None).unwrap();
         let paged = read(&root, "w.txt", Some(1), Some(2)).unwrap();
         assert_eq!(paged.content, "l1\nl2");
         assert_eq!(paged.total_lines, 4);
@@ -209,9 +316,9 @@ mod tests {
     #[test]
     fn list_paginates_sorted_directory_entries_with_metadata() {
         let root = temp_workspace("pagination");
-        write(&root, "z.txt", "z").unwrap();
-        write(&root, "a.txt", "a").unwrap();
-        write(&root, "m.txt", "m").unwrap();
+        write(&root, "z.txt", "z", None).unwrap();
+        write(&root, "a.txt", "a", None).unwrap();
+        write(&root, "m.txt", "m", None).unwrap();
         let first = list(&root, ".", false, Some(0), Some(2)).unwrap();
         assert_eq!(
             first
@@ -235,8 +342,8 @@ mod tests {
     #[test]
     fn recursive_list_walks_nested_dirs() {
         let root = temp_workspace("recursive");
-        write(&root, "src/deep/mod.rs", "fn main() {}").unwrap();
-        write(&root, "README.md", "# hi").unwrap();
+        write(&root, "src/deep/mod.rs", "fn main() {}", None).unwrap();
+        write(&root, "README.md", "# hi", None).unwrap();
         let entries = list(&root, ".", true, None, None).unwrap();
         let paths: Vec<&str> = entries.entries.iter().map(|e| e.path.as_str()).collect();
         assert_eq!(paths, vec!["README.md", "src/deep/mod.rs"]);
@@ -250,9 +357,9 @@ mod tests {
     #[test]
     fn recursive_list_paginates_in_stable_path_order() {
         let root = temp_workspace("recursive-pagination");
-        write(&root, "src/z.rs", "z").unwrap();
-        write(&root, "README.md", "readme").unwrap();
-        write(&root, "src/a.rs", "a").unwrap();
+        write(&root, "src/z.rs", "z", None).unwrap();
+        write(&root, "README.md", "readme", None).unwrap();
+        write(&root, "src/a.rs", "a", None).unwrap();
         let first = list(&root, ".", true, Some(0), Some(2)).unwrap();
         assert_eq!(
             first
@@ -274,8 +381,8 @@ mod tests {
     #[test]
     fn list_normalizes_zero_limit_to_at_least_one_entry() {
         let root = temp_workspace("zero-limit");
-        write(&root, "b.txt", "b").unwrap();
-        write(&root, "a.txt", "a").unwrap();
+        write(&root, "b.txt", "b", None).unwrap();
+        write(&root, "a.txt", "a", None).unwrap();
         let result = list(&root, ".", false, None, Some(0)).unwrap();
         assert_eq!(result.returned_count, 1);
         assert_eq!(result.entries[0].path, "a.txt");
@@ -286,7 +393,7 @@ mod tests {
     #[test]
     fn list_returns_stable_empty_page_for_offset_beyond_bounds() {
         let root = temp_workspace("offset-beyond");
-        write(&root, "a.txt", "a").unwrap();
+        write(&root, "a.txt", "a", None).unwrap();
         let result = list(&root, ".", false, Some(1), Some(2)).unwrap();
         assert!(result.entries.is_empty());
         assert_eq!(result.returned_count, 0);
@@ -302,7 +409,7 @@ mod tests {
     #[test]
     fn recursive_list_reports_walk_hard_cap_without_fake_continuation() {
         let root = temp_workspace("depth-cap");
-        write(&root, "top.txt", "t").unwrap();
+        write(&root, "top.txt", "t", None).unwrap();
         let mut deep = root.clone();
         for index in 0..(crate::walk::MAX_WALK_DEPTH + 2) {
             deep = deep.join(format!("d{index}"));

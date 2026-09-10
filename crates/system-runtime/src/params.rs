@@ -57,6 +57,8 @@ pub struct WriteParams {
     pub workspace_root: String,
     pub path: String,
     pub content: String,
+    /// 覆盖已存在文件必填：一次 file.read 返回的 mtime 凭据；新建文件可缺省。
+    pub read_token: Option<u64>,
     pub grant: String,
 }
 
@@ -69,6 +71,8 @@ pub struct EditParams {
     pub new_text: String,
     /// 要求 oldText 恰好出现的次数（默认 1），不匹配则拒绝写入。
     pub expected_count: Option<usize>,
+    /// 必填：一次 file.read 返回的 mtime 凭据，用于先读后写强制与陈旧检测。
+    pub read_token: Option<u64>,
     pub grant: String,
 }
 

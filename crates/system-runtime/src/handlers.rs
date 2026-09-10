@@ -23,6 +23,7 @@ pub fn handle_file_read(params: Value) -> Result<Value, OpError> {
         "sizeBytes": result.size_bytes,
         "totalLines": result.total_lines,
         "offset": result.offset,
+        "modifiedMs": result.modified_ms,
     }))
 }
 
@@ -80,14 +81,13 @@ pub fn handle_file_write(params: Value) -> Result<Value, OpError> {
         .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
     require_grant(&params.grant, &params.workspace_root, "file.write")?;
     let root = workspace_root(&params.workspace_root)?;
-    let path = paths::resolve_in_workspace(&root, &params.path)
+    let outcome = files::write(&root, &params.path, &params.content, params.read_token)
         .map_err(|message| OpError::new("file_error", message))?;
-    let existed = path.exists();
-    let written = files::write(&root, &params.path, &params.content)
-        .map_err(|message| OpError::new("file_error", message))?;
-    Ok(
-        json!({ "writtenBytes": written, "changedFiles": [{ "path": params.path, "action": if existed { "modified" } else { "created" } }] }),
-    )
+    Ok(json!({
+        "writtenBytes": outcome.written_bytes,
+        "modifiedMs": outcome.modified_ms,
+        "changedFiles": [{ "path": params.path, "action": if outcome.created { "created" } else { "modified" } }],
+    }))
 }
 
 pub fn handle_file_edit(params: Value) -> Result<Value, OpError> {
@@ -101,11 +101,13 @@ pub fn handle_file_edit(params: Value) -> Result<Value, OpError> {
         &params.old_text,
         &params.new_text,
         params.expected_count,
+        params.read_token,
     )
     .map_err(|message| OpError::new("file_error", message))?;
     Ok(json!({
         "replacedCount": outcome.replaced_count,
         "sizeBytes": outcome.size_bytes,
+        "modifiedMs": outcome.modified_ms,
         "changedFiles": outcome.changed_files,
     }))
 }

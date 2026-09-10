@@ -1,16 +1,18 @@
 import type { ToolDefinition } from '@reflexion-os-studio/agent-core'
 import type { SystemRuntimeClient } from '../../system.js'
 import { callSystem, optionalNumber, requireString } from './shared.js'
+import type { FileReadState } from './read-state.js'
 
 /** 只读类文件工具：读取（分段）、列表（递归）、glob 匹配、grep 文本搜索。 */
 export function createFileReadTool(
   system: SystemRuntimeClient,
   workspaceRoot: string,
+  readState: FileReadState,
 ): ToolDefinition {
   return {
     name: 'file.read',
     description:
-      '读取工作区内 UTF-8 文本文件的内容（含 sizeBytes/totalLines）。大文件用 offset（0 起始行号）+ limit 分段读；若 totalLines 大于 offset+返回行数，用同一 path 以 offset=offset+返回行数继续读取。path 为工作区相对路径，不允许绝对路径或 ..。',
+      '读取工作区内 UTF-8 文本文件的内容（含 sizeBytes/totalLines）。大文件用 offset（0 起始行号）+ limit 分段读；若 totalLines 大于 offset+返回行数，用同一 path 以 offset=offset+返回行数继续读取。path 为工作区相对路径，不允许绝对路径或 ..。编辑或覆盖文件前必须先用本工具读取目标文件。',
     parameters: {
       type: 'object',
       properties: {
@@ -20,16 +22,31 @@ export function createFileReadTool(
       },
       required: ['path'],
     },
-    execute: ({ args, signal }) => {
+    execute: async ({ args, signal }) => {
+      const path = requireString(args, 'path')
       const params: Record<string, unknown> = {
         workspaceRoot,
-        path: requireString(args, 'path'),
+        path,
       }
       const offset = optionalNumber(args, 'offset')
       const limit = optionalNumber(args, 'limit')
       if (offset !== undefined) params.offset = Math.max(0, Math.trunc(offset))
       if (limit !== undefined) params.limit = Math.max(1, Math.trunc(limit))
-      return callSystem(system, 'file.read', params, signal)
+      const raw = await callSystem(system, 'file.read', params, signal)
+      if (!raw.isError) {
+        try {
+          const parsed: unknown = JSON.parse(raw.content)
+          if (typeof parsed === 'object' && parsed !== null) {
+            const modifiedMs = (parsed as Record<string, unknown>).modifiedMs
+            if (typeof modifiedMs === 'number') {
+              readState.record(path, modifiedMs)
+            }
+          }
+        } catch {
+          // 非 JSON 结果不记录凭据；后续编辑会被先读校验拦下并可自纠。
+        }
+      }
+      return raw
     },
   }
 }
