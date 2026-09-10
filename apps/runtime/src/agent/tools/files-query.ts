@@ -89,32 +89,9 @@ export function createFileListTool(
       if (offset !== undefined) params.offset = Math.max(0, Math.trunc(offset))
       const limit = optionalNumber(args, 'limit')
       if (limit !== undefined) params.limit = Math.max(1, Math.trunc(limit))
-      const raw = await callSystem(system, 'file.list', params, signal)
-      if (!raw.isError) {
-        try {
-          const parsed: unknown = JSON.parse(raw.content)
-          raw.content = stringifyListResult(parsed)
-        } catch {
-          // 非 JSON 结果原样保留，由通用字符截断提示兜底。
-        }
-      }
-      return raw
+      return callSystem(system, 'file.list', params, signal)
     },
   }
-}
-
-/**
- * 序列化 Rust ListResult 时把截断元数据（returnedCount/truncated/nextOffset）放在
- * entries 之前：模型可见结果超过字符上限被二次截断时，续读信息不会被切掉，
- * 而不是被通用的"结果过长已截断"提示掩盖。
- */
-function stringifyListResult(result: unknown): string {
-  if (typeof result !== 'object' || result === null || Array.isArray(result)) {
-    return JSON.stringify(result)
-  }
-  const record = result as Record<string, unknown>
-  const { entries, ...metadata } = record
-  return JSON.stringify({ ...metadata, entries })
 }
 
 export function createFileGlobTool(

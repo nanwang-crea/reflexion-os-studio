@@ -58,7 +58,7 @@ test('file.list forwards offset/limit and normalizes non-negative integers', asy
   assert.deepEqual(calls[2], { workspaceRoot: '/ws', path: 'src' })
 })
 
-test('file.list truncated result keeps continuation metadata ahead of entries', async () => {
+test('file.list truncated result keeps continuation metadata intact', async () => {
   const system = fakeSystem(async () => ({
     entries: [{ path: 'a.ts', kind: 'file', sizeBytes: 1 }],
     returnedCount: 1,
@@ -74,14 +74,8 @@ test('file.list truncated result keeps continuation metadata ahead of entries', 
   assert.equal(parsed.nextOffset, 1)
   assert.equal(parsed.returnedCount, 1)
   assert.equal(parsed.entries.length, 1)
-  // 续读信息在 entries 之前：模型结果被字符上限二次截断时不会被切掉。
-  assert.ok(
-    result.content.indexOf('"truncated"') < result.content.indexOf('"entries"'),
-  )
-  assert.ok(
-    result.content.indexOf('"nextOffset"') <
-      result.content.indexOf('"entries"'),
-  )
+  // 续读元数据由通用截断层结构性保留（只收缩超长字符串/大数组字段），
+  // 不再依赖键的序列化顺序。
 })
 
 test('file.list complete result stays valid JSON with truncation metadata', async () => {
