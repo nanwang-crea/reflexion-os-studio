@@ -13,6 +13,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Store } from '../dist/store/index.js'
 import { AssetService } from '../dist/assets/service.js'
+import { dispatchCommand } from '../dist/handlers.js'
 
 test('AssetService imports, lists, reads and deletes workspace files', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'reflexion-assets-'))
@@ -179,5 +180,31 @@ test('AssetService recover cleans orphans and marks missing content failed', asy
   assert.equal(goodAfter.preview, 'failed')
   const okAfter = service.list(project.id).find((a) => a.assetId === ok.assetId)
   assert.equal(okAfter.preview, 'ready')
+  store.close()
+})
+
+test('project.delete removes asset content dir synchronously', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'reflexion-assets-'))
+  const workspace = mkdtempSync(join(tmpdir(), 'reflexion-ws-'))
+  const store = new Store(join(dataDir, 'db'))
+  const service = new AssetService(store, dataDir)
+  const project = store.projects.create({ name: 'p', folderPath: workspace })
+  writeFileSync(join(workspace, 'a.md'), 'aaa')
+  await service.importWorkspace(project.id, 'a.md')
+  const projectDir = join(dataDir, 'assets', project.id)
+  assert.ok(existsSync(projectDir), 'content dir exists before project.delete')
+
+  const result = await dispatchCommand(
+    'project.delete',
+    { projectId: project.id },
+    { store, agent: { clearQueue() {} }, assets: service },
+  )
+  assert.equal(result.removed, true)
+  assert.equal(
+    existsSync(projectDir),
+    false,
+    'asset content dir must be removed synchronously',
+  )
+  assert.equal(service.list(project.id).length, 0)
   store.close()
 })

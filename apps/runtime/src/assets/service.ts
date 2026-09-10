@@ -246,6 +246,21 @@ export class AssetService {
   }
 
   /**
+   * 项目删除时同步清空其 Asset 内容目录（assets/<projectId>/）。
+   * DB 行已由 projects 外键级联删除；目录删除失败不阻塞项目删除本身
+   * （孤立内容文件由启动巡检 recover 补偿清理），只记 stderr。
+   */
+  async deleteProjectDir(projectId: string): Promise<void> {
+    try {
+      await rm(this.dirFor(projectId), { recursive: true, force: true })
+    } catch (error) {
+      process.stderr.write(
+        `[runtime] asset dir cleanup failed for project ${projectId}: ${error instanceof Error ? error.message : String(error)}\n`,
+      )
+    }
+  }
+
+  /**
    * 启动巡检/补偿清理：与 Store 各领域 recover 方法同期调用。
    * 1) 删除「有内容文件但无 DB 行」的孤立文件（此前导入复制成功但落库失败残留）；
    * 2) 把「有 DB 行但内容文件缺失」的 Asset 标记为 failed（此前导出/崩溃/外部删除）。

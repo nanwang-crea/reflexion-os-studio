@@ -131,7 +131,7 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
       }),
     }
   },
-  'project.delete': (p, { store, agent }) => {
+  'project.delete': async (p, { store, agent, assets }) => {
     const projectId = requireString(p, 'projectId')
     const sessions = store.sessions.list(projectId)
     for (const session of sessions) {
@@ -142,20 +142,24 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
         )
       }
     }
-    return {
-      removed: store.transaction(() => {
-        const removed = store.projects.delete(projectId)
-        if (removed) {
-          // 项目与其下会话的记忆都无外键级联，随删除主体一并清理。
-          store.memories.removeByScope('project', projectId)
-          for (const session of sessions) {
-            store.memories.removeByScope('session', session.id)
-            agent.clearQueue(session.id)
-          }
+    const removed = store.transaction(() => {
+      const removed = store.projects.delete(projectId)
+      if (removed) {
+        // 项目与其下会话的记忆都无外键级联，随删除主体一并清理。
+        store.memories.removeByScope('project', projectId)
+        for (const session of sessions) {
+          store.memories.removeByScope('session', session.id)
+          agent.clearQueue(session.id)
         }
-        return removed
-      }),
+      }
+      return removed
+    })
+    if (removed) {
+      // Asset 内容目录同步清掉（DB 行已随项目级联删除，事务已提交）；
+      // 失败不回滚项目删除，孤立文件由启动巡检补偿清理。
+      await assets.deleteProjectDir(projectId)
     }
+    return { removed }
   },
   'message.send': (p, { agent }) => agent.send(p as unknown as ChatCommand),
   'queue.list': (p, { agent }) =>
