@@ -166,14 +166,20 @@ export function AssetsPanel(props: AssetsPanelProps): React.JSX.Element {
   }
 
   const copyRef = async (asset: AssetRef): Promise<void> => {
+    // [copy-diag] 诊断日志：定位后移除。
+    console.log('[copy-diag] asset copy click', {
+      hasClipboardApi: typeof navigator.clipboard?.writeText === 'function',
+      hasFocus: document.hasFocus(),
+    })
     try {
       await navigator.clipboard.writeText(
         `[${asset.fileName}](asset://${asset.assetId})`,
       )
       setCopied(true)
       setTimeout(() => setCopied(false), 1600)
-    } catch {
-      // 剪贴板不可用时静默失败。
+    } catch (err) {
+      // [copy-diag] 诊断期不再静默吞错，定位后移除。
+      console.error('[copy-diag] clipboard.writeText rejected:', err)
     }
   }
 

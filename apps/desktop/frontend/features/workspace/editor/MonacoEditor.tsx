@@ -96,10 +96,17 @@ export function MonacoEditor(props: MonacoEditorProps): React.JSX.Element {
 
   const handleCopy = useCallback(async () => {
     if (content === null) return
+    // [copy-diag] 诊断日志：定位后移除。
+    console.log('[copy-diag] editor copy click', {
+      hasClipboardApi: typeof navigator.clipboard?.writeText === 'function',
+      hasFocus: document.hasFocus(),
+      contentLength: content.length,
+    })
     try {
       await navigator.clipboard.writeText(content)
-    } catch {
-      // 剪贴板不可用时静默失败。
+    } catch (err) {
+      // [copy-diag] 诊断期不再静默吞错，定位后移除。
+      console.error('[copy-diag] clipboard.writeText rejected:', err)
     }
   }, [content])
 

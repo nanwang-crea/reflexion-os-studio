@@ -22,11 +22,18 @@ export function CopyButton({
   }, [copied])
 
   const copy = async (): Promise<void> => {
+    // [copy-diag] 诊断日志：确认点击进入复制逻辑并记录环境信息，定位后移除。
+    console.log('[copy-diag] click', {
+      hasClipboardApi: typeof navigator.clipboard?.writeText === 'function',
+      hasFocus: document.hasFocus(),
+      textLength: text.length,
+    })
     try {
       await navigator.clipboard.writeText(text)
       setCopied(true)
-    } catch {
-      // 剪贴板不可用时静默失败，不打断阅读。
+    } catch (err) {
+      // [copy-diag] 诊断期不再静默吞错，输出具体异常，定位后移除。
+      console.error('[copy-diag] clipboard.writeText rejected:', err)
     }
   }
 
