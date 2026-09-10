@@ -51,6 +51,8 @@ interface AssistantMessageProps {
   /** 该消息属于最近一个可重试的失败 Run 时展示重试入口。 */
   canRetry: boolean
   onRetry: () => void
+  /** 重试倒计时心跳：有活重试时按节拍自增，驱动内联倒计时重算剩余秒数。 */
+  retryTick?: number
   /** 资源引用（工作区文件/资产/外链）点击后按类型分发。 */
   onResourceClick?: (link: ResourceLink) => void
 }
@@ -88,7 +90,7 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
   const answerStreaming = props.runActive && props.streamingText !== undefined
   // Run 级阶段由事件驱动（runActivity），不再靠内容有无猜测阶段。
   // 连接 Provider 后首个增量到达前的空窗：用呼吸点告知“没有卡住”；
-  // Provider 重试期间改由 RunBlock 的重试状态行表达，避免双状态指示。
+  // Provider 重试期间改由本组件的内联重试状态行表达，避免双状态指示。
   const waiting =
     props.runActive &&
     props.runActivity?.retry === undefined &&
@@ -98,6 +100,27 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
     props.streamingReasoning === undefined
 
   const statusLabel = MESSAGE_STATUS_LABELS[props.message.status]
+
+  // 活重试的内联状态行：随流断点显示（message.reset 清空正文后落在正文位置），
+  // 恢复后 delta 事件覆盖 runActivity.retry 随之自动消失；retryTick 驱动逐秒重算。
+  const retry = props.runActivity?.retry
+  const retryCountdown =
+    retry !== undefined &&
+    retry.waitMs !== undefined &&
+    retry.startedAt !== undefined
+      ? Math.max(
+          0,
+          Math.ceil((retry.waitMs - (Date.now() - retry.startedAt)) / 1000),
+        )
+      : null
+  const retryLabel =
+    retry === undefined
+      ? null
+      : retryCountdown !== null && retryCountdown > 0
+        ? `正在重试（第 ${retry.attempt}/${retry.maxRetries} 次）… ${retryCountdown} 秒后自动重试`
+        : retryCountdown !== null
+          ? '正在重试…'
+          : `正在重试（第 ${retry.attempt}/${retry.maxRetries} 次）…`
 
   return (
     <div className="msg-assistant">
@@ -123,6 +146,11 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
               caret={answerStreaming}
               onResourceClick={props.onResourceClick}
             />
+          </div>
+        )}
+        {retryLabel !== null && props.runActive && (
+          <div className="assistant-retrying shimmer" role="status">
+            {retryLabel}
           </div>
         )}
         {statusLabel && (

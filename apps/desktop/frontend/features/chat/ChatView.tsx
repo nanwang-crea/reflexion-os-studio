@@ -364,6 +364,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
                       ? props.runActivities[message.runId]
                       : undefined
                   }
+                  retryTick={props.retryTick}
                   streamingText={props.streaming[message.id]}
                   streamingReasoning={props.streamingReasoning[message.id]}
                   runDurationMs={null}

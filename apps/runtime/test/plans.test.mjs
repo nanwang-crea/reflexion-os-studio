@@ -66,6 +66,7 @@ test('manage_plan tool definition carries final name, description and flat schem
     'get',
     'create',
     'update_step',
+    'modify_plan',
     'complete_plan',
     'cancel_plan',
   ])
@@ -366,6 +367,159 @@ test('store: complete requires all steps processed and terminal plans cannot rev
     () => store.plans.cancel(plan.id, null),
     (error) => error.code === 'PLAN_TERMINAL',
   )
+})
+
+test('store: modify merges steps in place (keep progress, insert pending, delete missing)', () => {
+  const store = freshStore()
+  const session = store.sessions.create(null)
+  const plan = store.plans.create({
+    sessionId: session.id,
+    goal: '原始目标',
+    steps: [
+      { id: 'plan-m-1', title: '第一步' },
+      { id: 'plan-m-2', title: '第二步' },
+      { id: 'plan-m-3', title: '第三步' },
+    ],
+  })
+  store.plans.updateStep(plan.id, 'plan-m-1', 'in_progress')
+  store.plans.updateStep(plan.id, 'plan-m-1', 'completed', '已完成')
+
+  const modified = store.plans.modify(plan.id, {
+    goal: '修订后的目标',
+    steps: [
+      // 同 id：保留 status/note，仅更新 title。
+      { id: 'plan-m-1', title: '第一步（修订）' },
+      // plan-m-2 未出现在新规格中：被删除。
+      // plan-m-3 同 id 保留；plan-m-4 全新 id：插入为 pending。
+      { id: 'plan-m-3', title: '第三步' },
+      { id: 'plan-m-4', title: '新增步骤' },
+    ],
+  })
+
+  assert.equal(modified.id, plan.id) // planId 不变
+  assert.equal(modified.goal, '修订后的目标')
+  assert.equal(modified.status, 'active')
+  assert.deepEqual(
+    modified.steps.map((step) => `${step.id}:${step.status}:${step.title}`),
+    [
+      'plan-m-1:completed:第一步（修订）',
+      'plan-m-3:pending:第三步',
+      'plan-m-4:pending:新增步骤',
+    ],
+  )
+  assert.equal(modified.steps[0].note, '已完成') // 进度不丢
+
+  // 被删除的步骤物理消失，其 id 可在未来计划中复用（plan_steps.id 全局主键）。
+  const reused = store.sessions.create(null)
+  const other = store.plans.create({
+    sessionId: reused.id,
+    goal: '复用已删除的步骤 id',
+    steps: [{ id: 'plan-m-2', title: '复用' }],
+  })
+  assert.equal(other.steps[0].id, 'plan-m-2')
+})
+
+test('store: modify rejects terminal plans and duplicate step ids', () => {
+  const store = freshStore()
+  const session = store.sessions.create(null)
+  const plan = store.plans.create({
+    sessionId: session.id,
+    goal: 'terminal',
+    steps: [{ id: 'plan-t-1', title: 'a' }],
+  })
+  store.plans.cancel(plan.id, null)
+  assert.throws(
+    () =>
+      store.plans.modify(plan.id, {
+        goal: 'x',
+        steps: [{ id: 'plan-t-1', title: 'a' }],
+      }),
+    (error) => error.code === 'PLAN_TERMINAL',
+  )
+
+  const active = store.plans.create({
+    sessionId: session.id,
+    goal: 'active',
+    steps: [{ id: 'plan-t-2', title: 'b' }],
+  })
+  assert.throws(
+    () =>
+      store.plans.modify(active.id, {
+        goal: 'x',
+        steps: [
+          { id: 'plan-t-3', title: 'a' },
+          { id: 'plan-t-3', title: 'b' },
+        ],
+      }),
+    (error) => error.code === 'STEP_ID_CONFLICT',
+  )
+})
+
+test('tool: modify_plan updates the active plan in place and emits plan.updated', async () => {
+  const store = freshStore()
+  const ctx = preparedCtx(store)
+  const tool = createManagePlanTool(ctx)
+
+  const created = await tool.execute({
+    args: {
+      action: 'create',
+      goal: '初始目标',
+      steps: [
+        { id: 'plan-tool-1', title: '扫描' },
+        { id: 'plan-tool-2', title: '实施' },
+      ],
+    },
+    signal: new AbortController().signal,
+  })
+  assert.equal(created.isError, false)
+  const plan = JSON.parse(created.content)
+  await tool.execute({
+    args: {
+      action: 'update_step',
+      planId: plan.id,
+      stepId: 'plan-tool-1',
+      status: 'in_progress',
+    },
+    signal: new AbortController().signal,
+  })
+
+  const modified = await tool.execute({
+    args: {
+      action: 'modify_plan',
+      planId: plan.id,
+      goal: '调整后的目标',
+      steps: [
+        { id: 'plan-tool-1', title: '扫描' },
+        { id: 'plan-tool-3', title: '验证' },
+      ],
+    },
+    signal: new AbortController().signal,
+  })
+  assert.equal(modified.isError, false)
+  const updated = JSON.parse(modified.content)
+  assert.equal(updated.id, plan.id)
+  assert.equal(updated.goal, '调整后的目标')
+  assert.deepEqual(
+    updated.steps.map((step) => `${step.id}:${step.status}`),
+    ['plan-tool-1:in_progress', 'plan-tool-3:pending'],
+  )
+
+  // 会话内活动计划仍是同一个（未取消重建）。
+  const active = store.plans.getActive(ctx.sessionId)
+  assert.equal(active?.id, plan.id)
+
+  // 缺 planId 的错误消息必须可自纠：提示先 get 找回 planId。
+  const missing = await tool.execute({
+    args: { action: 'modify_plan', goal: 'x', steps: [{ id: 's', title: 't' }] },
+    signal: new AbortController().signal,
+  })
+  assert.equal(missing.isError, true)
+  assert.equal(missing.code, 'invalid_request')
+  assert.ok(missing.content.includes('get'))
+
+  const types = ctx.emitter.events.map((event) => event.type)
+  assert.ok(types.includes('plan.updated'))
+  assert.ok(!types.includes('plan.created') || types[0] === 'plan.created')
 })
 
 // 注：recoverActive 用例已移除——当前实现没有该方法，计划不随 Run 终态收敛

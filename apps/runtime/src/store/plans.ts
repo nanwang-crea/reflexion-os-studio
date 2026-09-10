@@ -220,6 +220,65 @@ export class PlanStore {
     return this.finish(planId, 'cancelled', summary)
   }
 
+  /**
+   * 原地修改整个活动计划（声明式全量规格）：
+   * - 新规格中与现有步骤同 id 的：保留 status/note，仅更新 title（改标题不算重做）；
+   * - 全新 id：插入为 pending；
+   * - 未出现在新规格中的现有步骤：物理删除（runs.plan_step_id 外键
+   *   ON DELETE SET NULL，运行记录指针自动置空，见 store/schema.ts）。
+   * planId 与已完成进度保持不变。仅允许修改 active 状态的计划。
+   */
+  modify(
+    planId: string,
+    input: { goal: string; steps: Array<{ id: string; title: string }> },
+  ): Plan {
+    if (new Set(input.steps.map((step) => step.id)).size !== input.steps.length)
+      throw new PlanError('STEP_ID_CONFLICT', '计划内存在重复的步骤 id')
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      const plan = this.get(planId)
+      if (!plan) throw new PlanError('PLAN_NOT_FOUND', `计划不存在：${planId}`)
+      if (plan.status !== 'active')
+        throw new PlanError('PLAN_TERMINAL', `计划已处于终止状态：${plan.status}`)
+      const now = nowIso()
+      this.db
+        .prepare('UPDATE plans SET goal = ?, updated_at = ? WHERE id = ?')
+        .run(input.goal, now, planId)
+      const existingIds = new Set(plan.steps.map((step) => step.id))
+      const nextIds = new Set(input.steps.map((step) => step.id))
+      // 被移除的步骤物理删除：plan_steps.id 全局 PRIMARY KEY，删除后 id 可复用。
+      for (const removed of existingIds)
+        if (!nextIds.has(removed))
+          this.db.prepare('DELETE FROM plan_steps WHERE id = ?').run(removed)
+      // 同 id 步骤只同步标题，status/note 原样保留（已完成进度不丢）。
+      for (const step of input.steps) {
+        if (existingIds.has(step.id))
+          this.db
+            .prepare(
+              'UPDATE plan_steps SET title = ?, updated_at = ? WHERE id = ?',
+            )
+            .run(step.title, now, step.id)
+        else
+          this.db
+            .prepare(
+              'INSERT INTO plan_steps (id, plan_id, title, status, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            )
+            .run(step.id, planId, step.title, 'pending', null, now, now)
+      }
+      this.db.exec('COMMIT')
+      return this.get(planId)!
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      if (isUniqueViolation(error)) {
+        throw new PlanError(
+          'STEP_ID_CONFLICT',
+          `步骤 id 与历史计划冲突（plan_steps.id 全局唯一）：${input.steps.map((step) => step.id).join(', ')}；请使用带唯一前缀的步骤 id`,
+        )
+      }
+      throw error
+    }
+  }
+
   private finish(
     planId: string,
     status: PlanStatus,

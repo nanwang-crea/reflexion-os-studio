@@ -595,6 +595,27 @@
   animation-delay: 0.3s;
 }
 
+/* Provider 重试内联状态行：随流断点显示，恢复后随事件自动消失。 */
+.assistant-retrying {
+  font-size: 12.5px;
+  padding: 4px 0 2px;
+  color: var(--text-muted);
+}
+
+.assistant-retrying.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--text-muted) 30%,
+    var(--text) 50%,
+    var(--text-muted) 70%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: work-summary-shimmer 1.6s linear infinite;
+}
+
 @keyframes typing-bounce {
   0%,
   60%,

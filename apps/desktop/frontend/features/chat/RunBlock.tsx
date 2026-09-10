@@ -17,7 +17,7 @@ interface RunBlockProps {
   delegations: Delegation[]
   runActive: boolean
   runActivity?: RunActivity
-  /** 重试倒计时心跳：父级在有活重试时按节拍自增，驱动本组件重算剩余秒数。 */
+  /** 重试倒计时心跳：有活重试时按节拍自增，驱动回退行与内联倒计时重算剩余秒数。 */
   retryTick: number
   streaming: Record<string, string>
   streamingReasoning: Record<string, string>
@@ -83,6 +83,8 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
 
   // 活重试的倒计时：由事件携带的退避时长与本地起始时间戳换算剩余秒数。
   // retryTick 只用于触发重算；归零后回落为“正在重试”，等下一次事件覆盖。
+  // 倒计时随流内联在 AssistantMessage 正文断点处；顶部标签只表达阶段，
+  // 仅在无 finalItem 承载内联指示时（第 2 轮请求建立即重试）由回退行展示。
   const retry = props.runActivity?.retry
   const retryCountdown =
     retry !== undefined &&
@@ -93,14 +95,16 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
           Math.ceil((retry.waitMs - (Date.now() - retry.startedAt)) / 1000),
         )
       : null
+  const retryLabel =
+    retry === undefined
+      ? null
+      : retryCountdown !== null && retryCountdown > 0
+        ? `正在重试（第 ${retry.attempt}/${retry.maxRetries} 次）… ${retryCountdown} 秒后自动重试`
+        : retryCountdown !== null
+          ? '正在重试…'
+          : `正在重试（第 ${retry.attempt}/${retry.maxRetries} 次）…`
   const label = props.runActive
-    ? retry !== undefined
-      ? retryCountdown !== null
-        ? retryCountdown > 0
-          ? `正在重试（第 ${retry.attempt}/${retry.maxRetries} 次）… ${retryCountdown} 秒后自动重试`
-          : '正在重试…'
-        : `正在重试（第 ${retry.attempt}/${retry.maxRetries} 次）…`
-      : '正在处理…'
+    ? '正在处理…'
     : props.runFailed
       ? '运行失败'
       : props.runDurationMs !== null
@@ -109,15 +113,11 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
 
   return (
     <div className="run-block">
-      {/* 请求建立阶段失败（如 429）时 Run 尚无任何流程项：只渲染重试状态行，
-          避免与 AssistantMessage 的等待点重复表达“进行中”。 */}
-      {!hasProcess && props.runActive && retry !== undefined && (
+      {/* 兜底：无 finalItem 承载内联重试指示时（第 2 轮请求建立即重试），
+          在块顶部展示重试状态行，保证重试状态始终可见。 */}
+      {!props.finalItem && props.runActive && retryLabel !== null && (
         <div className="run-process">
-          <span
-            className={`run-process-label${props.runActive ? ' shimmer' : ''}`}
-          >
-            {label}
-          </span>
+          <span className="run-process-label shimmer">{retryLabel}</span>
         </div>
       )}
       {hasProcess && (
@@ -157,6 +157,7 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
           hideReasoning={true}
           runActive={props.runActive}
           runActivity={props.runActivity}
+          retryTick={props.retryTick}
           streamingText={props.streaming[props.finalItem.message.id]}
           streamingReasoning={
             props.streamingReasoning[props.finalItem.message.id]
