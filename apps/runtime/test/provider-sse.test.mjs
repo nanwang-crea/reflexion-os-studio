@@ -1,14 +1,31 @@
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { after, test } from 'node:test'
 import { createServer } from 'node:http'
 import { ProviderError, streamChatCompletion } from '../dist/provider.js'
+
+// undici 会为 fetch 池化 keep-alive 连接：server.close() 后空闲连接仍持有事件循环，
+// 导致测试进程不退出、整个文件被 runner 的文件级超时强制取消。
+// 因此把各用例创建的 server 登记在此，文件结束时强制关闭残余连接与监听器。
+const servers = new Set()
 
 function startServer(handler) {
   return new Promise((resolve) => {
     const server = createServer(handler)
-    server.listen(0, '127.0.0.1', () => resolve(server))
+    server.listen(0, '127.0.0.1', () => {
+      servers.add(server)
+      server.once('close', () => servers.delete(server))
+      resolve(server)
+    })
   })
 }
+
+after(() => {
+  for (const server of servers) {
+    // 正常退出的用例已自行 close()；断言中途失败时可能没有，这里兜底。
+    if (server.listening) server.close()
+    server.closeAllConnections()
+  }
+})
 
 function sseBody() {
   const lines = [
@@ -75,7 +92,8 @@ test('maps HTTP status to stable error codes', async () => {
 })
 
 test('connection failure maps to network', async () => {
-  // 端口 1 几乎必然拒绝连接
+  // 端口 1 几乎必然拒绝连接。maxRetries: 0 跳过退避（重试/退避行为由其他
+  // 用例专门覆盖），否则 5 次指数退避要让本用例空等 ~30 秒。
   await assert.rejects(
     streamChatCompletion(
       {
@@ -84,6 +102,7 @@ test('connection failure maps to network', async () => {
         model: 'mock-model',
         messages: [{ role: 'user', content: 'hi' }],
         signal: new AbortController().signal,
+        maxRetries: 0,
       },
       () => {},
     ),
