@@ -5,6 +5,8 @@ import type { editor as MonacoEditorType } from 'monaco-editor'
 import { readFile, writeFile } from '../../../api/workspace'
 import { getLanguageForFile, getFileName } from './language'
 import { DEFAULT_EDITOR_OPTIONS, THEME_NAME, THEME_DATA } from './monaco'
+import { copyTextToClipboard } from '../../../lib/clipboard'
+import { showToast } from '../../../components/Toast'
 import type { MonacoEditorProps } from './types'
 import { EDITOR_CONFIG } from './types'
 
@@ -96,18 +98,8 @@ export function MonacoEditor(props: MonacoEditorProps): React.JSX.Element {
 
   const handleCopy = useCallback(async () => {
     if (content === null) return
-    // [copy-diag] 诊断日志：定位后移除。
-    console.log('[copy-diag] editor copy click', {
-      hasClipboardApi: typeof navigator.clipboard?.writeText === 'function',
-      hasFocus: document.hasFocus(),
-      contentLength: content.length,
-    })
-    try {
-      await navigator.clipboard.writeText(content)
-    } catch (err) {
-      // [copy-diag] 诊断期不再静默吞错，定位后移除。
-      console.error('[copy-diag] clipboard.writeText rejected:', err)
-    }
+    const ok = await copyTextToClipboard(content)
+    showToast(ok ? '已复制全文到剪贴板' : '复制失败，请重试', ok ? 'success' : 'error')
   }, [content])
 
   if (error && content === null) {

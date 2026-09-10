@@ -16,6 +16,7 @@
     "@reflexion-os-studio/contracts": "workspace:*",
     "@reflexion-os-studio/runtime-client": "workspace:^",
     "@tauri-apps/api": "^2.8.0",
+    "@tauri-apps/plugin-clipboard-manager": "^2",
     "@tauri-apps/plugin-dialog": "^2",
     "monaco-editor": "^0.56.0",
     "react": "^19.2.8",

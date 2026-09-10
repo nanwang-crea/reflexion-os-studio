@@ -69,8 +69,12 @@
   word-break: break-word;
 }
 
+/* 用户消息也可能很长：限高 5 行内部上下滚动
+   （8em = 14px × 行高 1.6 × 5 行），断行沿用 .user-bubble 的 word-break。 */
 .user-content {
   white-space: pre-wrap;
+  max-height: 8em;
+  overflow-y: auto;
 }
 
 /* ---------- 助手消息 ---------- */
@@ -186,6 +190,18 @@
   color: var(--text-muted);
   display: grid;
   place-items: center;
+}
+
+/* 复制按钮（.copy-btn）：仅作用于 CopyButton（消息操作钮/代码块/表格共用），
+   在不影响其他复用 .msg-action 按钮的前提下扩大点击热区并加按下反馈。 */
+.copy-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+}
+
+.copy-btn:active {
+  transform: scale(0.92);
 }
 
 .msg-action:hover:not(:disabled) {
@@ -345,6 +361,11 @@
   color: var(--text-muted);
   font-size: 11px;
   line-height: 1.45;
+  /* 超长总结限高 5 行内部上下滚动
+     (8em = 11px × 行高 1.45 × 5 行)，长串允许断行。 */
+  word-break: break-word;
+  max-height: 8em;
+  overflow-y: auto;
 }
 
 @media (max-width: 760px) {
@@ -716,6 +737,7 @@
   font-size: 11px;
   color: var(--text-muted);
   pointer-events: none;
+  transition: opacity 0.1s ease;
 }
 
 .md-block-copy {
@@ -733,6 +755,11 @@
 .md-table-wrap:hover .md-block-copy,
 .md-block-copy:focus-visible {
   opacity: 1;
+}
+
+/* 复制按钮浮现时隐藏右上角语言标签，避免两者重叠导致按钮难点中。 */
+.md-code-block:hover .md-pre::after {
+  opacity: 0;
 }
 
 .md-quote {
@@ -1244,6 +1271,11 @@
   color: var(--text-secondary);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+  /* 命令/路径可能很长：限高 5 行内部上下滚动
+     (5.45em = 13px × 行高 1.4 × 5 行)。 */
+  line-height: 1.4;
+  max-height: 7em;
+  overflow-y: auto;
 }
 
 .approval-actions {

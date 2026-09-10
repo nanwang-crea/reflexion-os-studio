@@ -21,6 +21,7 @@ import { resolveApproval } from './api/chat'
 import { listSkills } from './api/skills'
 import type { SessionData } from './api/sessions'
 import { ConfirmDialog } from './components/ConfirmDialog'
+import { ToastHost } from './components/Toast'
 import { ResizeHandle } from './components/ResizeHandle'
 import { TopBar, STATUS_LABELS } from './components/TopBar'
 import { ChatView } from './features/chat/ChatView'
@@ -490,6 +491,7 @@ export default function App() {
         onConfirm={handleConfirm}
         onCancel={handleCancel}
       />
+      <ToastHost />
     </div>
   )
 }

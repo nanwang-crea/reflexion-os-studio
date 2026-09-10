@@ -298,6 +298,10 @@
   margin: 2px 0 6px 14px;
   padding-left: 8px;
   border-left: 1px solid var(--border-subtle);
+  /* 项目会话很多时列表过长：一次展示约 10 条，其余内部滚动下滑。
+     355px ≈ 10 × (行高 19.5 + 上下 padding 14 + 间距 2) px。 */
+  max-height: 355px;
+  overflow-y: auto;
 }
 
 .row {

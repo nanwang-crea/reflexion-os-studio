@@ -354,7 +354,7 @@ function renderBlock(
             <code>{block.text}</code>
             {caret}
           </pre>
-          <CopyButton text={block.text} className="md-block-copy" />
+          <CopyButton text={block.text} className="md-block-copy copy-btn" />
         </div>
       )
     case 'list': {
@@ -428,7 +428,7 @@ function renderBlock(
               })}
             </tbody>
           </table>
-          <CopyButton text={copyText} className="md-block-copy" />
+          <CopyButton text={copyText} className="md-block-copy copy-btn" />
           {caret}
         </div>
       )

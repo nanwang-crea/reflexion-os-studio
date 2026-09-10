@@ -8,6 +8,8 @@ import {
 } from '../../api/assets'
 import { RefreshIcon } from '../../ui/icons'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { copyTextToClipboard } from '../../lib/clipboard'
+import { showToast } from '../../components/Toast'
 
 interface AssetsPanelProps {
   projectId: string
@@ -166,20 +168,15 @@ export function AssetsPanel(props: AssetsPanelProps): React.JSX.Element {
   }
 
   const copyRef = async (asset: AssetRef): Promise<void> => {
-    // [copy-diag] 诊断日志：定位后移除。
-    console.log('[copy-diag] asset copy click', {
-      hasClipboardApi: typeof navigator.clipboard?.writeText === 'function',
-      hasFocus: document.hasFocus(),
-    })
-    try {
-      await navigator.clipboard.writeText(
-        `[${asset.fileName}](asset://${asset.assetId})`,
-      )
+    const ok = await copyTextToClipboard(
+      `[${asset.fileName}](asset://${asset.assetId})`,
+    )
+    if (ok) {
       setCopied(true)
       setTimeout(() => setCopied(false), 1600)
-    } catch (err) {
-      // [copy-diag] 诊断期不再静默吞错，定位后移除。
-      console.error('[copy-diag] clipboard.writeText rejected:', err)
+      showToast('已复制资产引用')
+    } else {
+      showToast('复制失败，请重试', 'error')
     }
   }
 

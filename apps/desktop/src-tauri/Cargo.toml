@@ -21,6 +21,7 @@ serde_json = "1"
 url = "2"
 # 启动时孤儿 sidecar 清理：跨平台进程枚举（macOS/Windows/Linux 一套 API）。
 sysinfo = "0.33"
+tauri-plugin-clipboard-manager = "2"
 
 [target.'cfg(unix)'.dependencies]
 # 进程组树杀（kill -pgid）：POSIX 上兜底收割 TS Runtime 及其子进程。

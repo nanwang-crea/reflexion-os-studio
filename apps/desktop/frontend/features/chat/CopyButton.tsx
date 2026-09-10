@@ -1,51 +1,65 @@
 import { useEffect, useState } from 'react'
-import { CheckIcon, CopyIcon } from '../../ui/icons'
+import { AlertIcon, CheckIcon, CopyIcon } from '../../ui/icons'
+import { copyTextToClipboard } from '../../lib/clipboard'
+import { showToast } from '../../components/Toast'
 
 interface CopyButtonProps {
   /** 点击后写入剪贴板的文本。 */
   text: string
-  /** 应用到 <button> 的额外类名；默认复用消息操作钮样式。 */
+  /** 应用到 <button> 的类名；默认复用消息操作钮样式。 */
   className?: string
 }
 
-/** 复制按钮：点击写剪贴板，成功短暂显示勾号后还原。用户/助手消息共用。 */
+type CopyState = 'idle' | 'copied' | 'failed'
+
+/**
+ * 复制按钮：走统一剪贴板通道（Tauri 插件 → Clipboard API → execCommand），
+ * 成败均有 toast 反馈；成功短暂显示勾号、失败显示警示号后还原。
+ * 用户/助手消息、代码块、表格复制共用。
+ */
 export function CopyButton({
   text,
-  className = 'msg-action',
+  className,
 }: CopyButtonProps): React.JSX.Element {
-  const [copied, setCopied] = useState(false)
+  const [state, setState] = useState<CopyState>('idle')
 
   useEffect(() => {
-    if (!copied) return
-    const timer = setTimeout(() => setCopied(false), 1600)
+    if (state === 'idle') return
+    const timer = setTimeout(() => setState('idle'), 1600)
     return () => clearTimeout(timer)
-  }, [copied])
+  }, [state])
 
   const copy = async (): Promise<void> => {
-    // [copy-diag] 诊断日志：确认点击进入复制逻辑并记录环境信息，定位后移除。
-    console.log('[copy-diag] click', {
-      hasClipboardApi: typeof navigator.clipboard?.writeText === 'function',
-      hasFocus: document.hasFocus(),
-      textLength: text.length,
-    })
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopied(true)
-    } catch (err) {
-      // [copy-diag] 诊断期不再静默吞错，输出具体异常，定位后移除。
-      console.error('[copy-diag] clipboard.writeText rejected:', err)
+    const ok = await copyTextToClipboard(text)
+    if (ok) {
+      setState('copied')
+      showToast('已复制到剪贴板')
+    } else {
+      setState('failed')
+      showToast('复制失败，请重试', 'error')
     }
   }
+
+  const label =
+    state === 'copied' ? '已复制' : state === 'failed' ? '复制失败' : '复制'
 
   return (
     <button
       type="button"
-      className={className}
-      title={copied ? '已复制' : '复制'}
-      aria-label={copied ? '已复制' : '复制'}
+      className={`copy-btn ${className ?? 'msg-action'}${
+        state === 'failed' ? ' copy-failed' : ''
+      }`}
+      title={label}
+      aria-label={label}
       onClick={() => void copy()}
     >
-      {copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
+      {state === 'copied' ? (
+        <CheckIcon size={13} />
+      ) : state === 'failed' ? (
+        <AlertIcon size={13} />
+      ) : (
+        <CopyIcon size={13} />
+      )}
     </button>
   )
 }
