@@ -49,6 +49,7 @@ pub fn handle_file_glob(params: Value) -> Result<Value, OpError> {
     let outcome = search::glob_search(
         &root,
         &params.pattern,
+        params.offset,
         params.limit.unwrap_or(search::DEFAULT_GLOB_LIMIT),
     )
     .map_err(|message| OpError::new("file_error", message))?;
@@ -67,6 +68,7 @@ pub fn handle_file_grep(params: Value) -> Result<Value, OpError> {
         &params.text,
         params.glob.as_deref(),
         params.ignore_case.unwrap_or(false),
+        params.context.unwrap_or(0),
         params.max_results.unwrap_or(search::DEFAULT_GREP_LIMIT),
     )
     .map_err(|message| OpError::new("file_error", message))?;

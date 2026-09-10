@@ -9,7 +9,9 @@ use serde::Serialize;
 use crate::paths::resolve_in_workspace;
 use crate::walk::walk_files;
 
-pub const MAX_READ_BYTES: u64 = 512 * 1024;
+/// 整文件读取上限：按行分窗不减少加载量（读前需全量载入定位行边界），
+/// 因此限制的是文件总大小；返回给模型的窗口仍由行数与 TS 层字符预算约束。
+pub const MAX_READ_BYTES: u64 = 2 * 1024 * 1024;
 pub const MAX_WRITE_BYTES: usize = 2 * 1024 * 1024;
 /// 单次列表分页默认/最大条目数：防止一次吃满上下文，超限可经 nextOffset 续读。
 pub const DEFAULT_LIST_LIMIT: usize = 200;
@@ -46,12 +48,17 @@ pub fn read(
     let size = fs::metadata(&path).map_err(|e| e.to_string())?.len();
     if size > MAX_READ_BYTES {
         return Err(format!(
-            "file too large for read: {size} bytes (limit {MAX_READ_BYTES})"
+            "file too large for read: {size} bytes (whole-file limit {MAX_READ_BYTES} bytes); \
+             line-windowed reads still load the entire file — use file.grep to locate content \
+             in larger files, or file.list to check sizes"
         ));
     }
     let bytes = fs::read(&path).map_err(|e| e.to_string())?;
-    let content =
-        String::from_utf8(bytes).map_err(|_| "file is not valid UTF-8 text".to_string())?;
+    let content = String::from_utf8(bytes).map_err(|_| {
+        "file is not valid UTF-8 text (binary file?); file.grep skips binary files \
+         automatically, and file.list shows file sizes"
+            .to_string()
+    })?;
     let total_lines = content.lines().count();
     let start = offset.unwrap_or(0);
     if start > total_lines {

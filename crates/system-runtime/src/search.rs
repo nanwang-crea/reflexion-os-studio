@@ -1,5 +1,6 @@
 //! Workspace 搜索：glob 文件名匹配与字面文本 grep。
 //! grep 只做字面子串（非正则），过滤与定位用 glob；遍历边界由 walk 模块保证。
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
@@ -14,6 +15,8 @@ pub const MAX_GREP_RESULTS: usize = 1000;
 /// grep 默认/上限条数：太多会撑爆模型上下文。
 pub const DEFAULT_GLOB_LIMIT: usize = 500;
 pub const DEFAULT_GREP_LIMIT: usize = 200;
+/// 命中行前后附带的上下文行数上限：过大无益，总量由调用方截断层兜底。
+pub const MAX_GREP_CONTEXT: usize = 5;
 const MAX_GREP_FILE_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_GREP_LINE_CHARS: usize = 500;
 
@@ -22,14 +25,30 @@ const MAX_GREP_LINE_CHARS: usize = 500;
 pub struct GlobOutcome {
     pub matches: Vec<FileEntry>,
     pub truncated: bool,
+    /// 仍有后续页时指向下一次请求的 offset；与 file.list 同构。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_offset: Option<usize>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GrepLine {
+    /// 1-based 绝对行号。
+    pub line: usize,
+    pub text: String,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GrepMatch {
     pub path: String,
+    /// 1-based 绝对行号。
     pub line: usize,
     pub text: String,
+    /// 命中行前后的上下文行（按行号升序；跳过本身命中的行）。
+    /// context=0 时整体省略，JSON 形状与无上下文调用完全一致。
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub context: Vec<GrepLine>,
 }
 
 #[derive(Serialize)]
@@ -42,25 +61,32 @@ pub struct GrepOutcome {
 pub fn glob_search(
     workspace_root: &Path,
     pattern: &str,
+    offset: Option<usize>,
     limit: usize,
 ) -> Result<GlobOutcome, String> {
     let segments = glob::pattern_segments(pattern)?;
     let start = resolve_in_workspace(workspace_root, ".")?;
     let walked = walk_files(&start, "");
     let limit = limit.clamp(1, MAX_GLOB_RESULTS);
-    let mut matches = Vec::new();
+    // 全量收集后再分页：match 到 limit 即 break 是有偏截断，
+    // 排序完整的匹配集才能给出稳定可续读的 offset 语义。
+    let mut all: Vec<FileEntry> = Vec::new();
     for entry in &walked.files {
         let path_segments: Vec<&str> = entry.path.split('/').collect();
         if glob::matches(&segments, &path_segments) {
-            matches.push(entry.clone());
-            if matches.len() >= limit {
-                break;
-            }
+            all.push(entry.clone());
         }
     }
-    // 恰好到上限说明可能还有更多；walk 截断说明还有未扫描的文件。
-    let truncated = walked.truncated || matches.len() >= limit;
-    Ok(GlobOutcome { matches, truncated })
+    let offset = offset.unwrap_or(0);
+    let page: Vec<FileEntry> = all.iter().skip(offset).take(limit).cloned().collect();
+    let page_end = offset.saturating_add(page.len());
+    let more = page_end < all.len();
+    // walk 截断说明还有未扫描的文件；more 说明匹配集还有下一页。
+    Ok(GlobOutcome {
+        matches: page,
+        truncated: walked.truncated || more,
+        next_offset: if more { Some(page_end) } else { None },
+    })
 }
 
 pub fn grep_search(
@@ -68,6 +94,7 @@ pub fn grep_search(
     text: &str,
     glob_filter: Option<&str>,
     ignore_case: bool,
+    context: usize,
     limit: usize,
 ) -> Result<GrepOutcome, String> {
     if text.trim().is_empty() {
@@ -82,10 +109,11 @@ pub fn grep_search(
     } else {
         text.to_string()
     };
+    let context = context.min(MAX_GREP_CONTEXT);
     let start = resolve_in_workspace(workspace_root, ".")?;
     let walked = walk_files(&start, "");
     let limit = limit.clamp(1, MAX_GREP_RESULTS);
-    let mut matches = Vec::new();
+    let mut matches: Vec<GrepMatch> = Vec::new();
     for entry in &walked.files {
         if let Some(pattern) = &filter {
             let path_segments: Vec<&str> = entry.path.split('/').collect();
@@ -108,7 +136,9 @@ pub fn grep_search(
             Ok(value) => value,
             Err(_) => continue,
         };
-        for (index, line) in content.lines().enumerate() {
+        let lines: Vec<&str> = content.lines().collect();
+        let mut matched: Vec<usize> = Vec::new();
+        for (index, line) in lines.iter().enumerate() {
             let haystack = if ignore_case {
                 line.to_lowercase()
             } else {
@@ -117,17 +147,40 @@ pub fn grep_search(
             if !haystack.contains(&needle) {
                 continue;
             }
+            matched.push(index);
+            if matched.len() >= limit {
+                break;
+            }
+        }
+        let reached_limit = matched.len() >= limit;
+        let matched_set: HashSet<usize> = matched.iter().copied().collect();
+        for &index in &matched {
+            let mut context_lines = Vec::new();
+            if context > 0 {
+                let first = index.saturating_sub(context);
+                let last = (index + context).min(lines.len().saturating_sub(1));
+                for neighbour in first..=last {
+                    if neighbour == index || matched_set.contains(&neighbour) {
+                        continue;
+                    }
+                    context_lines.push(GrepLine {
+                        line: neighbour + 1,
+                        text: truncate_line(lines[neighbour]),
+                    });
+                }
+            }
             matches.push(GrepMatch {
                 path: entry.path.clone(),
                 line: index + 1,
-                text: truncate_line(line),
+                text: truncate_line(lines[index]),
+                context: context_lines,
             });
-            if matches.len() >= limit {
-                return Ok(GrepOutcome {
-                    matches,
-                    truncated: true,
-                });
-            }
+        }
+        if reached_limit {
+            return Ok(GrepOutcome {
+                matches,
+                truncated: true,
+            });
         }
     }
     Ok(GrepOutcome {
@@ -165,11 +218,31 @@ mod tests {
         fs::write(root.join("a.ts"), "a").unwrap();
         fs::write(root.join("src/b.ts"), "b").unwrap();
         fs::write(root.join("c.md"), "c").unwrap();
-        let outcome = glob_search(&root, "**/*.ts", DEFAULT_GLOB_LIMIT).unwrap();
+        let outcome = glob_search(&root, "**/*.ts", None, DEFAULT_GLOB_LIMIT).unwrap();
         assert_eq!(outcome.matches.len(), 2);
         assert_eq!(outcome.matches[0].path, "a.ts");
         assert_eq!(outcome.matches[1].path, "src/b.ts");
         assert!(!outcome.truncated);
+        assert_eq!(outcome.next_offset, None);
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn glob_paginates_with_offset_and_next_offset() {
+        let root = temp_workspace("glob-offset");
+        fs::write(root.join("a.ts"), "a").unwrap();
+        fs::write(root.join("b.ts"), "b").unwrap();
+        fs::write(root.join("c.ts"), "c").unwrap();
+        let first = glob_search(&root, "*.ts", None, 2).unwrap();
+        assert_eq!(first.matches.len(), 2);
+        assert_eq!(first.matches[0].path, "a.ts");
+        assert!(first.truncated);
+        assert_eq!(first.next_offset, Some(2));
+        let second = glob_search(&root, "*.ts", first.next_offset, 2).unwrap();
+        assert_eq!(second.matches.len(), 1);
+        assert_eq!(second.matches[0].path, "c.ts");
+        assert!(!second.truncated);
+        assert_eq!(second.next_offset, None);
         fs::remove_dir_all(&root).ok();
     }
 
@@ -177,13 +250,42 @@ mod tests {
     fn grep_finds_lines_and_respects_case_flag() {
         let root = temp_workspace("grep");
         fs::write(root.join("note.txt"), "hello World\nsecond line\n").unwrap();
-        let found = grep_search(&root, "World", None, false, DEFAULT_GREP_LIMIT).unwrap();
+        let found = grep_search(&root, "World", None, false, 0, DEFAULT_GREP_LIMIT).unwrap();
         assert_eq!(found.matches.len(), 1);
         assert_eq!(found.matches[0].line, 1);
-        let insensitive = grep_search(&root, "world", None, true, DEFAULT_GREP_LIMIT).unwrap();
+        let insensitive = grep_search(&root, "world", None, true, 0, DEFAULT_GREP_LIMIT).unwrap();
         assert_eq!(insensitive.matches.len(), 1);
-        let missing = grep_search(&root, "nope", None, false, DEFAULT_GREP_LIMIT).unwrap();
+        let missing = grep_search(&root, "nope", None, false, 0, DEFAULT_GREP_LIMIT).unwrap();
         assert!(missing.matches.is_empty());
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn grep_context_includes_neighbours_and_skips_matched_lines() {
+        let root = temp_workspace("grep-context");
+        fs::write(
+            root.join("code.txt"),
+            "l0\nl1 needle\nl2\nl3\nl4 needle\nl5\n",
+        )
+        .unwrap();
+        let outcome = grep_search(&root, "needle", None, false, 2, DEFAULT_GREP_LIMIT).unwrap();
+        assert_eq!(outcome.matches.len(), 2);
+        assert_eq!(outcome.matches[0].line, 2);
+        let lines_of = |m: &GrepMatch| -> Vec<usize> {
+            m.context
+                .iter()
+                .map(|context_line| context_line.line)
+                .collect()
+        };
+        // 命中行 2 的上下文：1..4 去掉自身；行 5 本身命中，不重复出现。
+        assert_eq!(lines_of(&outcome.matches[0]), vec![1, 3, 4]);
+        assert_eq!(outcome.matches[1].line, 5);
+        assert_eq!(lines_of(&outcome.matches[1]), vec![3, 4, 6]);
+        // context=0 时字段整体省略（与既有 JSON 形状一致）。
+        let plain = grep_search(&root, "l0", None, false, 0, DEFAULT_GREP_LIMIT).unwrap();
+        assert!(plain.matches[0].context.is_empty());
+        let serialized = serde_json::to_value(&plain.matches[0]).unwrap();
+        assert!(serialized.get("context").is_none());
         fs::remove_dir_all(&root).ok();
     }
 
@@ -192,11 +294,11 @@ mod tests {
         let root = temp_workspace("grep-binary");
         fs::write(root.join("text.txt"), "needle here").unwrap();
         fs::write(root.join("data.bin"), [0u8, 1, 2]).unwrap();
-        let outcome = grep_search(&root, "needle", None, false, DEFAULT_GREP_LIMIT).unwrap();
+        let outcome = grep_search(&root, "needle", None, false, 0, DEFAULT_GREP_LIMIT).unwrap();
         assert_eq!(outcome.matches.len(), 1);
         assert_eq!(outcome.matches[0].path, "text.txt");
         let filtered =
-            grep_search(&root, "needle", Some("*.bin"), false, DEFAULT_GREP_LIMIT).unwrap();
+            grep_search(&root, "needle", Some("*.bin"), false, 0, DEFAULT_GREP_LIMIT).unwrap();
         assert!(filtered.matches.is_empty());
         fs::remove_dir_all(&root).ok();
     }
@@ -208,11 +310,11 @@ mod tests {
         fs::write(root.join("a.ts"), "needle").unwrap();
         fs::write(root.join("src/b.ts"), "needle").unwrap();
 
-        let glob = glob_search(&root, "**/*.ts", 0).unwrap();
+        let glob = glob_search(&root, "**/*.ts", None, 0).unwrap();
         assert_eq!(glob.matches.len(), 1);
         assert!(glob.truncated);
 
-        let grep = grep_search(&root, "needle", None, false, 0).unwrap();
+        let grep = grep_search(&root, "needle", None, false, 0, 0).unwrap();
         assert_eq!(grep.matches.len(), 1);
         assert!(grep.truncated);
 
@@ -222,7 +324,7 @@ mod tests {
     #[test]
     fn grep_rejects_empty_text() {
         let root = temp_workspace("grep-empty");
-        assert!(grep_search(&root, "  ", None, false, DEFAULT_GREP_LIMIT).is_err());
+        assert!(grep_search(&root, "  ", None, false, 0, DEFAULT_GREP_LIMIT).is_err());
         fs::remove_dir_all(&root).ok();
     }
 
@@ -234,12 +336,12 @@ mod tests {
         fs::write(root.join("node_modules/pkg/dep.ts"), "needle").unwrap();
         fs::write(root.join("src/main.ts"), "needle").unwrap();
 
-        let glob = glob_search(&root, "**/*.ts", DEFAULT_GLOB_LIMIT).unwrap();
+        let glob = glob_search(&root, "**/*.ts", None, DEFAULT_GLOB_LIMIT).unwrap();
         assert_eq!(glob.matches.len(), 1);
         assert_eq!(glob.matches[0].path, "src/main.ts");
         assert!(!glob.truncated);
 
-        let grep = grep_search(&root, "needle", None, false, DEFAULT_GREP_LIMIT).unwrap();
+        let grep = grep_search(&root, "needle", None, false, 0, DEFAULT_GREP_LIMIT).unwrap();
         assert_eq!(grep.matches.len(), 1);
         assert_eq!(grep.matches[0].path, "src/main.ts");
         assert!(!grep.truncated);

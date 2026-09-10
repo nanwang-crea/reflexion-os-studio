@@ -36,6 +36,8 @@ pub struct ListParams {
 pub struct GlobParams {
     pub workspace_root: String,
     pub pattern: String,
+    /// 分页起点：默认 0；与 file.list 同构。
+    pub offset: Option<usize>,
     pub limit: Option<usize>,
 }
 
@@ -48,6 +50,8 @@ pub struct GrepParams {
     /// 仅扫描命中该 glob 的文件，如 `*.rs`。
     pub glob: Option<String>,
     pub ignore_case: Option<bool>,
+    /// 命中行前后附带的上下文行数（0-5），缺省 0。
+    pub context: Option<usize>,
     pub max_results: Option<usize>,
 }
 

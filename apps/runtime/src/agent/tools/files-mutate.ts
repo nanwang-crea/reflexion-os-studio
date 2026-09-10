@@ -71,7 +71,7 @@ export function createFileEditTool(
   return {
     name: 'file.edit',
     description:
-      '对工作区内已有文本文件做精确替换：oldText → newText，只提交被替换的片段。oldText 必须逐字符复制自最近一次 file.read 读到的内容（不要凭记忆改写），在文件中出现的次数必须与 expectedCount（默认 1）一致，否则不写入并报错；运行时校验读取凭据，文件被外部修改过会要求重新读取。替换失败时先重新读取文件确认当前内容，再调整片段重试。需要用户审批。',
+      '对工作区内已有文本文件做精确替换：oldText → newText，只提交被替换的片段。oldText 必须逐字符复制自最近一次 file.read 读到的内容并去掉 L<行号>: 行号前缀（不要凭记忆改写），在文件中出现的次数必须与 expectedCount（默认 1）一致，否则不写入并报错；运行时校验读取凭据，文件被外部修改过会要求重新读取。替换失败时先重新读取文件确认当前内容，再调整片段重试。需要用户审批。',
     parameters: {
       type: 'object',
       properties: {
