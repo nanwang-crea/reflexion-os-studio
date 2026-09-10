@@ -4,6 +4,8 @@ import { useCallback, useState } from 'react'
 export interface PendingApproval {
   toolCallId: string
   runId: string
+  /** 审批所属会话：侧栏会话行据此显示待审批标记（旧版事件可缺省）。 */
+  sessionId?: string
   operation: string
   summary: string
 }

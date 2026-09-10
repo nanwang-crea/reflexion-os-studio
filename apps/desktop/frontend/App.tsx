@@ -145,6 +145,8 @@ export default function App() {
     runningSessionIds,
     completedSessionIds,
     failedSessionIds,
+    approvalSessionIds,
+    clearSessionStatus,
     retryTick,
   } = useAppBootstrap(bootstrapDeps)
 
@@ -244,6 +246,22 @@ export default function App() {
   const activeProject =
     projects.find((project) => project.id === activeProjectId) ?? null
 
+  // 点击会话行进入会话即视为"已确认"：清除该会话的完成/失败侧栏标记。
+  const handleSelectSession = useCallback(
+    (sessionId: string): void => {
+      clearSessionStatus(sessionId)
+      openSession(sessionId)
+    },
+    [clearSessionStatus, openSession],
+  )
+  const handleSelectStandaloneSession = useCallback(
+    (sessionId: string): void => {
+      clearSessionStatus(sessionId)
+      selectStandaloneSession(sessionId)
+    },
+    [clearSessionStatus, selectStandaloneSession],
+  )
+
   const handleResourceClick = useResourceRouter({
     activeProjectRef,
     setWorkspaceRequest,
@@ -308,6 +326,7 @@ export default function App() {
         runningSessionIds={runningSessionIds}
         completedSessionIds={completedSessionIds}
         failedSessionIds={failedSessionIds}
+        approvalSessionIds={approvalSessionIds}
         creatingProject={creatingProject}
         view={view}
         systemReady={bootstrap?.systemReady ?? false}
@@ -319,8 +338,8 @@ export default function App() {
         onEnterProjectFiles={enterProjectFiles}
         onBackToChat={backToChat}
         onSelectProject={selectProject}
-        onSelectSession={openSession}
-        onSelectStandaloneSession={selectStandaloneSession}
+        onSelectSession={handleSelectSession}
+        onSelectStandaloneSession={handleSelectStandaloneSession}
         onNewSessionInProject={selectProject}
         onNewChat={newStandaloneChat}
         onCreateProject={createProject}

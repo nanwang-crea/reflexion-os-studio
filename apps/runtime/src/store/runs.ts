@@ -128,9 +128,23 @@ export class RunStore {
     const promptTokens = (current?.promptTokens ?? 0) + usage.promptTokens
     const completionTokens =
       (current?.completionTokens ?? 0) + usage.completionTokens
+    // 缓存命中保持三态语义：任一轮次上报则累加入总账，仅当所有轮次都未上报
+    // 时才省略字段（与"上报了但命中为 0"区分开，runner 据此决定是否展示）。
+    const cachedPromptTokens =
+      usage.cachedPromptTokens !== undefined ||
+      current?.cachedPromptTokens !== undefined
+        ? (current?.cachedPromptTokens ?? 0) + (usage.cachedPromptTokens ?? 0)
+        : undefined
     this.db
       .prepare('UPDATE runs SET usage_json = ? WHERE id = ?')
-      .run(JSON.stringify({ promptTokens, completionTokens }), id)
+      .run(
+        JSON.stringify(
+          cachedPromptTokens === undefined
+            ? { promptTokens, completionTokens }
+            : { promptTokens, completionTokens, cachedPromptTokens },
+        ),
+        id,
+      )
   }
 
   activeForSession(sessionId: string): Run | null {
@@ -248,6 +262,7 @@ function parseUsage(value: unknown): Usage | null {
     const parsed = JSON.parse(String(value)) as {
       promptTokens?: unknown
       completionTokens?: unknown
+      cachedPromptTokens?: unknown
     }
     if (
       typeof parsed.promptTokens === 'number' &&
@@ -256,6 +271,9 @@ function parseUsage(value: unknown): Usage | null {
       return {
         promptTokens: parsed.promptTokens,
         completionTokens: parsed.completionTokens,
+        ...(typeof parsed.cachedPromptTokens === 'number'
+          ? { cachedPromptTokens: parsed.cachedPromptTokens }
+          : {}),
       }
     }
   } catch {

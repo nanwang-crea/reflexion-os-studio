@@ -36,6 +36,8 @@ interface SidebarProps {
   runningSessionIds?: string[]
   completedSessionIds?: string[]
   failedSessionIds?: string[]
+  /** 有待审批工具调用的会话（显示 ✋ 标记，优先级最高）。 */
+  approvalSessionIds?: string[]
   creatingProject: boolean
   /** 当前主视图；底部导航据此高亮。 */
   view: AppView
@@ -198,6 +200,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
         runningSessionIds={props.runningSessionIds}
         completedSessionIds={props.completedSessionIds}
         failedSessionIds={props.failedSessionIds}
+        approvalSessionIds={props.approvalSessionIds}
         creatingProject={props.creatingProject}
         onSelectProject={props.onSelectProject}
         onSelectSession={props.onSelectSession}
@@ -251,6 +254,7 @@ interface ChatsPanelProps {
   runningSessionIds?: string[]
   completedSessionIds?: string[]
   failedSessionIds?: string[]
+  approvalSessionIds?: string[]
   creatingProject: boolean
   onSelectProject: (projectId: string) => void
   onSelectSession: (sessionId: string) => void
@@ -368,6 +372,9 @@ function ChatsPanel(props: ChatsPanelProps): React.JSX.Element {
                             failed={props.failedSessionIds?.includes(
                               session.id,
                             )}
+                            pendingApproval={props.approvalSessionIds?.includes(
+                              session.id,
+                            )}
                             onSelect={() => props.onSelectSession(session.id)}
                             onRename={(title) =>
                               props.onRenameSession(session.id, title)
@@ -419,6 +426,9 @@ function ChatsPanel(props: ChatsPanelProps): React.JSX.Element {
                         session.id,
                       )}
                       failed={props.failedSessionIds?.includes(session.id)}
+                      pendingApproval={props.approvalSessionIds?.includes(
+                        session.id,
+                      )}
                       onSelect={() =>
                         props.onSelectStandaloneSession(session.id)
                       }

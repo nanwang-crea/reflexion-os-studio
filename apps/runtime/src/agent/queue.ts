@@ -14,7 +14,10 @@ export interface QueuedItem {
  * 重启即丢失(排队窗口短,不持久化);变更经 queue.changed 事件广播快照。
  */
 export class QueueService {
+  /** 会话 → 排队项（内存，重启即丢失）。 */
   private readonly queues = new Map<string, QueuedItem[]>()
+  /** 用户停止 Run 后的会话级暂停标记：暂停期间 pump 不自动出队，等 queue.resume 确认。 */
+  private readonly paused = new Set<string>()
 
   constructor(private readonly notifier: EventNotifier) {}
 
@@ -58,6 +61,7 @@ export class QueueService {
   /** 会话删除时清空其队列(残留项永无发送机会)。 */
   removeSession(sessionId: string): void {
     this.queues.delete(sessionId)
+    this.paused.delete(sessionId)
   }
 
   remove(sessionId: string, queueId: string): boolean {
@@ -92,6 +96,25 @@ export class QueueService {
     return entry
   }
 
+  /** 停止 Run 后暂停自动出队;返回 false 表示此前未处于暂停态。 */
+  pause(sessionId: string): boolean {
+    if (this.paused.has(sessionId)) return false
+    this.paused.add(sessionId)
+    this.notify(sessionId)
+    return true
+  }
+
+  /** 用户确认后解除暂停;返回 false 表示本来就没在暂停。 */
+  resume(sessionId: string): boolean {
+    if (!this.paused.delete(sessionId)) return false
+    this.notify(sessionId)
+    return true
+  }
+
+  isPaused(sessionId: string): boolean {
+    return this.paused.has(sessionId)
+  }
+
   private toEntry(
     sessionId: string,
     entry: QueuedItem,
@@ -115,6 +138,7 @@ export class QueueService {
     emitter.next({
       type: 'queue.changed',
       sessionId,
+      paused: this.isPaused(sessionId),
       items: this.list(sessionId),
     })
   }

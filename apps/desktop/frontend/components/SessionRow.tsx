@@ -9,6 +9,8 @@ export function SessionRow(props: {
   running?: boolean
   completed?: boolean
   failed?: boolean
+  /** 有等待审批的工具调用：优先级最高（待审批 > 失败 > 成功）。 */
+  pendingApproval?: boolean
   onSelect: () => void
   onRename: (title: string) => Promise<void>
   onDelete: () => Promise<void>
@@ -29,6 +31,21 @@ export function SessionRow(props: {
     setEditTitle(props.session.title)
     setEditing(true)
   }
+
+  // 侧栏标记优先级：待审批 > 失败 > 成功；正在查看的会话不显示完成标
+  //（避免阅读回复时的侧栏噪音，切走后若仍未确认则恢复显示）。
+  const showCompleted =
+    (props.completed ?? false) && !props.active && !props.pendingApproval
+  const showFailed = (props.failed ?? false) && !props.pendingApproval
+  const statusKind = props.pendingApproval
+    ? 'approval'
+    : props.running
+      ? 'running'
+      : showFailed
+        ? 'failed'
+        : showCompleted
+          ? 'completed'
+          : null
 
   const submitRename = async (): Promise<void> => {
     // Enter 提交后输入框尚在挂载，紧接的 blur 会再次触发；防重入。
@@ -77,22 +94,26 @@ export function SessionRow(props: {
           onClick={props.onSelect}
         >
           <span
-            className={`session-status${props.running ? ' running' : props.failed ? ' failed' : props.completed ? ' completed' : ''}`}
+            className={`session-status${statusKind === null ? '' : ` ${statusKind}`}`}
             aria-label={
-              props.running
-                ? '正在回复'
-                : props.failed
-                  ? '回复失败'
-                  : props.completed
-                    ? '回复完成'
-                    : undefined
+              statusKind === 'approval'
+                ? '有工具调用等待审批'
+                : statusKind === 'running'
+                  ? '正在回复'
+                  : statusKind === 'failed'
+                    ? '回复失败'
+                    : statusKind === 'completed'
+                      ? '回复完成'
+                      : undefined
             }
           >
-            {props.running ? (
+            {statusKind === 'approval' ? (
+              '✋'
+            ) : statusKind === 'running' ? (
               <span className="session-spinner" />
-            ) : props.failed ? (
+            ) : statusKind === 'failed' ? (
               '!'
-            ) : props.completed ? (
+            ) : statusKind === 'completed' ? (
               '✓'
             ) : null}
           </span>

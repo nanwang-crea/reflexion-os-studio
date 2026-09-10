@@ -33,6 +33,7 @@
     "provider.test",
     "queue.list",
     "queue.remove",
+    "queue.resume",
     "queue.send_now",
     "queue.update",
     "run.cancel",

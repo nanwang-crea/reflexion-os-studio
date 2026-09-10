@@ -4,6 +4,7 @@ import {
   listQueue,
   onQueueChanged,
   removeQueue,
+  resumeQueue,
   sendNow,
   updateQueue,
 } from '../../api/queue'
@@ -18,9 +19,11 @@ interface QueueBarProps {
 /**
  * 会话发送队列：上一条回复进行中继续输入的消息在此排队(FIFO)，
  * 等待发送时支持修改内容、删除、立即发送(移到队首)。
+ * 用户停止回复后队列进入暂停态：需显式点"继续发送"才恢复出队。
  */
 export function QueueBar(props: QueueBarProps): React.JSX.Element {
   const [items, setItems] = useState<QueueEntry[]>([])
+  const [paused, setPaused] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -29,6 +32,7 @@ export function QueueBar(props: QueueBarProps): React.JSX.Element {
     try {
       const result = await listQueue(props.sessionId)
       setItems(result.items)
+      setPaused(result.paused ?? false)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
     }
@@ -36,14 +40,16 @@ export function QueueBar(props: QueueBarProps): React.JSX.Element {
 
   useEffect(() => {
     setItems([])
+    setPaused(false)
     setEditingId(null)
     void refresh()
   }, [props.sessionId, refresh])
 
   useEffect(() => {
-    return onQueueChanged((sessionId, next) => {
+    return onQueueChanged((sessionId, next, nextPaused) => {
       if (sessionId !== props.sessionId) return
       setItems(next)
+      setPaused(nextPaused ?? false)
       // 编辑中的项不在队列里(被发送走了)时退出编辑态。
       setEditingId((current) =>
         current !== null && !next.some((entry) => entry.id === current)
@@ -86,14 +92,34 @@ export function QueueBar(props: QueueBarProps): React.JSX.Element {
     }
   }
 
+  const resume = async (): Promise<void> => {
+    try {
+      await resumeQueue(props.sessionId)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    }
+  }
+
+  // 空队列且未暂停才隐藏；暂停但无排队项时同样隐藏——"队列已暂停"
+  // 只在有消息可发时才有意义。
   if (items.length === 0) return <></>
 
   return (
     <div className="queue-bar">
-      <div className="queue-head">
-        <span>发送队列（等待上一条回复结束）</span>
-        <span className="queue-count">{items.length} 条</span>
-      </div>
+      {paused ? (
+        <div className="queue-paused">
+          <span>回复已停止，队列暂停发送（{items.length} 条待发）</span>
+          <button className="ghost" onClick={() => void resume()}>
+            <SendIcon />
+            继续发送
+          </button>
+        </div>
+      ) : (
+        <div className="queue-head">
+          <span>发送队列（等待上一条回复结束）</span>
+          <span className="queue-count">{items.length} 条</span>
+        </div>
+      )}
       <ul className="queue-list">
         {items.map((entry) => (
           <li className="queue-item" key={entry.id}>

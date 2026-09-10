@@ -165,7 +165,11 @@ export const CommandSchemaRegistry = {
       requestId: RequestIdSchema,
       sessionId: z.string().min(1),
     }),
-    result: z.object({ items: z.array(QueueEntrySchema) }),
+    result: z.object({
+      items: z.array(QueueEntrySchema),
+      // 队列是否处于暂停待确认态；可选：旧版 runtime 缺该字段。
+      paused: z.boolean().optional(),
+    }),
   },
   'queue.update': {
     // 修改排队中消息的内容(斜杠技能随新内容重新解析)。
@@ -193,6 +197,14 @@ export const CommandSchemaRegistry = {
       queueId: z.string().min(1),
     }),
     result: z.object({ accepted: z.boolean() }),
+  },
+  'queue.resume': {
+    // 解除用户停止 Run 后的队列暂停；若会话空闲且队列非空则立即出队发送。
+    params: z.object({
+      requestId: RequestIdSchema,
+      sessionId: z.string().min(1),
+    }),
+    result: z.object({ resumed: z.boolean() }),
   },
   'agent.list': {
     params: z.object({ requestId: RequestIdSchema }),

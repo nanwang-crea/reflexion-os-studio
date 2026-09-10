@@ -148,10 +148,15 @@
 }
 .session-status.completed {
   color: var(--ok);
-  animation: session-complete 1.6s ease-out forwards;
 }
 .session-status.failed {
   color: var(--danger);
+}
+.session-status.approval {
+  color: var(--warning-text);
+  background: var(--warning-bg);
+  border-radius: 50%;
+  font-size: 10px;
 }
 .session-spinner {
   width: 11px;
@@ -166,23 +171,8 @@
     transform: rotate(360deg);
   }
 }
-@keyframes session-complete {
-  0% {
-    opacity: 0;
-    transform: scale(0.7);
-  }
-  20% {
-    opacity: 1;
-    transform: scale(1.1);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(1);
-  }
-}
 @media (prefers-reduced-motion: reduce) {
-  .session-spinner,
-  .session-status.completed {
+  .session-spinner {
     animation: none;
   }
 }

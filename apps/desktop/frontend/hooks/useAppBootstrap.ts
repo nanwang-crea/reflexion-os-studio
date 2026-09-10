@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import type { RefObject } from 'react'
@@ -62,6 +62,10 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
   runningSessionIds: string[]
   completedSessionIds: string[]
   failedSessionIds: string[]
+  /** 有待审批工具调用的会话（侧栏 ✋ 标记）。 */
+  approvalSessionIds: string[]
+  /** 点击会话行视为确认：清除该会话的完成/失败标记。 */
+  clearSessionStatus: (sessionId: string) => void
   retryTick: number
 } {
   const { bootstrap, setBootstrap } = useBootstrapSnapshot()
@@ -173,6 +177,14 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
         if (event.type === 'run.started') {
           activity.setRunActivity(event.runId, { phase: 'thinking' })
           sessionTracking.onRunStarted(event.runId, event.run.sessionId)
+          // Runtime 侧自动出队（队列 pump / sendNow）产生的新消息不经前端
+          // 发送路径，补一次刷新让消息列表即时跟上；仅限当前查看的会话，
+          // 避免后台会话的 run 覆盖当前页数据。
+          if (event.run.sessionId === deps.activeSessionRef.current) {
+            void deps
+              .refreshSessionData(event.run.sessionId)
+              .catch(() => undefined)
+          }
           return
         }
         if (event.type === 'run.retrying') {
@@ -203,6 +215,9 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           approvals.onApprovalRequired({
             toolCallId: event.toolCallId,
             runId: event.runId,
+            ...(event.sessionId !== undefined
+              ? { sessionId: event.sessionId }
+              : {}),
             operation: event.operation,
             summary: event.summary,
           })
@@ -320,6 +335,18 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     runningSessionIds: sessionTracking.runningSessionIds,
     completedSessionIds: sessionTracking.completedSessionIds,
     failedSessionIds: sessionTracking.failedSessionIds,
+    approvalSessionIds: useMemo(
+      () =>
+        [
+          ...new Set(
+            approvals.pendingApprovals
+              .map((entry) => entry.sessionId)
+              .filter((id): id is string => id !== undefined),
+          ),
+        ].sort(),
+      [approvals.pendingApprovals],
+    ),
+    clearSessionStatus: sessionTracking.clearSessionStatus,
     retryTick: activity.retryTick,
   }
 }

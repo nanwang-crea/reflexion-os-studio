@@ -13,7 +13,10 @@ export interface ComposerModelOption {
 interface ComposerProps {
   placeholder: string
   disabled?: boolean
-  /** 有 Run 进行中时为 true：显示停止按钮并阻止提交。 */
+  /**
+   * 有 Run 进行中时为 true：输入框为空时按钮显示为停止；输入内容后
+   * 按钮切回发送（消息进入会话队列），清空后回到停止。
+   */
   busy?: boolean
   autoFocus?: boolean
   /** 权限模式（workspace / read-only / trusted），随发送生效。 */
@@ -44,6 +47,10 @@ export function Composer(props: ComposerProps): React.JSX.Element {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const busy = props.busy ?? false
+  // 单按钮状态机：busy 且输入框无内容 → 停止当前回复；一旦输入（或清空）
+  // 按钮在停止/发送间切换，发送在 busy 下的语义是入队排队。
+  const hasDraft = draft.trim().length > 0
+  const showStop = busy && !hasDraft
   const showModelSelect =
     props.modelOptions !== undefined &&
     props.modelOptions.length > 0 &&
@@ -233,11 +240,11 @@ export function Composer(props: ComposerProps): React.JSX.Element {
           props.modelOptions.length === 0 && (
             <span className="composer-no-model">未配置模型</span>
           )}
-        {busy && props.onStop ? (
+        {showStop && props.onStop ? (
           <button
             className="composer-stop"
             aria-label="停止"
-            title="停止当前回复"
+            title="停止当前回复（队列将暂停，稍后需确认继续发送）"
             onClick={() => void props.onStop?.()}
           >
             <StopIcon />
@@ -246,8 +253,8 @@ export function Composer(props: ComposerProps): React.JSX.Element {
           <button
             className="composer-send"
             aria-label="发送"
-            title="发送"
-            disabled={props.disabled || !draft.trim() || sending}
+            title={busy ? '正在回复，发送的消息将进入队列' : '发送'}
+            disabled={props.disabled || !hasDraft || sending}
             onClick={() => void submit()}
           >
             <SendIcon />

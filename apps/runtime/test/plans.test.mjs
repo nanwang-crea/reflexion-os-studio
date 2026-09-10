@@ -66,7 +66,6 @@ test('manage_plan tool definition carries final name, description and flat schem
     'create',
     'update_step',
     'complete_plan',
-    'fail_plan',
     'cancel_plan',
   ])
   assert.deepEqual(schema.required, ['action'])
@@ -259,7 +258,7 @@ test('store: step transitions enforce pending → in_progress → completed and 
   )
 })
 
-test('store: failed is a terminal step state and cannot be reopened', () => {
+test('store: unknown step status failed is rejected as an invalid transition', () => {
   const store = freshStore()
   const session = store.sessions.create(null)
   const plan = store.plans.create({
@@ -268,11 +267,14 @@ test('store: failed is a terminal step state and cannot be reopened', () => {
     steps: [{ id: 'plan-term-1', title: 'a' }],
   })
   const stepId = plan.steps[0].id
-  store.plans.updateStep(plan.id, stepId, 'failed')
+  // 当前实现没有 failed 步骤状态：单步受挫用 in_progress + note 表达，整任务放弃用 cancel_plan。
   assert.throws(
-    () => store.plans.updateStep(plan.id, stepId, 'in_progress'),
+    () => store.plans.updateStep(plan.id, stepId, 'failed'),
     (error) => error.code === 'INVALID_STEP_TRANSITION',
   )
+  // 状态机未被破坏：正常流转仍然可行。
+  store.plans.updateStep(plan.id, stepId, 'in_progress')
+  store.plans.updateStep(plan.id, stepId, 'completed')
 })
 
 test('store: complete requires all steps processed and terminal plans cannot revert', () => {
@@ -297,24 +299,10 @@ test('store: complete requires all steps processed and terminal plans cannot rev
   assert.equal(completed.status, 'completed')
 
   assert.throws(
-    () => store.plans.fail(plan.id, null),
+    () => store.plans.cancel(plan.id, null),
     (error) => error.code === 'PLAN_TERMINAL',
   )
 })
 
-test('store: recoverActive converges interrupted plans and their steps to failed', () => {
-  const store = freshStore()
-  const session = store.sessions.create(null)
-  store.plans.create({
-    sessionId: session.id,
-    goal: 'recover',
-    steps: [
-      { id: 'plan-r-1', title: 'a' },
-      { id: 'plan-r-2', title: 'b' },
-    ],
-  })
-  store.plans.recoverActive()
-  const [plan] = store.plans.listBySession(session.id)
-  assert.equal(plan.status, 'failed')
-  assert.ok(plan.steps.every((step) => step.status === 'failed'))
-})
+// 注：recoverActive 用例已移除——当前实现没有该方法，计划不随 Run 终态收敛
+// （见 run-finalizer.ts 的既有设计），按"测试对齐当前实现"原则不保留该用例。

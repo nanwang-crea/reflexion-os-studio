@@ -129,7 +129,17 @@ export class ChatAgent {
 
   /** 队列快照。 */
   listQueue(sessionId: string) {
-    return { items: this.queues.list(sessionId) }
+    return {
+      items: this.queues.list(sessionId),
+      paused: this.queues.isPaused(sessionId),
+    }
+  }
+
+  /** 解除停止 Run 后的队列暂停;会话空闲且队列非空则立即出队发送。 */
+  resumeQueue(sessionId: string): { resumed: boolean } {
+    const resumed = this.queues.resume(sessionId)
+    if (resumed) this.pumpQueue(sessionId)
+    return { resumed }
   }
 
   /** 修改排队内容：优先沿用显式 skillId,否则按新内容重新解析斜杠。 */
@@ -170,16 +180,20 @@ export class ChatAgent {
     return { settings: this.store.agentSettings.upsert(settings) }
   }
 
-  /** 立即发送：移到队首;空闲则立刻 pump(否则等当前结束)。 */
+  /** 立即发送：移到队首;空闲则立刻 pump(否则等当前结束)。显式发送视为解除暂停。 */
   sendNow(sessionId: string, queueId: string) {
     const accepted = this.queues.moveToFront(sessionId, queueId)
-    if (accepted) this.pumpQueue(sessionId)
+    if (accepted) {
+      this.queues.resume(sessionId)
+      this.pumpQueue(sessionId)
+    }
     return { accepted }
   }
 
-  /** 当前回复结束后自动发送队首(FIFO)。 */
+  /** 当前回复结束后自动发送队首(FIFO)；用户停止后暂停期间不出队。 */
   private pumpQueue(sessionId: string): void {
     if (this.queues.list(sessionId).length === 0) return
+    if (this.queues.isPaused(sessionId)) return
     if (this.store.runs.activeForSession(sessionId) !== null) return
     const entry = this.queues.dequeue(sessionId)
     if (!entry) return
@@ -328,7 +342,15 @@ export class ChatAgent {
   }
 
   cancel(runId: string): { accepted: boolean } {
-    return { accepted: this.launcher.cancel(runId) }
+    const run = this.store.runs.get(runId)
+    const accepted = this.launcher.cancel(runId)
+    // 用户主动停止：该会话队列进入暂停态，出队需 queue.resume 显式确认。
+    // 空队列不挂标记——否则用户看不见任何"已暂停"提示，之后新排队的
+    // 消息却会被静默扣住（幽灵暂停）。
+    if (accepted && run && this.queues.list(run.sessionId).length > 0) {
+      this.queues.pause(run.sessionId)
+    }
+    return { accepted }
   }
 
   /** 组装并后台启动一次 Run（Phase 3 未启动：child task 强制不可达）。 */

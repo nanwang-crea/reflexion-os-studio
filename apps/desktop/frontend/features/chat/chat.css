@@ -1263,6 +1263,23 @@
   color: var(--text-muted);
 }
 
+/* 停止回复后的暂停提示条：需显式"继续发送"才恢复自动出队。 */
+.queue-paused {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--warning-text) 35%, transparent);
+  border-radius: 10px;
+  background: var(--warning-bg);
+  font-size: 12px;
+  color: var(--text);
+}
+.queue-paused button {
+  flex-shrink: 0;
+}
+
 .queue-count {
   color: var(--info);
 }

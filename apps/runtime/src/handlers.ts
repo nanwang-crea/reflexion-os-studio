@@ -173,6 +173,8 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
     ),
   'queue.send_now': (p, { agent }) =>
     agent.sendNow(requireString(p, 'sessionId'), requireString(p, 'queueId')),
+  'queue.resume': (p, { agent }) =>
+    agent.resumeQueue(requireString(p, 'sessionId')),
   'run.cancel': (p, { agent }) => agent.cancel(requireString(p, 'runId')),
   'run.retry': (p, { agent }) =>
     agent.startRetry({

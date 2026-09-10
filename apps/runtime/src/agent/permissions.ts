@@ -128,7 +128,14 @@ export class ApprovalGateway {
     context: ApprovalContext
   }): Promise<'approved' | 'denied'> {
     const { toolCallId, emitter, operation, summary, signal, context } = input
-    emitter.next({ type: 'approval.required', toolCallId, operation, summary })
+    // 侧栏按会话聚合待审批标记：事件携带 sessionId（envelope.runId 是 runId）。
+    emitter.next({
+      type: 'approval.required',
+      toolCallId,
+      sessionId: context.sessionId,
+      operation,
+      summary,
+    })
     return new Promise((resolve, reject) => {
       const onAbort = (): void => {
         this.pending.delete(toolCallId)

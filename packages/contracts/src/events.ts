@@ -130,6 +130,9 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     toolCallId: z.string().min(1),
     operation: ApprovalOperationSchema,
     summary: z.string(),
+    // 审批所属会话：侧栏会话行据此显示待审批标记。可选：旧版 runtime
+    // 事件与持久化的 run_events 历史记录不含该字段（对齐 waitMs 先例）。
+    sessionId: z.string().min(1).optional(),
   }),
   RuntimeEventEnvelopeSchema.extend({
     type: z.literal('approval.resolved'),
@@ -160,10 +163,12 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     projectId: z.string().min(1),
     error: z.string(),
   }),
-  // 会话发送队列快照：入队/修改/删除/立即发送/出队时广播(envelope.runId=sessionId)。
+  // 会话发送队列快照：入队/修改/删除/立即发送/出队/暂停切换时广播(envelope.runId=sessionId)。
+  // paused：队列是否处于"用户停止后暂停待确认"状态；可选：旧版 runtime 不含该字段。
   RuntimeEventEnvelopeSchema.extend({
     type: z.literal('queue.changed'),
     sessionId: z.string().min(1),
+    paused: z.boolean().optional(),
     items: z.array(QueueEntrySchema),
   }),
   RuntimeEventEnvelopeSchema.extend({

@@ -24,7 +24,12 @@ export interface ModelTurn {
   toolCalls: AssistantToolCall[]
   /** Provider 已校验的终止原因；未知/缺失值不允许进入循环。 */
   finishReason: ModelFinishReason
-  usage?: { promptTokens: number; completionTokens: number }
+  usage?: {
+    promptTokens: number
+    completionTokens: number
+    /** Provider 回传的前缀缓存命中 prompt token 数；缺省表示端点未报告。 */
+    cachedPromptTokens?: number
+  }
 }
 
 /** Provider 终止原因（严格校验后的联合类型）。 */
