@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::paths::resolve_in_workspace;
 use crate::walk::walk_files;
@@ -28,8 +28,13 @@ pub struct ReadResult {
     pub total_lines: usize,
     /// 本次返回首行的 0-based 行号（整读时为 0）。
     pub offset: usize,
-    /// 读取时刻的文件 mtime（毫秒），作为后续 write/edit 的 readToken 凭据。
+    /// 读取时刻的文件 mtime（毫秒），revision 字段之一。
     pub modified_ms: u64,
+    /// 读取时刻的完整文件 SHA-256（小写 hex），revision 字段之一。
+    pub content_sha256: String,
+    /// 本次是否覆盖了文件全部行（未触达单次行数上限）；只有完整读取
+    /// 发放的 revision 才能通过 file.write 覆盖校验。
+    pub read_complete: bool,
 }
 
 pub fn read(
@@ -69,12 +74,15 @@ pub fn read(
     let max_lines = limit.unwrap_or(DEFAULT_READ_LIMIT).min(MAX_READ_LIMIT);
     let selected: Vec<&str> = content.lines().skip(start).take(max_lines).collect();
     let modified_ms = mtime_ms(&path)?;
+    let read_complete = start + selected.len() >= total_lines;
     Ok(ReadResult {
         content: selected.join("\n"),
         size_bytes: size,
         total_lines,
         offset: start,
         modified_ms,
+        content_sha256: crate::sha256::hex_digest(content.as_bytes()),
+        read_complete,
     })
 }
 
@@ -151,6 +159,17 @@ pub fn list(
     })
 }
 
+/// Revision 凭据：mtime + size + sha256 三字段，标识"一次完整读取"。
+/// mtime/size 检出修改，sha256 兜底同毫秒碰撞；由 Rust 侧在 file.read
+/// （未截断窗口）与 file.write / file.edit 成功后统一计算并返回。
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Revision {
+    pub modified_ms: u64,
+    pub size_bytes: u64,
+    pub sha256: String,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WriteOutcome {
@@ -159,16 +178,19 @@ pub struct WriteOutcome {
     pub created: bool,
     /// 写入后的新 mtime（毫秒），调用方记入读取状态供后续编辑使用。
     pub modified_ms: u64,
+    /// 写入后完整内容的 revision：覆盖写的调用方直接获得可继续 edit 的凭据。
+    pub revision: Revision,
 }
 
-/// 写入/覆盖文本文件。覆盖已存在文件必须携带 readToken（一次 file.read 的
-/// mtime 凭据）：未携带视为盲写拒绝；mtime 不一致视为读取后被外部修改。
+/// 覆盖已存在文件必须携带 revision（一次 file.read 完整读取的凭据）：
+/// 未携带视为盲写拒绝；mtime / size / sha256 任一不一致视为读取后被外部修改
+/// （错误按字段分档，便于定位是陈旧凭据还是同毫秒内容漂移）。
 /// 新建文件豁免先读约束。
 pub fn write(
     workspace_root: &Path,
     relative: &str,
     content: &str,
-    read_token: Option<u64>,
+    revision: Option<Revision>,
 ) -> Result<WriteOutcome, String> {
     let content_bytes = content.as_bytes();
     if content_bytes.len() > MAX_WRITE_BYTES {
@@ -183,16 +205,33 @@ pub fn write(
         if !path.is_file() {
             return Err(format!("not a regular file: {relative}"));
         }
-        let token = read_token.ok_or_else(|| {
+        let token = revision.ok_or_else(|| {
             format!(
-                "refusing to overwrite existing file '{relative}' without a fresh read: \
-                 run file.read on it first, then retry this write"
+                "refusing to overwrite existing file '{relative}' without a fresh full read: \
+                 run file.read on it first (until no truncation), then retry this write"
             )
         })?;
-        let current = mtime_ms(&path)?;
-        if current != token {
+        let current_ms = mtime_ms(&path)?;
+        let current_size = fs::metadata(&path).map_err(|e| e.to_string())?.len();
+        if current_ms != token.modified_ms {
             return Err(format!(
-                "file changed since last read (mtime {current} != readToken {token}); \
+                "file changed since last read (mtime {current_ms} != revision {}); \
+                 re-run file.read on '{relative}' before writing",
+                token.modified_ms
+            ));
+        }
+        if current_size != token.size_bytes {
+            return Err(format!(
+                "file changed since last read (size {current_size} != revision {}); \
+                 re-run file.read on '{relative}' before writing",
+                token.size_bytes
+            ));
+        }
+        let current_sha256 =
+            crate::sha256::hex_digest(&fs::read(&path).map_err(|e| e.to_string())?);
+        if current_sha256 != token.sha256 {
+            return Err(format!(
+                "file content changed since last read (same mtime but sha256 mismatch); \
                  re-run file.read on '{relative}' before writing"
             ));
         }
@@ -202,10 +241,16 @@ pub fn write(
     }
     atomic_write(&path, content_bytes)?;
     let modified_ms = mtime_ms(&path)?;
+    let outcome_revision = Revision {
+        modified_ms,
+        size_bytes: content_bytes.len() as u64,
+        sha256: crate::sha256::hex_digest(content_bytes),
+    };
     Ok(WriteOutcome {
         written_bytes: content_bytes.len() as u64,
         created: !existed,
         modified_ms,
+        revision: outcome_revision,
     })
 }
 
@@ -271,6 +316,9 @@ mod tests {
         assert_eq!(read.content, "你好工作区");
         assert_eq!(read.total_lines, 1);
         assert_eq!(read.modified_ms, outcome.modified_ms);
+        // 读取响应携带完整 revision，且与写入方返回的一致（同一内容）。
+        assert_eq!(read.content_sha256, outcome.revision.sha256);
+        assert_eq!(read.size_bytes, outcome.revision.size_bytes);
         let entries = list(&root, ".", false, None, None).unwrap();
         assert_eq!(entries.entries[0].path, "docs");
         assert_eq!(entries.entries[0].kind, "dir");
@@ -280,20 +328,79 @@ mod tests {
     }
 
     #[test]
-    fn write_requires_read_token_for_existing_files() {
+    fn write_requires_fresh_revision_for_existing_files() {
         let root = temp_workspace("write-token");
         let created = write(&root, "a.txt", "v1", None).unwrap();
         assert!(created.created);
-        // 未携带 readToken 的覆盖写被拒绝。
+        // 未携带 revision 的覆盖写被拒绝。
         assert!(write(&root, "a.txt", "v2", None).is_err());
-        // 陈旧 readToken 被拒绝。
-        assert!(write(&root, "a.txt", "v2", Some(created.modified_ms + 1)).is_err());
-        // 先读获得凭据后成功覆盖；返回写入后的新 mtime 与 modified 动作依据。
+        // 陈旧 revision（mtime 不一致）被拒绝。
+        let stale = crate::files::Revision {
+            modified_ms: created.revision.modified_ms + 1,
+            size_bytes: created.revision.size_bytes,
+            sha256: created.revision.sha256.clone(),
+        };
+        assert!(write(&root, "a.txt", "v2", Some(stale)).is_err());
+        // 完整读取获得 revision 后成功覆盖；返回写入后的新 revision。
         let fresh = read(&root, "a.txt", None, None).unwrap();
-        let overwritten = write(&root, "a.txt", "v2", Some(fresh.modified_ms)).unwrap();
+        let token = Revision {
+            modified_ms: fresh.modified_ms,
+            size_bytes: fresh.size_bytes,
+            sha256: fresh.content_sha256.clone(),
+        };
+        let overwritten = write(&root, "a.txt", "v2", Some(token)).unwrap();
         assert!(!overwritten.created);
         assert!(overwritten.modified_ms >= fresh.modified_ms);
+        assert_eq!(
+            overwritten.revision.sha256,
+            crate::sha256::hex_digest(b"v2")
+        );
         assert_eq!(fs::read_to_string(root.join("a.txt")).unwrap(), "v2");
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn write_rejects_revision_field_mismatches() {
+        let root = temp_workspace("write-revision");
+        write(&root, "a.txt", "original", None).unwrap();
+        let fresh = read(&root, "a.txt", None, None).unwrap();
+        let base = Revision {
+            modified_ms: fresh.modified_ms,
+            size_bytes: fresh.size_bytes,
+            sha256: fresh.content_sha256,
+        };
+        // 同 mtime 但 size 不一致（外部追加修改的形态）。
+        let size_mismatch = Revision {
+            size_bytes: base.size_bytes + 1,
+            ..base.clone()
+        };
+        assert!(write(&root, "a.txt", "v2", Some(size_mismatch)).is_err());
+        // mtime/size 一致但 sha256 不一致（同毫秒内内容漂移的兜底）。
+        let sha_mismatch = Revision {
+            sha256: "0".repeat(64),
+            ..base.clone()
+        };
+        assert!(write(&root, "a.txt", "v2", Some(sha_mismatch)).is_err());
+        // 内容未被外部改动：正确 revision 覆盖成功。
+        assert!(write(&root, "a.txt", "v2", Some(base)).is_ok());
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn read_returns_revision_and_roundtrips_through_write() {
+        let root = temp_workspace("revision");
+        write(&root, "a.txt", "line1\nline2\n", None).unwrap();
+        let full = read(&root, "a.txt", None, None).unwrap();
+        assert_eq!(
+            full.content_sha256,
+            crate::sha256::hex_digest(b"line1\nline2\n")
+        );
+        // 未触达行数上限 → 完整读取。
+        assert!(full.read_complete);
+        let paged = read(&root, "a.txt", None, Some(1)).unwrap();
+        // 触达 limit 的窗口不是完整读取。
+        assert!(!paged.read_complete);
+        assert_eq!(paged.content_sha256, full.content_sha256);
         fs::remove_dir_all(&root).ok();
     }
 

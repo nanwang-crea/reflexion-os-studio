@@ -11,6 +11,7 @@ use crate::paths::resolve_in_workspace;
 use crate::walk::{walk_files, FileEntry};
 
 pub const MAX_GLOB_RESULTS: usize = 2000;
+/// grep 单次调用的全工作区累计上限（跨文件累计，非单文件上限）。
 pub const MAX_GREP_RESULTS: usize = 1000;
 /// grep 默认/上限条数：太多会撑爆模型上下文。
 pub const DEFAULT_GLOB_LIMIT: usize = 500;
@@ -114,7 +115,11 @@ pub fn grep_search(
     let walked = walk_files(&start, "");
     let limit = limit.clamp(1, MAX_GREP_RESULTS);
     let mut matches: Vec<GrepMatch> = Vec::new();
-    for entry in &walked.files {
+    // W3：limit 是全工作区累计上限——旧实现按文件各自计数，
+    // 多文件各命中少量行时总量可静默远超 limit。
+    let mut total: usize = 0;
+    let mut hit_limit = false;
+    'files: for entry in &walked.files {
         if let Some(pattern) = &filter {
             let path_segments: Vec<&str> = entry.path.split('/').collect();
             if !glob::matches(pattern, &path_segments) {
@@ -137,6 +142,8 @@ pub fn grep_search(
             Err(_) => continue,
         };
         let lines: Vec<&str> = content.lines().collect();
+        // 本文件最多消耗的剩余配额。
+        let remaining = limit - total;
         let mut matched: Vec<usize> = Vec::new();
         for (index, line) in lines.iter().enumerate() {
             let haystack = if ignore_case {
@@ -148,11 +155,10 @@ pub fn grep_search(
                 continue;
             }
             matched.push(index);
-            if matched.len() >= limit {
+            if matched.len() >= remaining {
                 break;
             }
         }
-        let reached_limit = matched.len() >= limit;
         let matched_set: HashSet<usize> = matched.iter().copied().collect();
         for &index in &matched {
             let mut context_lines = Vec::new();
@@ -176,16 +182,16 @@ pub fn grep_search(
                 context: context_lines,
             });
         }
-        if reached_limit {
-            return Ok(GrepOutcome {
-                matches,
-                truncated: true,
-            });
+        total += matched.len();
+        if total >= limit {
+            // 已达全局累计上限：停止扫描后续文件，调用方可按 glob 收窄后重试。
+            hit_limit = true;
+            break 'files;
         }
     }
     Ok(GrepOutcome {
         matches,
-        truncated: walked.truncated,
+        truncated: hit_limit || walked.truncated,
     })
 }
 
@@ -318,6 +324,24 @@ mod tests {
         assert_eq!(grep.matches.len(), 1);
         assert!(grep.truncated);
 
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn grep_limit_is_global_across_files() {
+        let root = temp_workspace("grep-global-limit");
+        for name in ["a.txt", "b.txt", "c.txt"] {
+            fs::write(root.join(name), "needle\nother\nneedle\n").unwrap();
+        }
+        // 旧实现按文件计数：每文件 2 命中均不触达 limit=5，会静默返回 6 条。
+        // 新实现跨文件累计：恰好 5 条即停扫并标记截断。
+        let outcome = grep_search(&root, "needle", None, false, 0, 5).unwrap();
+        assert_eq!(outcome.matches.len(), 5);
+        assert!(outcome.truncated);
+        let by_file: HashSet<&str> = outcome.matches.iter().map(|m| m.path.as_str()).collect();
+        assert!(by_file.contains("a.txt"));
+        assert!(by_file.contains("b.txt"));
+        assert!(by_file.contains("c.txt"));
         fs::remove_dir_all(&root).ok();
     }
 

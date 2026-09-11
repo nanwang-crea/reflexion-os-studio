@@ -1,7 +1,7 @@
 import type { ToolDefinition } from '@reflexion-os-studio/agent-core'
 import type { SystemRuntimeClient } from '../../system.js'
 import { callSystem, optionalNumber, requireString } from './shared.js'
-import type { FileReadState } from './read-state.js'
+import { extractRevision, type FileReadState } from './read-state.js'
 
 /**
  * 单次回填的带行号内容字符预算：给元数据与截断提示留出余量（模型上限 16K）。
@@ -110,8 +110,10 @@ export function createFileReadTool(
         typeof record.sizeBytes === 'number' ? record.sizeBytes : 0
       const modifiedMs =
         typeof record.modifiedMs === 'number' ? record.modifiedMs : undefined
-      if (modifiedMs !== undefined) {
-        readState.record(path, modifiedMs)
+      const revision = extractRevision(record)
+      const readComplete = record.readComplete === true
+      if (modifiedMs !== undefined && revision !== undefined) {
+        readState.record(path, { revision, complete: readComplete })
       }
       const window = buildNumberedWindow(content, startLine)
       const result: Record<string, unknown> = {
@@ -128,6 +130,19 @@ export function createFileReadTool(
             }
           : {}),
         ...(modifiedMs !== undefined ? { modifiedMs } : {}),
+        ...(revision !== undefined
+          ? {
+                revision,
+                // 覆盖文件（file.write）必须基于未截断的完整读取：
+                // 分页窗口发出的凭据只满足 file.edit 的先读要求。
+                ...(readComplete
+                  ? {}
+                  : {
+                      revisionHint:
+                        '本窗口为分页读取，凭据仅可用于 file.edit；覆盖文件需完整读取（读至无截断）后再 file.write',
+                    }),
+              }
+          : {}),
         content: window.content,
       }
       return { content: JSON.stringify(result), isError: false }

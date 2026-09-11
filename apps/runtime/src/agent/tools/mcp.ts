@@ -23,6 +23,7 @@ export function createMcpTool(
           serverId,
           toolName,
           argsRecord(args),
+          signal,
         )
         if (signal.aborted) {
           throw new DOMException('The operation was aborted.', 'AbortError')

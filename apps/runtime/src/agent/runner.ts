@@ -194,26 +194,18 @@ export class RunRunner {
             return result.turn
           },
           executeToolBatch: (requests, signal) => {
-            // 工具调用次数预算：超限的请求折叠为稳定错误结果（模型自纠一次；
-            // 预算失败由 Finalizer 记 run_token/tool_call_budget）。
+            // 工具预算原子准入（W1）：整批要么全部准入、要么全部拒绝；超预算
+            // 立即以稳定错误码失败整个 Run，禁止部分执行——旧实现经 Promise.all
+            // 直接执行前 remaining 个调用，绕过调度器的批次/审计与预算计数，
+            // 造成预算、调度、审计三重失效。被拒批次的预建 ToolCall 行由
+            // Finalizer 统一取消。
             if (toolCallsUsed + requests.length > budgets.maxToolCalls) {
-              const remaining = Math.max(
-                0,
-                budgets.maxToolCalls - toolCallsUsed,
-              )
               process.stderr.write(
-                `[runtime] tool call budget exhausted (${toolCallsUsed}/${budgets.maxToolCalls})\n`,
+                `[runtime] tool call budget exhausted (${toolCallsUsed} used + ${requests.length} requested > ${budgets.maxToolCalls}); rejecting whole batch\n`,
               )
-              return Promise.all(
-                requests.map((request, index) =>
-                  index < remaining
-                    ? executeOneGuarded(request, signal)
-                    : Promise.resolve({
-                        content: `已达到 Run 工具调用次数上限 ${budgets.maxToolCalls}，本次调用未执行。`,
-                        isError: true,
-                        code: 'tool_call_budget',
-                      }),
-                ),
+              throw new ChildLimitError(
+                'tool_call_budget',
+                `Run 工具调用次数超出预算：已用 ${toolCallsUsed} + 本批 ${requests.length} > 上限 ${budgets.maxToolCalls}`,
               )
             }
             toolCallsUsed += requests.length

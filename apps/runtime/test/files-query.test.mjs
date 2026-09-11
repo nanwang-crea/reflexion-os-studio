@@ -178,6 +178,8 @@ test('file.read forwards system errors untouched and records read state on succe
     totalLines: 1,
     offset: 0,
     modifiedMs: 99,
+    // W2：完整读取凭据为 revision 三字段（mtime+size+sha256）。
+    revision: { modifiedMs: 99, sizeBytes: 3, sha256: 'a'.repeat(64) },
   }))
   const okTool = createFileReadTool(working, '/ws', readState)
   const ok = await run(okTool, { path: 'a.txt' })

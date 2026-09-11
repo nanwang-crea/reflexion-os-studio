@@ -6,7 +6,7 @@ import { McpClient } from '../dist/mcp/client.js'
 import { McpManager } from '../dist/mcp/manager.js'
 import { createMcpTool } from '../dist/agent/tools/mcp.js'
 import { Store } from '../dist/store/index.js'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, existsSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 
 const FIXTURE = join(
@@ -98,4 +98,36 @@ test('MCP tool bridge registers prefixed name, calls server with raw tool name',
   assert.equal(result.content, 'echo:桥测')
   manager.dispose()
   store.close()
+})
+
+test('McpClient aborts hung tool call fast and sends notifications/cancelled', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'reflexion-mcp-cancel-'))
+  const marker = join(dir, 'cancelled.jsonl')
+  const client = new McpClient({
+    command: NODE,
+    args: [FIXTURE],
+    env: { MOCK_MCP_CANCELLED_FILE: marker },
+  })
+  await client.connect()
+  const controller = new AbortController()
+  const pending = client.callTool('slow', {}, controller.signal)
+  setTimeout(() => controller.abort(), 100)
+  // 快速失败：不等 30s 协议超时，立即以 AbortError 拒绝。
+  await assert.rejects(pending, (error) => error.name === 'AbortError')
+  // 回执：mock server 收到 notifications/cancelled 并落盘。
+  for (let i = 0; i < 80 && !existsSync(marker); i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  const receipts = existsSync(marker)
+    ? readFileSync(marker, 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line))
+    : []
+  const receipt = receipts.find((entry) => typeof entry.requestId === 'number')
+  assert.ok(receipt, 'server should receive notifications/cancelled')
+  assert.equal(receipt.reason, 'client aborted')
+  // 取消后连接仍可用（pending 表未被污染）。
+  assert.equal(await client.callTool('echo', { text: '续' }), 'echo:续')
+  client.dispose()
 })

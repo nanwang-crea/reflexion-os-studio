@@ -79,12 +79,42 @@ export class McpClient {
     return result.tools ?? []
   }
 
-  /** 调用工具;文本内容以 \n 连接返回。 */
-  async callTool(name: string, args: Record<string, unknown>): Promise<string> {
-    const result = (await this.request('tools/call', {
+  /** 调用工具；文本内容以 \n 连接返回。signal 中止时发送 cancelled 通知并立即拒绝。 */
+  async callTool(
+    name: string,
+    args: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    if (signal?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError')
+    }
+    const { id, promise } = this.requestWithId('tools/call', {
       name,
       arguments: args,
-    })) as { content?: { type: string; text?: string }[]; isError?: boolean }
+    })
+    // aborted 承诺 + signal 监听：中止即发送协议取消通知并快速失败，
+    // 不等待 30s 请求超时；正常完成路径由 finally 移除监听。
+    let rejectAborted!: (error: Error) => void
+    const aborted = new Promise<never>((_, reject) => {
+      rejectAborted = reject
+    })
+    const onAbort = (): void => {
+      // 协议取消通知（notifications/cancelled）：尽力而为，服务器可提前终止。
+      this.notify('notifications/cancelled', {
+        requestId: id,
+        reason: 'client aborted',
+      })
+      rejectAborted(
+        new DOMException('The operation was aborted.', 'AbortError'),
+      )
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+    let result: { content?: { type: string; text?: string }[]; isError?: boolean }
+    try {
+      result = (await Promise.race([promise, aborted])) as typeof result
+    } finally {
+      signal?.removeEventListener('abort', onAbort)
+    }
     if (result.isError === true) {
       throw new Error(
         result.content?.map((item) => item.text ?? '').join('\n') ||
@@ -130,12 +160,23 @@ export class McpClient {
     method: string,
     params: Record<string, unknown>,
   ): Promise<unknown> {
+    return this.requestWithId(method, params).promise
+  }
+
+  /** request 的带 id 版本：callTool 需要请求 id 来发送 notifications/cancelled。 */
+  private requestWithId(
+    method: string,
+    params: Record<string, unknown>,
+  ): { id: number; promise: Promise<unknown> } {
     if (this.child === null) {
-      return Promise.reject(new Error('mcp client not connected'))
+      return {
+        id: 0,
+        promise: Promise.reject(new Error('mcp client not connected')),
+      }
     }
     const id = ++this.seq
     const message = { jsonrpc: '2.0', id, method, params }
-    return new Promise((resolve, reject) => {
+    const promise = new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id)
         reject(new Error(`mcp request timeout: ${method}`))
@@ -154,6 +195,7 @@ export class McpClient {
         )
       })
     })
+    return { id, promise }
   }
 
   private notify(method: string, params: Record<string, unknown>): void {

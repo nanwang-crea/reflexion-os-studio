@@ -277,23 +277,48 @@ export class ContextBuilder {
       process.stderr.write(
         `[runtime] checkpoint compaction failed, falling back to legacy compaction: ${String(error)}\n`,
       )
-      const { compactFrames } = await import('@reflexion-os-studio/agent-core')
-      const { frames: compacted } = await compactFrames({
-        frames,
-        budgetTokens: budget,
-        keepRecentFrames: KEEP_RECENT_FRAMES,
-        summarize: (stablePart) =>
-          summarizeFrames(provider, stablePart, signal),
-      })
-      const messages = framesToValidatedMessages(
-        boundFramesForModel(compacted, budget, KEEP_RECENT_FRAMES),
-      )
-      emitContextMetrics(sessionId, {
-        ...metrics,
-        contextBuildMs: Date.now() - buildStartedAt,
-        compactionCalls: ((metrics.compactionCalls as number) ?? 0) + 1,
-      })
-      return messages
+      try {
+        const { compactFrames } = await import('@reflexion-os-studio/agent-core')
+        const { frames: compacted } = await compactFrames({
+          frames,
+          budgetTokens: budget,
+          keepRecentFrames: KEEP_RECENT_FRAMES,
+          summarize: (stablePart) =>
+            summarizeFrames(provider, stablePart, signal),
+        })
+        const messages = framesToValidatedMessages(
+          boundFramesForModel(compacted, budget, KEEP_RECENT_FRAMES),
+        )
+        emitContextMetrics(sessionId, {
+          ...metrics,
+          contextBuildMs: Date.now() - buildStartedAt,
+          compactionCalls: ((metrics.compactionCalls as number) ?? 0) + 1,
+        })
+        return messages
+      } catch (legacyError) {
+        if (legacyError instanceof FrameError) throw legacyError
+        if (
+          legacyError instanceof Error &&
+          legacyError.name === 'AbortError'
+        ) {
+          throw legacyError
+        }
+        // 第二层也失败（同一 Provider 故障二次命中）：零成本确定性裁剪兜底，
+        // 与 compactInRun 的降级路径一致，绝不让上下文压缩阻塞对话。
+        process.stderr.write(
+          `[runtime] legacy compaction failed, falling back to deterministic frame trimming: ${String(legacyError)}\n`,
+        )
+        const messages = framesToValidatedMessages(
+          boundFramesForModel(frames, budget),
+        )
+        emitContextMetrics(sessionId, {
+          ...metrics,
+          contextBuildMs: Date.now() - buildStartedAt,
+          compactionCalls: ((metrics.compactionCalls as number) ?? 0) + 1,
+          deterministicTrim: true,
+        })
+        return messages
+      }
     }
   }
 

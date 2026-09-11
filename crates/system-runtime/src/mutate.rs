@@ -32,6 +32,8 @@ pub struct EditOutcome {
     pub size_bytes: u64,
     /// 编辑后的新 mtime（毫秒），调用方记入读取状态供后续编辑使用。
     pub modified_ms: u64,
+    /// 编辑后完整内容的 revision 凭据（mtime+size+sha256）。
+    pub revision: crate::files::Revision,
     pub changed_files: Vec<ChangedFile>,
 }
 
@@ -69,7 +71,7 @@ pub fn edit(
     old_text: &str,
     new_text: &str,
     expected: Option<usize>,
-    read_token: Option<u64>,
+    revision: Option<crate::files::Revision>,
 ) -> Result<EditOutcome, String> {
     if old_text.is_empty() {
         return Err("oldText must not be empty".to_string());
@@ -85,17 +87,32 @@ pub fn edit(
             "file too large for edit: {size} bytes (limit {MAX_WRITE_BYTES})"
         ));
     }
-    let token = read_token.ok_or_else(|| {
+    let token = revision.ok_or_else(|| {
         format!("file.edit requires readToken: run file.read on '{relative}' first")
     })?;
-    let current = crate::files::mtime_ms(&path)?;
-    if current != token {
+    let current_ms = crate::files::mtime_ms(&path)?;
+    if current_ms != token.modified_ms {
         return Err(format!(
-            "file changed since last read (mtime {current} != readToken {token}); \
-             re-run file.read on '{relative}' before editing"
+            "file changed since last read (mtime {current_ms} != revision {}); \
+             re-run file.read on '{relative}' before editing",
+            token.modified_ms
+        ));
+    }
+    if size != token.size_bytes {
+        return Err(format!(
+            "file changed since last read (size {size} != revision {}); \
+             re-run file.read on '{relative}' before editing",
+            token.size_bytes
         ));
     }
     let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let current_sha256 = crate::sha256::hex_digest(content.as_bytes());
+    if current_sha256 != token.sha256 {
+        return Err(format!(
+            "file content changed since last read (same mtime but sha256 mismatch); \
+             re-run file.read on '{relative}' before editing"
+        ));
+    }
     let raw_count = content.matches(old_text).count();
     let (updated, replaced_count) = if raw_count == expected {
         (content.replace(old_text, new_text), expected)
@@ -104,10 +121,16 @@ pub fn edit(
     };
     crate::files::atomic_write(&path, updated.as_bytes())?;
     let modified_ms = crate::files::mtime_ms(&path)?;
+    let size_bytes = updated.len() as u64;
     Ok(EditOutcome {
         replaced_count,
-        size_bytes: updated.len() as u64,
+        size_bytes,
         modified_ms,
+        revision: crate::files::Revision {
+            modified_ms,
+            size_bytes,
+            sha256: crate::sha256::hex_digest(updated.as_bytes()),
+        },
         changed_files: vec![changed(relative, "modified")],
     })
 }
@@ -224,8 +247,13 @@ mod tests {
     fn edit_replaces_exact_occurrence_count() {
         let root = temp_workspace("edit");
         fs::write(root.join("a.txt"), "fee fee fi").unwrap();
-        let token = crate::files::mtime_ms(&root.join("a.txt")).unwrap();
-        let ok = edit(&root, "a.txt", "fee", "foo", Some(2), Some(token)).unwrap();
+        let read = crate::files::read(&root, "a.txt", None, None).unwrap();
+        let token = crate::files::Revision {
+            modified_ms: read.modified_ms,
+            size_bytes: read.size_bytes,
+            sha256: read.content_sha256,
+        };
+        let ok = edit(&root, "a.txt", "fee", "foo", Some(2), Some(token.clone())).unwrap();
         assert_eq!(ok.replaced_count, 2);
         assert_eq!(ok.changed_files[0].action, "modified");
         assert_eq!(ok.changed_files[0].path, "a.txt");
@@ -233,13 +261,23 @@ mod tests {
             fs::read_to_string(root.join("a.txt")).unwrap(),
             "foo foo fi"
         );
-        let stale = edit(&root, "a.txt", "foo", "bar", Some(1), Some(token));
-        assert!(stale.is_err());
-        let mismatch = edit(&root, "a.txt", "fee", "bar", Some(1), Some(ok.modified_ms));
-        assert!(mismatch.is_err());
+        // 陈旧凭据：mtime 或内容任一不再匹配都被拒绝。
+        let stale_mtime = crate::files::Revision {
+            modified_ms: token.modified_ms.wrapping_add(1),
+            ..token.clone()
+        };
+        assert!(edit(&root, "a.txt", "foo", "bar", Some(1), Some(stale_mtime)).is_err());
+        let stale_sha = crate::files::Revision {
+            sha256: "0".repeat(64),
+            ..token
+        };
+        assert!(edit(&root, "a.txt", "foo", "bar", Some(1), Some(stale_sha)).is_err());
+        // 写入方返回的新凭据可直接继续编辑（链式工作流）。
+        let chain = edit(&root, "a.txt", "foo", "fee", Some(2), Some(ok.revision)).unwrap();
+        assert_eq!(chain.replaced_count, 2);
         assert_eq!(
             fs::read_to_string(root.join("a.txt")).unwrap(),
-            "foo foo fi"
+            "fee fee fi"
         );
         fs::remove_dir_all(&root).ok();
     }
@@ -256,7 +294,12 @@ mod tests {
     fn edit_matches_crlf_files_with_normalized_eol() {
         let root = temp_workspace("edit-crlf");
         fs::write(root.join("c.txt"), "alpha\r\nbeta\r\ngamma\r\n").unwrap();
-        let token = crate::files::mtime_ms(&root.join("c.txt")).unwrap();
+        let read = crate::files::read(&root, "c.txt", None, None).unwrap();
+        let token = crate::files::Revision {
+            modified_ms: read.modified_ms,
+            size_bytes: read.size_bytes,
+            sha256: read.content_sha256,
+        };
         // oldText 来自 file.read 的 \n 归一化输出，精确匹配为 0，容错路径命中。
         let outcome = edit(&root, "c.txt", "beta", "delta", None, Some(token)).unwrap();
         assert_eq!(outcome.replaced_count, 1);
@@ -271,7 +314,12 @@ mod tests {
     fn edit_preserves_bom_and_lf_files() {
         let root = temp_workspace("edit-bom");
         fs::write(root.join("b.txt"), "\u{feff}one\ntwo\n").unwrap();
-        let token = crate::files::mtime_ms(&root.join("b.txt")).unwrap();
+        let read = crate::files::read(&root, "b.txt", None, None).unwrap();
+        let token = crate::files::Revision {
+            modified_ms: read.modified_ms,
+            size_bytes: read.size_bytes,
+            sha256: read.content_sha256,
+        };
         // BOM 文件首行匹配（模型拿到的内容含 BOM 字符，此处模拟不含 BOM 的复制）。
         let outcome = edit(&root, "b.txt", "two", "TWO", None, Some(token)).unwrap();
         assert_eq!(outcome.replaced_count, 1);

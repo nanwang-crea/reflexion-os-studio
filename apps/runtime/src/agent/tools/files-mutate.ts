@@ -1,7 +1,7 @@
 import type { ToolDefinition } from '@reflexion-os-studio/agent-core'
 import type { SystemRuntimeClient } from '../../system.js'
 import { callSystem, optionalNumber, requireString } from './shared.js'
-import { recordResultMtime, type FileReadState } from './read-state.js'
+import { recordResultRevision, type FileReadState } from './read-state.js'
 
 /**
  * 整文件写入的字符数预检：超过即折叠为自纠错误，引导模型改用 file.edit。
@@ -13,7 +13,7 @@ const MAX_WRITE_CONTENT_CHARS = 200_000
 /**
  * 写类文件工具：全部需要用户审批（grant 由审批网关注入，
  * Rust 侧 require_grant 兜底校验），路径一律限制在工作区内。
- * 先读后写强制与陈旧检测由 readToken（file.read 的 mtime 凭据）承载，
+ * 先读后写强制与陈旧检测由 revision（mtime+size+sha256 三字段凭据）承载，
  * Rust 侧做最终校验；本层负责凭据的自动注入与回写，模型无需感知。
  */
 export function createFileWriteTool(
@@ -49,13 +49,20 @@ export function createFileWriteTool(
         content,
         grant: grant ?? '',
       }
-      const readToken = readState.token(path)
-      if (readToken !== undefined) {
-        params.readToken = readToken
+      const entry = readState.entry(path)
+      if (entry !== undefined && !entry.complete) {
+        return Promise.resolve({
+          content: `${path} 的读取凭据来自分页窗口，不足以覆盖整文件：请继续用 offset=nextOffset 读取至 contentTruncated=false（或重新完整读取）后再 file.write。新建文件可直接写入。`,
+          isError: true,
+          code: 'invalid_request',
+        })
+      }
+      if (entry !== undefined) {
+        params.revision = entry.revision
       }
       return callSystem(system, 'file.write', params, signal).then((result) => {
         if (!result.isError) {
-          recordResultMtime(readState, path, result)
+          recordResultRevision(readState, path, result)
         }
         return result
       })
@@ -93,8 +100,8 @@ export function createFileEditTool(
     },
     execute: ({ args, signal, grant }) => {
       const path = requireString(args, 'path')
-      const readToken = readState.token(path)
-      if (readToken === undefined) {
+      const entry = readState.entry(path)
+      if (entry === undefined) {
         return Promise.resolve({
           content: `尚未在本轮读取 ${path}：编辑前必须先用 file.read 读取该文件，并从返回内容中逐字符复制 oldText。`,
           isError: true,
@@ -106,7 +113,7 @@ export function createFileEditTool(
         path,
         oldText: requireString(args, 'oldText'),
         newText: requireString(args, 'newText'),
-        readToken,
+        revision: entry.revision,
         grant: grant ?? '',
       }
       const expectedCount = optionalNumber(args, 'expectedCount')
@@ -115,7 +122,7 @@ export function createFileEditTool(
       }
       return callSystem(system, 'file.edit', params, signal).then((result) => {
         if (!result.isError) {
-          recordResultMtime(readState, path, result)
+          recordResultRevision(readState, path, result)
         }
         return result
       })

@@ -112,11 +112,13 @@ export class McpManager {
     return tools
   }
 
-  /** 执行一次 MCP 工具调用;失败折叠为错误文本(与内置工具处理一致)。 */
+  /** 执行一次 MCP 工具调用；失败折叠为错误文本(与内置工具处理一致)。
+   *  signal 中止时透传给 client（协议取消 + 快速失败）。 */
   async callTool(
     serverId: string,
     toolName: string,
     args: Record<string, unknown>,
+    signal?: AbortSignal,
   ): Promise<{ content: string; isError: boolean }> {
     const connected = this.clients.get(serverId)
     if (!connected) {
@@ -126,9 +128,11 @@ export class McpManager {
       }
     }
     try {
-      const text = await connected.client.callTool(toolName, args)
+      const text = await connected.client.callTool(toolName, args, signal)
       return { content: text, isError: false }
     } catch (error) {
+      // 取消是控制流而非工具错误：AbortError 上抛，由工具桥转交调度器归因。
+      if (error instanceof Error && error.name === 'AbortError') throw error
       return {
         content: `MCP 工具 ${toolName} 调用失败: ${error instanceof Error ? error.message : String(error)}`,
         isError: true,

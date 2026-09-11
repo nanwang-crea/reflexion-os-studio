@@ -16,6 +16,7 @@ mod params;
 mod paths;
 mod protocol;
 mod search;
+mod sha256;
 mod shell;
 mod walk;
 

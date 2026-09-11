@@ -127,7 +127,6 @@ test('failed run creates no memory job via finalizer path', async () => {
       errorCode: 'no_progress',
       errorMessage: '停止',
       pendingMessage: null,
-      planDisposition: 'fail',
       enqueueMemoryJob: false,
     },
   )
@@ -154,7 +153,6 @@ test('failed run creates no memory job via finalizer path', async () => {
       errorCode: null,
       errorMessage: null,
       pendingMessage: null,
-      planDisposition: 'keep',
       enqueueMemoryJob: true,
       resultContent: 'done',
     },

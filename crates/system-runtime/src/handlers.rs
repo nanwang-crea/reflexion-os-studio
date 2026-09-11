@@ -24,6 +24,10 @@ pub fn handle_file_read(params: Value) -> Result<Value, OpError> {
         "totalLines": result.total_lines,
         "offset": result.offset,
         "modifiedMs": result.modified_ms,
+        // revision：完整读取（readComplete）时可作为 file.write 覆盖凭据使用；
+        // 分页窗口的 revision 只用于 file.edit 的陈旧检测。
+        "contentSha256": result.content_sha256,
+        "readComplete": result.read_complete,
     }))
 }
 
@@ -83,11 +87,16 @@ pub fn handle_file_write(params: Value) -> Result<Value, OpError> {
         .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
     require_grant(&params.grant, &params.workspace_root, "file.write")?;
     let root = workspace_root(&params.workspace_root)?;
-    let outcome = files::write(&root, &params.path, &params.content, params.read_token)
+    let outcome = files::write(&root, &params.path, &params.content, params.revision)
         .map_err(|message| OpError::new("file_error", message))?;
     Ok(json!({
         "writtenBytes": outcome.written_bytes,
         "modifiedMs": outcome.modified_ms,
+        "revision": {
+            "modifiedMs": outcome.revision.modified_ms,
+            "sizeBytes": outcome.revision.size_bytes,
+            "sha256": outcome.revision.sha256,
+        },
         "changedFiles": [{ "path": params.path, "action": if outcome.created { "created" } else { "modified" } }],
     }))
 }
@@ -103,13 +112,18 @@ pub fn handle_file_edit(params: Value) -> Result<Value, OpError> {
         &params.old_text,
         &params.new_text,
         params.expected_count,
-        params.read_token,
+        params.revision,
     )
     .map_err(|message| OpError::new("file_error", message))?;
     Ok(json!({
         "replacedCount": outcome.replaced_count,
         "sizeBytes": outcome.size_bytes,
         "modifiedMs": outcome.modified_ms,
+        "revision": {
+            "modifiedMs": outcome.revision.modified_ms,
+            "sizeBytes": outcome.revision.size_bytes,
+            "sha256": outcome.revision.sha256,
+        },
         "changedFiles": outcome.changed_files,
     }))
 }

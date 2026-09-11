@@ -380,7 +380,6 @@ test('finalizer settles callbacks exactly once even when notifier throws', async
       errorCode: null,
       errorMessage: null,
       pendingMessage: null,
-      planDisposition: 'keep',
       enqueueMemoryJob: false,
       resultContent: 'ok',
     },
@@ -427,7 +426,7 @@ test('cancel converges draft to interrupted and fires onCancel once', async () =
   assert.equal(draft.status, 'interrupted')
 })
 
-test('failed run converges its active plan to failed', () => {
+test('failed run persists terminal state and emits run.failed', () => {
   const store = freshStore()
   const session = store.sessions.create(
     store.projects.create({ name: 'p', folderPath: '/w' }).id,
@@ -437,13 +436,6 @@ test('failed run converges its active plan to failed', () => {
     providerId: 'provider',
     model: 'model',
   })
-  const plan = store.plans.create({
-    sessionId: session.id,
-    messageId: null,
-    goal: '完成多步任务',
-    steps: [{ id: 'step-1', title: '第一步' }],
-  })
-  store.runs.attachPlan(run.id, plan.id, plan.steps[0]?.id ?? null)
   const events = []
   new RunFinalizer(store).finalize(
     {
@@ -463,33 +455,19 @@ test('failed run converges its active plan to failed', () => {
       errorCode: 'max_turns',
       errorMessage: '任务在 4 轮内未完成，已停止执行',
       pendingMessage: null,
-      planDisposition: 'fail',
       enqueueMemoryJob: false,
     },
   )
-  const updated = store.plans.get(plan.id)
-  assert.equal(updated.status, 'failed')
   assert.equal(store.runs.get(run.id).status, 'failed')
   assert.equal(store.runs.get(run.id).errorCode, 'max_turns')
-  assert.equal(
-    events.some((e) => e.type === 'plan.updated'),
-    true,
-  )
   assert.equal(
     events.some((e) => e.type === 'run.failed'),
     true,
   )
-  // 计划未完成步骤同步收敛为 failed。
-  const planWithSteps = store.plans.get(plan.id)
-  for (const step of planWithSteps.steps) {
-    assert.equal(
-      ['failed', 'completed', 'skipped', 'cancelled'].includes(step.status),
-      true,
-    )
-  }
+  // ea4f1a4 之后计划不再随 Run 终态收敛，仅由 manage_plan 驱动。
 })
 
-test('cancelled run converges its active plan to cancelled and draft to interrupted', () => {
+test('cancelled run keeps plan untouched and draft to interrupted', () => {
   const store = freshStore()
   const session = store.sessions.create(
     store.projects.create({ name: 'p', folderPath: '/w' }).id,
@@ -499,13 +477,6 @@ test('cancelled run converges its active plan to cancelled and draft to interrup
     providerId: 'provider',
     model: 'model',
   })
-  const plan = store.plans.create({
-    sessionId: session.id,
-    messageId: null,
-    goal: '被取消的计划',
-    steps: [{ id: 'step-1', title: '第一步' }],
-  })
-  store.runs.attachPlan(run.id, plan.id, plan.steps[0]?.id ?? null)
   const draft = store.messages.create({
     sessionId: session.id,
     runId: run.id,
@@ -534,11 +505,10 @@ test('cancelled run converges its active plan to cancelled and draft to interrup
       errorCode: null,
       errorMessage: null,
       pendingMessage: null,
-      planDisposition: 'cancel',
       enqueueMemoryJob: false,
     },
   )
-  assert.equal(store.plans.get(plan.id).status, 'cancelled')
+  // 计划不随 Run 终态收敛（ea4f1a4）：Finalizer 不触碰任何计划行。
   assert.equal(store.runs.get(run.id).status, 'cancelled')
   assert.equal(
     store.messages.listBySession(session.id).find((m) => m.id === draft.id)
