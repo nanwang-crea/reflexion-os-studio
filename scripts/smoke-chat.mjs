@@ -670,7 +670,7 @@ try {
   const readFinal = readDetail.messages[readDetail.messages.length - 1]
   check(
     'file.read result flows back into final answer',
-    readFinal?.content === '读取完成：Rust 读到了我',
+    readFinal?.content === '读取完成：L1: Rust 读到了我',
     `content=${JSON.stringify(readFinal?.content)}`,
   )
 

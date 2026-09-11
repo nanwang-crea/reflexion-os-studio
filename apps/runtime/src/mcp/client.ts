@@ -1,6 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { createInterface } from 'node:readline'
-import { randomUUID } from 'node:crypto'
 
 /** MCP 协议版本(2024-11-05 稳定版)。 */
 export const MCP_PROTOCOL_VERSION = '2024-11-05'
@@ -252,9 +251,4 @@ export class McpClient {
     }
     this.pending.clear()
   }
-}
-
-/** spawn 用 id 关联的 request 辅助:connect 内部使用。 */
-export function newRequestId(): string {
-  return randomUUID()
 }
