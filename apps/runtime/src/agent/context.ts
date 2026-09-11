@@ -278,7 +278,6 @@ export class ContextBuilder {
         `[runtime] checkpoint compaction failed, falling back to legacy compaction: ${String(error)}\n`,
       )
       try {
-        const { compactFrames } = await import('@reflexion-os-studio/agent-core')
         const { frames: compacted } = await compactFrames({
           frames,
           budgetTokens: budget,

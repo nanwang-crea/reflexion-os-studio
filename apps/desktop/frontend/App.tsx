@@ -142,6 +142,8 @@ export default function App() {
     runActivities,
     resetStreaming,
     pendingApprovals,
+    clearPendingApproval,
+    restorePendingApproval,
     memoryNotice,
     runningSessionIds,
     completedSessionIds,
@@ -175,20 +177,30 @@ export default function App() {
     resetWorkspaceFiles,
   })
 
-  /** 审批决策：approval.resolve 命令；事件回执负责移除等待卡片。 */
+  /**
+   * 审批决策：approval.resolve 命令；卡片本地乐观摘除，点击即消失，
+   * 不等 approval.resolved 事件走完 runtime→宿主→webview 往返（同一
+   * 事件管道积压时卡片会滞留）。命令失败则恢复等待卡重试；
+   * 事件回执到达时按 toolCallId 幂等，摘除已不存在的卡无副作用。
+   */
   const handleResolveApproval = useCallback(
     async (
       toolCallId: string,
       decision: 'approved' | 'denied',
       scope: 'once' | 'session',
     ): Promise<void> => {
+      const entry = pendingApprovals.find(
+        (item) => item.toolCallId === toolCallId,
+      )
+      if (entry !== undefined) clearPendingApproval(toolCallId)
       try {
         await resolveApproval({ toolCallId, decision, scope })
       } catch (error) {
+        if (entry !== undefined) restorePendingApproval(entry)
         setNotice(error instanceof Error ? error.message : String(error))
       }
     },
-    [],
+    [pendingApprovals, clearPendingApproval, restorePendingApproval],
   )
 
   useEffect(() => {

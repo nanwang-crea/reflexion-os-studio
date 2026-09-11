@@ -95,10 +95,12 @@ export class McpClient {
     // aborted 承诺 + signal 监听：中止即发送协议取消通知并快速失败，
     // 不等待 30s 请求超时；正常完成路径由 finally 移除监听。
     let rejectAborted!: (error: Error) => void
+    let abortWon!: boolean
     const aborted = new Promise<never>((_, reject) => {
       rejectAborted = reject
     })
     const onAbort = (): void => {
+      abortWon = true
       // 协议取消通知（notifications/cancelled）：尽力而为，服务器可提前终止。
       this.notify('notifications/cancelled', {
         requestId: id,
@@ -112,6 +114,17 @@ export class McpClient {
     let result: { content?: { type: string; text?: string }[]; isError?: boolean }
     try {
       result = (await Promise.race([promise, aborted])) as typeof result
+    } catch (error) {
+      if (abortWon) {
+        // abort 赢得 race：摘除孤儿 pending 条目并清掉 30s 定时器，
+        // 已无主请求不再占用表项；迟到响应由 handleLine 查无条目而忽略。
+        const orphan = this.pending.get(id)
+        if (orphan) {
+          this.pending.delete(id)
+          clearTimeout(orphan.timer)
+        }
+      }
+      throw error
     } finally {
       signal?.removeEventListener('abort', onAbort)
     }

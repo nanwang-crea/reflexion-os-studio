@@ -78,6 +78,10 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
   resetStreaming: () => void
   pendingApprovals: PendingApproval[]
   clearPendingApprovals: (runId: string) => void
+  /** 审批决策乐观摘卡：命令发出即移除等待卡；approval.resolved 事件幂等对账。 */
+  clearPendingApproval: (toolCallId: string) => void
+  /** 审批命令失败时恢复等待卡（保留可重试入口，不丢审批上下文）。 */
+  restorePendingApproval: (entry: PendingApproval) => void
   memoryNotice: string | null
   runningSessionIds: string[]
   completedSessionIds: string[]
@@ -231,6 +235,16 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           cache.applyDelta(event.messageId, event.runId, event.delta)
           return
         }
+        if (event.type === 'message.created') {
+          // 消息骨架即时入列：流式增量的渲染载体是 sessionData 里的消息行，
+          // 缺了这一步，纯文本轮次要等 message.completed 才整体上屏，
+          // 期间所有 delta 不可见（仅点击/其他事件触发的刷新会偶然带出）。
+          // 仅当前查看会话触发，后台会话事件不打扰当前页（同 run.started 守卫）。
+          if (event.message.sessionId === deps.activeSessionRef.current) {
+            scheduleToolRefresh()
+          }
+          return
+        }
         if (event.type === 'message.reasoning_delta') {
           activity.setRunActivity(event.runId, { phase: 'thinking' })
           cache.applyReasoningDelta(event.messageId, event.runId, event.delta)
@@ -381,6 +395,8 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     resetStreaming,
     pendingApprovals: approvals.pendingApprovals,
     clearPendingApprovals: approvals.clearForRun,
+    clearPendingApproval: approvals.onApprovalResolved,
+    restorePendingApproval: approvals.onApprovalRequired,
     memoryNotice,
     runningSessionIds: sessionTracking.runningSessionIds,
     completedSessionIds: sessionTracking.completedSessionIds,
