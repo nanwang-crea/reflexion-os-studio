@@ -24,10 +24,18 @@ pub fn handle_file_read(params: Value) -> Result<Value, OpError> {
         "totalLines": result.total_lines,
         "offset": result.offset,
         "modifiedMs": result.modified_ms,
-        // revision：完整读取（readComplete）时可作为 file.write 覆盖凭据使用；
-        // 分页窗口的 revision 只用于 file.edit 的陈旧检测。
         "contentSha256": result.content_sha256,
         "readComplete": result.read_complete,
+        // revision（mtime+size+sha256 嵌套凭据）：与 files.rs L162-164 的约定对齐——
+        // 由 Rust 侧在 file.read 成功后统一计算并返回。完整读取（readComplete）
+        // 的凭据可用于 file.write 覆盖校验；分页窗口凭据只用于 file.edit
+        // 陈旧检测（TS 层按 readComplete 分档）。此前缺失此字段会切断
+        // "先读后改"链路：extractRevision 提取不到 → 不登记 → edit/write 必拒。
+        "revision": {
+            "modifiedMs": result.modified_ms,
+            "sizeBytes": result.size_bytes,
+            "sha256": result.content_sha256,
+        },
     }))
 }
 
