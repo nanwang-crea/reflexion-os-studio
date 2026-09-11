@@ -11,7 +11,17 @@ import type {
 const DEFAULT_TIMEOUT_MS = 120_000
 /** 请求建立阶段失败(网络/限流/服务端短暂故障)的自动重试次数与退避。 */
 const DEFAULT_MAX_RETRIES = 5
-const RETRY_BACKOFF_MS = [1_000, 2_500, 5_000, 10_000, 20_000]
+/** 重试退避公式：1s 起步 ×2 递增，封顶 60s；适配任意 maxRetries（设置范围 0–15）。 */
+const RETRY_BACKOFF_BASE_MS = 1_000
+const RETRY_BACKOFF_CAP_MS = 60_000
+
+function retryBackoffMs(attempt: number): number {
+  // attempt 从 1 开始；封顶后不再翻倍，避免长重试链退避失控。
+  return Math.min(
+    RETRY_BACKOFF_CAP_MS,
+    RETRY_BACKOFF_BASE_MS * 2 ** (attempt - 1),
+  )
+}
 
 /** 429 限流与 5xx 短暂故障可重试；认证/配置类错误重试无意义。 */
 function shouldRetryStatus(code: number, detail = ''): boolean {
@@ -218,8 +228,7 @@ export async function streamChatCompletion(
     maxRetries: number
     reason: string
   }): Promise<void> => {
-    const waitMs =
-      RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)]
+    const waitMs = retryBackoffMs(attempt)
     options.onRetry?.({ ...input, waitMs })
     await sleep(waitMs, options.signal)
   }

@@ -23,8 +23,8 @@ const FIELDS: {
   {
     key: 'requestRetries',
     label: '请求重试次数',
-    placeholder: '2（默认）',
-    hint: 'Provider 请求建立阶段失败(可恢复 400/429/5xx/网络)自动重试次数；范围 0–15，0 表示不重试。',
+    placeholder: '5（默认）',
+    hint: 'Provider 请求建立阶段失败(可恢复 400/429/5xx/网络)自动重试次数；范围 0–15，0 表示不重试；退避 1s 起步逐次翻倍，封顶 60s。',
   },
   {
     key: 'requestTimeoutSec',
