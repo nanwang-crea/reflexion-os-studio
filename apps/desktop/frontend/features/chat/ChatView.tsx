@@ -153,14 +153,19 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
   )
   const currentPlan = useMemo(() => {
     const plans = props.sessionData?.plans ?? []
-    // 显示策略：active 常驻可见；最近一个 completed 保留为折叠完成反馈；
-    // cancelled 不渲染，避免"幽灵计划"占着 UI 让用户困惑（Codex 式短命进度板）。
+    // 显示策略（翻篇即退场）：active 常驻可见；最近一个 completed 仅作完成回执，
+    // 用户发出下一条消息（话题翻篇）后即退场；cancelled 不渲染，避免"幽灵计划"
+    // 占着 UI 让用户困惑（Codex 式短命进度板）。
     const recentFirst = [...plans].reverse()
-    return (
-      recentFirst.find((plan) => plan.status === 'active') ??
-      recentFirst.find((plan) => plan.status === 'completed') ??
-      null
+    const active = recentFirst.find((plan) => plan.status === 'active')
+    if (active) return active
+    const finished = recentFirst.find((plan) => plan.status === 'completed')
+    if (!finished || finished.completedAt === null) return finished ?? null
+    const completedAt = finished.completedAt
+    const hasNewerUserMessage = (props.sessionData?.messages ?? []).some(
+      (message) => message.role === 'user' && message.createdAt > completedAt,
     )
+    return hasNewerUserMessage ? null : finished
   }, [props.sessionData])
   const runs = useMemo(() => props.sessionData?.runs ?? [], [props.sessionData])
   const visibleRuns = useMemo(
