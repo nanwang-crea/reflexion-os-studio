@@ -9,8 +9,10 @@ use std::sync::OnceLock;
 use crate::shell::ShellOutcome;
 
 pub(crate) mod noop;
-// Seatbelt 渲染器全平台编译（纯字符串/std::process），便于跨机单测；
-// select() 仅在 macOS 分支消费（Linux bwrap 接入前，其余平台构建靠此放行 dead_code）。
+// Seatbelt/bwrap 渲染器全平台编译（纯字符串/std::process），便于跨机单测；
+// select() 仅在对应平台 cfg 分支消费（其余平台构建靠 cfg_attr 放行 dead_code）。
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub(crate) mod linux;
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub(crate) mod macos;
 #[cfg(windows)]
@@ -36,11 +38,14 @@ pub(crate) fn sandbox_temp_dir() -> PathBuf {
 }
 
 pub(crate) trait SandboxProvider: Send + Sync {
-    /// 稳定标识，进入协议："windows-token" / "none"（未来追加 "seatbelt" / "bwrap"）。
+    /// 稳定标识，进入协议："windows-token" / "seatbelt" / "bwrap" / "none"。
     fn id(&self) -> &'static str;
 
     /// 工厂探测：不可用则降级 Noop。仅在工厂初始化时调用一次。
-    #[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))] // Linux bwrap 接入前，该平台 select() 不探测
+    #[cfg_attr(
+        not(any(windows, target_os = "macos", target_os = "linux")),
+        allow(dead_code)
+    )] // 三平台 select() 分支都探测；其余 unix（如 *BSD）构建不消费
     fn is_available(&self) -> bool;
 
     /// 自持执行路径（Windows CreateProcessAsUserW）。返回 None = 走包装路径。
@@ -61,7 +66,8 @@ pub(crate) trait SandboxProvider: Send + Sync {
     }
 }
 
-/// 进程内唯一 provider：按平台探测（Windows 受限令牌 / macOS Seatbelt），探测不过降级 Noop。
+/// 进程内唯一 provider：按平台探测（Windows 受限令牌 / macOS Seatbelt / Linux bwrap），
+/// 探测不过降级 Noop。
 pub(crate) fn provider() -> &'static dyn SandboxProvider {
     static PROVIDER: OnceLock<Box<dyn SandboxProvider>> = OnceLock::new();
     PROVIDER.get_or_init(select).as_ref()
@@ -78,6 +84,13 @@ fn select() -> Box<dyn SandboxProvider> {
     #[cfg(target_os = "macos")]
     {
         let provider = macos::SeatbeltSandbox::from_env();
+        if provider.is_available() {
+            return Box::new(provider);
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let provider = linux::BwrapSandbox::from_env();
         if provider.is_available() {
             return Box::new(provider);
         }

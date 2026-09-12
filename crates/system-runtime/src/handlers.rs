@@ -279,40 +279,43 @@ pub fn handle_shell_execute(id: Value, params: Value) -> Result<(Value, bool), O
             "active": provider.id() != "none",
             "provider": provider.id(),
         });
-        let outcome = match provider.exec_direct(&request, &|pid| {
-            let _ = running_shells().lock().map(|mut shells| {
-                shells.insert(request_id.clone(), pid);
-            });
-        }) {
-            Some(result) => result,
-            None => match provider.wrap(&request) {
-                Some(argv) => {
+        // 沙盒临时目录必须在 provider 渲染前落盘：macOS profile_path 规范化要求
+        // 命中真实祖先链，Linux bwrap 的 FIXED_TMP alias 挂载看 host 可见性
+        // （缺失 dest 在 ro 父挂载下 mkdir 会 EROFS）。Windows exec_direct 的
+        // launch.rs 自建同款目录，create_dir_all 幂等不受影响。
+        let temp = sandbox::sandbox_temp_dir();
+        let outcome = match std::fs::create_dir_all(&temp) {
+            // 线程闭包非 Result 上下文，禁止 `?`——match 产出 Err 走统一上报。
+            Err(error) => Err(format!("sandbox temp dir create failed: {error}")),
+            Ok(()) => match provider.exec_direct(&request, &|pid| {
+                let _ = running_shells().lock().map(|mut shells| {
+                    shells.insert(request_id.clone(), pid);
+                });
+            }) {
+                Some(result) => result,
+                None => match provider.wrap(&request) {
                     // 包装路径：TMPDIR 指到沙盒临时目录（与 Windows 轮 TMP/TEMP 重定向
-                    // 同语义；该目录已在 request.writable_roots 白名单里）。
-                    // 线程闭包非 Result 上下文，禁止 `?`——用 match 产出 Err 走统一上报。
-                    let temp = sandbox::sandbox_temp_dir();
-                    match std::fs::create_dir_all(&temp) {
-                        Ok(()) => shell::execute_argv(
-                            &argv,
-                            &[("TMPDIR", temp.display().to_string())],
-                            &request.cwd,
-                            request.timeout_ms,
-                            &|pid| {
-                                let _ = running_shells().lock().map(|mut shells| {
-                                    shells.insert(request_id.clone(), pid);
-                                });
-                            },
-                        ),
-                        Err(error) => Err(format!("sandbox temp dir create failed: {error}")),
+                    // 同语义；该目录已在 request.writable_roots 白名单里）。bwrap argv 内的
+                    // --setenv 是沙箱子进程视角的第二重权威覆盖，两者并存互不冲突。
+                    Some(argv) => shell::execute_argv(
+                        &argv,
+                        &[("TMPDIR", temp.display().to_string())],
+                        &request.cwd,
+                        request.timeout_ms,
+                        &|pid| {
+                            let _ = running_shells().lock().map(|mut shells| {
+                                shells.insert(request_id.clone(), pid);
+                            });
+                        },
+                    ),
+                    None => {
+                        shell::execute(&request.command, &request.cwd, request.timeout_ms, &|pid| {
+                            let _ = running_shells().lock().map(|mut shells| {
+                                shells.insert(request_id.clone(), pid);
+                            });
+                        })
                     }
-                }
-                None => {
-                    shell::execute(&request.command, &request.cwd, request.timeout_ms, &|pid| {
-                        let _ = running_shells().lock().map(|mut shells| {
-                            shells.insert(request_id.clone(), pid);
-                        });
-                    })
-                }
+                },
             },
         };
         let _ = running_shells().lock().map(|mut shells| {
