@@ -311,6 +311,8 @@ TS 侧零破坏：result 新字段向后兼容；params 新字段可选。工具
 
 - seatbelt 语义为 **last-match wins**：拒读在前、可写根 allow 在后 → workspace
   恰好嵌在 `~/.ssh` 之类的病态场景仍按最后规则可写（记录为已知怪癖，不影响常规）；
+- 反方向嵌套同族怪癖：workspace ⊇ DATA_DIR 时，可写根 allow 覆盖到 data_dir 的写
+  （O_WRONLY 可覆写、不可读取——deny 只挡 `file-read*`），病态配置项，如实记录；
 - HOME/DATA_DIR 缺失时跳过对应 deny（渲染器分支，有单测钉住）；
 - 路径含引号的转义：SBPL 字符串按 C 风格转义渲染（`escape_sbpl_string` 单测钉住）。
 
@@ -334,19 +336,31 @@ TS 侧零破坏：result 新字段向后兼容；params 新字段可选。工具
 > `select()` 仅 `#[cfg(target_os = "linux")]` 使用。运行时行为本机不可验证（无 Linux），
 > 交付口径 = Windows 轮。
 
-### 12.1 argv 结构（`build_bwrap_args(request, home, data_dir) -> Vec<String>`，纯函数）
+### 12.1 argv 结构（`wrap()` 在 host 侧采集 `BindFacts`，`build_bwrap_args(request, facts) -> Vec<String>` 纯渲染）
 
 ```text
-bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp
-      --bind <sandbox_temp> /tmp/reflexion-sandbox? (以 TMPDIR 重定向 + --setenv TMPDIR)
-      --bind <writable_root> <writable_root> …
-      --tmpfs <HOME>/.ssh  --tmpfs <HOME>/.aws  --tmpfs <HOME>/.gnupg  --tmpfs <DATA_DIR>
-      --unshare-all [无 --share-net | 有网络审批时 --share-net]
-      --die-with-parent --new-session --clearenv?（不 clear，继承 env + TMPDIR 覆盖）
+bwrap --ro-bind / / --dev /dev --proc /proc
+      --bind <writable_root> <writable_root> …        # handler 约定：[workspace, sandbox_temp]
+      [--bind <sandbox_temp> /tmp/reflexion-sandbox]  # 仅当 host 该固定名存在（facts.fixed_tmp_bindable）
+      [--tmpfs <敏感路径> …]                          # 仅 host 存在者：DATA_DIR、HOME/{.ssh,.aws,.gnupg}（facts.masked）
+      --tmpfs /dev/shm
+      --unshare-all [--share-net]                     # --share-net 仅网络审批通过，且必排在 --unshare-all 之后
+      --die-with-parent --new-session
+      --setenv TMPDIR <固定名或 sandbox_temp 原路径>  # 随 alias 分支走
       -- /bin/sh -c <command>
 ```
 
-- 遮蔽用 `--tmpfs`（敏感目录在沙箱内呈现为空目录而非报错，读不到内容即达标）；
+- 不再无条件 `--tmpfs /tmp`（早期草图有误）：写入经 TMPDIR 重定向到可写根
+  sandbox_temp，/tmp 保持只读可见；对固定名 `/tmp/reflexion-sandbox` 的别名挂载
+  仅在 host 存在时给——bwrap 在 ro 覆盖树下补建缺失 dest 只在父目录可写时成立，
+  否则 EROFS 直接退出（fail-closed），EEXIST 是唯一通路；
+- 遮蔽做**存在性过滤**（wrap 时 stat、纯渲染器消费事实）：不存在即无可遮蔽，
+  强挂还会撞 EROFS 让命令必死——过滤同时修复正确性与可用性；遮蔽路径为文件/
+  符号链接时 bwrap 拒挂（fail-closed，不泄密，真机确认）；
+- 挂载顺序是安全不变量（金样 positional 断言钉死）：bwrap 按 argv 序挂载，
+  遮蔽 `--tmpfs` 一律渲染在全部 `--bind` 之后（mask wins：同路径后挂 tmpfs
+  盖住先挂的可写 bind）；`--unshare-all` 在解析期整组改写 namespace bitmask，
+  `--share-net` 必须在其后，否则被盖回禁网（审批后反而没网）；
 - `--unshare-all` 自带 net namespace → **Linux 上禁网是强隔离**（优于 Windows 档，与
   codex landlock+seccomp 网络策略同档）；审批通过时改为 `--share-net`；
 - `--new-session` 后外层 `kill(-pgid)` 可能不贯穿沙箱内子进程 → 以 `--die-with-parent`
