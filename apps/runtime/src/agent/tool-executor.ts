@@ -156,7 +156,14 @@ export async function executeToolCall(
         }
       }
       if (verdict === 'denied') {
-        finalizeToolCall(store, state, emitter, row.id, 'failed', 'permission_denied')
+        finalizeToolCall(
+          store,
+          state,
+          emitter,
+          row.id,
+          'failed',
+          'permission_denied',
+        )
         return {
           content: '用户拒绝了本次命令联网请求',
           isError: true,

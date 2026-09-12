@@ -13,11 +13,11 @@
 解析 cwd）→ [shell.rs](crates/system-runtime/src/shell.rs)（POSIX `sh -c` / Windows `cmd /C`，
 超时杀进程组）。
 
-| # | 问题 | 现状 | 影响 |
-| --- | --- | --- | --- |
-| P1 | 环境继承瘦 | Rust sidecar 由 Tauri 宿主 → Node → Rust 层层 spawn（`sidecar_paths.rs` / `system.ts`），不传 env；GUI（Finder/图标）启动链的 PATH 只有 `/usr/bin:/bin:/usr/sbin:/sbin` | shell 命令找不到用户安装的工具（nvm / homebrew / conda），报 command not found——即 2026-09-11 确认的现象；git 查找被迫走 `find_git_executable` 候选路径兜底 |
-| P2 | 无 OS 级沙箱 | 仅限制初始 cwd（workspace 相对路径 + 符号链接边界），`sh -c` 内部可 `cd`、任意读写、出网 | 工作区边界只是流程性约束（审批 grant），非 OS 强制 |
-| P3 | 网络无管控 | 任意命令可出网，且无独立审批抓手 | 数据外传 / 意外副作用风险 |
+| #   | 问题         | 现状                                                                                                                                                                    | 影响                                                                                                                                                        |
+| --- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1  | 环境继承瘦   | Rust sidecar 由 Tauri 宿主 → Node → Rust 层层 spawn（`sidecar_paths.rs` / `system.ts`），不传 env；GUI（Finder/图标）启动链的 PATH 只有 `/usr/bin:/bin:/usr/sbin:/sbin` | shell 命令找不到用户安装的工具（nvm / homebrew / conda），报 command not found——即 2026-09-11 确认的现象；git 查找被迫走 `find_git_executable` 候选路径兜底 |
+| P2  | 无 OS 级沙箱 | 仅限制初始 cwd（workspace 相对路径 + 符号链接边界），`sh -c` 内部可 `cd`、任意读写、出网                                                                                | 工作区边界只是流程性约束（审批 grant），非 OS 强制                                                                                                          |
+| P3  | 网络无管控   | 任意命令可出网，且无独立审批抓手                                                                                                                                        | 数据外传 / 意外副作用风险                                                                                                                                   |
 
 补充说明：`find_git_executable`（`git/exec.rs`：`REFLEXION_GIT_PATH` → PATH → 平台候选）是
 兜底逻辑而非根因；P1 修复后它仍保留，但基本不会再走到候选探测。
@@ -44,13 +44,13 @@
 
 ## 3. 参照实现对照
 
-| 维度 | codex | ReflexionOS（本地 `../ReflexionOS`） | opencode（本地 `../opencode`） | 本项目一期 |
-| --- | --- | --- | --- | --- |
-| shell 选择 | `getpwuid_r` 读用户登录 shell + which + 平台兜底（`codex-rs/shell-command/src/shell_detect.rs`） | 直接系统 shell | `$SHELL` 优先 → `/bin/zsh`（macOS）/ git-bash（Windows）黑名单过滤（`src/shell/shell.ts`） | `$SHELL` → `getpwuid` → 平台兜底，进程内缓存 |
-| 环境继承 | 登录模式 `-lc`（`core/src/shell.rs`） | conda base env hook 注入 | 继承 `process.env` | 登录 shell 自行补全，不主动覆盖 env |
-| 沙箱 | macOS Seatbelt 开箱即用；Linux bwrap（缺则 bundled helper + 启动警告）；Windows 原生沙箱/WSL2 | factory 按平台顺序（win → Seatbelt → bwrap），不可用返回 NullSandbox 放行 | 无 OS 沙箱（权限判定 + 审批） | Seatbelt provider + Noop 降级 + 状态上报 |
-| 沙箱策略 | `read-only` / `workspace-write` / `danger-full-access` + `writable_roots` | allow default + deny 网络/系统写/敏感路径（`seatbelt_profile.py`） | — | 一期 allow default + deny 网络/敏感路径；二期评估严格模式 |
-| 网络 | 沙箱内禁网，越界走审批 | `requires_network` 参数 → 主动网络审批（`shell_tool.py`） | — | 同 ReflexionOS 模式 |
+| 维度       | codex                                                                                            | ReflexionOS（本地 `../ReflexionOS`）                                      | opencode（本地 `../opencode`）                                                             | 本项目一期                                                |
+| ---------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| shell 选择 | `getpwuid_r` 读用户登录 shell + which + 平台兜底（`codex-rs/shell-command/src/shell_detect.rs`） | 直接系统 shell                                                            | `$SHELL` 优先 → `/bin/zsh`（macOS）/ git-bash（Windows）黑名单过滤（`src/shell/shell.ts`） | `$SHELL` → `getpwuid` → 平台兜底，进程内缓存              |
+| 环境继承   | 登录模式 `-lc`（`core/src/shell.rs`）                                                            | conda base env hook 注入                                                  | 继承 `process.env`                                                                         | 登录 shell 自行补全，不主动覆盖 env                       |
+| 沙箱       | macOS Seatbelt 开箱即用；Linux bwrap（缺则 bundled helper + 启动警告）；Windows 原生沙箱/WSL2    | factory 按平台顺序（win → Seatbelt → bwrap），不可用返回 NullSandbox 放行 | 无 OS 沙箱（权限判定 + 审批）                                                              | Seatbelt provider + Noop 降级 + 状态上报                  |
+| 沙箱策略   | `read-only` / `workspace-write` / `danger-full-access` + `writable_roots`                        | allow default + deny 网络/系统写/敏感路径（`seatbelt_profile.py`）        | —                                                                                          | 一期 allow default + deny 网络/敏感路径；二期评估严格模式 |
+| 网络       | 沙箱内禁网，越界走审批                                                                           | `requires_network` 参数 → 主动网络审批（`shell_tool.py`）                 | —                                                                                          | 同 ReflexionOS 模式                                       |
 
 ## 4. 方案设计
 
@@ -122,21 +122,21 @@
 
 #### 机制
 
-| 层 | 实现 |
-| --- | --- |
-| Token（`token.rs`） | `OpenProcessToken` → `CreateRestrictedToken(DISABLE_MAX_PRIVILEGE, SidsToDisable=[Builtin\Administrators])` → `SetTokenInformation(TokenIntegrityLevel, LOW)`；句柄 `OnceLock` 缓存 |
-| ACL（`acl.rs`） | `SetNamedSecurityInfoW` 打 LOW 强制完整性标签（SACL `S:(ML;;OICI;;;LW)`，OI/CI 继承）；可写 root = workspace root + 专用沙盒临时目录（`<TEMP>/reflexion-sandbox`，TMP/TEMP 环境变量重定向给沙盒子进程） |
-| Launch（`launch.rs`） | 匿名管道捕获 stdout/stderr → `CreateProcessAsUserW(token, cmd /C, CREATE_SUSPENDED \| CREATE_NO_WINDOW)` → `CreateJobObjectW` + `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` → `ResumeThread` |
+| 层                    | 实现                                                                                                                                                                                                    |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Token（`token.rs`）   | `OpenProcessToken` → `CreateRestrictedToken(DISABLE_MAX_PRIVILEGE, SidsToDisable=[Builtin\Administrators])` → `SetTokenInformation(TokenIntegrityLevel, LOW)`；句柄 `OnceLock` 缓存                     |
+| ACL（`acl.rs`）       | `SetNamedSecurityInfoW` 打 LOW 强制完整性标签（SACL `S:(ML;;OICI;;;LW)`，OI/CI 继承）；可写 root = workspace root + 专用沙盒临时目录（`<TEMP>/reflexion-sandbox`，TMP/TEMP 环境变量重定向给沙盒子进程） |
+| Launch（`launch.rs`） | 匿名管道捕获 stdout/stderr → `CreateProcessAsUserW(token, cmd /C, CREATE_SUSPENDED \| CREATE_NO_WINDOW)` → `CreateJobObjectW` + `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` → `ResumeThread`                   |
 
 #### 能力边界
 
-| 能力 | Windows-token | 说明 |
-| --- | --- | --- |
-| 网络强制禁断 | ❌ **不强制** | 审批是流程性闸门，同 codex unelevated（诚实标注"弱网络隔离"） |
-| 敏感路径读保护 | ❌ | 完整性级别不限制读 |
-| ACL 标签持久化 | ✅ 副作用 | workspace 目录增加 LOW 标签（幂等重设，LOW 标签文件任何完整性可写，权衡记录在案） |
-| 提权保护 | ✅ | 剥离全部特权 + 移除管理员 SID |
-| 写边界 | workspace root + 沙盒临时目录 | **不给整个用户 TEMP 打标签**（会放宽该目录的完整性约束，副作用过大）；沙盒临时目录通过 TMP/TEMP 环境变量重定向 |
+| 能力           | Windows-token                 | 说明                                                                                                           |
+| -------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| 网络强制禁断   | ❌ **不强制**                 | 审批是流程性闸门，同 codex unelevated（诚实标注"弱网络隔离"）                                                  |
+| 敏感路径读保护 | ❌                            | 完整性级别不限制读                                                                                             |
+| ACL 标签持久化 | ✅ 副作用                     | workspace 目录增加 LOW 标签（幂等重设，LOW 标签文件任何完整性可写，权衡记录在案）                              |
+| 提权保护       | ✅                            | 剥离全部特权 + 移除管理员 SID                                                                                  |
+| 写边界         | workspace root + 沙盒临时目录 | **不给整个用户 TEMP 打标签**（会放宽该目录的完整性约束，副作用过大）；沙盒临时目录通过 TMP/TEMP 环境变量重定向 |
 
 #### codex unelevated 对照
 
@@ -146,16 +146,16 @@ codex unelevated 档也是受限令牌 + ACL 边界，弱网络隔离。本设�
 
 ## 5. 实施步骤与验收
 
-| 步骤 | 内容 | 验收 |
-| --- | --- | --- |
-| S1 | `user_shell.rs` 探测 + `-lc` 执行改造（Rust） | cargo test 全绿；Finder 启动 desktop 后 `echo $PATH` 能看到 nvm/homebrew 路径，用户工具可执行 |
-| S2 | SandboxProvider + seatbelt profile + 协议扩展 | 无网络审批时 `curl` 被拒；workspace 内读写正常；读 `~/.ssh` 被拒；`sandbox-exec` 缺失时降级为 `sandbox:"none"` 且状态可见 |
-| S3 | `requires_network` + 网络审批闭环 | `npm install`（未审批）触发审批卡；allow once 后执行成功；session 放行后不再询问；无 grant 的 `allowNetwork` 被 Rust 拒绝 |
-| S4 | 状态上报 + 前端展示 + 错误分类 | ready/status 带 sandbox 位；UI 可见沙箱状态与降级提示 |
-| S5 | 文档与回归 | `AGENTS.md`、`PERMISSION-MODEL.md` 增补；现有 shell/审批测试全绿；desktop / cli / runtime 直连三端冒烟 |
-| W1 | SandboxProvider 工厂 + 双路径 trait + NoopSandbox | macOS 返回 none；cargo test 全绿 |
-| W2 | Windows 受限令牌 provider（`#[cfg(windows)]`） | `cargo check --target x86_64-pc-windows-msvc` 通过；真机验收：令牌生效、workspace 外写被拒、Job 树杀 |
-| W3 | 网络审批闭环（TS + Rust） | `requires_network` → 审批卡 → grant `sandboxNetwork` → Rust 核对；trusted 不旁路 |
+| 步骤 | 内容                                              | 验收                                                                                                                      |
+| ---- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| S1   | `user_shell.rs` 探测 + `-lc` 执行改造（Rust）     | cargo test 全绿；Finder 启动 desktop 后 `echo $PATH` 能看到 nvm/homebrew 路径，用户工具可执行                             |
+| S2   | SandboxProvider + seatbelt profile + 协议扩展     | 无网络审批时 `curl` 被拒；workspace 内读写正常；读 `~/.ssh` 被拒；`sandbox-exec` 缺失时降级为 `sandbox:"none"` 且状态可见 |
+| S3   | `requires_network` + 网络审批闭环                 | `npm install`（未审批）触发审批卡；allow once 后执行成功；session 放行后不再询问；无 grant 的 `allowNetwork` 被 Rust 拒绝 |
+| S4   | 状态上报 + 前端展示 + 错误分类                    | ready/status 带 sandbox 位；UI 可见沙箱状态与降级提示                                                                     |
+| S5   | 文档与回归                                        | `AGENTS.md`、`PERMISSION-MODEL.md` 增补；现有 shell/审批测试全绿；desktop / cli / runtime 直连三端冒烟                    |
+| W1   | SandboxProvider 工厂 + 双路径 trait + NoopSandbox | macOS 返回 none；cargo test 全绿                                                                                          |
+| W2   | Windows 受限令牌 provider（`#[cfg(windows)]`）    | `cargo check --target x86_64-pc-windows-msvc` 通过；真机验收：令牌生效、workspace 外写被拒、Job 树杀                      |
+| W3   | 网络审批闭环（TS + Rust）                         | `requires_network` → 审批卡 → grant `sandboxNetwork` → Rust 核对；trusted 不旁路                                          |
 
 ## 6. 风险与开放问题
 
