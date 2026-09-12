@@ -11,6 +11,7 @@ const OPERATION_LABELS: Record<string, string> = {
   'file.move': '移动文件',
   'file.mkdir': '创建目录',
   'shell.execute': '执行命令',
+  'sandbox_network': '允许命令联网',
 }
 
 interface ApprovalCardProps {
