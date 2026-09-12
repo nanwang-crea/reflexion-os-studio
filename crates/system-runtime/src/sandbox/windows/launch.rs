@@ -22,7 +22,8 @@ use windows::Win32::System::JobObjects::{
 use windows::Win32::System::Pipes::CreatePipe;
 use windows::Win32::System::Threading::{
     CreateProcessAsUserW, GetExitCodeProcess, ResumeThread, WaitForSingleObject, CREATE_NO_WINDOW,
-    CREATE_SUSPENDED, PROCESS_INFORMATION, STARTF_USESTDHANDLES, STARTUPINFOW,
+    CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, PROCESS_INFORMATION, STARTF_USESTDHANDLES,
+    STARTUPINFOW,
 };
 
 use super::acl;
@@ -31,7 +32,6 @@ use crate::shell::ShellOutcome;
 
 const MAX_OUTPUT_BYTES: usize = 256 * 1024;
 const POLL_INTERVAL_MS: u32 = 25;
-const SANDBOX_TEMP_DIR: &str = "reflexion-sandbox";
 
 /// Send-safe HANDLE wrapper for cross-thread pipe ownership transfer.
 /// Wraps the raw pointer value as usize to satisfy Send bounds.
@@ -78,6 +78,8 @@ pub(crate) fn exec(
         let environment = environment_block(&sandbox_temp)?;
 
         let mut si = STARTUPINFOW::default();
+        // MSDN：CreateProcessAsUserW 要求先置 cb = sizeof(STARTUPINFOW)，否则 ERROR_INVALID_PARAMETER。
+        si.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
         si.dwFlags = STARTF_USESTDHANDLES;
         si.hStdOutput = stdout_write;
         si.hStdError = stderr_write;
@@ -89,7 +91,9 @@ pub(crate) fn exec(
             None,
             None,
             true, // 管道写端可继承：必须 TRUE
-            CREATE_SUSPENDED | CREATE_NO_WINDOW,
+            // 环境块是 UTF-16（见 environment_block），必须置 CREATE_UNICODE_ENVIRONMENT，
+            // 否则 Windows 按 ANSI 解析，子进程 PATH/TMP 等被破坏。
+            CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
             Some(environment.as_ptr().cast()),
             PCWSTR(cwd.as_ptr()),
             &si,
@@ -156,9 +160,9 @@ pub(crate) fn exec(
     }
 }
 
-/// 沙盒专用临时目录：<TEMP>/reflexion-sandbox（存在性惰性创建）。
+/// 沙盒专用临时目录：<TEMP>/reflexion-sandbox（路径唯一定义在 sandbox 模块，此处惰性创建）。
 fn sandbox_temp_dir() -> Result<PathBuf, String> {
-    let dir = std::env::temp_dir().join(SANDBOX_TEMP_DIR);
+    let dir = crate::sandbox::sandbox_temp_dir();
     std::fs::create_dir_all(&dir)
         .map_err(|error| format!("sandbox temp dir create failed: {error}"))?;
     Ok(dir)

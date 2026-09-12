@@ -261,7 +261,7 @@ pub fn handle_shell_execute(id: Value, params: Value) -> Result<(Value, bool), O
         cwd,
         timeout_ms,
         allow_network,
-        writable_roots: vec![root, std::env::temp_dir().join("reflexion-sandbox")],
+        writable_roots: vec![root, sandbox::sandbox_temp_dir()],
     };
     std::thread::spawn(move || {
         let provider = sandbox::provider();

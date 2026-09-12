@@ -15,6 +15,7 @@ pub(crate) mod windows;
 pub(crate) use noop::NoopSandbox;
 
 /// 一次 shell 执行的沙箱请求（handlers 组装，provider 消费）。
+#[allow(dead_code)] // allow_network/writable_roots consumed by Windows provider (and Seatbelt next round)
 pub(crate) struct SandboxRequest {
     pub command: String,
     pub cwd: PathBuf,
@@ -25,11 +26,17 @@ pub(crate) struct SandboxRequest {
     pub writable_roots: Vec<PathBuf>,
 }
 
+/// 沙盒专用临时目录（Windows：LOW 标签 + TMP/TEMP 重定向目标；handlers 与 provider 共用唯一定义）。
+pub(crate) fn sandbox_temp_dir() -> PathBuf {
+    std::env::temp_dir().join("reflexion-sandbox")
+}
+
 pub(crate) trait SandboxProvider: Send + Sync {
     /// 稳定标识，进入协议："windows-token" / "none"（未来追加 "seatbelt" / "bwrap"）。
     fn id(&self) -> &'static str;
 
     /// 工厂探测：不可用则降级 Noop。仅在工厂初始化时调用一次。
+    #[cfg_attr(not(windows), allow(dead_code))] // 仅 Windows select() 分支调用；Seatbelt 接入后 Unix 也会探测
     fn is_available(&self) -> bool;
 
     /// 自持执行路径（Windows CreateProcessAsUserW）。返回 None = 走包装路径。
