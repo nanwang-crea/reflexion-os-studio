@@ -159,6 +159,12 @@ export class RuntimeTransport {
         for (const handler of this.eventHandlers) {
           handler(parsed.data)
         }
+      } else {
+        // 版本代际不一致/畸形事件必须显式可见（架构红线：降级不等于静默）。
+        console.warn(
+          `[runtime-client] dropped malformed event ${message.method}:`,
+          parsed.error.issues.slice(0, 3),
+        )
       }
       return
     }
