@@ -12,7 +12,7 @@ pub const DEFAULT_TIMEOUT_MS: u64 = 30_000;
 pub const MAX_TIMEOUT_MS: u64 = 120_000;
 const MAX_OUTPUT_BYTES: usize = 256 * 1024;
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShellOutcome {
     pub exit_code: Option<i32>,
@@ -28,12 +28,40 @@ pub fn execute(
     timeout_ms: u64,
     on_spawn: &dyn Fn(u32),
 ) -> Result<ShellOutcome, String> {
+    let mut cmd = build_command(command);
+    run_command(&mut cmd, cwd, timeout_ms, on_spawn)
+}
+
+/// argv 执行路径：包装型 provider（Seatbelt/bwrap）的 launcher argv 直接 spawn，
+/// 不经过 `sh -c` 二次拼接（profile 塞字符串的转义不可维护）。
+/// `envs` 在继承父环境之上叠加覆盖（如 TMPDIR 重定向）。
+pub fn execute_argv(
+    argv: &[String],
+    envs: &[(&str, String)],
+    cwd: &std::path::Path,
+    timeout_ms: u64,
+    on_spawn: &dyn Fn(u32),
+) -> Result<ShellOutcome, String> {
+    let first = argv.first().ok_or_else(|| "argv is empty".to_string())?;
+    let mut cmd = Command::new(first);
+    cmd.args(&argv[1..]);
+    for (key, value) in envs {
+        cmd.env(key, value);
+    }
+    run_command(&mut cmd, cwd, timeout_ms, on_spawn)
+}
+
+fn run_command(
+    cmd: &mut Command,
+    cwd: &std::path::Path,
+    timeout_ms: u64,
+    on_spawn: &dyn Fn(u32),
+) -> Result<ShellOutcome, String> {
     let timeout_ms = timeout_ms.min(MAX_TIMEOUT_MS);
     if !cwd.is_dir() {
         return Err("shell cwd does not exist".to_string());
     }
 
-    let mut cmd = build_command(command);
     cmd.current_dir(cwd)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -234,6 +262,41 @@ mod tests {
             .map(|status| status.success())
             .unwrap_or(false);
         assert!(!alive, "grandchild process {pid} should be reaped");
+        std::fs::remove_dir_all(&cwd).ok();
+    }
+
+    #[test]
+    fn execute_argv_captures_output_and_env_override() {
+        let cwd = temp_dir("argv-basic");
+        let outcome = execute_argv(
+            &[
+                "sh".to_string(),
+                "-c".to_string(),
+                "printf \"$SANDBOX_MARK\"".to_string(),
+            ],
+            &[("SANDBOX_MARK", "argv-ok".to_string())],
+            &cwd,
+            10_000,
+            &|_| {},
+        )
+        .unwrap();
+        assert_eq!(outcome.stdout, "argv-ok");
+        assert_eq!(outcome.exit_code, Some(0));
+        std::fs::remove_dir_all(&cwd).ok();
+    }
+
+    #[test]
+    fn execute_argv_reports_spawn_failure() {
+        let cwd = temp_dir("argv-missing-bin");
+        let error = execute_argv(
+            &["definitely-not-a-real-binary".to_string()],
+            &[],
+            &cwd,
+            1_000,
+            &|_| {},
+        )
+        .unwrap_err();
+        assert!(error.contains("spawn failed"));
         std::fs::remove_dir_all(&cwd).ok();
     }
 }

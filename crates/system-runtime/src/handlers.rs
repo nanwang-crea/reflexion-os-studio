@@ -285,16 +285,35 @@ pub fn handle_shell_execute(id: Value, params: Value) -> Result<(Value, bool), O
             });
         }) {
             Some(result) => result,
-            None => shell::execute(
-                &provider.wrap(request.command.clone()),
-                &request.cwd,
-                request.timeout_ms,
-                &|pid| {
-                    let _ = running_shells().lock().map(|mut shells| {
-                        shells.insert(request_id.clone(), pid);
-                    });
-                },
-            ),
+            None => match provider.wrap(&request) {
+                Some(argv) => {
+                    // 包装路径：TMPDIR 指到沙盒临时目录（与 Windows 轮 TMP/TEMP 重定向
+                    // 同语义；该目录已在 request.writable_roots 白名单里）。
+                    // 线程闭包非 Result 上下文，禁止 `?`——用 match 产出 Err 走统一上报。
+                    let temp = sandbox::sandbox_temp_dir();
+                    match std::fs::create_dir_all(&temp) {
+                        Ok(()) => shell::execute_argv(
+                            &argv,
+                            &[("TMPDIR", temp.display().to_string())],
+                            &request.cwd,
+                            request.timeout_ms,
+                            &|pid| {
+                                let _ = running_shells().lock().map(|mut shells| {
+                                    shells.insert(request_id.clone(), pid);
+                                });
+                            },
+                        ),
+                        Err(error) => Err(format!("sandbox temp dir create failed: {error}")),
+                    }
+                }
+                None => {
+                    shell::execute(&request.command, &request.cwd, request.timeout_ms, &|pid| {
+                        let _ = running_shells().lock().map(|mut shells| {
+                            shells.insert(request_id.clone(), pid);
+                        });
+                    })
+                }
+            },
         };
         let _ = running_shells().lock().map(|mut shells| {
             shells.remove(&request_id);
