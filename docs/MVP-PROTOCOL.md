@@ -11,7 +11,7 @@ Tauri Host ↔ TypeScript Runtime 使用 JSON-RPC 2.0 over newline-delimited JSO
   "jsonrpc": "2.0",
   "method": "runtime.ready",
   "params": {
-    "protocolVersion": "1.0",
+    "protocolVersion": "1.1",
     "runtimeVersion": "0.1.0",
     "capabilities": ["chat"]
   }
