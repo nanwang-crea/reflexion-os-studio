@@ -15,6 +15,7 @@ mod mutate;
 mod params;
 mod paths;
 mod protocol;
+mod sandbox;
 mod search;
 mod sha256;
 mod shell;
