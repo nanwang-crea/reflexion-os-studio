@@ -1,6 +1,8 @@
-# Shell 沙箱：Windows 受限令牌档 + 网络审批闭环 设计
+# Shell 沙箱设计：Windows 受限令牌 + macOS Seatbelt + Linux bwrap + 网络审批闭环
 
 > 日期：2026-09-12。状态：已评审（brainstorming 流程产出）。
+> **修订记录**：轮次 A（Windows 档 + 网络审批 + 骨架）已实施并合入 main；
+> 轮次 B（本文档新增 §11–§13：macOS Seatbelt、Linux bwrap、trait argv 化重构）为当前实施目标。
 > 上游文档：[SHELL-SANDBOX-PLAN.md](../../SHELL-SANDBOX-PLAN.md)（一期计划，本设计是其扩展与部分实现）。
 > 决策依据：2026-09-12 设计会话；对照 codex 官方文档（Agent approvals & security、
 > Windows sandbox）、codex-rs 架构、ReflexionOS 本地实现（`backend/app/security/sandbox/windows*.py`
@@ -28,27 +30,39 @@
 
 ## 2. 范围
 
-### 本轮实现
+### 轮次 A（已实施，合入 main）
 
 1. `crates/system-runtime/src/sandbox/` 模块：trait + 工厂 + `NoopSandbox` + Windows
    provider（`#[cfg(windows)]`）。
-2. `shell.execute` 接线：经工厂分发（exec_direct 或 wrap+现有 shell.rs）；result 增加
+2. `shell.execute` 接线：经工厂分发（exec_direct 或现有 shell.rs）；result 增加
    `sandbox` 元数据；`system.ready` 增加 `sandbox` 能力位。
 3. `shell.execute` params 增加 `allowNetwork`（Rust 侧解析 + grant 核对）。
 4. 网络审批闭环（TS）：工具参数 `requires_network`、`sandbox_network` 审批生成、grant
    payload 增加 `sandboxNetwork`、前端审批卡标签。
 
-### 非目标（保留决策位，不在本轮）
+### 轮次 B（本修订新增，当前实施目标）
 
-- **Seatbelt provider**（macOS OS 级沙箱）与登录 shell 环境（原计划 S1/S2 的 macOS 部分）——
-  下一轮；本轮 macOS 工厂返回 Noop。
-- **Linux bwrap**、codex `elevated` 档（专用沙盒用户 + netsh 防火墙 + UAC setup）、
+1. **trait argv 化重构**：`wrap` 无法承载请求上下文（可写边界、网络开关），改为
+   `wrap(&self, request: &SandboxRequest) -> Option<Vec<String>>`（argv 形态）；
+   `shell.rs` 增加 `execute_argv`（argv + env 覆盖执行，复用现有超时/树杀/上限内核）。
+   Windows 路径（`exec_direct`）语义不变。详见 §11.1。
+2. **macOS Seatbelt provider**（§11）：`sandbox-exec -p <profile>` 包装；`deny default` 白名单
+   profile（读放开 − 敏感路径拒读、写仅 workspace + 沙盒临时目录、网络按 `allow_network`
+   条件放行）；`sandbox-exec` 探测失败如实降级 `none`。**本机真机验收**。
+3. **Linux bwrap provider**（§12）：`--unshare-all`（有网审批时 `--share-net`）+ `--ro-bind /`
+   - `--bind` 可写根 + `--tmpfs` 遮蔽敏感路径；探测（二进制 + userns 干跑）失败降级 `none`。
+     本机无 Linux，交付口径同 Windows 轮：**渲染器单测 + 编译级验证 + 如实标注未真机验证**。
+4. 工具 description 措辞升级：macOS/Linux 上网络与写边界已是 **OS 强制**（不再是"未来"）。
+
+### 非目标（保留决策位）
+
+- codex `elevated` 档（专用沙盒用户 + netsh 防火墙 + UAC setup）、
   私有桌面（`windows.sandbox_private_desktop` 对应物）、codex 式 network_proxy 域名策略；
 - **codex 式可写根内保护路径**（`<root>/.git`、`.codex` 等只读化）：Windows 完整性标签
   方案可对子目录打更高级别标签实现，留作后续加固项（对齐 codex "Protected paths in
   writable roots"）。
 - 沙箱能力位的前端 UI 展示（原计划 S4 的页面部分）。
-- deny-default 严格模式（codex `workspace-write` 式白名单）。
+- 登录 shell 环境（原计划 S1：Finder 启动后 PATH 缺失问题）——与沙箱正交，另行立项。
 
 ## 3. 架构：双路径 Trait + 工厂
 
@@ -59,10 +73,12 @@ pub struct SandboxRequest {
     pub cwd: PathBuf,
     pub timeout_ms: u64,
     pub allow_network: bool,
+    /// 顺序约定：[workspace_root, sandbox_temp_dir]（轮次 A 已加，轮次 B 消费）。
+    pub writable_roots: Vec<PathBuf>,
 }
 
 pub trait SandboxProvider: Send + Sync {
-    /// "windows-token" | "none"（下轮追加 "seatbelt" / "bwrap"）
+    /// "windows-token" | "seatbelt" | "bwrap" | "none"
     fn id(&self) -> &'static str;
     fn is_available(&self) -> bool;
     /// 自持执行路径（Windows：CreateProcessAsUserW，无法用"包装"表达）。
@@ -75,8 +91,14 @@ pub trait SandboxProvider: Send + Sync {
         let _ = (request, on_spawn);
         None
     }
-    /// 包装路径：改写命令字符串（Seatbelt 下轮：sandbox-exec -p <profile> -- …）。
-    fn wrap(&self, command: String) -> String { command }
+    /// 包装路径（轮次 B 重构）：返回完整 argv（launcher + `-- sh -c <command>`）。
+    /// None = 不包装（Noop，走现状 `shell::execute`）。argv 形态避免把巨型 profile
+    /// 塞进 `sh -c` 字符串的转义灾难；请求上下文（可写根/网络开关）经 SandboxRequest
+    /// 进入 profile/args 渲染。
+    fn wrap(&self, request: &SandboxRequest) -> Option<Vec<String>> {
+        let _ = request;
+        None
+    }
 }
 ```
 
@@ -89,7 +111,11 @@ pub trait SandboxProvider: Send + Sync {
 
 - Windows：探测 `WindowsTokenSandbox::probe()`（OpenProcessToken + CreateRestrictedToken +
   完整性级别设置的干跑）；成功 → `windows-token`，失败 → `none`。
-- macOS/Linux：本轮直接 `none`（Seatbelt/bwrap 下轮挂入工厂的对应 cfg 分支）。
+- macOS（轮次 B）：探测 `/usr/bin/sandbox-exec` 存在且干跑 `sandbox-exec -p '(version 1)(allow
+default)' -- /usr/bin/true` 成功 → `seatbelt`，否则 `none`（Apple 已弃用该工具，未来系统
+  移除时如实降级）。
+- Linux（轮次 B）：探测 `bwrap` 二进制（PATH）+ userns/净边界干跑成功 → `bwrap`，否则
+  `none`（硬化内核禁非特权 userns 时降级）。
 - **选定后不回退**（fail-closed）：provider 探测通过但运行期执行失败 → 结构化错误如实上报，
   绝不静默降级为无沙箱执行；`none` 降级只发生在工厂探测阶段。
 
@@ -98,8 +124,10 @@ pub trait SandboxProvider: Send + Sync {
 ```text
 provider = sandbox::provider()
 match provider.exec_direct(&request, &on_spawn):
-    Some(result) → result（active = true）
-    None         → shell::execute(&provider.wrap(command), …)（active = provider.id() != "none"）
+    Some(result) → result（Windows 自持路径）
+    None → match provider.wrap(&request):
+        Some(argv)  → shell::execute_argv(argv, envs={TMPDIR: sandbox_temp}, …)（macOS/Linux）
+        None        → shell::execute(command, …)（Noop 现状路径）
 result 增加 "sandbox": { "active": bool, "provider": id }
 ```
 
@@ -135,15 +163,18 @@ result 增加 "sandbox": { "active": bool, "provider": id }
 - 超时 → `TerminateJobObject`（整树终止，强于现有 taskkill 语义）；
 - 输出读取/上限/超时轮询语义与 `shell.rs` 对齐（256 KiB 截断、25ms 轮询）。
 
-### 4.4 如实声明的能力边界（写入用户可见文档）
+### 4.4 如实声明的能力边界（写入用户可见文档；轮次 B 更新为全平台矩阵）
 
-| 能力           | macOS Seatbelt（下轮） | Windows-token（本轮）                                                                          |
-| -------------- | ---------------------- | ---------------------------------------------------------------------------------------------- |
-| 网络强制禁断   | ✅ `deny network*`     | ❌ **不强制**（审批是流程性闸门，同 codex unelevated）                                         |
-| 写边界         | workspace + TMPDIR     | workspace + TMPDIR（完整性标签）                                                               |
-| 敏感路径读保护 | ✅ deny `~/.ssh` 等    | ❌ 完整性级别不限制读                                                                          |
-| 提权保护       | （沙箱内）             | ✅ 剥离特权 + 移除管理员 SID                                                                   |
-| 副作用         | 无                     | workspace 目录 ACL 增加 LOW 标签（持久化，幂等重设；LOW 标签文件任何完整性可写，权衡记录在案） |
+| 能力           | macOS Seatbelt（轮次 B）                      | Linux bwrap（轮次 B）                      | Windows-token（轮次 A）                                                                        |
+| -------------- | --------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| 网络强制禁断   | ✅ `deny default` 不含 network                | ✅ `--unshare-net`（审批后 `--share-net`） | ❌ **不强制**（审批是流程性闸门，同 codex unelevated）                                         |
+| 写边界         | ✅ workspace + 沙盒临时目录（profile 白名单） | ✅ 同左（`--bind` 白名单）                 | ✅ workspace + 沙盒临时目录（完整性标签）                                                      |
+| 敏感路径读保护 | ✅ deny `~/.ssh`/`~/.aws`/`~/.gnupg`/数据目录 | ✅ `--tmpfs` 遮蔽同左                      | ❌ 完整性级别不限制读                                                                          |
+| 提权保护       | （沙箱内，无特权）                            | ✅ userns 内无真实 root                    | ✅ 剥离特权 + 移除管理员 SID                                                                   |
+| 副作用         | 无（profile 不落盘）                          | 依赖外部 `bwrap` 二进制；缺失时降级 none   | workspace 目录 ACL 增加 LOW 标签（持久化，幂等重设；LOW 标签文件任何完整性可写，权衡记录在案） |
+
+轮次 B 起，`requires_network` 审批在 macOS/Linux 上是 **OS 强制 + 流程审批双保险**；
+Windows 上仍是纯流程闸门（如实标注）。
 
 ## 5. 按命令网络授权（S3）
 
@@ -158,7 +189,8 @@ result 增加 "sandbox": { "active": bool, "provider": id }
         → 审批卡（允许一次 / 本会话允许）
   → grant payload 携带 sandboxNetwork: true
   → Rust require_grant：allowNetwork=true 而 grant.sandboxNetwork≠true → 拒绝
-  → 沙箱执行（本轮 Windows/Noop 均不 OS 强制；Seatbelt 落地后自动升级为 OS 强制）
+  → 沙箱执行（轮次 B 起：macOS Seatbelt / Linux bwrap 均 OS 强制禁网，审批通过才把网络
+    放行写进 profile/argv；Windows 仍是流程闸门）
 ```
 
 ### 5.2 约束与语义
@@ -185,24 +217,25 @@ result 增加 "sandbox": { "active": bool, "provider": id }
 
 ## 6. 协议变更（全部向后兼容）
 
-| 消息                   | 变更                                                                                                       |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `shell.execute` params | + `allowNetwork: boolean`（可选，缺省 false；deny_unknown_fields 下可选字段安全）                          |
-| `shell.execute` result | + `sandbox: { active: boolean, provider: "windows-token" \| "none" }`（枚举开放，未来 `seatbelt`/`bwrap`） |
-| `system.ready` params  | + `sandbox: "windows-token" \| "none"`（同上枚举）                                                         |
+| 消息                   | 变更                                                                                                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `shell.execute` params | + `allowNetwork: boolean`（可选，缺省 false；deny_unknown_fields 下可选字段安全）                                                                       |
+| `shell.execute` result | + `sandbox: { active: boolean, provider: "windows-token" \| "seatbelt" \| "bwrap" \| "none" }`（开放字符串，轮次 B 起 macOS/Linux 产出 seatbelt/bwrap） |
+| `system.ready` params  | + `sandbox: 同上枚举`                                                                                                                                   |
 
 TS 侧零破坏：result 新字段向后兼容；params 新字段可选。工具结果含 `sandbox` 元数据随
 现有 toolCall 轨迹存储展示，无专门 UI。
 
 ## 7. 降级与错误处理
 
-| 场景                                         | 行为                                                                      |
-| -------------------------------------------- | ------------------------------------------------------------------------- |
-| Windows 探测失败（令牌/完整性设置不可用）    | 工厂选 `none`；ready 能力位如实为 `none`                                  |
-| 选定后执行失败（spawn/管道/Job 错误）        | 结构化错误（`execution_failed` + 明确 message），不回退无沙箱执行         |
-| allowNetwork=true 但 grant 无 sandboxNetwork | `network_approval_required` 错误，TS 侧不会出现（审批先行），此为绕过兜底 |
-| macOS/Linux                                  | 工厂返回 `none`，行为与现状完全一致（`sh -c` 路径不动）                   |
-| sandbox.cancel / system.cancel               | 现有 `running_shells` + `kill_tree` 路径不变；Job 兜底收割                |
+| 场景                                           | 行为                                                                                          |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Windows 探测失败（令牌/完整性设置不可用）      | 工厂选 `none`；ready 能力位如实为 `none`                                                      |
+| 选定后执行失败（spawn/管道/Job 错误）          | 结构化错误（`execution_failed` + 明确 message），不回退无沙箱执行                             |
+| allowNetwork=true 但 grant 无 sandboxNetwork   | `network_approval_required` 错误，TS 侧不会出现（审批先行），此为绕过兜底                     |
+| macOS `sandbox-exec` 缺失/被系统移除（轮次 B） | 工厂探测失败 → `none`，行为与现状一致；探测成功则选定后不再回退                               |
+| Linux `bwrap` 缺失 / userns 被禁（轮次 B）     | 同上：探测阶段降级 `none`；不做任何"半沙箱"执行                                               |
+| sandbox.cancel / system.cancel                 | 现有 `running_shells` + `kill_tree` 路径不变；Job 兜底收割；bwrap 以 `--die-with-parent` 兜底 |
 
 ## 8. 测试与验证
 
@@ -229,12 +262,113 @@ TS 侧零破坏：result 新字段向后兼容；params 新字段可选。工具
 
 ## 10. 决策记录
 
-| 决策               | 结论                                                      | 依据                                                                  |
-| ------------------ | --------------------------------------------------------- | --------------------------------------------------------------------- |
-| Windows 机制档位   | 受限令牌 + 低完整性 + Job Object（codex unelevated 同族） | 免管理员；elevated/UAC/防火墙档桌面体验差；ReflexionOS 已趟通同构路线 |
-| trait 形状         | 双路径（wrap + exec_direct）                              | Windows 无法用命令包装表达；ReflexionOS 2026-07-02 实测教训           |
-| 按命令网络授权     | 本轮纳入（S3）                                            | codex 同语义；避免发布无人消费的 allowNetwork 孤儿参数；审批管线现成  |
-| trusted 与网络审批 | 不旁路                                                    | 网络独立链路，任何模式不自动放行                                      |
-| Windows 网络强制   | 不做，如实上报                                            | 无免管理员机制；同 codex unelevated 诚实标注"弱网络隔离"              |
-| 沙盒临时目录       | 专用子目录 + TMP/TEMP 重定向                              | 给整个用户 TEMP 打 LOW 标签副作用过大（放宽完整性约束）               |
-| fail-closed        | 探测后不回退                                              | 静默降级为无沙箱是最坏状态；降级只允许发生在工厂探测期                |
+| 决策                        | 结论                                                                       | 依据                                                                                               |
+| --------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Windows 机制档位            | 受限令牌 + 低完整性 + Job Object（codex unelevated 同族）                  | 免管理员；elevated/UAC/防火墙档桌面体验差；ReflexionOS 已趟通同构路线                              |
+| trait 形状                  | 双路径（wrap + exec_direct）                                               | Windows 无法用命令包装表达；ReflexionOS 2026-07-02 实测教训                                        |
+| 按命令网络授权              | 本轮纳入（S3）                                                             | codex 同语义；避免发布无人消费的 allowNetwork 孤儿参数；审批管线现成                               |
+| trusted 与网络审批          | 不旁路                                                                     | 网络独立链路，任何模式不自动放行                                                                   |
+| Windows 网络强制            | 不做，如实上报                                                             | 无免管理员机制；同 codex unelevated 诚实标注"弱网络隔离"                                           |
+| 沙盒临时目录                | 专用子目录 + TMP/TEMP 重定向                                               | 给整个用户 TEMP 打 LOW 标签副作用过大（放宽完整性约束）                                            |
+| fail-closed                 | 探测后不回退                                                               | 静默降级为无沙箱是最坏状态；降级只允许发生在工厂探测期                                             |
+| wrap 签名 argv 化（轮次 B） | `wrap(&SandboxRequest) -> Option<Vec<String>>`，`shell::execute_argv` 承接 | profile/args 塞进 `sh -c` 字符串的转义不可维护；包装型 provider 需要请求上下文（可写根、网络开关） |
+| Seatbelt 读策略（轮次 B）   | 读放开、仅拒读敏感路径（`~/.ssh` 等 + 数据目录）                           | codex workspace-write 同策略：保可用性的同时守住凭据读取；全盘禁读会让常见命令失效                 |
+| bwrap 交付口径（轮次 B）    | 渲染器全平台单测 + Linux 编译门 + 真机验收挂起                             | 本机无 Linux；诚实度与 Windows 轮一致，不虚报验证覆盖                                              |
+
+## 11. macOS Seatbelt Provider（轮次 B，`sandbox/macos.rs`）
+
+> 模块**不加 cfg 门**编译于全平台（纯字符串渲染 + 干跑探测，无平台 API），
+> 因此 profile 渲染器单测可在开发机运行；`select()` 仅在 `#[cfg(target_os = "macos")]`
+> 分支使用它。
+
+### 11.1 argv 结构
+
+```text
+/usr/bin/sandbox-exec -p <profile> -- /bin/sh -c <command>
+```
+
+- env 覆盖：`TMPDIR=<sandbox_temp>`（与 Windows 轮同一 `sandbox::sandbox_temp_dir()` 定义）；
+- `sandbox-exec` 为 exec 语义（替换自身），包装后 pid 即 sh 的 pid，
+  现有 `kill(-pgid)` 进程组树杀语义不变。
+
+### 11.2 profile 渲染（`render_profile(request, home, data_dir) -> String`，纯函数）
+
+```text
+(version 1)
+(deny default)
+(allow process*)
+(allow signal (target same-sandbox))
+(allow file-read*)
+(deny file-read* (subpath "<HOME>/.ssh") (subpath "<HOME>/.aws")
+                 (subpath "<HOME>/.gnupg") (subpath "<DATA_DIR>"))
+(allow file-write* (subpath "<writable_root>") … )
+(allow file-write* (literal "/dev/null") (subpath "/dev/tt") …)   # tty 兼容按需
+(allow sysctl-read)
+(allow ipc-posix-shm-read*)
+(allow mach-lookup)                                                # 常见 dyld/log 依赖
+[网络按需] (allow network*)  仅当 request.allow_network == true
+```
+
+- seatbelt 语义为 **last-match wins**：拒读在前、可写根 allow 在后 → workspace
+  恰好嵌在 `~/.ssh` 之类的病态场景仍按最后规则可写（记录为已知怪癖，不影响常规）；
+- HOME/DATA_DIR 缺失时跳过对应 deny（渲染器分支，有单测钉住）；
+- 路径含引号的转义：SBPL 字符串按 C 风格转义渲染（`escape_sbpl_string` 单测钉住）。
+
+### 11.3 探测与真机验收（本机 macOS 必须全过，这是轮次 B 的主验证面）
+
+- 探测：`/usr/bin/sandbox-exec` 存在 + 干跑 `(version 1)(allow default) -- true` 退出 0；
+- 集成测试（`#[cfg(target_os = "macos")]`）：
+  1. `echo hi` → stdout 正常（可用性回归）；
+  2. 越界写：`touch <HOME>/reflexion-sandbox-probe-<ts>` → 非零退出且文件不存在；
+  3. workspace 内写 + 沙盒临时目录写（TMPDIR）→ 成功；
+  4. 拒读：`cat <DATA_DIR>/secrets.json`（测试专用假数据）→ 非零退出；
+  5. 禁网：`curl -sS -m 8 https://example.com` 未授权 → 非零退出且无响应体；
+     `allow_network=true` → 成功（离线环境下断言跳过并如实报告）；
+  6. 超时/取消/输出上限语义与 shell.rs 基线一致（复用既有测试形状）；
+  7. profile 渲染器对既有工具（`git status`、`node --version`、`python3 -c`）无回归
+     （真实执行冒烟，失败则按 seatbelt 报错信息迭代白名单，不允许放宽到 deny 失效）。
+
+## 12. Linux bwrap Provider（轮次 B，`sandbox/linux.rs`）
+
+> 同样全平台编译（args 渲染为纯函数、探测走 std::process），渲染器单测本机可跑；
+> `select()` 仅 `#[cfg(target_os = "linux")]` 使用。运行时行为本机不可验证（无 Linux），
+> 交付口径 = Windows 轮。
+
+### 12.1 argv 结构（`build_bwrap_args(request, home, data_dir) -> Vec<String>`，纯函数）
+
+```text
+bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp
+      --bind <sandbox_temp> /tmp/reflexion-sandbox? (以 TMPDIR 重定向 + --setenv TMPDIR)
+      --bind <writable_root> <writable_root> …
+      --tmpfs <HOME>/.ssh  --tmpfs <HOME>/.aws  --tmpfs <HOME>/.gnupg  --tmpfs <DATA_DIR>
+      --unshare-all [无 --share-net | 有网络审批时 --share-net]
+      --die-with-parent --new-session --clearenv?（不 clear，继承 env + TMPDIR 覆盖）
+      -- /bin/sh -c <command>
+```
+
+- 遮蔽用 `--tmpfs`（敏感目录在沙箱内呈现为空目录而非报错，读不到内容即达标）；
+- `--unshare-all` 自带 net namespace → **Linux 上禁网是强隔离**（优于 Windows 档，与
+  codex landlock+seccomp 网络策略同档）；审批通过时改为 `--share-net`；
+- `--new-session` 后外层 `kill(-pgid)` 可能不贯穿沙箱内子进程 → 以 `--die-with-parent`
+  兜底（bwrap 死则子 init 收 SIGKILL），验收表如实记录该差异。
+
+### 12.2 探测
+
+`bwrap --version` 成功 + 干跑 `bwrap --unshare-all --ro-bind / / -- /bin/true` 退出 0
+（覆盖 userns 可用性）；任一失败 → `none`。
+
+### 12.3 验证边界（如实）
+
+- 本机：args 渲染器单测（金样钉字符串）、探测逻辑的纯函数部分、`cargo check` 全目标；
+- 真机（Linux）验收项挂入 SHELL-SANDBOX-PLAN 表格：写边界、禁网、userns 降级路径、
+  bwrap 缺失降级路径。
+
+## 13. 轮次 B 验收与文档
+
+- 全链验证（AGENTS.md §6 顺序）+ **Windows 交叉编译必须保持绿**（trait 重构触及共享
+  分发代码）；`exec_direct` 签名与 Windows 行为零改动（由既有测试与 cross-check 钉住）。
+- 更新：SHELL-SANDBOX-PLAN §5（S2 行改"已实施/待 macOS 真机项清零"口径、Linux 行）、
+  AGENTS.md §1 能力行（macOS Seatbelt + Linux bwrap + 网络 OS 强制范围）、
+  PERMISSION-MODEL.md 指向三平台矩阵（§4.4）。
+- shell.ts description 措辞："未声明 requires_network 的命令在 macOS/Linux 沙箱内会被
+  OS 直接拒绝"（不再用"未来"）。
