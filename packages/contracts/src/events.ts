@@ -5,7 +5,6 @@ import {
   MemorySchema,
   MessageSchema,
   RunSchema,
-  SessionSchema,
   UsageSchema,
   ContentPartSchema,
   WorkspaceIndexSnapshotSchema,
@@ -30,45 +29,79 @@ export const FinishReasonSchema = z.enum([
 ])
 export type FinishReason = z.infer<typeof FinishReasonSchema>
 
+// 事件作用域：显式声明每条事件归属的资源流，取代“借用 runId”的旧信封。
+// 判别联合以 type 单键判别；scope 字面量与资源字段在每个变体内成对声明，
+// schema 保证 type/scope/资源字段三者一致。
+export const EventScopeSchema = z.enum([
+  'runtime',
+  'run',
+  'session',
+  'project',
+  'mcp',
+  'terminal',
+])
+export type EventScope = z.infer<typeof EventScopeSchema>
+
 export const RuntimeEventEnvelopeSchema = z.object({
   protocolVersion: z.string(),
   eventId: z.string().min(1),
-  runId: z.string().min(1),
+  scope: EventScopeSchema,
   seq: z.number().int().nonnegative(),
   occurredAt: z.iso.datetime(),
 })
 export type RuntimeEventEnvelope = z.infer<typeof RuntimeEventEnvelopeSchema>
 
+// run 作用域公共信封：run 通道事件全部 extend 它（runId 真实归属）。
+const RunEnvelopeSchema = RuntimeEventEnvelopeSchema.extend({
+  scope: z.literal('run'),
+  runId: z.string().min(1),
+})
+
+export const TerminalStatusSchema = z.enum([
+  'starting',
+  'running',
+  'closing',
+  'closed',
+  'exited',
+  'disconnected',
+  'failed',
+])
+export type TerminalStatus = z.infer<typeof TerminalStatusSchema>
+
+// terminal 作用域公共信封（事件在 W2 接线，契约在本阶段冻结）。
+const TerminalEnvelopeSchema = RuntimeEventEnvelopeSchema.extend({
+  scope: z.literal('terminal'),
+  projectId: z.string().min(1),
+  terminalId: z.string().min(1),
+})
+
 export const RuntimeEventSchema = z.discriminatedUnion('type', [
   RuntimeEventEnvelopeSchema.extend({
     type: z.literal('runtime.status'),
+    scope: z.literal('runtime'),
     status: RuntimeStatusSchema,
   }),
-  RuntimeEventEnvelopeSchema.extend({
-    type: z.literal('session.created'),
-    session: SessionSchema,
-  }),
-  RuntimeEventEnvelopeSchema.extend({
+  RunEnvelopeSchema.extend({
     type: z.literal('message.created'),
     message: MessageSchema,
   }),
-  RuntimeEventEnvelopeSchema.extend({
+  RunEnvelopeSchema.extend({
     type: z.literal('message.delta'),
     messageId: z.string().min(1),
     chunkSeq: z.number().int().nonnegative(),
     delta: z.string(),
   }),
-  RuntimeEventEnvelopeSchema.extend({
+  RunEnvelopeSchema.extend({
     type: z.literal('message.reset'),
     messageId: z.string().min(1),
   }),
-  RuntimeEventEnvelopeSchema.extend({
+  RunEnvelopeSchema.extend({
     type: z.literal('message.reasoning_delta'),
     messageId: z.string().min(1),
     chunkSeq: z.number().int().nonnegative(),
     delta: z.string(),
   }),
-  RuntimeEventEnvelopeSchema.extend({
+  RunEnvelopeSchema.extend({
     type: z.literal('message.completed'),
     messageId: z.string().min(1),
     content: z.string(),
@@ -76,14 +109,14 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     usage: UsageSchema.optional(),
     parts: z.array(ContentPartSchema).optional(),
   }),
-  RuntimeEventEnvelopeSchema.extend({
+  RunEnvelopeSchema.extend({
     type: z.literal('run.started'),
     run: RunSchema,
   }),
-  RuntimeEventEnvelopeSchema.extend({
+  RunEnvelopeSchema.extend({
     type: z.literal('run.completed'),
   }),
-  RuntimeEventEnvelopeSchema.extend({
+  RunEnvelopeSchema.extend({
     type: z.literal('run.retrying'),
     attempt: z.number().int().positive(),
     maxRetries: z.number().int().nonnegative(),
@@ -92,40 +125,41 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     // 可选：旧版 runtime 事件与持久化的 run_events 历史记录不含该字段。
     waitMs: z.number().int().nonnegative().optional(),
   }),
-  RuntimeEventEnvelopeSchema.extend({
+  RunEnvelopeSchema.extend({
     type: z.literal('run.failed'),
     error: RuntimeErrorSchema,
   }),
-  RuntimeEventEnvelopeSchema.extend({
+  RunEnvelopeSchema.extend({
     type: z.literal('run.cancelled'),
   }),
-  // 工具调用与审批事件（Agent Core 阶段开始发出；A0 先固定契约）。
-  RuntimeEventEnvelopeSchema.extend({
+  // 计划事件：run 作用域，载荷与旧契约一致。
+  RunEnvelopeSchema.extend({
     type: z.literal('plan.created'),
     plan: PlanSchema,
   }),
-  RuntimeEventEnvelopeSchema.extend({
+  RunEnvelopeSchema.extend({
     type: z.literal('plan.step.updated'),
     planId: z.string().min(1),
     step: PlanStepSchema,
   }),
-  RuntimeEventEnvelopeSchema.extend({
+  RunEnvelopeSchema.extend({
     type: z.literal('plan.updated'),
     plan: PlanSchema,
   }),
-  RuntimeEventEnvelopeSchema.extend({
+  // 工具调用与审批事件。
+  RunEnvelopeSchema.extend({
     type: z.literal('tool.requested'),
     toolCallId: z.string().min(1),
     toolName: z.string().min(1),
     args: JsonValueSchema,
   }),
-  RuntimeEventEnvelopeSchema.extend({
+  RunEnvelopeSchema.extend({
     type: z.literal('tool.completed'),
     toolCallId: z.string().min(1),
     status: z.enum(['completed', 'failed', 'cancelled']),
     errorCode: z.string().nullable(),
   }),
-  RuntimeEventEnvelopeSchema.extend({
+  RunEnvelopeSchema.extend({
     type: z.literal('approval.required'),
     toolCallId: z.string().min(1),
     operation: ApprovalOperationSchema,
@@ -134,20 +168,23 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     // 事件与持久化的 run_events 历史记录不含该字段（对齐 waitMs 先例）。
     sessionId: z.string().min(1).optional(),
   }),
-  RuntimeEventEnvelopeSchema.extend({
+  RunEnvelopeSchema.extend({
     type: z.literal('approval.resolved'),
     toolCallId: z.string().min(1),
     decision: z.enum(['approved', 'denied']),
-    scope: z.enum(['once', 'session']),
+    // 原 payload 字段名 scope（once/session）改名 grantScope：
+    // 避免与信封 scope 在 .extend() 合并时静默互相覆盖。
+    grantScope: z.enum(['once', 'session']),
   }),
   // A2 Memory：Run 结束后异步提取落库的记忆；UI 据此做非打断式提示。
-  RuntimeEventEnvelopeSchema.extend({
+  RunEnvelopeSchema.extend({
     type: z.literal('memory.written'),
     memories: z.array(MemorySchema),
   }),
-  // Phase 1B Workspace 索引事件：不属于任何 Run，envelope.runId 复用 projectId。
+  // Phase 1B Workspace 索引事件：project 作用域，projectId 为真实身份。
   RuntimeEventEnvelopeSchema.extend({
     type: z.literal('workspace.index.progress'),
+    scope: z.literal('project'),
     projectId: z.string().min(1),
     version: z.number().int().nonnegative(),
     files: z.number().int().nonnegative(),
@@ -155,35 +192,53 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
   }),
   RuntimeEventEnvelopeSchema.extend({
     type: z.literal('workspace.index.completed'),
+    scope: z.literal('project'),
     projectId: z.string().min(1),
     snapshot: WorkspaceIndexSnapshotSchema,
   }),
   RuntimeEventEnvelopeSchema.extend({
     type: z.literal('workspace.index.failed'),
+    scope: z.literal('project'),
     projectId: z.string().min(1),
     error: z.string(),
   }),
-  // 会话发送队列快照：入队/修改/删除/立即发送/出队/暂停切换时广播(envelope.runId=sessionId)。
+  // 会话发送队列快照：session 作用域，sessionId 为真实身份。
   // paused：队列是否处于"用户停止后暂停待确认"状态；可选：旧版 runtime 不含该字段。
   RuntimeEventEnvelopeSchema.extend({
     type: z.literal('queue.changed'),
+    scope: z.literal('session'),
     sessionId: z.string().min(1),
     paused: z.boolean().optional(),
     items: z.array(QueueEntrySchema),
   }),
-  RuntimeEventEnvelopeSchema.extend({
+  RunEnvelopeSchema.extend({
     type: z.literal('delegation.created'),
     delegation: DelegationSchema,
   }),
-  RuntimeEventEnvelopeSchema.extend({
+  RunEnvelopeSchema.extend({
     type: z.literal('delegation.updated'),
     delegation: DelegationSchema,
   }),
-  // MCP server 状态变化(ready/failed/removed),envelope.runId=serverId。
+  // MCP server 状态变化(disabled/ready/failed)：mcp 作用域，serverId 为真实身份。
   RuntimeEventEnvelopeSchema.extend({
     type: z.literal('mcp.changed'),
+    scope: z.literal('mcp'),
     serverId: z.string().min(1),
     server: McpServerSchema,
+  }),
+  // 集成终端事件（W2 接线，本阶段冻结契约）。output 载荷为 base64 字节帧。
+  TerminalEnvelopeSchema.extend({
+    type: z.literal('terminal.output'),
+    outputSeq: z.number().int().nonnegative(),
+    generation: z.number().int().nonnegative(),
+    consumerId: z.string().min(1),
+    data: z.string().min(1),
+  }),
+  TerminalEnvelopeSchema.extend({
+    type: z.literal('terminal.state'),
+    status: TerminalStatusSchema,
+    exitCode: z.number().int().nullable().optional(),
+    errorMessage: z.string().optional(),
   }),
 ])
 export type RuntimeEvent = z.infer<typeof RuntimeEventSchema>
