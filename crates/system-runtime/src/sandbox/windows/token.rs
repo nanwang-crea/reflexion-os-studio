@@ -5,13 +5,13 @@
 use std::sync::OnceLock;
 
 use windows::core::{w, Result};
-use windows::Win32::Foundation::{CloseHandle, LocalFree, HLOCAL, HANDLE};
-use windows::Win32::Security::{
-    CreateRestrictedToken, CreateWellKnownSid, SetTokenInformation, DISABLE_MAX_PRIVILEGE,
-    PSID, SID_AND_ATTRIBUTES, TOKEN_ASSIGN_PRIMARY, TOKEN_DUPLICATE, TOKEN_MANDATORY_LABEL,
-    TOKEN_QUERY, TokenIntegrityLevel, WinBuiltinAdministratorsSid,
-};
+use windows::Win32::Foundation::{CloseHandle, LocalFree, HANDLE, HLOCAL};
 use windows::Win32::Security::Authorization::ConvertStringSidToSidW;
+use windows::Win32::Security::{
+    CreateRestrictedToken, CreateWellKnownSid, SetTokenInformation, TokenIntegrityLevel,
+    WinBuiltinAdministratorsSid, DISABLE_MAX_PRIVILEGE, PSID, SID_AND_ATTRIBUTES,
+    TOKEN_ASSIGN_PRIMARY, TOKEN_DUPLICATE, TOKEN_MANDATORY_LABEL, TOKEN_QUERY,
+};
 use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
 /// Safe wrapper around raw HANDLE for Send + Sync in static context.
