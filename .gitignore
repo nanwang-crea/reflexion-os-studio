@@ -12,3 +12,4 @@ dist-frontend
 apps/desktop/src-tauri/package-resources/
 # Node 发行版下载缓存（fetch-node-dist.mjs）
 .cache/
+.worktrees/
