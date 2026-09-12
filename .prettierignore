@@ -2,6 +2,7 @@ node_modules
 dist
 dist-frontend
 **/dist/**
+pnpm-lock.yaml
 target
 src-tauri/gen
 **/src-tauri/gen/**
