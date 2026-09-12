@@ -4,13 +4,13 @@
 
 use serde_json::{json, Value};
 
-use crate::grant::require_grant;
+use crate::grant::{require_grant, require_network_approval};
 use crate::params::{
     EditParams, GitBranchesParams, GitDiffParams, GitStatusParams, GlobParams, GrantPathParams,
     GrepParams, ListParams, MoveParams, ReadParams, ShellParams, WriteParams,
 };
 use crate::protocol::{emit, error_response, ok_response, running_shells, workspace_root, OpError};
-use crate::{files, git, mutate, paths, search, shell};
+use crate::{files, git, mutate, paths, sandbox, search, shell};
 
 pub fn handle_file_read(params: Value) -> Result<Value, OpError> {
     let params: ReadParams = serde_json::from_value(params)
@@ -243,6 +243,10 @@ pub fn handle_shell_execute(id: Value, params: Value) -> Result<(Value, bool), O
     let params: ShellParams = serde_json::from_value(params)
         .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
     require_grant(&params.grant, &params.workspace_root, "shell.execute")?;
+    let allow_network = params.allow_network.unwrap_or(false);
+    if allow_network {
+        require_network_approval(&params.grant)?;
+    }
     let root = workspace_root(&params.workspace_root)?;
     let cwd_relative = params.cwd.as_deref().unwrap_or(".");
     let cwd = paths::resolve_in_workspace(&root, cwd_relative)
@@ -251,15 +255,37 @@ pub fn handle_shell_execute(id: Value, params: Value) -> Result<(Value, bool), O
         .timeout_ms
         .unwrap_or(shell::DEFAULT_TIMEOUT_MS)
         .min(shell::MAX_TIMEOUT_MS);
-    // 异步执行：长命令不阻塞主循环，system.cancel 才能被及时处理。
     let request_id = shell_request_id(&id)?;
-    let command = params.command;
+    let request = sandbox::SandboxRequest {
+        command: params.command,
+        cwd,
+        timeout_ms,
+        allow_network,
+        writable_roots: vec![root, std::env::temp_dir().join("reflexion-sandbox")],
+    };
     std::thread::spawn(move || {
-        let outcome = shell::execute(&command, &cwd, timeout_ms, &|pid| {
+        let provider = sandbox::provider();
+        let sandbox_meta = json!({
+            "active": provider.id() != "none",
+            "provider": provider.id(),
+        });
+        let outcome = match provider.exec_direct(&request, &|pid| {
             let _ = running_shells().lock().map(|mut shells| {
                 shells.insert(request_id.clone(), pid);
             });
-        });
+        }) {
+            Some(result) => result,
+            None => shell::execute(
+                &provider.wrap(request.command.clone()),
+                &request.cwd,
+                request.timeout_ms,
+                &|pid| {
+                    let _ = running_shells().lock().map(|mut shells| {
+                        shells.insert(request_id.clone(), pid);
+                    });
+                },
+            ),
+        };
         let _ = running_shells().lock().map(|mut shells| {
             shells.remove(&request_id);
         });
@@ -272,6 +298,7 @@ pub fn handle_shell_execute(id: Value, params: Value) -> Result<(Value, bool), O
                     "stderr": outcome.stderr,
                     "timedOut": outcome.timed_out,
                     "truncated": outcome.truncated,
+                    "sandbox": sandbox_meta,
                 }),
             )),
             Err(message) => emit(error_response(

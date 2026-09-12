@@ -16,6 +16,8 @@ struct ApprovalGrant {
     operation: String,
     scope: String,
     expires_at: u64,
+    #[serde(default)]
+    sandbox_network: bool,
 }
 
 pub fn require_grant(grant: &str, workspace_root: &str, operation: &str) -> Result<(), OpError> {
@@ -48,4 +50,55 @@ pub fn require_grant(grant: &str, workspace_root: &str, operation: &str) -> Resu
         ));
     }
     Ok(())
+}
+
+pub fn require_network_approval(grant: &str) -> Result<(), OpError> {
+    let grant: ApprovalGrant = serde_json::from_str(grant).map_err(|_| {
+        OpError::new(
+            "invalid_grant",
+            "network approval check requires a valid grant".to_string(),
+        )
+    })?;
+    if !grant.sandbox_network {
+        return Err(OpError::new(
+            "network_approval_required",
+            "command network access requires an approved sandbox_network grant".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn grant_json(sandbox_network: bool) -> String {
+        let expires_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64
+            + 60_000;
+        format!(
+            r#"{{"grantId":"g1","requestId":"r1","sessionId":"s1","workspaceId":"/w",
+                "operation":"shell.execute","scope":"once","expiresAt":{expires_at},
+                "sandboxNetwork":{sandbox_network}}}"#
+        )
+    }
+
+    #[test]
+    fn accepts_network_when_declared() {
+        assert!(require_network_approval(&grant_json(true)).is_ok());
+    }
+
+    #[test]
+    fn rejects_network_without_declaration() {
+        let error = require_network_approval(&grant_json(false)).unwrap_err();
+        assert_eq!(error.code, "network_approval_required");
+    }
+
+    #[test]
+    fn rejects_malformed_grant_for_network_check() {
+        let error = require_network_approval("not-json").unwrap_err();
+        assert_eq!(error.code, "invalid_grant");
+    }
 }

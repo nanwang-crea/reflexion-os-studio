@@ -99,6 +99,7 @@ pub struct ShellParams {
     pub cwd: Option<String>,
     pub grant: String,
     pub timeout_ms: Option<u64>,
+    pub allow_network: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -119,4 +120,32 @@ pub struct GitDiffParams {
     pub workspace_root: String,
     pub path: String,
     pub staged: Option<bool>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shell_params_allow_network_defaults_to_none() {
+        let params: ShellParams = serde_json::from_value(serde_json::json!({
+            "workspaceRoot": "/w",
+            "command": "echo hi",
+            "grant": "g",
+        }))
+        .unwrap();
+        assert_eq!(params.allow_network, None);
+    }
+
+    #[test]
+    fn shell_params_allow_network_parses_true() {
+        let params: ShellParams = serde_json::from_value(serde_json::json!({
+            "workspaceRoot": "/w",
+            "command": "echo hi",
+            "grant": "g",
+            "allowNetwork": true,
+        }))
+        .unwrap();
+        assert_eq!(params.allow_network, Some(true));
+    }
 }

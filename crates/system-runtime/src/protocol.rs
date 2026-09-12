@@ -34,7 +34,8 @@ pub fn ready_message() -> Value {
         "params": {
             "protocolVersion": PROTOCOL_VERSION,
             "runtimeVersion": RUNTIME_VERSION,
-            "capabilities": ["system.bootstrap", "system.tools"]
+            "capabilities": ["system.bootstrap", "system.tools"],
+            "sandbox": crate::sandbox::provider().id(),
         }
     })
 }
