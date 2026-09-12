@@ -122,6 +122,51 @@ export async function executeToolCall(
   }
   state.toolCallRowIds.add(row.id)
 
+  // 网络审批独立链路（spec §5）：任何模式（含 trusted）不自动放行；
+  // 会话级授权存网关（键含 operation），本会话后续网络命令免二次询问。
+  let sandboxNetwork = false
+  const networkRequested =
+    request.name === 'shell.execute' &&
+    typeof args === 'object' &&
+    args !== null &&
+    !Array.isArray(args) &&
+    (args as Record<string, unknown>).requires_network === true
+  if (networkRequested) {
+    const networkContext = {
+      sessionId: run.sessionId,
+      workspaceRoot: input.workspaceRoot,
+    }
+    if (input.approvals.hasSessionGrant('sandbox_network', networkContext)) {
+      sandboxNetwork = true
+    } else {
+      store.runs.setIntermediateStatus(run.id, 'awaiting_approval')
+      let verdict: 'approved' | 'denied'
+      try {
+        verdict = await input.approvals.request({
+          toolCallId: `${row.id}:network`,
+          emitter,
+          operation: 'sandbox_network',
+          summary: summarizeArgs(request.name, args),
+          signal,
+          context: networkContext,
+        })
+      } finally {
+        if (!input.approvals.hasPendingRun(run.id)) {
+          store.runs.setIntermediateStatus(run.id, 'running')
+        }
+      }
+      if (verdict === 'denied') {
+        finalizeToolCall(store, state, emitter, row.id, 'failed', 'permission_denied')
+        return {
+          content: '用户拒绝了本次命令联网请求',
+          isError: true,
+          code: 'permission_denied',
+        }
+      }
+      sandboxNetwork = true
+    }
+  }
+
   // 授权引用：ask 批准后以本次调用为 once 凭据；会话级授权用稳定引用。
   let grant: string | undefined
   if (askNeeded) {
@@ -167,6 +212,7 @@ export async function executeToolCall(
       sessionId: run.sessionId,
       workspaceRoot: input.workspaceRoot,
       operation: request.name,
+      sandboxNetwork,
     })
     store.toolCalls.markStatus(row.id, 'running', row.id)
   } else if (decision === 'ask') {
@@ -176,6 +222,7 @@ export async function executeToolCall(
       sessionId: run.sessionId,
       workspaceRoot: input.workspaceRoot,
       operation: request.name,
+      sandboxNetwork,
     })
     store.toolCalls.markStatus(row.id, 'running', grant)
   } else if (requiresRustGrant(request.name)) {
@@ -188,6 +235,7 @@ export async function executeToolCall(
       sessionId: run.sessionId,
       workspaceRoot: input.workspaceRoot,
       operation: request.name,
+      sandboxNetwork,
     })
     store.toolCalls.markStatus(row.id, 'running', grant)
   }

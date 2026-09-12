@@ -217,6 +217,7 @@ interface GrantIdentity {
   sessionId: string
   workspaceRoot: string | null
   operation: string
+  sandboxNetwork?: boolean
 }
 
 /** once 凭据：ask 批准后以本次调用为凭据，时效 5 分钟。 */
@@ -229,6 +230,7 @@ export function buildOnceGrant(input: GrantIdentity): string {
     operation: input.operation,
     scope: 'once',
     expiresAt: Date.now() + 5 * 60 * 1000,
+    sandboxNetwork: input.sandboxNetwork === true,
   })
 }
 
@@ -242,5 +244,6 @@ export function buildSessionGrant(input: GrantIdentity): string {
     operation: input.operation,
     scope: 'session',
     expiresAt: Date.now() + 30 * 60 * 1000,
+    sandboxNetwork: input.sandboxNetwork === true,
   })
 }
