@@ -58,9 +58,9 @@ pub(crate) fn provider() -> &'static dyn SandboxProvider {
 fn select() -> Box<dyn SandboxProvider> {
     #[cfg(windows)]
     {
-        let candidate = windows::WindowsTokenSandbox;
-        if candidate.is_available() {
-            return Box::new(candidate);
+        let provider = windows::WindowsTokenSandbox;
+        if provider.is_available() {
+            return Box::new(provider);
         }
     }
     Box::new(NoopSandbox)
