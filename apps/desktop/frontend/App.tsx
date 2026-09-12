@@ -492,6 +492,7 @@ export default function App() {
                 onSelectTab={selectTab}
                 onCloseTab={closeTab}
                 onReorderTabs={reorderTabs}
+                onResourceClick={handleResourceClick}
                 width={workspaceWidth}
               />
             </>

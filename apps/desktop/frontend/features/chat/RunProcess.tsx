@@ -1,5 +1,5 @@
 import type { Message, ToolCall } from '@reflexion-os-studio/runtime-client'
-import { MessageMarkdown } from './markdown/MessageMarkdown'
+import { MarkdownCore } from '../../components/markdown/md-core'
 import { ReasoningBlock } from './ReasoningBlock'
 import { ToolTrace } from './ToolTrace'
 
@@ -39,7 +39,7 @@ export function RunProcess(props: RunProcessProps): React.JSX.Element {
             )}
             {text !== '' && !props.reasoningOnlyMessageIds?.has(message.id) && (
               <div className="run-process-text">
-                <MessageMarkdown text={text} />
+                <MarkdownCore text={text} />
               </div>
             )}
             <ToolTrace calls={toolCalls} runActive={props.runActive} />

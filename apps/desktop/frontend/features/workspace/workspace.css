@@ -902,3 +902,69 @@
   color: var(--text-secondary);
   white-space: nowrap;
 }
+
+/* ---------- Markdown 文件富预览 ---------- */
+
+/* 预览体：纵向滚动容器，顶部提示条固定不随内容滚动 */
+.md-preview-body {
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.md-preview-body > .content-hint {
+  flex: none;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.md-preview-scroll {
+  flex: 1;
+  min-height: 0;
+  padding: 12px 16px 24px;
+}
+
+/* 预览 / 源码切换（文件头操作区，靠右） */
+.md-view-toggle {
+  display: flex;
+  gap: 2px;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 1px;
+}
+
+.md-view-toggle button {
+  padding: 2px 10px;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.md-view-toggle button:hover {
+  color: var(--text);
+}
+
+.md-view-toggle button.active {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+/* 源码视图容器：MonacoSurface（可编辑）填充预览区 */
+.md-source-body {
+  display: flex;
+}
+
+/* 增量加载哨兵 / 提示（触底 600px 预取） */
+.md-preview-more {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.md-preview-scroll > .content-hint {
+  margin: 10px 0;
+  text-align: center;
+}

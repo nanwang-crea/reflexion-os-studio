@@ -14,39 +14,44 @@ interface ResourceRouterOptions {
 export function useResourceRouter(
   options: ResourceRouterOptions,
 ): (link: ResourceLink) => void {
+  // 依赖拆到成员级：options 对象字面量每次渲染都是新身份，会让回调
+  // 随宿主每帧重渲染而抖动，击穿下游 memo（AGENTS §10）。四个成员
+  // （ref + setState setters）身份恒定，回调因此全程稳定。
+  const { activeProjectRef, setWorkspaceRequest, setWorkspaceOpen, setNotice } =
+    options
   return useCallback(
     (link: ResourceLink): void => {
       if (link.kind === 'externalUrl') {
         void openExternalUrl(link.uri).catch((error: unknown) =>
-          options.setNotice(
+          setNotice(
             `打开链接失败：${error instanceof Error ? error.message : String(error)}`,
           ),
         )
         return
       }
-      const activeProjectId = options.activeProjectRef.current
+      const activeProjectId = activeProjectRef.current
       if (link.kind === 'workspaceFile') {
         const projectId =
           link.projectId === '' ? activeProjectId : link.projectId
         if (projectId === null || projectId !== activeProjectId) {
-          options.setNotice('资源不属于当前项目')
+          setNotice('资源不属于当前项目')
           return
         }
-        options.setWorkspaceRequest({
+        setWorkspaceRequest({
           nonce: Date.now(),
           kind: 'file',
           path: link.path,
           line: link.line,
         })
       } else {
-        options.setWorkspaceRequest({
+        setWorkspaceRequest({
           nonce: Date.now(),
           kind: 'asset',
           assetId: link.assetId,
         })
       }
-      options.setWorkspaceOpen(true)
+      setWorkspaceOpen(true)
     },
-    [options],
+    [activeProjectRef, setWorkspaceRequest, setWorkspaceOpen, setNotice],
   )
 }

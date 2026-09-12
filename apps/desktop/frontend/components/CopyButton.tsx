@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { AlertIcon, CheckIcon, CopyIcon } from '../../ui/icons'
-import { copyTextToClipboard } from '../../lib/clipboard'
-import { showToast } from '../../components/Toast'
+import { AlertIcon, CheckIcon, CopyIcon } from '../ui/icons'
+import { copyTextToClipboard } from '../lib/clipboard'
+import { showToast } from './Toast'
 
 interface CopyButtonProps {
   /** 点击后写入剪贴板的文本。 */
@@ -15,7 +15,7 @@ type CopyState = 'idle' | 'copied' | 'failed'
 /**
  * 复制按钮：走统一剪贴板通道（Tauri 插件 → Clipboard API → execCommand），
  * 成败均有 toast 反馈；成功短暂显示勾号、失败显示警示号后还原。
- * 用户/助手消息、代码块、表格复制共用。
+ * 用户/助手消息、代码块、表格复制共用（chat 与 workspace 预览两个模块）。
  */
 export function CopyButton({
   text,

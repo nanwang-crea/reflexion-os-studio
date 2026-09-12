@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Project } from '@reflexion-os-studio/runtime-client'
+import type { Project, ResourceLink } from '@reflexion-os-studio/runtime-client'
 import { FolderIcon } from '../../ui/icons'
 import { ContentView } from './ContentView'
 import { DiffViewer } from './DiffViewer'
+import { MarkdownFilePreview } from './preview/MarkdownFilePreview'
+import { BinaryFilePreview } from './preview/BinaryFilePreview'
+import { getPreviewKind } from './preview/preview'
 import type { OpenFileTab } from './types'
 
 /** 转义 CSS 选择器属性值中的特殊字符，路径可含 `.`、`/` 等。 */
@@ -25,6 +28,8 @@ interface FileViewerPanelProps {
   onReorderTabs: (paths: string[]) => void
   /** 面板宽度（由 App 拖拽控制）。 */
   width?: number
+  /** Markdown 预览内资源引用（相对路径 / workspace:// / asset://）分发。 */
+  onResourceClick?: (link: ResourceLink) => void
 }
 
 /**
@@ -34,6 +39,8 @@ interface FileViewerPanelProps {
  * 指针移动超过阈值才进入拖动态；被拖标签原位半透明 + 虚线框，插入
  * 指示线实时预览落点，松手一次性提交新顺序；普通点击仍正常派发给
  * 选择/关闭按钮。文件内容只经 workspace.read_file 获取。
+ * 预览路由（preview/preview.ts）：markdown 走富预览（聊天同款渲染）、
+ * 二进制给占位提示，其余沿用 ContentView / Monaco。
  */
 export function FileViewerPanel(
   props: FileViewerPanelProps,
@@ -421,12 +428,22 @@ export function FileViewerPanel(
               after={activeTab.after}
               onClose={() => props.onCloseTab(activeTab.path)}
             />
+          ) : getPreviewKind(activeTab.path) === 'markdown' ? (
+            <MarkdownFilePreview
+              key={activeTab.path}
+              projectId={project.id}
+              path={activeTab.path}
+              onResourceClick={props.onResourceClick}
+            />
+          ) : getPreviewKind(activeTab.path) === 'binary' ? (
+            <BinaryFilePreview key={activeTab.path} path={activeTab.path} />
           ) : (
             <ContentView
               key={activeTab.path}
               projectId={project.id}
               path={activeTab.path}
               initialLine={activeTab.line}
+              readOnly={false}
               onClose={() => props.onCloseTab(activeTab.path)}
             />
           )}

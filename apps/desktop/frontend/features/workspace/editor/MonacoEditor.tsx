@@ -1,191 +1,96 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import Editor from '@monaco-editor/react'
-import type { OnMount } from '@monaco-editor/react'
-import type { editor as MonacoEditorType } from 'monaco-editor'
-import { readFile, writeFile } from '../../../api/workspace'
-import { getLanguageForFile, getFileName } from './language'
-import { DEFAULT_EDITOR_OPTIONS, THEME_NAME, THEME_DATA } from './monaco'
-import { copyTextToClipboard } from '../../../lib/clipboard'
-import { showToast } from '../../../components/Toast'
+/**
+ * Monaco 单文件编辑器完整视图：头部工具栏（关闭/复制/编辑切换/保存）
+ * + 无头内核 MonacoSurface。加载/编辑/脏跟踪/保存逻辑都在 Surface。
+ */
+import { useCallback, useRef, useState } from 'react'
+import {
+  MonacoSurface,
+  type MonacoSurfaceHandle,
+  type MonacoSurfaceState,
+} from './MonacoSurface'
+import { getFileName } from './language'
 import type { MonacoEditorProps } from './types'
-import { EDITOR_CONFIG } from './types'
 
-/** 只读/编辑切换的 Monaco 单文件编辑器。 */
 export function MonacoEditor(props: MonacoEditorProps): React.JSX.Element {
-  const { projectId, path, initialLine, readOnly, onClose, onContentChange } =
-    props
-  const [content, setContent] = useState<string | null>(null)
-  const [baseline, setBaseline] = useState<string>('')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [editMode, setEditMode] = useState(!readOnly)
-  const [saving, setSaving] = useState(false)
-  const editorRef = useRef<MonacoEditorType.IStandaloneCodeEditor | null>(null)
+  const [surface, setSurface] = useState<MonacoSurfaceState>({
+    loading: true,
+    error: null,
+    dirty: false,
+    saving: false,
+    canEdit: false,
+    editMode: false,
+  })
+  const surfaceRef = useRef<MonacoSurfaceHandle>(null)
+  const fileName = getFileName(props.path)
+  const editable = props.readOnly !== true
 
-  const language = getLanguageForFile(path)
-  const fileName = getFileName(path)
-  const dirty = content !== null && content !== baseline
-
-  // 加载文件内容
-  useEffect(() => {
-    let disposed = false
-    setLoading(true)
-    setError(null)
-    void (async () => {
-      try {
-        const result = await readFile(projectId, path, { limit: 50000 })
-        if (disposed) return
-        setContent(result.content)
-        setBaseline(result.content)
-        setEditMode(
-          !readOnly &&
-            result.sizeBytes < EDITOR_CONFIG.EDIT_READ_ONLY_THRESHOLD,
-        )
-        setLoading(false)
-      } catch (err) {
-        if (disposed) return
-        setError(err instanceof Error ? err.message : String(err))
-        setLoading(false)
-      }
-    })()
-    return () => {
-      disposed = true
-    }
-  }, [projectId, path, readOnly])
-
-  // 定位到目标行
-  useEffect(() => {
-    if (initialLine === undefined) return
-    const editor = editorRef.current
-    if (editor) {
-      editor.revealLineInCenter(initialLine)
-      editor.setPosition({ lineNumber: initialLine, column: 1 })
-    }
-  }, [initialLine, loading])
-
-  // 同步 readOnly prop 到 editMode
-  useEffect(() => {
-    if (readOnly) setEditMode(false)
-  }, [readOnly])
-
-  const handleEditorMount: OnMount = useCallback((editor, monaco) => {
-    editorRef.current = editor
-    monaco.editor.defineTheme(THEME_NAME, THEME_DATA)
-    monaco.editor.setTheme(THEME_NAME)
-  }, [])
-
-  const handleChange = useCallback(
-    (value: string | undefined) => {
-      if (value === undefined) return
-      setContent(value)
-      onContentChange?.(value)
-    },
-    [onContentChange],
+  const handleStateChange = useCallback(
+    (state: MonacoSurfaceState): void => setSurface(state),
+    [],
   )
-
-  const handleSave = useCallback(async () => {
-    if (content === null || saving) return
-    setSaving(true)
-    try {
-      await writeFile(projectId, path, content)
-      setBaseline(content)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setSaving(false)
-    }
-  }, [content, saving, projectId, path])
-
-  const handleCopy = useCallback(async () => {
-    if (content === null) return
-    const ok = await copyTextToClipboard(content)
-    showToast(ok ? '已复制全文到剪贴板' : '复制失败，请重试', ok ? 'success' : 'error')
-  }, [content])
-
-  if (error && content === null) {
-    return (
-      <div className="content-view">
-        <header className="content-head">
-          <button
-            className="ghost content-close"
-            onClick={onClose}
-            aria-label="关闭"
-            title="关闭"
-          >
-            ×
-          </button>
-          <span className="content-name">{fileName}</span>
-        </header>
-        <div className="content-error">{error}</div>
-      </div>
-    )
-  }
 
   return (
     <div className="content-view monaco-editor-container">
       <header className="content-head">
         <button
           className="ghost content-close"
-          onClick={onClose}
+          onClick={props.onClose}
           aria-label="关闭"
           title="关闭"
         >
           ×
         </button>
-        <span className="content-name" title={path}>
+        <span className="content-name" title={props.path}>
           {fileName}
         </span>
         <button
           className="ghost"
-          onClick={() => void handleCopy()}
+          onClick={() => void surfaceRef.current?.copyText()}
           title="复制全文"
         >
           复制
         </button>
-        {!readOnly && (
+        {editable && (
           <>
             <button
-              className={`ghost${editMode ? ' active' : ''}`}
-              onClick={() => setEditMode((v) => !v)}
-              title={editMode ? '切换为只读' : '切换为编辑'}
+              className={`ghost${surface.editMode ? ' active' : ''}`}
+              onClick={() => surfaceRef.current?.setEditMode(!surface.editMode)}
+              disabled={!surface.canEdit}
+              title={
+                surface.canEdit
+                  ? surface.editMode
+                    ? '切换为只读'
+                    : '切换为编辑'
+                  : '文件过大或读取被截断，仅支持只读'
+              }
             >
-              {editMode ? '编辑中' : '只读'}
+              {surface.editMode ? '编辑中' : '只读'}
             </button>
-            {dirty && (
+            {surface.dirty && (
               <button
                 className="ghost"
-                onClick={() => void handleSave()}
-                disabled={saving}
+                onClick={() => void surfaceRef.current?.save()}
+                disabled={surface.saving}
                 title="保存"
               >
-                {saving ? '保存中…' : '保存'}
+                {surface.saving ? '保存中…' : '保存'}
               </button>
             )}
           </>
         )}
-        {error !== null && (
-          <span className="content-error-inline">{error}</span>
+        {surface.error !== null && (
+          <span className="content-error-inline">{surface.error}</span>
         )}
       </header>
-      <div className="content-body monaco-body">
-        {loading ? (
-          <div className="content-hint">加载中…</div>
-        ) : (
-          <Editor
-            language={language}
-            value={content ?? ''}
-            theme={THEME_NAME}
-            options={{
-              ...DEFAULT_EDITOR_OPTIONS,
-              readOnly: !editMode,
-              domReadOnly: !editMode,
-            }}
-            onMount={handleEditorMount}
-            onChange={handleChange}
-            className="monaco-editor-instance"
-          />
-        )}
-      </div>
+      <MonacoSurface
+        projectId={props.projectId}
+        path={props.path}
+        initialLine={props.initialLine}
+        readOnly={props.readOnly}
+        ref={surfaceRef}
+        onStateChange={handleStateChange}
+        onContentChange={props.onContentChange}
+      />
     </div>
   )
 }

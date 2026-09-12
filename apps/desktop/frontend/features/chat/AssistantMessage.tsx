@@ -16,9 +16,9 @@ type MessagePart = { type: 'text'; text: string } | ResourcePart
 function resourceFromPart(part: ResourcePart): ResourceLink {
   return 'link' in part ? part.link : part.resource_link
 }
-import { CopyButton } from './CopyButton'
+import { CopyButton } from '../../components/CopyButton'
 import { AlertIcon } from '../../ui/icons'
-import { MessageMarkdown } from './markdown/MessageMarkdown'
+import { MarkdownCore } from '../../components/markdown/md-core'
 import { ReasoningBlock } from './ReasoningBlock'
 import { ToolTrace } from './ToolTrace'
 import type { RunActivity } from '../../hooks/useRunActivity'
@@ -141,7 +141,7 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
         )}
         {contentText !== '' && (
           <div className="assistant-content">
-            <MessageMarkdown
+            <MarkdownCore
               text={structuredParts.length > 0 ? structuredText : contentText}
               caret={answerStreaming}
               onResourceClick={props.onResourceClick}
