@@ -237,6 +237,7 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
   TerminalEnvelopeSchema.extend({
     type: z.literal('terminal.state'),
     status: TerminalStatusSchema,
+    // exitCode 三态：缺省=尚未退出/未知；null=被信号终止或不可得；数字=退出码。
     exitCode: z.number().int().nullable().optional(),
     errorMessage: z.string().optional(),
   }),

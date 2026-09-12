@@ -587,6 +587,8 @@ test('tool and approval events validate envelope payloads', () => {
       payload.type,
     )
   }
+  // 动态工具名（MCP 的 serverId/toolName、Agent 侧 manage_plan 等）也应是合法操作：
+  // 审批操作契约已从「仅内置操作」扩展为「内置操作或任意非空工具名」。
   assert.equal(
     RuntimeEventSchema.safeParse({
       ...envelope,
@@ -597,6 +599,7 @@ test('tool and approval events validate envelope payloads', () => {
     }).success,
     true,
   )
+  // 空操作名仍非法：非空工具名约束是硬边界。
   assert.equal(
     RuntimeEventSchema.safeParse({
       ...envelope,
@@ -604,6 +607,28 @@ test('tool and approval events validate envelope payloads', () => {
       toolCallId: 't1',
       operation: '',
       summary: 'x',
+    }).success,
+    false,
+  )
+})
+
+test('approval.resolved 以 grantScope 承载授权范围，信封 scope 不被遮蔽', () => {
+  const parsed = RuntimeEventSchema.safeParse({
+    ...RUN_ENV,
+    type: 'approval.resolved',
+    toolCallId: 't1',
+    decision: 'approved',
+    grantScope: 'once',
+  })
+  assert.equal(parsed.success, true)
+  // payload 的 once/session 只能出现在 grantScope；信封 scope 仍是 run。
+  assert.equal(parsed.data.scope, 'run')
+  assert.equal(
+    RuntimeEventSchema.safeParse({
+      ...RUN_ENV,
+      type: 'approval.resolved',
+      toolCallId: 't1',
+      decision: 'approved',
     }).success,
     false,
   )
@@ -691,7 +716,7 @@ test('memory commands validate params and results', () => {
 
 test('memory.written event validates memory payloads', () => {
   const envelope = {
-    protocolVersion: '1.0',
+    protocolVersion: PROTOCOL_VERSION,
     eventId: 'e1',
     scope: 'run',
     runId: 'r1',

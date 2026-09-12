@@ -25,6 +25,8 @@ cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml
 
 ## W0：事件信封泛化
 
+> **树红窗口**：Task 1 起至 Task 6 止，`apps/runtime`/`runtime-client`/前端 typecheck 与部分 runtime 测试有意保持红色（生产者/消费者按任务顺序迁移）。bisect 起点 = Task 7 的全量绿。
+
 ### Task 0: 功能分支
 
 - [ ] **Step 1: 从 main 建分支**
