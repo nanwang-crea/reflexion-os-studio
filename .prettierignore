@@ -10,3 +10,6 @@ src-tauri/gen
 **/.zcode/**
 **/src-tauri/package-resources/**
 .cache/
+.worktrees/
+**/.worktrees/**
+pnpm-lock.yaml

@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 use crate::grant::require_grant;
 use crate::params::{
     EditParams, GitBranchesParams, GitDiffParams, GitStatusParams, GlobParams, GrantPathParams,
-    GrepParams, ListParams, MoveParams, ReadParams, ShellParams, WriteParams,
+    GrepParams, ListParams, MoveParams, OperationSource, ReadParams, ShellParams, WriteParams,
 };
 use crate::protocol::{emit, error_response, ok_response, running_shells, workspace_root, OpError};
 use crate::{files, git, mutate, paths, search, shell};
@@ -93,7 +93,17 @@ pub fn handle_file_grep(params: Value) -> Result<Value, OpError> {
 pub fn handle_file_write(params: Value) -> Result<Value, OpError> {
     let params: WriteParams = serde_json::from_value(params)
         .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    require_grant(&params.grant, &params.workspace_root, "file.write")?;
+    // 授权来源显式化：agent 必须携带通过校验的审批凭据；ui（编辑器保存）
+    // 是用户直接动作、免凭据。缺省按 agent 处理，保证既有调用方语义不变。
+    if params.source != Some(OperationSource::Ui) {
+        let grant = params.grant.as_deref().ok_or_else(|| {
+            OpError::new(
+                "invalid_grant",
+                "file.write requires an approval grant for agent operations".to_string(),
+            )
+        })?;
+        require_grant(grant, &params.workspace_root, "file.write")?;
+    }
     let root = workspace_root(&params.workspace_root)?;
     let outcome = files::write(&root, &params.path, &params.content, params.revision)
         .map_err(|message| OpError::new("file_error", message))?;
@@ -299,5 +309,81 @@ pub fn handle_cancel(params: &Value) {
                 shell::kill_tree(pid);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod file_write_source_tests {
+    use super::*;
+    use std::env::temp_dir;
+    use std::fs;
+
+    struct Sandbox {
+        root: std::path::PathBuf,
+    }
+    impl Sandbox {
+        fn new(tag: &str) -> Self {
+            let root = temp_dir().join(format!("reflexion-wsrc-{}-{}", tag, std::process::id()));
+            fs::create_dir_all(&root).unwrap();
+            Sandbox { root }
+        }
+        fn root_str(&self) -> String {
+            self.root.to_str().unwrap().to_string()
+        }
+    }
+    impl Drop for Sandbox {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+
+    #[test]
+    fn ui_source_writes_without_grant() {
+        let sandbox = Sandbox::new("ui");
+        let result = handle_file_write(json!({
+            "workspaceRoot": sandbox.root_str(),
+            "path": "saved.txt",
+            "content": "from editor",
+            "source": "ui",
+        }));
+        assert!(
+            result.is_ok(),
+            "ui write must not require grant: {:?}",
+            result
+        );
+        assert_eq!(
+            fs::read_to_string(sandbox.root.join("saved.txt")).unwrap(),
+            "from editor"
+        );
+    }
+
+    #[test]
+    fn agent_and_default_source_still_require_grant() {
+        let sandbox = Sandbox::new("agent");
+        let missing = handle_file_write(json!({
+            "workspaceRoot": sandbox.root_str(), "path": "a.txt", "content": "x",
+        }));
+        assert_eq!(missing.unwrap_err().code, "invalid_grant");
+        let explicit_agent = handle_file_write(json!({
+            "workspaceRoot": sandbox.root_str(), "path": "a.txt", "content": "x", "source": "agent",
+        }));
+        assert_eq!(explicit_agent.unwrap_err().code, "invalid_grant");
+    }
+
+    #[test]
+    fn ui_source_still_denies_blind_overwrite() {
+        let sandbox = Sandbox::new("blind");
+        fs::write(sandbox.root.join("note.txt"), b"on disk").unwrap();
+        let result = handle_file_write(json!({
+            "workspaceRoot": sandbox.root_str(), "path": "note.txt", "content": "stomp", "source": "ui",
+        }));
+        let error = result.unwrap_err();
+        assert_eq!(error.code, "file_error");
+        assert!(error.message.contains("without a fresh full read"));
+        // 丢更新保护与授权来源无关：盘上内容未被覆盖。
+        assert_eq!(
+            fs::read_to_string(sandbox.root.join("note.txt")).unwrap(),
+            "on disk"
+        );
     }
 }

@@ -41,22 +41,25 @@ export function ToastHost(): React.JSX.Element | null {
   const timersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
 
   useEffect(() => {
+    const timers = timersRef.current
     const listener: Listener = (toast) => {
       setItems((prev) => [...prev.slice(-2), toast])
       seq += 1
       const current = seq
       const timer = setTimeout(() => {
-        timersRef.current.delete(timer)
+        timers.delete(timer)
         // 只移除自己这批之后仍未过期、且 id 匹配的条目，避免误删后到的提示。
-        setItems((prev) => prev.filter((item) => item.id !== toast.id || item.id > current))
+        setItems((prev) =>
+          prev.filter((item) => item.id !== toast.id || item.id > current),
+        )
       }, 2400)
-      timersRef.current.add(timer)
+      timers.add(timer)
     }
     listeners.add(listener)
     return () => {
       listeners.delete(listener)
-      for (const timer of timersRef.current) clearTimeout(timer)
-      timersRef.current.clear()
+      for (const timer of timers) clearTimeout(timer)
+      timers.clear()
     }
   }, [])
 

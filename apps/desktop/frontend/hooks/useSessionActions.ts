@@ -38,6 +38,8 @@ interface SessionActionsDeps {
   confirm: (state: ConfirmDialogState) => Promise<boolean>
   // 视图行为：项目创建后进入该项目
   selectProject: (projectId: string) => void
+  /** 清空项目上下文前的守卫（如脏文件确认）；返回 false 中止操作。 */
+  beforeProjectClear?: () => boolean | Promise<boolean>
 }
 
 /**
@@ -101,6 +103,13 @@ export function useSessionActions(deps: SessionActionsDeps): {
   }
 
   const deleteProject = async (projectId: string): Promise<void> => {
+    // 守卫必须先行：删除当前项目前先确认脏文件可弃，用户在 DB 删除后取消会留下半应用状态。
+    if (
+      deps.activeProjectRef.current === projectId &&
+      !(await (deps.beforeProjectClear?.() ?? true))
+    ) {
+      return
+    }
     const project = deps.projects.find((item) => item.id === projectId)
     const confirmed = await deps.confirm({
       title: '删除项目',
@@ -113,6 +122,7 @@ export function useSessionActions(deps: SessionActionsDeps): {
     try {
       await deleteProjectApi(projectId)
       if (deps.activeProjectRef.current === projectId) {
+        // 守卫已在前：此处直接清空，不再二次确认。
         deps.setActiveProjectId(null)
         deps.setActiveSessionId(null)
         deps.setSessionData(null)

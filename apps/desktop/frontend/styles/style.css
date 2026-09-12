@@ -6,6 +6,9 @@
   --bg-hover: #2a2a2a;
   --bg-active: #3a3a3a;
   --bg-inset: #1d1d1d;
+  /* active 标签与编辑器背景融合；必须与
+     features/workspace/editor/monaco.ts 的 editor.background 保持同值 */
+  --bg-editor: #1e1e1e;
   --surface-overlay: rgba(23, 23, 23, 0.55);
   --surface-translucent: rgba(23, 23, 23, 0.35);
   --scrim: rgba(0, 0, 0, 0.55);
@@ -22,8 +25,9 @@
   --mono:
     ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono',
     monospace;
-  /* 聊天列宽：transcript/输入区/悬浮卡对齐共用，改一处即可整体同步。 */
-  --chat-col: 760px;
+  /* 聊天列宽：transcript/输入区/悬浮卡对齐共用，改一处即可整体同步。
+     上限加宽：窗口最大化时消息区跟随变宽，超宽屏行长封顶。 */
+  --chat-col: min(1200px, 85%);
   font-family:
     system-ui,
     -apple-system,

@@ -38,7 +38,7 @@ export interface MonacoSurfaceState {
 }
 
 export interface MonacoSurfaceHandle {
-  save: () => Promise<void>
+  save: () => Promise<boolean>
   setEditMode: (editMode: boolean) => void
   copyText: () => Promise<void>
 }
@@ -152,12 +152,6 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
     onStateChange(next)
   }, [loading, error, dirty, saving, canEdit, editMode, onStateChange])
 
-  const handleEditorMount: OnMount = useCallback((editor, monaco) => {
-    editorRef.current = editor
-    monaco.editor.defineTheme(THEME_NAME, THEME_DATA)
-    monaco.editor.setTheme(THEME_NAME)
-  }, [])
-
   const handleChange = useCallback(
     (value: string | undefined) => {
       if (value === undefined) return
@@ -167,18 +161,34 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
     [onContentChange],
   )
 
-  const handleSave = useCallback(async (): Promise<void> => {
-    if (content === null || saving || !canEdit) return
+  const handleSave = useCallback(async (): Promise<boolean> => {
+    if (content === null || saving || !canEdit) return false
+    // 内容未变化视为保存成功：Cmd+S 不触发对磁盘的无意义写入。
+    if (content === baseline) return true
     setSaving(true)
     try {
       await writeFile(projectId, path, content)
       setBaseline(content)
+      return true
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+      return false
     } finally {
       setSaving(false)
     }
-  }, [content, saving, canEdit, projectId, path])
+  }, [content, baseline, saving, canEdit, projectId, path])
+
+  const handleSaveRef = useRef(handleSave)
+  handleSaveRef.current = handleSave
+
+  const handleEditorMount: OnMount = useCallback((editor, monaco) => {
+    editorRef.current = editor
+    monaco.editor.defineTheme(THEME_NAME, THEME_DATA)
+    monaco.editor.setTheme(THEME_NAME)
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+      void handleSaveRef.current()
+    })
+  }, [])
 
   const handleCopy = useCallback(async (): Promise<void> => {
     if (content === null) return

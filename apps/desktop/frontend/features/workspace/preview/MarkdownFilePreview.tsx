@@ -1,6 +1,7 @@
-import { memo, useCallback, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type { ResourceLink } from '@reflexion-os-studio/runtime-client'
 import { workspaceFileUri } from '@reflexion-os-studio/runtime-client'
+import type { ConfirmDialogState } from '../../../components/ConfirmDialog'
 import { MarkdownCore } from '../../../components/markdown/md-core'
 import {
   MonacoSurface,
@@ -9,6 +10,7 @@ import {
 } from '../editor/MonacoSurface'
 import { normalizeRelativePath } from './links'
 import { friendlyReadError, MD_PREVIEW_MAX_LINES } from './preview'
+import { IS_MAC } from '../../../lib/platform'
 import { useMdIncrementalFeed } from './useMdIncrementalFeed'
 
 /** 预览视图形态：默认富预览，可一键切换源码（源码即编辑）。 */
@@ -33,6 +35,15 @@ interface MarkdownFilePreviewProps {
   path: string
   /** 资源引用（workspace:// asset:// https://）点击回调；宿主按类型分发。 */
   onResourceClick?: (link: ResourceLink) => void
+  /** 源码模式下编辑内核脏状态上抛（预览模式恒为 false）。 */
+  onDirtyChange?: (path: string, dirty: boolean) => void
+  /** 注册 surface 句柄 getter（null 注销），供标签层保存/守卫使用。 */
+  registerSurface?: (
+    path: string,
+    getter: (() => MonacoSurfaceHandle | null) | null,
+  ) => void
+  /** 应用级确认弹窗（promise 风格），源码→预览丢弃守卫用。 */
+  confirm?: (state: ConfirmDialogState) => Promise<boolean>
 }
 
 /**
@@ -49,7 +60,7 @@ interface MarkdownFilePreviewProps {
 export function MarkdownFilePreview(
   props: MarkdownFilePreviewProps,
 ): React.JSX.Element {
-  const { projectId, path, onResourceClick } = props
+  const { projectId, path, onResourceClick, confirm, onDirtyChange } = props
   const [mode, setMode] = useState<MarkdownPreviewViewMode>('preview')
   // 显式重载计数：进入预览（初始/从源码切回/保存后）都会重新读文件。
   const [reloadTick, setReloadTick] = useState(0)
@@ -60,18 +71,45 @@ export function MarkdownFilePreview(
   const { feed, loading, error, loadingMore, sentinelRef } =
     useMdIncrementalFeed(projectId, path, reloadTick)
 
+  const fileName = path.split('/').pop() ?? path
+
+  const onDirtyChangeSafe = useCallback(
+    (targetPath: string, dirty: boolean): void => {
+      onDirtyChange?.(targetPath, dirty)
+    },
+    [onDirtyChange],
+  )
+
   const handleViewModeChange = useCallback(
     (next: MarkdownPreviewViewMode): void => {
+      if (next === mode) return
+      if (next === 'preview' && mode === 'source') {
+        const dirtyNow = surfaceState?.dirty === true
+        if (dirtyNow && confirm !== undefined) {
+          void (async () => {
+            const ok = await confirm({
+              title: '有未保存的修改',
+              message: `${fileName} 的源码修改尚未保存，切换到预览将丢弃。`,
+              confirmLabel: '放弃修改并预览',
+              danger: true,
+            })
+            if (!ok) return
+            onDirtyChangeSafe(path, false)
+            setMode('preview')
+            setReloadTick((tick) => tick + 1)
+          })()
+          return
+        }
+        onDirtyChangeSafe(path, false)
+      }
       setMode(next)
-      // 每次回到预览都重读文件，保证展示最新落盘内容；进入源码时清掉
-      // 上一次挂载残留的 Surface 状态，避免脏标记闪现旧值。
       if (next === 'preview') {
         setReloadTick((tick) => tick + 1)
       } else {
         setSurfaceState(null)
       }
     },
-    [],
+    [mode, surfaceState?.dirty, confirm, fileName, path, onDirtyChangeSafe],
   )
 
   // 资源引用分发：workspace:// 缺省项目 / 指向其他项目时归一到当前
@@ -121,11 +159,19 @@ export function MarkdownFilePreview(
   )
 
   const handleSurfaceState = useCallback(
-    (state: MonacoSurfaceState): void => setSurfaceState(state),
-    [],
+    (state: MonacoSurfaceState): void => {
+      setSurfaceState(state)
+      onDirtyChange?.(path, mode === 'source' && state.dirty)
+    },
+    [mode, onDirtyChange, path],
   )
 
-  const fileName = path.split('/').pop() ?? path
+  const { registerSurface } = props
+  useEffect(() => {
+    registerSurface?.(path, () => surfaceRef.current)
+    return () => registerSurface?.(path, null)
+  }, [path, registerSurface])
+
   const previewBody =
     loading || feed === null ? (
       <div className="content-hint">加载中…</div>
@@ -212,16 +258,14 @@ export function MarkdownFilePreview(
             >
               {surfaceState?.editMode ? '编辑中' : '只读'}
             </button>
-            {surfaceState?.dirty && (
-              <button
-                className="ghost"
-                onClick={() => void surfaceRef.current?.save()}
-                disabled={surfaceState.saving}
-                title="保存"
-              >
-                {surfaceState.saving ? '保存中…' : '保存'}
-              </button>
-            )}
+            <button
+              className="ghost"
+              onClick={() => void surfaceRef.current?.save()}
+              disabled={!surfaceState?.dirty || surfaceState?.saving}
+              title={IS_MAC ? '保存（⌘S）' : '保存（Ctrl+S）'}
+            >
+              {surfaceState?.saving ? '保存中…' : '保存'}
+            </button>
           </>
         )}
         {mode === 'preview' && error !== null && (

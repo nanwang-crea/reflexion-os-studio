@@ -19,12 +19,12 @@
 
 ### 与 codex 的一致性对照（决策依据）
 
-| 维度 | codex | 本设计 | 结论 |
-| --- | --- | --- | --- |
-| Windows 沙箱档位 | `elevated`（专用沙盒用户+防火墙，需管理员）/ `unelevated`（受限令牌+ACL 边界，弱网络隔离） | 只做 unelevated 同族；elevated 记为未来项 | 一致（选 fallback 档） |
-| 网络越界 | 按命令/动作审批（"asks for approval … to run commands that require network access"） | `requires_network` 声明 → 审批卡 → grant 声明 → Rust 核对 | 一致（我们是先审批后执行，codex 是失败后升级重跑，语义等价） |
-| 双层模型 | 沙箱模式（技术边界）+ 审批策略（何时询问），互相独立 | 沙箱 provider（OS 边界）+ 审批管线（流程边界），互相独立 | 一致 |
-| trait 形状 | codex-rs：seatbelt/landlock 包装命令，Windows 自持 spawn | 双路径 trait：`wrap`（包装）+ `exec_direct`（自持） | 一致 |
+| 维度             | codex                                                                                      | 本设计                                                    | 结论                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------- | ------------------------------------------------------------ |
+| Windows 沙箱档位 | `elevated`（专用沙盒用户+防火墙，需管理员）/ `unelevated`（受限令牌+ACL 边界，弱网络隔离） | 只做 unelevated 同族；elevated 记为未来项                 | 一致（选 fallback 档）                                       |
+| 网络越界         | 按命令/动作审批（"asks for approval … to run commands that require network access"）       | `requires_network` 声明 → 审批卡 → grant 声明 → Rust 核对 | 一致（我们是先审批后执行，codex 是失败后升级重跑，语义等价） |
+| 双层模型         | 沙箱模式（技术边界）+ 审批策略（何时询问），互相独立                                       | 沙箱 provider（OS 边界）+ 审批管线（流程边界），互相独立  | 一致                                                         |
+| trait 形状       | codex-rs：seatbelt/landlock 包装命令，Windows 自持 spawn                                   | 双路径 trait：`wrap`（包装）+ `exec_direct`（自持）       | 一致                                                         |
 
 ## 2. 范围
 
@@ -137,13 +137,13 @@ result 增加 "sandbox": { "active": bool, "provider": id }
 
 ### 4.4 如实声明的能力边界（写入用户可见文档）
 
-| 能力 | macOS Seatbelt（下轮） | Windows-token（本轮） |
-| --- | --- | --- |
-| 网络强制禁断 | ✅ `deny network*` | ❌ **不强制**（审批是流程性闸门，同 codex unelevated） |
-| 写边界 | workspace + TMPDIR | workspace + TMPDIR（完整性标签） |
-| 敏感路径读保护 | ✅ deny `~/.ssh` 等 | ❌ 完整性级别不限制读 |
-| 提权保护 | （沙箱内） | ✅ 剥离特权 + 移除管理员 SID |
-| 副作用 | 无 | workspace 目录 ACL 增加 LOW 标签（持久化，幂等重设；LOW 标签文件任何完整性可写，权衡记录在案） |
+| 能力           | macOS Seatbelt（下轮） | Windows-token（本轮）                                                                          |
+| -------------- | ---------------------- | ---------------------------------------------------------------------------------------------- |
+| 网络强制禁断   | ✅ `deny network*`     | ❌ **不强制**（审批是流程性闸门，同 codex unelevated）                                         |
+| 写边界         | workspace + TMPDIR     | workspace + TMPDIR（完整性标签）                                                               |
+| 敏感路径读保护 | ✅ deny `~/.ssh` 等    | ❌ 完整性级别不限制读                                                                          |
+| 提权保护       | （沙箱内）             | ✅ 剥离特权 + 移除管理员 SID                                                                   |
+| 副作用         | 无                     | workspace 目录 ACL 增加 LOW 标签（持久化，幂等重设；LOW 标签文件任何完整性可写，权衡记录在案） |
 
 ## 5. 按命令网络授权（S3）
 
@@ -174,35 +174,35 @@ result 增加 "sandbox": { "active": bool, "provider": id }
 
 ### 5.3 改动点
 
-| 层 | 文件 | 改动 |
-| --- | --- | --- |
-| TS 工具 | `apps/runtime/src/agent/tools/shell.ts` | 参数 + `requires_network`（description 提示"需联网命令必须声明，否则未来沙箱内必失败"） |
-| TS 审批 | `apps/runtime/src/agent/permissions.ts` | `buildOnceGrant`/`buildSessionGrant` GrantIdentity 增加可选 `sandboxNetwork`；网关复用不变 |
-| TS 执行 | `apps/runtime/src/agent/tool-executor.ts` | requires_network 时先取/生成 `sandbox_network` 授权，拼进 grant |
-| Rust | `crates/system-runtime/src/params.rs` | `ShellParams.allow_network: Option<bool>` |
-| Rust | `crates/system-runtime/src/grant.rs` | ApprovalGrant 增加可选 `sandbox_network`；allowNetwork 核对 |
-| 前端 | `features/chat/ApprovalCard.tsx` | `OPERATION_LABELS` + `'sandbox_network': '允许命令联网'` |
+| 层      | 文件                                      | 改动                                                                                       |
+| ------- | ----------------------------------------- | ------------------------------------------------------------------------------------------ |
+| TS 工具 | `apps/runtime/src/agent/tools/shell.ts`   | 参数 + `requires_network`（description 提示"需联网命令必须声明，否则未来沙箱内必失败"）    |
+| TS 审批 | `apps/runtime/src/agent/permissions.ts`   | `buildOnceGrant`/`buildSessionGrant` GrantIdentity 增加可选 `sandboxNetwork`；网关复用不变 |
+| TS 执行 | `apps/runtime/src/agent/tool-executor.ts` | requires_network 时先取/生成 `sandbox_network` 授权，拼进 grant                            |
+| Rust    | `crates/system-runtime/src/params.rs`     | `ShellParams.allow_network: Option<bool>`                                                  |
+| Rust    | `crates/system-runtime/src/grant.rs`      | ApprovalGrant 增加可选 `sandbox_network`；allowNetwork 核对                                |
+| 前端    | `features/chat/ApprovalCard.tsx`          | `OPERATION_LABELS` + `'sandbox_network': '允许命令联网'`                                   |
 
 ## 6. 协议变更（全部向后兼容）
 
-| 消息 | 变更 |
-| --- | --- |
-| `shell.execute` params | + `allowNetwork: boolean`（可选，缺省 false；deny_unknown_fields 下可选字段安全） |
+| 消息                   | 变更                                                                                                       |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `shell.execute` params | + `allowNetwork: boolean`（可选，缺省 false；deny_unknown_fields 下可选字段安全）                          |
 | `shell.execute` result | + `sandbox: { active: boolean, provider: "windows-token" \| "none" }`（枚举开放，未来 `seatbelt`/`bwrap`） |
-| `system.ready` params | + `sandbox: "windows-token" \| "none"`（同上枚举） |
+| `system.ready` params  | + `sandbox: "windows-token" \| "none"`（同上枚举）                                                         |
 
 TS 侧零破坏：result 新字段向后兼容；params 新字段可选。工具结果含 `sandbox` 元数据随
 现有 toolCall 轨迹存储展示，无专门 UI。
 
 ## 7. 降级与错误处理
 
-| 场景 | 行为 |
-| --- | --- |
-| Windows 探测失败（令牌/完整性设置不可用） | 工厂选 `none`；ready 能力位如实为 `none` |
-| 选定后执行失败（spawn/管道/Job 错误） | 结构化错误（`execution_failed` + 明确 message），不回退无沙箱执行 |
+| 场景                                         | 行为                                                                      |
+| -------------------------------------------- | ------------------------------------------------------------------------- |
+| Windows 探测失败（令牌/完整性设置不可用）    | 工厂选 `none`；ready 能力位如实为 `none`                                  |
+| 选定后执行失败（spawn/管道/Job 错误）        | 结构化错误（`execution_failed` + 明确 message），不回退无沙箱执行         |
 | allowNetwork=true 但 grant 无 sandboxNetwork | `network_approval_required` 错误，TS 侧不会出现（审批先行），此为绕过兜底 |
-| macOS/Linux | 工厂返回 `none`，行为与现状完全一致（`sh -c` 路径不动） |
-| sandbox.cancel / system.cancel | 现有 `running_shells` + `kill_tree` 路径不变；Job 兜底收割 |
+| macOS/Linux                                  | 工厂返回 `none`，行为与现状完全一致（`sh -c` 路径不动）                   |
+| sandbox.cancel / system.cancel               | 现有 `running_shells` + `kill_tree` 路径不变；Job 兜底收割                |
 
 ## 8. 测试与验证
 
@@ -215,7 +215,7 @@ TS 侧零破坏：result 新字段向后兼容；params 新字段可选。工具
   SHELL-SANDBOX-PLAN.md 验收表留待 Windows 环境。
 - **TS 侧**：现有 approval 管线测试模式沿用；`pnpm lint` / `pnpm typecheck` 全链。
 - **依赖**：`crates/system-runtime` 增加 `[target.'cfg(windows)'.dependencies] windows =
-  { … }`（官方 windows crate；具体 feature 清单在实施计划中固定，仅 Windows
+{ … }`（官方 windows crate；具体 feature 清单在实施计划中固定，仅 Windows
   target 编译，macOS 构建不受影响。
 
 ## 9. 文档更新
@@ -229,12 +229,12 @@ TS 侧零破坏：result 新字段向后兼容；params 新字段可选。工具
 
 ## 10. 决策记录
 
-| 决策 | 结论 | 依据 |
-| --- | --- | --- |
-| Windows 机制档位 | 受限令牌 + 低完整性 + Job Object（codex unelevated 同族） | 免管理员；elevated/UAC/防火墙档桌面体验差；ReflexionOS 已趟通同构路线 |
-| trait 形状 | 双路径（wrap + exec_direct） | Windows 无法用命令包装表达；ReflexionOS 2026-07-02 实测教训 |
-| 按命令网络授权 | 本轮纳入（S3） | codex 同语义；避免发布无人消费的 allowNetwork 孤儿参数；审批管线现成 |
-| trusted 与网络审批 | 不旁路 | 网络独立链路，任何模式不自动放行 |
-| Windows 网络强制 | 不做，如实上报 | 无免管理员机制；同 codex unelevated 诚实标注"弱网络隔离" |
-| 沙盒临时目录 | 专用子目录 + TMP/TEMP 重定向 | 给整个用户 TEMP 打 LOW 标签副作用过大（放宽完整性约束） |
-| fail-closed | 探测后不回退 | 静默降级为无沙箱是最坏状态；降级只允许发生在工厂探测期 |
+| 决策               | 结论                                                      | 依据                                                                  |
+| ------------------ | --------------------------------------------------------- | --------------------------------------------------------------------- |
+| Windows 机制档位   | 受限令牌 + 低完整性 + Job Object（codex unelevated 同族） | 免管理员；elevated/UAC/防火墙档桌面体验差；ReflexionOS 已趟通同构路线 |
+| trait 形状         | 双路径（wrap + exec_direct）                              | Windows 无法用命令包装表达；ReflexionOS 2026-07-02 实测教训           |
+| 按命令网络授权     | 本轮纳入（S3）                                            | codex 同语义；避免发布无人消费的 allowNetwork 孤儿参数；审批管线现成  |
+| trusted 与网络审批 | 不旁路                                                    | 网络独立链路，任何模式不自动放行                                      |
+| Windows 网络强制   | 不做，如实上报                                            | 无免管理员机制；同 codex unelevated 诚实标注"弱网络隔离"              |
+| 沙盒临时目录       | 专用子目录 + TMP/TEMP 重定向                              | 给整个用户 TEMP 打 LOW 标签副作用过大（放宽完整性约束）               |
+| fail-closed        | 探测后不回退                                              | 静默降级为无沙箱是最坏状态；降级只允许发生在工厂探测期                |

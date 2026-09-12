@@ -47,13 +47,16 @@ export class FileReadState {
 }
 
 /** 从读取类响应提取 revision 字段；字段缺失或类型不符时返回 undefined。 */
-export function extractRevision(record: Record<string, unknown>): FileRevision | undefined {
+export function extractRevision(
+  record: Record<string, unknown>,
+): FileRevision | undefined {
   const revision = record.revision
   if (typeof revision !== 'object' || revision === null) return undefined
   const fields = revision as Record<string, unknown>
   if (typeof fields.modifiedMs !== 'number') return undefined
   if (typeof fields.sizeBytes !== 'number') return undefined
-  if (typeof fields.sha256 !== 'string' || fields.sha256.length !== 64) return undefined
+  if (typeof fields.sha256 !== 'string' || fields.sha256.length !== 64)
+    return undefined
   return {
     modifiedMs: fields.modifiedMs,
     sizeBytes: fields.sizeBytes,

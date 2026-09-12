@@ -6,6 +6,7 @@ import type {
   SkillManifest,
   Delegation,
 } from '@reflexion-os-studio/runtime-client'
+import { AppMain } from './AppMain'
 import { useAppBootstrap } from './hooks/useAppBootstrap'
 import { useModelSelection } from './hooks/useModelSelection'
 import { usePermissionMode } from './hooks/usePermissionMode'
@@ -21,17 +22,13 @@ import { resolveApproval } from './api/chat'
 import { listSkills } from './api/skills'
 import type { SessionData } from './api/sessions'
 import { ConfirmDialog } from './components/ConfirmDialog'
-import { ToastHost } from './components/Toast'
+import { showToast, ToastHost } from './components/Toast'
 import { ResizeHandle } from './components/ResizeHandle'
-import { TopBar, STATUS_LABELS } from './components/TopBar'
-import { ChatView } from './features/chat/ChatView'
-import { LandingView } from './features/landing/LandingView'
-import { MemoryView } from './features/memories/MemoryView'
+import { STATUS_LABELS } from './components/TopBar'
 import { Sidebar } from './components/Sidebar'
-import { SkillsView } from './features/skills/SkillsView'
-import { AutomationsView } from './features/automations/AutomationsView'
-import { FileViewerPanel } from './features/workspace/FileViewerPanel'
-import { SettingsView } from './features/settings/SettingsView'
+import type { FileViewerPanelHandle } from './features/workspace/FileViewerPanel'
+import { useWorkspaceTabGuard } from './hooks/useWorkspaceTabGuard'
+import { useAppHotkeys } from './hooks/useAppHotkeys'
 import { useSessionActions } from './hooks/useSessionActions'
 import { useResourceRouter } from './hooks/useResourceRouter'
 
@@ -72,6 +69,7 @@ export default function App() {
     workspaceWidth,
     setWorkspaceWidth,
     openTabs,
+    activeTabId,
     activeFilePath,
     filesFocusAssetId,
     setFilesFocusAssetId,
@@ -83,9 +81,17 @@ export default function App() {
     selectTab,
     reorderTabs,
     resetWorkspaceFiles,
+    dirtyPaths,
+    setTabDirty,
   } = useWorkspacePanel()
-  const { confirmState, confirm, handleConfirm, handleCancel } =
-    useConfirmDialog()
+  const {
+    confirmState,
+    confirm,
+    confirmAction,
+    handleConfirm,
+    handleTertiary,
+    handleCancel,
+  } = useConfirmDialog()
 
   const { permissionMode, changePermissionMode } = usePermissionMode()
   const { modelOptions, selectedModelKey, setSelectedModelKey } =
@@ -135,6 +141,32 @@ export default function App() {
     ],
   )
 
+  const filePanelRef = useRef<FileViewerPanelHandle>(null)
+  const { requestCloseTab, guardedResetWorkspaceFiles } = useWorkspaceTabGuard({
+    openTabs,
+    dirtyPaths,
+    closeTab,
+    resetWorkspaceFiles,
+    confirmAction,
+    setNotice,
+    filePanelRef,
+  })
+  useAppHotkeys({
+    saveActive: () => {
+      // 面板对用户不可见时不动作：工作区收起或不在聊天视图时，
+      // 快捷键不应保存/关闭隐藏的标签。
+      if (view !== 'chat' || !workspaceOpen) return
+      if (activeFilePath === null || !dirtyPaths.has(activeFilePath)) return
+      void filePanelRef.current?.saveDirty(activeFilePath).then((ok) => {
+        if (ok === false) showToast('保存失败，请在编辑器中查看错误', 'error')
+      })
+    },
+    closeActiveTab: () => {
+      if (view !== 'chat' || !workspaceOpen) return
+      if (activeTabId !== null) void requestCloseTab(activeTabId)
+    },
+  })
+
   const {
     bootstrap,
     streaming,
@@ -174,7 +206,7 @@ export default function App() {
     refreshSessionData,
     refreshProjectSessions,
     refreshDelegations,
-    resetWorkspaceFiles,
+    resetWorkspaceFiles: guardedResetWorkspaceFiles,
   })
 
   /**
@@ -240,6 +272,7 @@ export default function App() {
     setNotice,
     confirm,
     selectProject,
+    beforeProjectClear: guardedResetWorkspaceFiles,
   })
 
   const hasEnabledProvider = profiles.some((profile) => profile.enabled)
@@ -300,21 +333,6 @@ export default function App() {
     setSidebarOpen,
   ])
 
-  const contextTitle =
-    view === 'settings'
-      ? '设置'
-      : view === 'memories'
-        ? '记忆'
-        : view === 'skills'
-          ? '技能'
-          : view === 'automations'
-            ? '自动化'
-            : activeSessionId
-              ? (sessionData?.session?.title ?? '对话')
-              : activeProject
-                ? activeProject.name
-                : '新对话'
-
   if (!runtimeReady) {
     return (
       <div className="boot-screen">
@@ -371,138 +389,107 @@ export default function App() {
           )
         }
       />
-      <div className="main-pane">
-        <TopBar
-          sidebarOpen={sidebarOpen}
-          onToggleSidebar={() => setSidebarOpen((open) => !open)}
-          contextTitle={contextTitle}
-          showWorkspaceToggle={view === 'chat'}
-          workspaceOpen={workspaceOpen}
-          onToggleWorkspace={() => setWorkspaceOpen((open) => !open)}
-          memoryNotice={memoryNotice}
-          runtimeState={bootstrap?.state ?? ''}
-          statusLabel={statusLabel}
-        />
-
-        {notice && (
-          <div className="notice" role="alert" aria-live="assertive">
-            <span>{notice}</span>
-            <button
-              type="button"
-              className="ghost"
-              onClick={() => setNotice(null)}
-            >
-              关闭
-            </button>
-          </div>
-        )}
-
-        <div className="content-area">
-          <div className="content-main">
-            {view === 'settings' ? (
-              <SettingsView
-                profiles={profiles}
-                onSaved={() => refreshProfiles()}
-                onBackToChat={() => setView('chat')}
-                confirm={confirm}
-              />
-            ) : view === 'memories' ? (
-              <MemoryView confirm={confirm} />
-            ) : view === 'skills' ? (
-              <SkillsView
-                onUseSkill={(skillId, sessionId) => {
-                  setActiveProjectId(null)
-                  setActiveSessionId(sessionId)
-                  void refreshSessionData(sessionId)
-                  void refreshStandaloneSessions()
-                  setComposerPrefill({ skillId, nonce: Date.now() })
-                  setView('chat')
-                }}
-              />
-            ) : view === 'automations' ? (
-              <AutomationsView />
-            ) : activeSessionId ? (
-              <ChatView
-                sessionData={sessionData}
-                delegations={delegations}
-                streaming={streaming}
-                streamingReasoning={streamingReasoning}
-                runActivities={runActivities}
-                retryTick={retryTick}
-                hasEnabledProvider={hasEnabledProvider}
-                permissionValue={permissionMode}
-                onPermissionChange={changePermissionMode}
-                modelOptions={modelOptions}
-                selectedModelKey={selectedModelKey}
-                onModelChange={setSelectedModelKey}
-                skills={skills}
-                composerPrefill={composerPrefill}
-                onPrefillConsumed={() => setComposerPrefill(null)}
-                onSend={sendMessage}
-                onStop={stopRun}
-                onRetry={retryRun}
-                onGoSettings={() => {
-                  setView('settings')
-                }}
-                pendingApprovals={pendingApprovals}
-                onResolveApproval={handleResolveApproval}
-                onResourceClick={handleResourceClick}
-                onOpenDiff={openDiff}
-              />
-            ) : (
-              <LandingView
-                project={activeProject}
-                projects={projects}
-                selectedProjectId={activeProjectId}
-                onProjectChange={selectLandingProject}
-                sessions={activeProject ? projectSessions : []}
-                hasEnabledProvider={hasEnabledProvider}
-                permissionValue={permissionMode}
-                onPermissionChange={changePermissionMode}
-                modelOptions={modelOptions}
-                selectedModelKey={selectedModelKey}
-                onModelChange={setSelectedModelKey}
-                skills={skills}
-                composerPrefill={composerPrefill}
-                onPrefillConsumed={() => setComposerPrefill(null)}
-                onSend={sendMessage}
-                onSelectSession={openSession}
-                onRenameSession={renameSession}
-                onDeleteSession={deleteSession}
-                onGoSettings={() => {
-                  setView('settings')
-                }}
-              />
-            )}
-          </div>
-          {view === 'chat' && workspaceOpen && (
-            <>
-              <ResizeHandle
-                onResize={(delta) =>
-                  setWorkspaceWidth((width) =>
-                    Math.max(280, Math.min(900, width - delta)),
-                  )
-                }
-              />
-              <FileViewerPanel
-                project={activeProject}
-                systemReady={bootstrap?.systemReady ?? false}
-                openTabs={openTabs}
-                activePath={activeFilePath}
-                onSelectTab={selectTab}
-                onCloseTab={closeTab}
-                onReorderTabs={reorderTabs}
-                onResourceClick={handleResourceClick}
-                width={workspaceWidth}
-              />
-            </>
-          )}
-        </div>
-      </div>
+      <AppMain
+        view={view}
+        activeSessionId={activeSessionId}
+        notice={notice}
+        onDismissNotice={() => setNotice(null)}
+        topBar={{
+          sidebarOpen,
+          onToggleSidebar: () => setSidebarOpen((open) => !open),
+          memoryNotice,
+          runtimeState: bootstrap?.state ?? '',
+          statusLabel,
+        }}
+        chat={{
+          sessionData,
+          delegations,
+          streaming,
+          streamingReasoning,
+          runActivities,
+          retryTick,
+          hasEnabledProvider,
+          permissionValue: permissionMode,
+          onPermissionChange: changePermissionMode,
+          modelOptions,
+          selectedModelKey,
+          onModelChange: setSelectedModelKey,
+          skills,
+          composerPrefill,
+          onPrefillConsumed: () => setComposerPrefill(null),
+          onSend: sendMessage,
+          onStop: stopRun,
+          onRetry: retryRun,
+          onGoSettings: () => setView('settings'),
+          pendingApprovals,
+          onResolveApproval: handleResolveApproval,
+          onResourceClick: handleResourceClick,
+          onOpenDiff: openDiff,
+        }}
+        landing={{
+          project: activeProject,
+          projects,
+          selectedProjectId: activeProjectId,
+          onProjectChange: selectLandingProject,
+          sessions: activeProject ? projectSessions : [],
+          hasEnabledProvider,
+          permissionValue: permissionMode,
+          onPermissionChange: changePermissionMode,
+          modelOptions,
+          selectedModelKey,
+          onModelChange: setSelectedModelKey,
+          skills,
+          composerPrefill,
+          onPrefillConsumed: () => setComposerPrefill(null),
+          onSend: sendMessage,
+          onSelectSession: openSession,
+          onRenameSession: renameSession,
+          onDeleteSession: deleteSession,
+          onGoSettings: () => setView('settings'),
+        }}
+        settings={{
+          profiles,
+          onSaved: refreshProfiles,
+          onBackToChat: () => setView('chat'),
+          confirm,
+        }}
+        memories={{ confirm }}
+        onUseSkill={async (skillId, sessionId) => {
+          if (!(await guardedResetWorkspaceFiles())) return
+          setActiveProjectId(null)
+          setActiveSessionId(sessionId)
+          void refreshSessionData(sessionId)
+          void refreshStandaloneSessions()
+          setComposerPrefill({ skillId, nonce: Date.now() })
+          setView('chat')
+        }}
+        workspace={{
+          open: workspaceOpen,
+          setOpen: setWorkspaceOpen,
+          width: workspaceWidth,
+          setWidth: setWorkspaceWidth,
+          panel: {
+            ref: filePanelRef,
+            project: activeProject,
+            systemReady: bootstrap?.systemReady ?? false,
+            openTabs,
+            activeTabId,
+            dirtyPaths,
+            onSelectTab: selectTab,
+            onRequestCloseTab: requestCloseTab,
+            onReorderTabs: reorderTabs,
+            onDirtyChange: setTabDirty,
+            confirm,
+            onResourceClick: handleResourceClick,
+            width: workspaceWidth,
+          },
+        }}
+      />
       <ConfirmDialog
         state={confirmState}
         onConfirm={handleConfirm}
         onCancel={handleCancel}
+        onTertiary={handleTertiary}
       />
       <ToastHost />
     </div>

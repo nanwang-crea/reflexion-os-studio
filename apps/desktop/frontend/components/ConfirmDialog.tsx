@@ -7,12 +7,15 @@ export interface ConfirmDialogState {
   cancelLabel?: string
   /** 危险操作（如删除）时确认按钮显示为红色。 */
   danger?: boolean
+  /** 可选第三键文案（如"不保存"）；设置后需同步传入 onTertiary。 */
+  tertiaryLabel?: string
 }
 
 interface ConfirmDialogProps {
   state: ConfirmDialogState | null
   onConfirm: () => void
   onCancel: () => void
+  onTertiary?: () => void
 }
 
 /**
@@ -58,6 +61,12 @@ export function ConfirmDialog(
           <button ref={cancelRef} className="ghost" onClick={props.onCancel}>
             {state.cancelLabel ?? '取消'}
           </button>
+          {state.tertiaryLabel !== undefined &&
+            props.onTertiary !== undefined && (
+              <button className="ghost" onClick={props.onTertiary}>
+                {state.tertiaryLabel}
+              </button>
+            )}
           <button
             className={state.danger ? 'dialog-danger' : ''}
             onClick={props.onConfirm}

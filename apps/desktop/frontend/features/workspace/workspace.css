@@ -221,6 +221,15 @@
   border-top: 1px solid var(--border-subtle);
 }
 
+/* 保活的非激活文本标签页容器：display:none 隐藏，激活时 flex 铺满。 */
+.workspace-tab-page {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .content-view {
   display: flex;
   flex-direction: column;
@@ -237,15 +246,36 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
+.content-head-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.content-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+.content-dirty-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warning-text);
+}
+
 .content-close {
   padding: 2px 8px;
   font-size: 16px;
   line-height: 1.2;
-  flex: none;
 }
 
 .content-name {
-  flex: 1;
   min-width: 0;
   font-size: 13px;
   font-weight: 600;
@@ -254,9 +284,14 @@
   text-overflow: ellipsis;
 }
 
+/* 扁平结构头部（Diff / Markdown 预览）：name 直接是 head 子元素，补回弹性。 */
+.content-head > .content-name {
+  flex: 1;
+  min-width: 0;
+}
+
 .content-head .ghost {
   padding: 4px 6px;
-  flex: none;
 }
 
 .content-head .ghost.active {
@@ -604,6 +639,9 @@
 .file-tabs {
   flex: none;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 6px 0;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-sidebar);
 }
@@ -611,6 +649,7 @@
 .file-tabs-scroll {
   position: relative;
   display: flex;
+  gap: 2px;
   min-width: 0;
   overflow-x: auto;
   /* 隐藏原生滚动条，改用下方自定义可见滑块 */
@@ -667,18 +706,28 @@
   background: var(--text-muted);
 }
 
+/* VS Code 风格标签：无竖向分隔，active 融入内容区（底边上移盖住
+   标签条边框 + 同色背景），顶部圆角。 */
 .file-tab {
   display: flex;
   align-items: center;
   flex: 0 0 auto;
   max-width: 210px;
-  border-right: 1px solid var(--border-subtle);
   color: var(--text-muted);
   cursor: grab;
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
 }
 
 .file-tab:active {
   cursor: grabbing;
+}
+
+.file-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
 }
 
 .file-tab.dragging {
@@ -690,7 +739,9 @@
 
 .file-tab.active {
   color: var(--text);
-  background: var(--bg-active);
+  background: var(--bg-editor);
+  border-color: var(--border-subtle);
+  margin-bottom: -1px;
 }
 
 .file-tab-main {
@@ -706,21 +757,47 @@
 }
 
 .file-tab-main:hover {
-  background: var(--bg-hover);
+  background: transparent;
 }
 
 .file-tab-close {
   flex: none;
+  display: inline-flex;
+  align-items: center;
   padding: 3px 7px;
   border-radius: 4px;
   background: transparent;
-  color: var(--text-muted);
+  color: inherit;
   line-height: 1;
 }
 
 .file-tab-close:hover {
   background: var(--bg-hover);
   color: var(--text);
+}
+
+/* 脏圆点替代关闭 ×；hover 或键盘聚焦标签时圆点变回 ×。 */
+.file-tab-dirty {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--warning-text);
+}
+
+.file-tab.dirty .file-tab-close {
+  display: none;
+}
+
+.file-tab.dirty:hover .file-tab-close,
+.file-tab.dirty:focus-within .file-tab-close {
+  display: inline-flex;
+}
+
+.file-tab.dirty:hover .file-tab-dirty,
+.file-tab.dirty:focus-within .file-tab-dirty {
+  display: none;
 }
 
 /* ---------- 侧栏项目文件工作区 ---------- */

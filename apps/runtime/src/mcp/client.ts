@@ -110,7 +110,10 @@ export class McpClient {
       )
     }
     signal?.addEventListener('abort', onAbort, { once: true })
-    let result: { content?: { type: string; text?: string }[]; isError?: boolean }
+    let result: {
+      content?: { type: string; text?: string }[]
+      isError?: boolean
+    }
     try {
       result = (await Promise.race([promise, aborted])) as typeof result
     } catch (error) {

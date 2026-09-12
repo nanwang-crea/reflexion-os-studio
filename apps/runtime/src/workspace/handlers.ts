@@ -1,11 +1,16 @@
+import type { FileRevision } from '@reflexion-os-studio/contracts'
 import { CommandError } from '../agent/errors.js'
+import { extractRevision } from '../agent/tools/read-state.js'
 import { requireString, type CommandHandler } from '../command-utils.js'
 import type { SystemRuntimeClient } from '../system.js'
+import { workspaceFileState } from './file-state.js'
 
 /**
- * Phase 1B Workspace 命令：索引生命周期 + 文件树/查看器（只读）。
- * 文件访问全部透传 Rust System Runtime（workspace 边界在 Rust 侧强制），
- * Runtime 这里只做前置校验：路径必须相对、命令目标必须是已关联文件夹的项目。
+ * Phase 1B Workspace 命令：索引生命周期 + 文件树/查看器 + 编辑器读写。
+ * 文件访问全部透传 Rust System Runtime（workspace 边界与先读后写在 Rust 侧
+ * 二次校验），Runtime 这里只做前置校验与凭据簿记：路径必须相对、命令目标
+ * 必须是已关联文件夹的项目；read_file 登记 revision 凭据、write_file（UI
+ * 保存）按登记注入并以 source:"ui" 声明免审批来源，前端不搬运凭据。
  */
 export const workspaceCommandHandlers: Record<string, CommandHandler> = {
   'workspace.index.start': (p, { store, workspace }) => {
@@ -99,10 +104,19 @@ export const workspaceCommandHandlers: Record<string, CommandHandler> = {
       params.offset = Math.max(0, Math.trunc(p.offset))
     if (typeof p.limit === 'number')
       params.limit = Math.max(1, Math.trunc(p.limit))
-    return (await requestSystem(system, 'file.read', params)) as Record<
+    const result = (await requestSystem(system, 'file.read', params)) as Record<
       string,
       unknown
     >
+    // 登记覆盖写凭据：编辑器/预览据 readComplete 判定能否整文件保存。
+    const revision = extractRevision(result)
+    if (revision !== undefined) {
+      workspaceFileState.record(project.folderPath, path, {
+        revision,
+        complete: result.readComplete === true,
+      })
+    }
+    return result
   },
   'workspace.git_status': async (p, { store, system }) => {
     const project = requireWorkspaceProject(
@@ -165,11 +179,29 @@ export const workspaceCommandHandlers: Record<string, CommandHandler> = {
     )
     const path = assertRelativePath(requireString(p, 'path'))
     const content = typeof p.content === 'string' ? p.content : ''
+    const root = project.folderPath
+    const record = workspaceFileState.entry(root, path)
+    if (record !== undefined && !record.complete) {
+      throw new CommandError(
+        'invalid_request',
+        `${path} 的读取凭据来自分页窗口，不足以覆盖整文件：请完整读取后再保存。`,
+      )
+    }
     const result = (await requestSystem(system, 'file.write', {
-      workspaceRoot: project.folderPath,
+      workspaceRoot: root,
       path,
       content,
-    })) as { writtenBytes?: number }
+      ...(record ? { revision: record.revision } : {}),
+      // 用户直接动作：向 Rust 声明免审批来源（agent 路径才要求 grant）。
+      source: 'ui',
+    })) as { writtenBytes?: number; revision?: FileRevision }
+    // 回写新凭据：编辑器连续保存以最新 revision 通过陈旧校验。
+    if (result.revision !== undefined) {
+      workspaceFileState.record(root, path, {
+        revision: result.revision,
+        complete: true,
+      })
+    }
     return { writtenBytes: result.writtenBytes ?? 0 }
   },
 }

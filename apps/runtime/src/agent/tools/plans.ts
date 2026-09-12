@@ -138,7 +138,9 @@ function mapPlanError(error: unknown): ToolResult {
  */
 function parseGoalAndSteps(
   input: Record<string, unknown>,
-): { goal: string; steps: Array<{ id: string; title: string }> } | { error: ToolResult } {
+):
+  | { goal: string; steps: Array<{ id: string; title: string }> }
+  | { error: ToolResult } {
   const goal = input.goal
   const rawSteps = input.steps
   if (
@@ -171,10 +173,7 @@ function parseGoalAndSteps(
   }
   if (new Set(steps.map((step) => step.id)).size !== steps.length)
     return {
-      error: errorResult(
-        'STEP_ID_CONFLICT',
-        '计划内存在重复的步骤 id',
-      ),
+      error: errorResult('STEP_ID_CONFLICT', '计划内存在重复的步骤 id'),
     }
   return { goal, steps }
 }

@@ -132,16 +132,16 @@ export function createFileReadTool(
         ...(modifiedMs !== undefined ? { modifiedMs } : {}),
         ...(revision !== undefined
           ? {
-                revision,
-                // 覆盖文件（file.write）必须基于未截断的完整读取：
-                // 分页窗口发出的凭据只满足 file.edit 的先读要求。
-                ...(readComplete
-                  ? {}
-                  : {
-                      revisionHint:
-                        '本窗口为分页读取，凭据仅可用于 file.edit；覆盖文件需完整读取（读至无截断）后再 file.write',
-                    }),
-              }
+              revision,
+              // 覆盖文件（file.write）必须基于未截断的完整读取：
+              // 分页窗口发出的凭据只满足 file.edit 的先读要求。
+              ...(readComplete
+                ? {}
+                : {
+                    revisionHint:
+                      '本窗口为分页读取，凭据仅可用于 file.edit；覆盖文件需完整读取（读至无截断）后再 file.write',
+                  }),
+            }
           : {}),
         content: window.content,
       }

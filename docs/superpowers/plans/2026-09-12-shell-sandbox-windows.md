@@ -9,6 +9,7 @@
 **Tech Stack:** Rust（官方 `windows` crate，仅 Windows target）、Node `node:test`（测 `dist/` 导出）。
 
 **验证边界（必须如实执行与汇报）:**
+
 - 本机 macOS：`cargo test` 全绿 + 全链验证；Windows 仅 `cargo check --target x86_64-pc-windows-msvc` **编译级验证，运行时行为未经真机验证**。
 - Windows FFI 的模块路径/签名以 `cargo check --target x86_64-pc-windows-msvc` 的编译反馈修正为准——该命令就是 Task 3–5 的"运行测试"步骤，修正仅限 API 形状（模块路径、参数包装类型、BOOL/newtype 转换），不得改变语义。
 - 依赖版本号（`windows = "0.62"`）如与编译反馈冲突，按 cargo 提示的可用版本修正并保持 feature 列表完整。
@@ -18,6 +19,7 @@
 ### Task 1: Rust 沙箱骨架（trait + Noop + 工厂）
 
 **Files:**
+
 - Create: `crates/system-runtime/src/sandbox/mod.rs`
 - Create: `crates/system-runtime/src/sandbox/noop.rs`
 - Modify: `crates/system-runtime/src/main.rs:10-23`（mod 声明区）
@@ -180,6 +182,7 @@ git commit -m "feat(runtime): SandboxProvider 双路径 trait + 工厂 + Noop �
 ### Task 2: Windows 依赖接入（编译门）
 
 **Files:**
+
 - Modify: `crates/system-runtime/Cargo.toml`
 
 - [ ] **Step 2.1: 添加 Windows target 依赖**
@@ -223,6 +226,7 @@ git commit -m "build(runtime): 接入 windows crate（仅 Windows target）"
 ### Task 3: Windows 受限令牌（token.rs）
 
 **Files:**
+
 - Create: `crates/system-runtime/src/sandbox/windows/mod.rs`（占位）
 - Create: `crates/system-runtime/src/sandbox/windows/token.rs`
 
@@ -352,6 +356,7 @@ git commit -m "feat(runtime): Windows 受限令牌构造（剥离特权+禁管�
 ### Task 4: Windows 文件写边界（acl.rs）
 
 **Files:**
+
 - Create: `crates/system-runtime/src/sandbox/windows/acl.rs`
 - Modify: `crates/system-runtime/src/sandbox/windows/mod.rs`（加 mod 声明）
 
@@ -458,6 +463,7 @@ git commit -m "feat(runtime): Windows 可写 root 低完整性标签（写边界
 ### Task 5: Windows 执行器 + provider 接入工厂
 
 **Files:**
+
 - Create: `crates/system-runtime/src/sandbox/windows/launch.rs`
 - Modify: `crates/system-runtime/src/sandbox/windows/mod.rs`（provider 实现）
 
@@ -799,6 +805,7 @@ git commit -m "feat(runtime): Windows 沙箱执行器（CreateProcessAsUserW+Job
 ### Task 6: Rust 协议接线（params/grant/handlers/ready）
 
 **Files:**
+
 - Modify: `crates/system-runtime/src/params.rs:96-102`
 - Modify: `crates/system-runtime/src/grant.rs`
 - Modify: `crates/system-runtime/src/handlers.rs:242-287`（handle_shell_execute）
@@ -1052,6 +1059,7 @@ git commit -m "feat(runtime): shell.execute 沙箱分发 + allowNetwork grant �
 ### Task 7: TS 工具参数与审批接线（S3）
 
 **Files:**
+
 - Modify: `apps/runtime/src/agent/tools/shell.ts`
 - Modify: `apps/runtime/src/agent/permissions.ts:214-246`（GrantIdentity/builders）
 - Modify: `apps/runtime/src/agent/tool-executor.ts:123-193`（网络审批分支）
@@ -1176,50 +1184,57 @@ export function buildSessionGrant(input: GrantIdentity): string {
 buildSessionGrant）都追加 `sandboxNetwork,` 参数：
 
 ```ts
-  // 网络审批独立链路（spec §5）：任何模式（含 trusted）不自动放行；
-  // 会话级授权存网关（键含 operation），本会话后续网络命令免二次询问。
-  let sandboxNetwork = false
-  const networkRequested =
-    request.name === 'shell.execute' &&
-    typeof args === 'object' &&
-    args !== null &&
-    !Array.isArray(args) &&
-    (args as Record<string, unknown>).requires_network === true
-  if (networkRequested) {
-    const networkContext = {
-      sessionId: run.sessionId,
-      workspaceRoot: input.workspaceRoot,
-    }
-    if (input.approvals.hasSessionGrant('sandbox_network', networkContext)) {
-      sandboxNetwork = true
-    } else {
-      store.runs.setIntermediateStatus(run.id, 'awaiting_approval')
-      let verdict: 'approved' | 'denied'
-      try {
-        verdict = await input.approvals.request({
-          toolCallId: `${row.id}:network`,
-          emitter,
-          operation: 'sandbox_network',
-          summary: summarizeArgs(request.name, args),
-          signal,
-          context: networkContext,
-        })
-      } finally {
-        if (!input.approvals.hasPendingRun(run.id)) {
-          store.runs.setIntermediateStatus(run.id, 'running')
-        }
-      }
-      if (verdict === 'denied') {
-        finalizeToolCall(store, state, emitter, row.id, 'failed', 'permission_denied')
-        return {
-          content: '用户拒绝了本次命令联网请求',
-          isError: true,
-          code: 'permission_denied',
-        }
-      }
-      sandboxNetwork = true
-    }
+// 网络审批独立链路（spec §5）：任何模式（含 trusted）不自动放行；
+// 会话级授权存网关（键含 operation），本会话后续网络命令免二次询问。
+let sandboxNetwork = false
+const networkRequested =
+  request.name === 'shell.execute' &&
+  typeof args === 'object' &&
+  args !== null &&
+  !Array.isArray(args) &&
+  (args as Record<string, unknown>).requires_network === true
+if (networkRequested) {
+  const networkContext = {
+    sessionId: run.sessionId,
+    workspaceRoot: input.workspaceRoot,
   }
+  if (input.approvals.hasSessionGrant('sandbox_network', networkContext)) {
+    sandboxNetwork = true
+  } else {
+    store.runs.setIntermediateStatus(run.id, 'awaiting_approval')
+    let verdict: 'approved' | 'denied'
+    try {
+      verdict = await input.approvals.request({
+        toolCallId: `${row.id}:network`,
+        emitter,
+        operation: 'sandbox_network',
+        summary: summarizeArgs(request.name, args),
+        signal,
+        context: networkContext,
+      })
+    } finally {
+      if (!input.approvals.hasPendingRun(run.id)) {
+        store.runs.setIntermediateStatus(run.id, 'running')
+      }
+    }
+    if (verdict === 'denied') {
+      finalizeToolCall(
+        store,
+        state,
+        emitter,
+        row.id,
+        'failed',
+        'permission_denied',
+      )
+      return {
+        content: '用户拒绝了本次命令联网请求',
+        isError: true,
+        code: 'permission_denied',
+      }
+    }
+    sandboxNetwork = true
+  }
+}
 ```
 
 - [ ] **Step 7.5: 实现 shell.ts 参数透出**
@@ -1240,14 +1255,14 @@ buildSessionGrant）都追加 `sandboxNetwork,` 参数：
 3. `execute` 内（cwd 判断块之后）增加：
 
 ```ts
-      if (
-        typeof args === 'object' &&
-        args !== null &&
-        !Array.isArray(args) &&
-        (args as Record<string, unknown>).requires_network === true
-      ) {
-        params.allowNetwork = true
-      }
+if (
+  typeof args === 'object' &&
+  args !== null &&
+  !Array.isArray(args) &&
+  (args as Record<string, unknown>).requires_network === true
+) {
+  params.allowNetwork = true
+}
 ```
 
 - [ ] **Step 7.6: 跑测试确认通过**
@@ -1267,6 +1282,7 @@ git commit -m "feat(runtime): shell 网络审批闭环（requires_network→sand
 ### Task 8: 前端审批卡标签
 
 **Files:**
+
 - Modify: `apps/desktop/frontend/features/chat/ApprovalCard.tsx:3-14`
 
 - [ ] **Step 8.1: OPERATION_LABELS 增加 sandbox_network**
@@ -1294,6 +1310,7 @@ git commit -m "feat(frontend): sandbox_network 审批卡标签"
 ### Task 9: 文档更新与全链验证
 
 **Files:**
+
 - Modify: `docs/SHELL-SANDBOX-PLAN.md`
 - Modify: `docs/PERMISSION-MODEL.md:77`
 - Modify: `AGENTS.md`（§1 能力清单）

@@ -1,4 +1,5 @@
 import { MonacoEditor } from './editor/MonacoEditor'
+import type { MonacoSurfaceHandle } from './editor/MonacoSurface'
 
 interface ContentViewProps {
   projectId: string
@@ -6,6 +7,11 @@ interface ContentViewProps {
   initialLine?: number
   readOnly?: boolean
   onClose: () => void
+  onDirtyChange?: (path: string, dirty: boolean) => void
+  registerSurface?: (
+    path: string,
+    getter: (() => MonacoSurfaceHandle | null) | null,
+  ) => void
 }
 
 /**
@@ -20,6 +26,8 @@ export function ContentView(props: ContentViewProps): React.JSX.Element {
       initialLine={props.initialLine}
       readOnly={props.readOnly ?? true}
       onClose={props.onClose}
+      onDirtyChange={props.onDirtyChange}
+      registerSurface={props.registerSurface}
     />
   )
 }
