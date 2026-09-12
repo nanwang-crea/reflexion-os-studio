@@ -9,7 +9,7 @@ export function createShellExecuteTool(
   return {
     name: 'shell.execute',
     description:
-      '在工作区内执行 shell 命令（POSIX sh / Windows cmd），返回退出码与输出。truncated=true 表示 stdout 或 stderr 超过输出上限，需改用更窄的命令范围或分页/重定向到工作区文件后用 file.read 分段读取。cwd 需在工作区内。需要用户审批。沙箱默认禁网：命令需要联网（npm install / git push / curl 等）时必须将 requires_network 置 true 并等待用户批准，未声明时未来 OS 沙箱内必失败。',
+      '在工作区内执行 shell 命令（POSIX sh / Windows cmd），返回退出码与输出。truncated=true 表示 stdout 或 stderr 超过输出上限，需改用更窄的命令范围或分页/重定向到工作区文件后用 file.read 分段读取。cwd 需在工作区内。需要用户审批。沙箱默认禁网：命令需要联网（npm install / git push / curl 等）时必须将 requires_network 置 true 并等待用户批准；未声明的联网尝试在 macOS/Linux 沙箱内会被 OS 直接拒绝（Windows 为流程闸门）。',
     parameters: {
       type: 'object',
       properties: {

@@ -78,8 +78,10 @@ Grant 不是跨机器安全凭证，不写入数据库，不进事件 payload，
 
 负责不可绕过的底线：deny-by-default、请求 schema、workspace-relative 路径、路径规范化、`..` 拒绝、符号链接边界、Shell cwd、命令超时、环境过滤、输出限制和进程树回收。Rust 不接受任意 `authorized: true`；无效 grant、越界路径、超时或不合法参数直接拒绝。
 
-Phase 1 的 Rust 是应用级执行边界；shell 域的平台级沙箱按 SHELL-SANDBOX-PLAN.md 分档推进
-（macOS Seatbelt、Windows 受限令牌档已立项），bubblewrap/seccomp 等其余平台级隔离放到 Phase 6。
+Phase 1 的 Rust 是应用级执行边界；shell 域的平台级沙箱已按 SHELL-SANDBOX-PLAN.md 落地三档
+（macOS Seatbelt、Windows 受限令牌、Linux bwrap，能力矩阵见设计 spec §4.4）。验证状态如实区分：
+macOS 已真机验收（写边界/敏感拒读/禁网为 OS 强制）；Windows 与 Linux 档经交叉编译与单测验证，
+运行时行为仍待各自真机验收（Linux 边界见 spec §12）。seccomp 等其余平台级隔离仍放 Phase 6。
 
 ## Agent 可见能力
 

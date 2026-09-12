@@ -12,31 +12,31 @@
 
 ## 决策记录
 
-| 决策点 | 结论 |
-| --- | --- |
-| 执行层 | Rust `git/` 模块扩子命令，复用 `run_git` 全部护栏；argv 由 Rust 按命令枚举固定拼装，路径走 workspace 相对校验，**拒绝任意 argv 透传** |
-| 权限语义 | UI 按钮 = 用户直接动作，免审批凭据（与 `workspace.write_file` 的 `source:"ui"` 边界一致）；无二次确认层——commit/push 一键即执行（VS Code 同款） |
-| push 入口 | GitChanges 面板头部按钮组：Commit 主按钮（⌘/Ctrl+Enter）+ 拆分菜单「提交并推送」+ Push/Sync 按钮；分支芯片点开切换器 |
+| 决策点     | 结论                                                                                                                                                                                         |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 执行层     | Rust `git/` 模块扩子命令，复用 `run_git` 全部护栏；argv 由 Rust 按命令枚举固定拼装，路径走 workspace 相对校验，**拒绝任意 argv 透传**                                                        |
+| 权限语义   | UI 按钮 = 用户直接动作，免审批凭据（与 `workspace.write_file` 的 `source:"ui"` 边界一致）；无二次确认层——commit/push 一键即执行（VS Code 同款）                                              |
+| push 入口  | GitChanges 面板头部按钮组：Commit 主按钮（⌘/Ctrl+Enter）+ 拆分菜单「提交并推送」+ Push/Sync 按钮；分支芯片点开切换器                                                                         |
 | 切分支重载 | 磁盘未提交改动交给 git 原生（能 carry 则 carry，冲突则报错展示 stderr）；**内存脏 buffer 是 git 不可见的雷**：切换/pull 前走三键确认（保存全部/放弃/取消），成功后所有文本标签强制从磁盘重载 |
-| pull | 仅 `--ff-only`；分歧即失败并把 git 提示原样展示，不自动 merge/rebase |
-| 凭据 | 继承用户 git 配置（credential helper / SSH agent），不实现认证 UI；交互防挂起见"跨平台"节 |
-| 终端捆绑 | 不捆绑（架构层不同、互相拖累交付；终端是 git 的逃生舱而非前置） |
+| pull       | 仅 `--ff-only`；分歧即失败并把 git 提示原样展示，不自动 merge/rebase                                                                                                                         |
+| 凭据       | 继承用户 git 配置（credential helper / SSH agent），不实现认证 UI；交互防挂起见"跨平台"节                                                                                                    |
+| 终端捆绑   | 不捆绑（架构层不同、互相拖累交付；终端是 git 的逃生舱而非前置）                                                                                                                              |
 
 ## 命令面
 
 ### Rust 协议（system-runtime，新增）
 
-| 方法 | argv | 备注 |
-| --- | --- | --- |
-| `git.stage` | `git add -- <paths…>` | paths 非空校验；"全部暂存"由前端枚举路径传入 |
-| `git.unstage` | `git reset -- <paths…>` | 用 reset 而非 restore（兼容老 git） |
-| `git.commit` | `git commit -m <message>` | message 非空；仅提交已暂存（无 -a）；hooks 由 git 原生执行，失败展示 stderr |
-| `git.fetch` | `git fetch origin` | 长超时档 |
-| `git.push` | 有 upstream：`git push`；无：`git push -u origin <current>` | current 由 Rust 自查 symbolic-ref，前端不传分支名 |
-| `git.pull` | `git pull --ff-only` | 同上网络档 |
-| `git.branch_create` | `git branch <name>` / `git checkout -b <name>` | `checkout:true` 时后者；name 服务端校验（`git check-ref-format --branch` 或字符白名单） |
-| `git.checkout` | `git checkout <name>` | name 同上校验 |
-| `git.status`（扩展） | porcelain=v2 `# branch.*` 头 + `rev-list --left-right --count` | 响应增加 `branch`、`upstream`、`ahead`、`behind`（无 upstream 时 null） |
+| 方法                 | argv                                                           | 备注                                                                                    |
+| -------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `git.stage`          | `git add -- <paths…>`                                          | paths 非空校验；"全部暂存"由前端枚举路径传入                                            |
+| `git.unstage`        | `git reset -- <paths…>`                                        | 用 reset 而非 restore（兼容老 git）                                                     |
+| `git.commit`         | `git commit -m <message>`                                      | message 非空；仅提交已暂存（无 -a）；hooks 由 git 原生执行，失败展示 stderr             |
+| `git.fetch`          | `git fetch origin`                                             | 长超时档                                                                                |
+| `git.push`           | 有 upstream：`git push`；无：`git push -u origin <current>`    | current 由 Rust 自查 symbolic-ref，前端不传分支名                                       |
+| `git.pull`           | `git pull --ff-only`                                           | 同上网络档                                                                              |
+| `git.branch_create`  | `git branch <name>` / `git checkout -b <name>`                 | `checkout:true` 时后者；name 服务端校验（`git check-ref-format --branch` 或字符白名单） |
+| `git.checkout`       | `git checkout <name>`                                          | name 同上校验                                                                           |
+| `git.status`（扩展） | porcelain=v2 `# branch.*` 头 + `rev-list --left-right --count` | 响应增加 `branch`、`upstream`、`ahead`、`behind`（无 upstream 时 null）                 |
 
 全部新命令 async 分发（复用 status/diff 的 `(Value, bool)` 线程模式）。错误分类沿用 `git_unavailable / git_failed / timeout` + stderr 关键模式友好化：`no upstream`、`non-fast-forward`、`Your local changes…would be overwritten`、`nothing to commit`。
 
@@ -101,10 +101,10 @@ commands.ts 新增 8 个 `workspace.git_*` schema：params 为 requestId/project
 
 ## 影响面（预估）
 
-| 层 | 文件 |
-| --- | --- |
-| contracts | `commands.ts`（8 命令 + status 扩展） |
-| Rust | `git/service.rs`、`git/status.rs`（ahead/behind）、`git/mod.rs`（子命令拼装）、`handlers.rs`（分发 + async）、`git/exec.rs`（超时档 + env 注入）；单测 |
-| runtime | `workspace/handlers.ts`（新命令 + 串行队列）、command-coverage |
-| Tauri | `RUNTIME_METHODS` 白名单 |
-| 前端 | `GitChanges.tsx`（重构为 SCM 面板）、`api/workspace.ts`、`useWorkspacePanel.ts`（reloadAllTextTabs）、`FileViewerPanel.tsx`（key bump）、守卫 hook 扩展、`workspace.css` |
+| 层        | 文件                                                                                                                                                                     |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| contracts | `commands.ts`（8 命令 + status 扩展）                                                                                                                                    |
+| Rust      | `git/service.rs`、`git/status.rs`（ahead/behind）、`git/mod.rs`（子命令拼装）、`handlers.rs`（分发 + async）、`git/exec.rs`（超时档 + env 注入）；单测                   |
+| runtime   | `workspace/handlers.ts`（新命令 + 串行队列）、command-coverage                                                                                                           |
+| Tauri     | `RUNTIME_METHODS` 白名单                                                                                                                                                 |
+| 前端      | `GitChanges.tsx`（重构为 SCM 面板）、`api/workspace.ts`、`useWorkspacePanel.ts`（reloadAllTextTabs）、`FileViewerPanel.tsx`（key bump）、守卫 hook 扩展、`workspace.css` |

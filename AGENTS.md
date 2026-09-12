@@ -13,8 +13,10 @@ React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
 - 当前已完成 **Phase 1A**（M0 启动骨架 → 1A-1 Chat Core → 1A-2 System Tools）、**Phase 1B 第一部分（Workspace Surface）** 与 **Phase 2 的 Skills / Memory / MCP 子集**：
   - **Chat**：Provider 配置与密钥存储、Project/Session/Message/Run、SSE 流式（正文+思考）、Stop/Retry/错误恢复、发送队列（回复中自动排队，可修改/删除/立即发送）、重启后历史仍在；
   - **Tools**：纯 TS 工具（时间 / web.fetch / skill.use）+ Rust 工具（file.read/list/glob/grep/write/edit/delete/move/mkdir、shell.execute），workspace / read-only 权限 Profile、审批卡（once / session）、会话级授权、工具轨迹聚合展示；
-  - **Shell 沙箱**：SandboxProvider 工厂 + Windows 受限令牌档（低完整性写边界 + Job Object，网络不
-    OS 强制）+ 按命令网络审批（requires_network → sandbox_network 卡 → grant.sandboxNetwork）；
+  - **Shell 沙箱**：SandboxProvider 工厂 + 三平台 provider（Windows 受限令牌：低完整性写边界 +
+    Job Object，网络不 OS 强制；macOS Seatbelt：deny-default profile，写边界/敏感拒读/网络 OS
+    强制，真机验收过；Linux bwrap：userns+netns 禁网，渲染器验证过、运行时待真机）+ 按命令
+    网络审批（requires_network → sandbox_network 卡 → grant.sandboxNetwork）；
   - **Skills**：内置 code-review / web-research / workspace-report；斜杠命令激活 + skill.use 工具加载全文；
   - **Memory**：Run 结束后自动提取-合并（会话/项目级，user 级待确认流程落地前不产出候选项）、记忆管理页、上下文召回注入；
   - **MCP**：stdio 协议 client（握手/tools/list/call、严格超时）+ 管理服务（配置/启停/重连/工具清单）、工具桥注册为 `serverId/toolName`、默认 ask 审批、设置页 MCP 面板、mcp_servers 表；
