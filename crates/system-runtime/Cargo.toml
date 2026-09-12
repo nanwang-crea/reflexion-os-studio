@@ -12,3 +12,15 @@ sha2 = "0.10"
 [target.'cfg(unix)'.dependencies]
 # 超时/树杀需要按进程组发信号（kill -pgid）。
 libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+# Windows 受限令牌沙箱（codex unelevated 同族）：仅 Windows target 编译。
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Security_Authorization",
+  "Win32_Storage_FileSystem",
+  "Win32_System_JobObjects",
+  "Win32_System_Pipes",
+  "Win32_System_Threading",
+] }
