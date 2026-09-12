@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { test } from 'node:test'
 import { Store } from '../dist/store/index.js'
-import { normalizeContent } from '../dist/resources/resource-link-normalizer.js'
+import { normalizeContent } from '../dist/agent/resource-links.js'
 
 test('normalizes explicit and filesystem resource links', () => {
   const root = mkdtempSync(join(tmpdir(), 'resource-normalizer-'))
