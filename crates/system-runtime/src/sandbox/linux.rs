@@ -229,13 +229,24 @@ mod tests {
     #[test]
     fn masks_render_exactly_for_existing_paths_it_receives() {
         // 给定事实 → 逐条 --tmpfs（且排在可写 bind 之后，遮蔽优先）。
-        let args = joined(&facts(FULL_MASKS, false));
+        let f = facts(FULL_MASKS, false);
+        let args = build_bwrap_args(&request(false), &f);
+        let joined_str = args.join("\u{1}");
         for masked in FULL_MASKS {
             assert!(
-                args.contains(&format!("--tmpfs\u{1}{masked}")),
+                joined_str.contains(&format!("--tmpfs\u{1}{masked}")),
                 "missing mask for {masked}"
             );
         }
+        // 顺序钉（安全相关）：bwrap 按 argv 序挂载，遮蔽 --tmpfs 必须排在最后一条
+        // --bind 之后——同路径上后挂的 tmpfs 盖住先挂的可写 bind（mask wins）。
+        // 若有人把遮蔽挪到 bind 前，可写根恰好嵌套敏感路径时遮蔽会被反盖。
+        let last_bind = args.iter().rposition(|a| a == "--bind").unwrap();
+        let first_tmpfs = args.iter().position(|a| a == "--tmpfs").unwrap();
+        assert!(
+            first_tmpfs > last_bind,
+            "masks must mount after all binds: first --tmpfs@{first_tmpfs} <= last --bind@{last_bind}"
+        );
         // 未给事实（host 不存在、wrap 已过滤）→ 只剩 /dev/shm 一条 tmpfs。
         let bare = joined(&facts(&[], false));
         assert_eq!(bare.matches("--tmpfs").count(), 1);
@@ -259,20 +270,34 @@ mod tests {
     #[test]
     fn fixed_tmp_alias_only_when_dest_is_bindable() {
         // bindable：双挂载 alias + 子进程 TMPDIR 用固定名。
-        let alias = joined(&facts(&[], true));
-        assert!(alias.contains(&format!(
+        let alias = build_bwrap_args(&request(false), &facts(&[], true));
+        let alias_str = alias.join("\u{1}");
+        assert!(alias_str.contains(&format!(
             "--bind\u{1}/tmp-x/reflexion-sandbox\u{1}{FIXED_TMP}"
         )));
-        assert!(alias.contains(&format!("--setenv\u{1}TMPDIR\u{1}{FIXED_TMP}")));
+        assert!(alias_str.contains(&format!("--setenv\u{1}TMPDIR\u{1}{FIXED_TMP}")));
         // 不可达：不加 alias bind，TMPDIR 回退沙盒临时目录原路径。
-        let fallback = joined(&facts(&[], false));
+        let fallback = build_bwrap_args(&request(false), &facts(&[], false));
+        let fallback_str = fallback.join("\u{1}");
         assert!(
-            !fallback.contains(&format!(
+            !fallback_str.contains(&format!(
                 "--bind\u{1}/tmp-x/reflexion-sandbox\u{1}{FIXED_TMP}\u{1}"
             )),
-            "no alias bind when {FIXED_TMP} not bindable: {fallback}"
+            "no alias bind when {FIXED_TMP} not bindable: {fallback_str}"
         );
-        assert!(fallback.contains("--setenv\u{1}TMPDIR\u{1}/tmp-x/reflexion-sandbox"));
+        assert!(fallback_str.contains("--setenv\u{1}TMPDIR\u{1}/tmp-x/reflexion-sandbox"));
+        // 顺序钉（两分支）：--setenv 必须在 `--` 终止符之前（其后即子命令，flag
+        // 会被 sh 当参数吃掉）。不钉 --setenv vs --unshare-all 相对序：env 在 exec
+        // 时才生效，该相对序对 bwrap 无语义（已核对渲染器输出确实 setenv 在后，
+        // 但只作形状记录，不作安全不变量——真正的安全不变量是挂载序与 share-net 序）。
+        for args in [&alias, &fallback] {
+            let setenv = args.iter().position(|a| a == "--setenv").unwrap();
+            let terminator = args.iter().position(|a| a == "--").unwrap();
+            assert!(
+                setenv < terminator,
+                "--setenv must precede the `--` terminator: {setenv} >= {terminator}"
+            );
+        }
     }
 
     #[test]
@@ -280,8 +305,17 @@ mod tests {
         let f = facts(FULL_MASKS, true);
         assert!(joined(&f).contains("--unshare-all"));
         assert!(!joined(&f).contains("--share-net"));
-        let approved = build_bwrap_args(&request(true), &f).join("\u{1}");
-        assert!(approved.contains("--share-net"));
+        // 顺序钉（安全相关）：bwrap 解析循环里 --unshare-all 是**赋值**整组
+        // namespace flags，--share-net 是清 net 位——--share-net 排在
+        // --unshare-all 之前会被覆盖回禁网（审批后反而没网）。
+        let approved = build_bwrap_args(&request(true), &f);
+        assert!(approved.join("\u{1}").contains("--share-net"));
+        let unshare_all = approved.iter().position(|a| a == "--unshare-all").unwrap();
+        let share_net = approved.iter().position(|a| a == "--share-net").unwrap();
+        assert!(
+            share_net > unshare_all,
+            "--share-net must follow --unshare-all: {share_net} <= {unshare_all}"
+        );
     }
 
     #[test]

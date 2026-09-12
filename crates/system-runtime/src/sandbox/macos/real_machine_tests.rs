@@ -213,11 +213,15 @@ fn network_denied_without_approval() {
         "connect must fail without approval, stderr: {}",
         outcome.stderr
     );
-    assert!(
-        outcome.stderr.contains("Operation not permitted"),
-        "expected seatbelt connect denial (EPERM), not ECONNREFUSED: {}",
-        outcome.stderr
-    );
+    // EPERM 判别只在 python3 路线成立：curl 8.7.1 把 EPERM 与 ECONNREFUSED 一律
+    // 打印为 "Couldn't connect to server"，curl 回退路线仅以上方非零退出为断言。
+    if binary_available("python3") {
+        assert!(
+            outcome.stderr.contains("Operation not permitted"),
+            "expected seatbelt connect denial (EPERM), not ECONNREFUSED: {}",
+            outcome.stderr
+        );
+    }
 }
 
 #[test]

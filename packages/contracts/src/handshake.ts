@@ -22,7 +22,7 @@ export const ReadyParamsSchema = z.object({
   protocolVersion: z.string(),
   runtimeVersion: z.string(),
   capabilities: z.array(CapabilitySchema),
-  // 沙箱 provider 标识（如 "none" | "windows-token"，未来 "seatbelt"/"bwrap"）。
+  // 沙箱 provider 标识（"none" | "windows-token" | "seatbelt" | "bwrap"）。
   // 开放字符串而非闭合枚举：新增 provider 不破坏握手校验；旧 sidecar 可省略。
   sandbox: z.string().optional(),
 })
