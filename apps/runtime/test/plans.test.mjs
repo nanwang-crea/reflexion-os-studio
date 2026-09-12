@@ -127,9 +127,10 @@ test('get action: read-only lookup of the active plan without context memory', a
   assert.equal(cross.code, 'invalid_request')
 
   // get 是只读的：不产生事件，活动计划不受影响。
-  assert.deepEqual(ctx.emitter.events.map((event) => event.type), [
-    'plan.created',
-  ])
+  assert.deepEqual(
+    ctx.emitter.events.map((event) => event.type),
+    ['plan.created'],
+  )
 })
 
 test('legacy update_plan alias maps to the same implementation', async () => {
@@ -510,7 +511,11 @@ test('tool: modify_plan updates the active plan in place and emits plan.updated'
 
   // 缺 planId 的错误消息必须可自纠：提示先 get 找回 planId。
   const missing = await tool.execute({
-    args: { action: 'modify_plan', goal: 'x', steps: [{ id: 's', title: 't' }] },
+    args: {
+      action: 'modify_plan',
+      goal: 'x',
+      steps: [{ id: 's', title: 't' }],
+    },
     signal: new AbortController().signal,
   })
   assert.equal(missing.isError, true)

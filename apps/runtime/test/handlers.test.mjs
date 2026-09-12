@@ -352,3 +352,116 @@ test('phase 3 isolation: tool registry never registers task without starter', ()
   const registry = createToolRegistry(baseCtx())
   assert.equal(registry.has('task'), false)
 })
+
+test('workspace.read_file registers revision; write_file consumes it with source ui', async () => {
+  const store = freshStore()
+  const root = mkdtempSync(join(tmpdir(), 'reflexion-wsreg-'))
+  const project = store.projects.create({ name: 'p', folderPath: root })
+  const revision = { modifiedMs: 1000, sizeBytes: 6, sha256: 'a'.repeat(64) }
+  const calls = []
+  const system = {
+    available: true,
+    request: async (method, params) => {
+      calls.push({ method, params })
+      if (method === 'file.read') {
+        return {
+          content: 'hello\n',
+          sizeBytes: 6,
+          totalLines: 1,
+          offset: 0,
+          readComplete: true,
+          revision,
+        }
+      }
+      return { writtenBytes: 7, revision: { ...revision, modifiedMs: 2000 } }
+    },
+  }
+  const ctx = { store, system }
+  await dispatchCommand(
+    'workspace.read_file',
+    { projectId: project.id, path: 'a.txt' },
+    ctx,
+  )
+  await dispatchCommand(
+    'workspace.write_file',
+    { projectId: project.id, path: 'a.txt', content: 'hello!\n' },
+    ctx,
+  )
+  const write = calls.find((call) => call.method === 'file.write').params
+  assert.deepEqual(write.revision, revision)
+  assert.equal(write.source, 'ui')
+  assert.equal('grant' in write, false)
+  // 连续保存：写响应的新凭据回登记，第二次保存必须携带它。
+  await dispatchCommand(
+    'workspace.write_file',
+    { projectId: project.id, path: 'a.txt', content: 'hello?\n' },
+    ctx,
+  )
+  const second = calls.filter((call) => call.method === 'file.write')[1].params
+  assert.deepEqual(second.revision, { ...revision, modifiedMs: 2000 })
+})
+
+test('workspace.write_file sends no revision without a prior read (new file)', async () => {
+  const store = freshStore()
+  const root = mkdtempSync(join(tmpdir(), 'reflexion-wsnew-'))
+  const project = store.projects.create({ name: 'p', folderPath: root })
+  const calls = []
+  await dispatchCommand(
+    'workspace.write_file',
+    { projectId: project.id, path: 'new.txt', content: 'x' },
+    {
+      store,
+      system: {
+        available: true,
+        request: async (method, params) => {
+          calls.push({ method, params })
+          return { writtenBytes: 1 }
+        },
+      },
+    },
+  )
+  assert.equal(calls[0].method, 'file.write')
+  assert.equal('revision' in calls[0].params, false)
+  assert.equal(calls[0].params.source, 'ui')
+  assert.equal('grant' in calls[0].params, false)
+})
+
+test('workspace.write_file rejects overwrite when last read was paginated', async () => {
+  const store = freshStore()
+  const root = mkdtempSync(join(tmpdir(), 'reflexion-wspart-'))
+  const project = store.projects.create({ name: 'p', folderPath: root })
+  const calls = []
+  const system = {
+    available: true,
+    request: async (method, params) => {
+      calls.push({ method, params })
+      return {
+        content: 'window\n',
+        sizeBytes: 100,
+        totalLines: 50,
+        offset: 0,
+        readComplete: false,
+        revision: { modifiedMs: 1, sizeBytes: 100, sha256: 'c'.repeat(64) },
+      }
+    },
+  }
+  const ctx = { store, system }
+  await dispatchCommand(
+    'workspace.read_file',
+    { projectId: project.id, path: 'big.txt', offset: 0, limit: 10 },
+    ctx,
+  )
+  await assert.rejects(
+    () =>
+      dispatchCommand(
+        'workspace.write_file',
+        { projectId: project.id, path: 'big.txt', content: 'stomp\n' },
+        ctx,
+      ),
+    /分页窗口/,
+  )
+  assert.equal(
+    calls.some((call) => call.method === 'file.write'),
+    false,
+  )
+})

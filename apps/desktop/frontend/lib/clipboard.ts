@@ -4,7 +4,8 @@
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 
 /** 仅在 Tauri WebView 内启用插件通道；纯 Web 环境跳过以免产生无谓报错。 */
-const hasTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+const hasTauri =
+  typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 async function viaTauriPlugin(text: string): Promise<void> {
   if (!hasTauri) throw new Error('not in tauri webview')

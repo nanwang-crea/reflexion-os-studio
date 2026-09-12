@@ -19,7 +19,8 @@ export interface SessionNavigationDeps {
   refreshSessionData: (sessionId: string) => Promise<void>
   refreshProjectSessions: (projectId: string) => Promise<void>
   refreshDelegations: (sessionId: string) => Promise<void>
-  resetWorkspaceFiles: () => void
+  /** 确认并清空工作区文件（可能弹窗）；返回 false 表示用户取消切换。 */
+  resetWorkspaceFiles: () => boolean | Promise<boolean>
 }
 
 export interface SessionNavigation {
@@ -55,49 +56,60 @@ export function useSessionNavigation(
   }
 
   const selectProject = (projectId: string): void => {
-    deps.setActiveProjectId(projectId)
-    deps.setActiveSessionId(null)
-    deps.setSessionData(null)
-    deps.setDelegations([])
-    deps.setView('chat')
-    // 文件标签只属于当前项目：切项目时清空。
-    deps.resetWorkspaceFiles()
-    void deps.refreshProjectSessions(projectId)
+    void (async () => {
+      if (!(await deps.resetWorkspaceFiles())) return
+      deps.setActiveProjectId(projectId)
+      deps.setActiveSessionId(null)
+      deps.setSessionData(null)
+      deps.setDelegations([])
+      deps.setView('chat')
+      void deps.refreshProjectSessions(projectId)
+    })()
   }
 
   const selectLandingProject = (projectId: string | null): void => {
-    deps.setActiveProjectId(projectId)
-    deps.setActiveSessionId(null)
-    deps.setSessionData(null)
-    deps.setDelegations([])
-    if (projectId !== null) {
-      deps.resetWorkspaceFiles()
-      void deps.refreshProjectSessions(projectId)
-    }
+    void (async () => {
+      // null（切到"独立对话"）同样会清空项目上下文并卸载脏编辑器，必须过守卫。
+      if (!(await deps.resetWorkspaceFiles())) return
+      deps.setActiveProjectId(projectId)
+      deps.setActiveSessionId(null)
+      deps.setSessionData(null)
+      deps.setDelegations([])
+      if (projectId !== null) {
+        void deps.refreshProjectSessions(projectId)
+      }
+    })()
   }
 
   const selectStandaloneSession = (sessionId: string): void => {
-    deps.setActiveProjectId(null)
-    openSession(sessionId)
+    void (async () => {
+      if (!(await deps.resetWorkspaceFiles())) return
+      deps.setActiveProjectId(null)
+      openSession(sessionId)
+    })()
   }
 
   const newStandaloneChat = (): void => {
-    deps.setActiveProjectId(null)
-    deps.setActiveSessionId(null)
-    deps.setSessionData(null)
-    deps.setDelegations([])
-    deps.setView('chat')
+    void (async () => {
+      if (!(await deps.resetWorkspaceFiles())) return
+      deps.setActiveProjectId(null)
+      deps.setActiveSessionId(null)
+      deps.setSessionData(null)
+      deps.setDelegations([])
+      deps.setView('chat')
+    })()
   }
 
   const enterProjectFiles = (projectId: string): void => {
-    deps.setActiveProjectId(projectId)
-    deps.setView('chat')
-    deps.setSidebarMode('files')
-    deps.setSidebarOpen(true)
-    if (deps.activeProjectId !== projectId) {
-      deps.resetWorkspaceFiles()
-    }
-    void deps.refreshProjectSessions(projectId)
+    void (async () => {
+      const switching = deps.activeProjectId !== projectId
+      if (switching && !(await deps.resetWorkspaceFiles())) return
+      deps.setActiveProjectId(projectId)
+      deps.setView('chat')
+      deps.setSidebarMode('files')
+      deps.setSidebarOpen(true)
+      void deps.refreshProjectSessions(projectId)
+    })()
   }
 
   const backToChat = (): void => {

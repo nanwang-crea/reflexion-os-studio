@@ -62,7 +62,11 @@ interface ApprovalGrant {
 
 Grant 不是跨机器安全凭证，不写入数据库，不进事件 payload，不需要签名/MAC/nonce。Rust 只接受由已连接 Runtime 建立的 grant 引用，并检查 request、workspace、operation、scope 和过期时间；进程重启后全部失效。
 
-**MVP 落地边界**：grant 语义（once/session 范围、过期）由 Runtime 内存管理（ApprovalGateway）；Rust 侧当前只校验 write/execute 请求携带非空 grant 引用，完整 grant 对象校验（scope/expiry 绑定）随 Phase 6 加固下沉 Rust。Rust 的硬边界（路径规范化/符号链接/体量/超时/树杀）已完整生效。
+**MVP 落地边界**：grant 语义（once/session 范围、过期）由 Runtime 内存管理（ApprovalGateway）；Rust 侧 `require_grant` 校验写/执行请求携带的凭据 JSON：形状、workspace/operation 绑定与时效；once 的消费态跟踪与 session 生命周期仍在 Runtime 侧（随 Phase 6 加固下沉）。Rust 的硬边界（路径规范化/符号链接/体量/超时/树杀）已完整生效。
+
+### UI 直接动作（编辑器保存）
+
+用户直接操作的 UI 写入（工作区面板编辑器保存，`workspace.write_file` 命令）不是 agent 动作、不存在审批环节：Runtime 以 `source: "ui"` 调用 Rust `file.write`，Rust 对该来源跳过 grant 校验（缺省/`agent` 来源照旧必须携带有效 grant）。**先读后写的丢更新保护与来源无关、始终生效**：覆盖凭据（`revision`）由 Runtime workspace 域登记与消费（`workspace.read_file` 完整读取时登记、保存成功以写响应回写），前端不搬运任何凭据。`file.edit/delete/move/mkdir` 与 `shell.execute` 目前仅 agent 路径使用，grant 约束不变。
 
 ## 两层职责
 

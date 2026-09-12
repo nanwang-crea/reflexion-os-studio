@@ -83,7 +83,9 @@ export class PlanStore {
           'PLAN_ALREADY_EXISTS',
           `当前会话已存在活动计划：${active.id}（goal：${active.goal}；步骤：${active.steps
             .map((step) => `${step.id}=${step.status}`)
-            .join('、')}）。请直接沿用该 planId 调用 update_step 推进，或先 complete/cancel 收尾后再 create 新计划`,
+            .join(
+              '、',
+            )}）。请直接沿用该 planId 调用 update_step 推进，或先 complete/cancel 收尾后再 create 新计划`,
         )
       this.db
         .prepare(
@@ -239,7 +241,10 @@ export class PlanStore {
       const plan = this.get(planId)
       if (!plan) throw new PlanError('PLAN_NOT_FOUND', `计划不存在：${planId}`)
       if (plan.status !== 'active')
-        throw new PlanError('PLAN_TERMINAL', `计划已处于终止状态：${plan.status}`)
+        throw new PlanError(
+          'PLAN_TERMINAL',
+          `计划已处于终止状态：${plan.status}`,
+        )
       const now = nowIso()
       this.db
         .prepare('UPDATE plans SET goal = ?, updated_at = ? WHERE id = ?')

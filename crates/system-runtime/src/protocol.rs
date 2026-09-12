@@ -41,6 +41,7 @@ pub fn ready_message() -> Value {
 }
 
 /// 工具操作失败：稳定 code 进 data，前端/模型据此理解失败类别。
+#[derive(Debug)]
 pub struct OpError {
     pub code: &'static str,
     pub message: String,

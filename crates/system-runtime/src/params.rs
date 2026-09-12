@@ -55,6 +55,15 @@ pub struct GrepParams {
     pub max_results: Option<usize>,
 }
 
+/// 写操作授权来源：agent = 审批网关签发的凭据（默认）；ui = 用户直接动作，
+/// 无审批概念、免凭据，但先读后写（revision）的丢更新保护仍然生效。
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum OperationSource {
+    Agent,
+    Ui,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WriteParams {
@@ -64,7 +73,10 @@ pub struct WriteParams {
     /// 覆盖已存在文件必填：一次 file.read 完整读取发放的 revision 凭据
     /// （mtime + size + sha256）；新建文件可缺省。
     pub revision: Option<crate::files::Revision>,
-    pub grant: String,
+    /// agent 来源必填且必须通过 require_grant；ui 来源忽略。
+    pub grant: Option<String>,
+    #[serde(default)]
+    pub source: Option<OperationSource>,
 }
 
 #[derive(Deserialize)]

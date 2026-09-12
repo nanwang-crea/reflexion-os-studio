@@ -449,12 +449,23 @@ export type WorkspaceIndexSnapshot = z.infer<
   typeof WorkspaceIndexSnapshotSchema
 >
 
+/** 覆盖写凭据（Rust file.read 发放、file.write 校验）：防盲写/丢更新。 */
+export const FileRevisionSchema = z.object({
+  modifiedMs: z.number().int().nonnegative(),
+  sizeBytes: z.number().int().nonnegative(),
+  sha256: z.string().min(1),
+})
+export type FileRevision = z.infer<typeof FileRevisionSchema>
+
 /** workspace.read_file 结果（Rust file.read 透传）。 */
 export const WorkspaceReadResultSchema = z.object({
   content: z.string(),
   sizeBytes: z.number().int().nonnegative(),
   totalLines: z.number().int().nonnegative(),
   offset: z.number().int().nonnegative(),
+  readComplete: z.boolean(),
+  // 覆盖写凭据由 Runtime 在 workspace 域内登记与消费，前端不搬运。
+  revision: FileRevisionSchema.optional(),
 })
 export type WorkspaceReadResult = z.infer<typeof WorkspaceReadResultSchema>
 

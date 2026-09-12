@@ -16,17 +16,17 @@
 
 ## 设计决策（用户已确认）
 
-| 决策点 | 结论 |
-| --- | --- |
-| 缩放语义 | 非 WebView 缩放；指窗口拖大后消息区自适应 → 列宽上限加宽 |
-| 聊天列宽 | `--chat-col` 由 `760px` 改为 `min(1200px, 85%)`，全部 6 处使用点自动跟随 |
-| 脏状态归属 | 方案 A：上收至 `useWorkspacePanel`（`dirtyPaths: Set<string>`） |
-| 切换标签丢数据 | 文本类标签保活（非激活 `display:none`），修复数据丢失 |
-| 关闭确认 | 三键弹窗：保存并关闭（主）/ 不保存 / 取消；`ConfirmDialog` 扩展可选第三键 |
-| 切项目确认 | 保存全部并切换 / 放弃并切换 / 取消 |
-| 快捷键 | `Cmd/Ctrl+S` 保存；`Cmd+Shift+W`（macOS）/ `Ctrl+W`（Win·Linux）关标签；不绑 Esc；macOS 不用 `Cmd+W`（原生菜单优先，让路需改 Tauri 菜单，不做） |
-| 关窗口拦截 | 本批最后实现；前端 `onCloseRequested` 拦截，做不完如实留到下批 |
-| 编辑器 UI | 头部重排 + 头部脏圆点 + 标签条 VS Code 风格重构 + 字号微调（13→14）+ 顺带简化冗余样式 |
+| 决策点         | 结论                                                                                                                                            |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 缩放语义       | 非 WebView 缩放；指窗口拖大后消息区自适应 → 列宽上限加宽                                                                                        |
+| 聊天列宽       | `--chat-col` 由 `760px` 改为 `min(1200px, 85%)`，全部 6 处使用点自动跟随                                                                        |
+| 脏状态归属     | 方案 A：上收至 `useWorkspacePanel`（`dirtyPaths: Set<string>`）                                                                                 |
+| 切换标签丢数据 | 文本类标签保活（非激活 `display:none`），修复数据丢失                                                                                           |
+| 关闭确认       | 三键弹窗：保存并关闭（主）/ 不保存 / 取消；`ConfirmDialog` 扩展可选第三键                                                                       |
+| 切项目确认     | 保存全部并切换 / 放弃并切换 / 取消                                                                                                              |
+| 快捷键         | `Cmd/Ctrl+S` 保存；`Cmd+Shift+W`（macOS）/ `Ctrl+W`（Win·Linux）关标签；不绑 Esc；macOS 不用 `Cmd+W`（原生菜单优先，让路需改 Tauri 菜单，不做） |
+| 关窗口拦截     | 本批最后实现；前端 `onCloseRequested` 拦截，做不完如实留到下批                                                                                  |
+| 编辑器 UI      | 头部重排 + 头部脏圆点 + 标签条 VS Code 风格重构 + 字号微调（13→14）+ 顺带简化冗余样式                                                           |
 
 ## 详细设计
 
@@ -59,7 +59,7 @@
 
 ### 3. 脏圆点 + 关闭拦截 + 三键弹窗
 
-**圆点**：标签文件名旁渲染 `·`（`workspace.css` 新增 `.file-tab-dirty`）；按第 6 节 VS Code 行为，脏时圆点**替代**关闭 ×，hover 标签时圆点变回 ×。编辑器头部文件名旁同样显示圆点（头部关闭按钮独立，不受影响）。
+**圆点**：标签文件名旁渲染 `·`（`workspace.css` 新增 `.file-tab-dirty`）；按第 6 节 VS Code 行为，脏时圆点**替代**关闭 ×，hover 标签时圆点变回 ×（键盘可达性用 `:focus-within` 同规则补齐）。编辑器头部文件名旁同样显示圆点（头部关闭按钮独立，不受影响）。
 
 **ConfirmDialog 扩展**（向后兼容）：`ConfirmDialogState` 增加可选 `tertiaryLabel?: string`，组件新增 `onTertiary?: () => void`；按钮顺序 `[取消] [tertiary ghost] [confirm primary]`。
 
@@ -69,7 +69,7 @@
 2. 保存并关闭 → `saveDirty(path)`，成功后 `closeTab`，失败保持打开并提示错误；
 3. 不保存 → 直接 `closeTab`；取消 → 关闭弹窗。
 
-**切换项目流程**：目标项目切换前若 `dirtyPaths` 非空 → 弹「N 个文件未保存」三键弹窗；保存全部并切换 → `saveAllDirty()` 成功项清除、存在失败项则中止切换并提示；放弃并切换 → 清脏标记 + `resetWorkspaceFiles()`。
+**切换项目流程**：目标项目切换前若 `dirtyPaths` 非空 → 弹「N 个文件未保存」三键弹窗；保存全部并切换 → `saveAllDirty()` 成功项清除、存在失败项则中止切换并提示；放弃并切换 → 清脏标记 + `resetWorkspaceFiles()`。**覆盖范围（评审后补全）**：一切会改变/清空 `activeProjectId` 的迁移都必须先过守卫——切换项目、落地页切上下文（含切到"独立对话"null）、进入独立会话、新建独立对话、技能跳转、删除当前项目（守卫在删除动作**之前**，取消则不删，避免半应用状态）；否则 project=null 时面板早退卸载保活编辑器，未保存内容静默丢失。
 
 ### 4. 快捷键（新 hook `hooks/useAppHotkeys.ts`）
 
@@ -82,7 +82,7 @@
 ### 5. 关窗口拦截（本批最后）
 
 - 前端经 `@tauri-apps/api/window` 的 `getCurrentWindow().onCloseRequested` 拦截：`dirtyPaths` 非空时 `event.preventDefault()`，弹「放弃修改并退出 / 取消」双键弹窗，确认后 `destroy()`。
-- 预期无需 Rust 改动；实现时验证 `capabilities` 对 `core:window` 相关权限的放行，不满足再补 capability。
+- **实现修订（评审后）**：Rust 侧原有"任意 CloseRequested 即 begin_shutdown + 3s 强退"的兜底与 JS 守卫直接冲突（取消也会 3s 后被杀）。已将退出编排整体移到 `RunEvent::ExitRequested`（`prevent_exit` → `begin_shutdown` → 3s 宽限线程 kill+exit），删除窗口事件兜底；`RunEvent::Exit` 臂加 `stopping` 守卫防双杀。**已知限制**：macOS Cmd+Q 走系统 terminate，不经 `CloseRequested`，不会弹未保存确认（优雅关停仍正常）——彻底修复需自定义应用菜单，留待后续。
 - 此项工作量最大，允许留到下一批（如实记录）。
 
 ### 6. 编辑器 UI 优化
@@ -107,24 +107,24 @@
 
 - 保存失败：编辑器保持打开，头部错误提示（现有 `surface.error` 机制）+ Toast；
 - `saveAllDirty` 部分失败：中止切换项目，Toast 列出失败文件；
-- 关闭弹窗期间的并发操作（连点 ×）：弹窗打开期间忽略后续关闭请求（`pendingClosePath` 单值互斥）。
+- 关闭弹窗期间的并发操作（连点 × / 连按快捷键）：`confirmAction` 重入时旧弹窗 promise 以 `'cancel'` 结算、新弹窗接管（已评审确认所有 cancel 路径无副作用），不引入额外互斥状态。
 
 ## 影响文件（预估）
 
-| 文件 | 变更 |
-| --- | --- |
-| `styles/style.css` | `--chat-col` |
-| `hooks/useWorkspacePanel.ts` | `dirtyPaths` / `setTabDirty` / 清理 |
-| `hooks/useAppHotkeys.ts` | 新增 |
-| `features/workspace/FileViewerPanel.tsx` | 先拆分再改造（见下） |
-| `features/workspace/FileTabs.tsx` | 新增（自 `FileViewerPanel` 拆出：标签条 + 拖拽排序 + 自绘滚动条 + 脏圆点） |
-| `features/workspace/editor/MonacoEditor.tsx` | 头部重排 / onDirtyChange / 句柄上抛 |
-| `features/workspace/editor/MonacoSurface.tsx` | Monaco Cmd+S addCommand |
-| `features/workspace/editor/monaco.ts` | 字号 |
-| `components/ConfirmDialog.tsx` | 第三键 |
-| `App.tsx` | 接线（关闭拦截弹窗 / 快捷键 / dirty 链路）；若超行数上限，同步拆出关闭确认编排 hook |
-| `features/workspace/workspace.css` | 标签条 / 头部样式重构 |
-| `App.tsx` / `main.tsx` | 关窗口拦截（第 5 节） |
+| 文件                                          | 变更                                                                                |
+| --------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `styles/style.css`                            | `--chat-col`                                                                        |
+| `hooks/useWorkspacePanel.ts`                  | `dirtyPaths` / `setTabDirty` / 清理                                                 |
+| `hooks/useAppHotkeys.ts`                      | 新增                                                                                |
+| `features/workspace/FileViewerPanel.tsx`      | 先拆分再改造（见下）                                                                |
+| `features/workspace/FileTabs.tsx`             | 新增（自 `FileViewerPanel` 拆出：标签条 + 拖拽排序 + 自绘滚动条 + 脏圆点）          |
+| `features/workspace/editor/MonacoEditor.tsx`  | 头部重排 / onDirtyChange / 句柄上抛                                                 |
+| `features/workspace/editor/MonacoSurface.tsx` | Monaco Cmd+S addCommand                                                             |
+| `features/workspace/editor/monaco.ts`         | 字号                                                                                |
+| `components/ConfirmDialog.tsx`                | 第三键                                                                              |
+| `App.tsx`                                     | 接线（关闭拦截弹窗 / 快捷键 / dirty 链路）；若超行数上限，同步拆出关闭确认编排 hook |
+| `features/workspace/workspace.css`            | 标签条 / 头部样式重构                                                               |
+| `App.tsx` / `main.tsx`                        | 关窗口拦截（第 5 节）                                                               |
 
 **拆分纪律**：`FileViewerPanel.tsx` 现 454 行（硬上限 500），本次必拆：`FileTabs.tsx`（标签条含拖拽与滚动条）+ `FileViewerPanel.tsx`（布局宿主 + 保活渲染 + 句柄聚合）。
 

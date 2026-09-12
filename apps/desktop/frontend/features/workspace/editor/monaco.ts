@@ -23,6 +23,7 @@ export const THEME_DATA: editor.IStandaloneThemeData = {
     { token: 'regexp', foreground: 'd16969' },
   ],
   colors: {
+    /* 与 style.css --bg-editor 同步（active 标签融合） */
     'editor.background': '#1e1e1e',
     'editor.foreground': '#d4d4d4',
     'editor.lineHighlightBackground': '#2a2d2e',
@@ -41,10 +42,10 @@ export const THEME_DATA: editor.IStandaloneThemeData = {
 /** Monaco 默认编辑器选项。 */
 export const DEFAULT_EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOptions =
   {
-    fontSize: 13,
+    fontSize: 14,
     fontFamily: "'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace",
     fontLigatures: true,
-    lineHeight: 20,
+    lineHeight: 21,
     padding: { top: 8, bottom: 8 },
     scrollBeyondLastLine: false,
     renderWhitespace: 'selection',

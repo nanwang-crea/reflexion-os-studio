@@ -296,10 +296,7 @@ export class ContextBuilder {
         return messages
       } catch (legacyError) {
         if (legacyError instanceof FrameError) throw legacyError
-        if (
-          legacyError instanceof Error &&
-          legacyError.name === 'AbortError'
-        ) {
+        if (legacyError instanceof Error && legacyError.name === 'AbortError') {
           throw legacyError
         }
         // 第二层也失败（同一 Provider 故障二次命中）：零成本确定性裁剪兜底，

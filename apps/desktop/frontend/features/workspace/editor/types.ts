@@ -1,4 +1,6 @@
-/** 单文件 Monaco 编辑器 Props。 */
+import type { MonacoSurfaceHandle } from './MonacoSurface'
+
+/** 编辑内核脏状态上抛（仅脏/净切换时触发）。 */
 export interface MonacoEditorProps {
   projectId: string
   path: string
@@ -6,6 +8,12 @@ export interface MonacoEditorProps {
   readOnly?: boolean
   onClose: () => void
   onContentChange?: (content: string) => void
+  onDirtyChange?: (path: string, dirty: boolean) => void
+  /** 注册 surface 句柄 getter（null 注销）；getter 调用时才解引用，规避闭包陈旧。 */
+  registerSurface?: (
+    path: string,
+    getter: (() => MonacoSurfaceHandle | null) | null,
+  ) => void
 }
 
 /** Monaco DiffEditor Props。 */

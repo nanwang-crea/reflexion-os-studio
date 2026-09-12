@@ -64,7 +64,7 @@ export function readFile(
   })
 }
 
-/** 写入文本文件到工作区；Rust 侧强制 workspace 边界与大小限制。 */
+/** 写入文本文件到工作区；覆盖保护（先读后写凭据）由 Runtime/ Rust 两层承担。 */
 export function writeFile(
   projectId: string,
   path: string,

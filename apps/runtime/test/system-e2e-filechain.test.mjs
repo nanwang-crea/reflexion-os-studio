@@ -7,6 +7,8 @@ import {
   SystemRuntimeClient,
   resolveSystemRuntimeBinary,
 } from '../dist/system.js'
+import { Store } from '../dist/store/index.js'
+import { dispatchCommand } from '../dist/handlers.js'
 
 /**
  * 回归测试：先读后改凭据链路（真实二进制端到端）。
@@ -171,6 +173,69 @@ test(
       assert.equal(
         readFileSync(join(workspace, 'fresh.txt'), 'utf8'),
         'brand new\n',
+      )
+    } finally {
+      await client.shutdown()
+      rmSync(workspace, { recursive: true, force: true })
+    }
+  },
+)
+
+test(
+  'workspace.write_file UI-save flow: runtime registry revision + source:ui against real Rust',
+  { skip: BINARY === null },
+  async () => {
+    const store = new Store(mkdtempSync(join(tmpdir(), 'reflexion-uawrite-')))
+    const workspace = mkdtempSync(join(tmpdir(), 'reflexion-uiws-'))
+    writeFileSync(join(workspace, 'note.txt'), 'one\ntwo\n')
+    const project = store.projects.create({
+      name: 'p',
+      folderPath: workspace,
+    })
+    const client = new SystemRuntimeClient(BINARY, [], () => {})
+    client.start()
+    try {
+      await waitReady(client)
+      const ctx = { store, system: client }
+      await dispatchCommand(
+        'workspace.read_file',
+        { projectId: project.id, path: 'note.txt' },
+        ctx,
+      )
+      // 保存不带任何凭据：Runtime 查登记注入 revision，并声明 source:"ui"。
+      await dispatchCommand(
+        'workspace.write_file',
+        { projectId: project.id, path: 'note.txt', content: 'one\ntwo!\n' },
+        ctx,
+      )
+      assert.equal(
+        readFileSync(join(workspace, 'note.txt'), 'utf8'),
+        'one\ntwo!\n',
+      )
+      // 连续保存：登记随写响应刷新，无需重读即可再存。
+      await dispatchCommand(
+        'workspace.write_file',
+        { projectId: project.id, path: 'note.txt', content: 'one\ntwo?\n' },
+        ctx,
+      )
+      assert.equal(
+        readFileSync(join(workspace, 'note.txt'), 'utf8'),
+        'one\ntwo?\n',
+      )
+      // 丢更新保护仍生效：磁盘被外部改动后，陈旧登记凭据必被 Rust 拒绝。
+      writeFileSync(join(workspace, 'note.txt'), 'external edit\n')
+      await assert.rejects(
+        () =>
+          dispatchCommand(
+            'workspace.write_file',
+            { projectId: project.id, path: 'note.txt', content: 'stomp\n' },
+            ctx,
+          ),
+        /changed since last read|fresh full read/,
+      )
+      assert.equal(
+        readFileSync(join(workspace, 'note.txt'), 'utf8'),
+        'external edit\n',
       )
     } finally {
       await client.shutdown()

@@ -92,7 +92,6 @@ pub fn run() {
         restart: Mutex::new(RuntimeRestartState { count: 0 }),
     });
     let state_for_setup = state.clone();
-    let state_for_window = state.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -107,32 +106,42 @@ pub fn run() {
             supervisor::start_sidecars(app.handle(), state_for_setup.clone());
             Ok(())
         })
-        .on_window_event(move |_window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if state_for_window
-                    .stopping
-                    .load(std::sync::atomic::Ordering::SeqCst)
-                {
-                    return;
-                }
-                api.prevent_close();
-                shutdown::begin_shutdown(&state_for_window);
-                let state_for_exit = state_for_window.clone();
-                std::thread::spawn(move || {
-                    // 宽限须覆盖 TS 的 Rust 协议关停宽限（2s），否则优雅关停被掐断。
-                    std::thread::sleep(Duration::from_millis(3000));
-                    shutdown::kill_runtime_tree(&state_for_exit);
-                    std::process::exit(0);
-                });
-            }
-        })
         .build(tauri::generate_context!())
         .expect("error while building ReflexionOS Studio")
         .run(|app_handle, event| {
-            if matches!(event, tauri::RunEvent::Exit { .. }) {
-                let managed = app_handle.state::<Arc<SupervisorState>>();
-                shutdown::begin_shutdown(managed.inner());
-                shutdown::kill_runtime_tree(managed.inner());
+            match event {
+                tauri::RunEvent::ExitRequested { api, .. } => {
+                    // tauri-runtime-wry 在最后一个窗口销毁时立即触发 ExitRequested；
+                    // 编排必须在此而非 Destroyed，否则 RunEvent::Exit 会在毫秒级
+                    // SIGKILL sidecar 树，掐断基于协议的优雅关停（AGENTS §8）。
+                    api.prevent_exit();
+                    if let Some(state) = app_handle.try_state::<Arc<SupervisorState>>() {
+                        if !state.stopping.load(std::sync::atomic::Ordering::SeqCst) {
+                            shutdown::begin_shutdown(state.inner());
+                            let handle = app_handle.clone();
+                            std::thread::spawn(move || {
+                                // 宽限须覆盖 TS 的协议关停宽限（2s），否则优雅关停被掐断。
+                                std::thread::sleep(Duration::from_millis(3000));
+                                if let Some(state) = handle.try_state::<Arc<SupervisorState>>() {
+                                    shutdown::kill_runtime_tree(state.inner());
+                                }
+                                std::process::exit(0);
+                            });
+                        }
+                    }
+                }
+                tauri::RunEvent::Exit { .. } => {
+                    if let Some(state) = app_handle.try_state::<Arc<SupervisorState>>() {
+                        if !state
+                            .stopping
+                            .swap(true, std::sync::atomic::Ordering::SeqCst)
+                        {
+                            shutdown::begin_shutdown(state.inner());
+                            shutdown::kill_runtime_tree(state.inner());
+                        }
+                    }
+                }
+                _ => {}
             }
         });
 }

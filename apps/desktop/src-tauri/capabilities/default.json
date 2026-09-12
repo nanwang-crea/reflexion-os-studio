@@ -3,5 +3,11 @@
   "identifier": "default",
   "description": "Default desktop permissions",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:allow-open", "clipboard-manager:allow-write-text"]
+  "permissions": [
+    "core:default",
+    "core:window:allow-close",
+    "core:window:allow-destroy",
+    "dialog:allow-open",
+    "clipboard-manager:allow-write-text"
+  ]
 }
