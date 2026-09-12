@@ -19,6 +19,7 @@ mod sandbox;
 mod search;
 mod sha256;
 mod shell;
+mod terminal;
 mod walk;
 
 use serde_json::{json, Value};
