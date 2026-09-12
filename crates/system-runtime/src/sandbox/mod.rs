@@ -9,8 +9,8 @@ use std::sync::OnceLock;
 use crate::shell::ShellOutcome;
 
 pub(crate) mod noop;
-// Seatbelt/bwrap 渲染器全平台编译（纯字符串/std::process），便于跨机单测；
-// select() 仅在对应平台 cfg 分支消费。
+// Seatbelt 渲染器全平台编译（纯字符串/std::process），便于跨机单测；
+// select() 仅在 macOS 分支消费（Linux bwrap 接入前，其余平台构建靠此放行 dead_code）。
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub(crate) mod macos;
 #[cfg(windows)]
@@ -40,7 +40,7 @@ pub(crate) trait SandboxProvider: Send + Sync {
     fn id(&self) -> &'static str;
 
     /// 工厂探测：不可用则降级 Noop。仅在工厂初始化时调用一次。
-    #[cfg_attr(not(windows), allow(dead_code))] // 仅 Windows select() 分支调用；Seatbelt 接入后 Unix 也会探测
+    #[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))] // Linux bwrap 接入前，该平台 select() 不探测
     fn is_available(&self) -> bool;
 
     /// 自持执行路径（Windows CreateProcessAsUserW）。返回 None = 走包装路径。
@@ -61,7 +61,7 @@ pub(crate) trait SandboxProvider: Send + Sync {
     }
 }
 
-/// 进程内唯一 provider：Windows 探测受限令牌，其余平台本轮 Noop（Seatbelt 下轮接入）。
+/// 进程内唯一 provider：按平台探测（Windows 受限令牌 / macOS Seatbelt），探测不过降级 Noop。
 pub(crate) fn provider() -> &'static dyn SandboxProvider {
     static PROVIDER: OnceLock<Box<dyn SandboxProvider>> = OnceLock::new();
     PROVIDER.get_or_init(select).as_ref()
@@ -71,6 +71,13 @@ fn select() -> Box<dyn SandboxProvider> {
     #[cfg(windows)]
     {
         let provider = windows::WindowsTokenSandbox;
+        if provider.is_available() {
+            return Box::new(provider);
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let provider = macos::SeatbeltSandbox::from_env();
         if provider.is_available() {
             return Box::new(provider);
         }

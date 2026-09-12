@@ -17,8 +17,6 @@ pub(crate) struct SeatbeltSandbox {
 }
 
 impl SeatbeltSandbox {
-    /// Task 3 的 select() 接线前，macOS 非测试构建暂无消费者（测试构建有消费，故 not(test) 才放行）。
-    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn from_env() -> Self {
         let home = std::env::var_os("HOME").map(PathBuf::from);
         // 与 runtime 存储同一规则：REFLEXION_DATA_DIR 优先，缺省 ~/.reflexion-os-studio。
@@ -76,16 +74,50 @@ impl SandboxProvider for SeatbeltSandbox {
 }
 
 fn denied_read_paths(home: Option<&Path>, data_dir: &Path) -> Vec<PathBuf> {
-    let mut paths = vec![data_dir.to_path_buf()];
+    let mut paths = vec![profile_path(data_dir)];
     if let Some(home) = home {
         for tail in [".ssh", ".aws", ".gnupg"] {
-            paths.push(home.join(tail));
+            paths.push(profile_path(&home.join(tail)));
         }
     }
     paths
 }
 
+/// 内核按解析后的真实 vnode 路径匹配，macOS `/var`、`/tmp` 是指向 `/private/*` 的符号链接：
+/// 规则路径必须 canonicalize，否则 subpath 静默失配（真机实测：`/var/folders/...` 的
+/// deny/allow 都命中不了 `/private/var/folders/...` 下的 vnode）。
+/// 末段可能尚不存在（沙盒临时目录在 wrap 之后才创建），故取「最长现存祖先」解析后
+/// 拼回剩余尾段。只规范化根自身，不放开洞：写越根内符号链接落在根外路径，
+/// 仍被 deny default 拒。连 `/` 都解析失败的病态情况下回退原样。
+fn profile_path(path: &Path) -> PathBuf {
+    for ancestor in path.ancestors() {
+        if let Ok(resolved) = std::fs::canonicalize(ancestor) {
+            let tail = path.strip_prefix(ancestor).unwrap_or(path);
+            return resolved.join(tail);
+        }
+    }
+    path.to_path_buf()
+}
+
 /// 纯函数渲染，单测钉住核心结构；真机白名单微调以集成测试为准（禁软化核心语义）。
+///
+/// 白名单记录（round B 真机验收，每条对应实测依据）：
+/// - `process*` / `process-info*` / `signal (target same-sandbox)`：exec 链与超时 kill 必需；
+///   sandbox-exec exec 替换自身保持 pgid，`kill(-pgid)` 树杀语义不变（timeout_survives_wrapping）。
+/// - `file-read*` + 定向 deny（data_dir、HOME 的 .ssh/.aws/.gnupg）：读大体放开保工具可用，
+///   凭据路径拒读（sensitive_read_denied_sibling_read_allowed）。deny 侧同样必须
+///   canonicalize（`profile_path`），否则 /var 系路径下假数据目录静默漏读——真机首跑即中招。
+/// - `file-write*` per writable_root（workspace + 沙盒临时目录）：写边界主语义
+///   （write_escape_denied / in_boundary_writes_allowed）；根路径 canonicalize 修复
+///   /var→/private/var 首跑失配。
+/// - `file-write-data /dev/null /dev/dtracehelper /dev/tt*`、`file-ioctl /dev/null /dev/tt*`：
+///   sh/git 等写 /dev/null、探测 tty（subpath "/dev/tt" 为字符串前缀匹配，覆盖
+///   /dev/tty 与 /dev/ttysXXX，Chrome seatbelt 同款写法）。
+/// - `sysctl-read` / `ipc-posix-shm` / `mach-lookup` / `iokit-open`：git --version、python3、
+///   ls 冒烟通过所需（common_tools_no_collateral）；mach-lookup 不细分服务列表是
+///   已知宽松点，收紧属 Phase 6 硬化。
+/// - `network*`：仅 allow_network（用户审批 sandbox_network 后）渲染；未授权时
+///   connect 得到 EPERM 而非 ECONNREFUSED（network_denied_without_approval）。
 pub(crate) fn render_profile(
     request: &SandboxRequest,
     home: Option<&Path>,
@@ -108,7 +140,7 @@ pub(crate) fn render_profile(
     for root in &request.writable_roots {
         profile.push_str(&format!(
             "(allow file-write* (subpath {}))\n",
-            sbpl_string(root)
+            sbpl_string(&profile_path(root))
         ));
     }
     profile.push_str(
@@ -161,19 +193,55 @@ mod tests {
 
     #[test]
     fn profile_is_deny_default_with_scoped_allows() {
+        // 根路径用「不存在的 /w 之下」保证 profile_path 跨平台渲染为原样（仅 / 参与解析）。
         let profile = render_profile(
-            &request(&["/w", "/tmp/reflexion-sandbox"], false),
+            &request(&["/w", "/w/reflexion-sandbox"], false),
             Some(Path::new("/Users/tester")),
             Path::new("/Users/tester/.reflexion-os-studio"),
         );
         assert!(profile.starts_with("(version 1)\n(deny default)"));
         assert!(profile.contains("(allow file-write* (subpath \"/w\"))"));
-        assert!(profile.contains("(allow file-write* (subpath \"/tmp/reflexion-sandbox\"))"));
+        assert!(profile.contains("(allow file-write* (subpath \"/w/reflexion-sandbox\"))"));
         assert!(profile.contains("(subpath \"/Users/tester/.ssh\")"));
         assert!(profile.contains("(subpath \"/Users/tester/.reflexion-os-studio\")"));
         assert!(
             !profile.contains("(allow network"),
             "no network allowance without approval: {profile}"
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn render_profile_pins_normalized_paths_in_output() {
+        // 输出面钉住（与 profile_path 单测互补）：/tmp → /private/tmp 的解析必须真正进入
+        // 渲染结果——可写根 allow 与 data_dir deny 两侧都要规范化，否则内核 vnode 静默失配。
+        let profile = render_profile(
+            &request(&["/tmp/x-root"], false),
+            None,
+            Path::new("/tmp/x-data"),
+        );
+        assert!(
+            profile.contains("(allow file-write* (subpath \"/private/tmp/x-root\"))"),
+            "writable root must render normalized: {profile}"
+        );
+        assert!(
+            profile.contains("(deny file-read* (subpath \"/private/tmp/x-data\"))"),
+            "data_dir deny must render normalized: {profile}"
+        );
+        assert!(
+            !profile.contains("\"/tmp/x-"),
+            "raw symlinked path must not leak into profile: {profile}"
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn profile_path_resolves_symlinked_ancestors_of_missing_leaf() {
+        // /var → /private/var，末段不存在也要按现存祖先解析（沙盒临时目录 wrap 时才建）。
+        let resolved = profile_path(Path::new("/var/reflexion-sandbox-missing"));
+        assert_eq!(
+            resolved,
+            PathBuf::from("/private/var/reflexion-sandbox-missing")
         );
     }
 
@@ -205,3 +273,9 @@ mod tests {
         assert_eq!(argv[6], "echo hi");
     }
 }
+
+/// 真机验收（spec §11.3，轮次 B 主验证面）：sandbox-exec 实跑，钉死
+/// deny-default / 写边界 / 敏感拒读 / 禁网四条核心语义 + 常用工具无连带伤害。
+/// probe 失败 = 本机环境异常，大声断言失败（BLOCKED），不得静默跳过。
+#[cfg(all(test, target_os = "macos"))]
+mod real_machine_tests;
