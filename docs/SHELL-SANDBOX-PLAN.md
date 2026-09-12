@@ -37,7 +37,8 @@
 
 非目标（推迟到二期，本文只留决策位）：
 
-- Linux（bubblewrap）/ Windows（受限 token）沙箱实现与排期。
+- Linux（bubblewrap）沙箱实现与排期。
+- codex `elevated` 档（专用沙盒用户 + 防火墙 + UAC setup）、私有桌面（`windows.sandbox_private_desktop` 对应物）、`network_proxy` 域名策略。
 - 沙箱从"allow default + deny 红线"收紧为 codex 式 deny-default 严格模式。
 - 环境快照缓存（登录 shell 每命令付出 zprofile 加载成本；实测过慢再引入）。
 
@@ -69,13 +70,14 @@
   快照、后续直接注入"。
 - 测试：探测顺序与缓存单测；`-lc` 参数拼装单测；现有 `shell.rs` 测试保持通过。
 
-### 4.2 Seatbelt 沙箱（对应 P2）
+### 4.2 SandboxProvider 工厂与双路径 trait（对应 P2）
 
 - 新模块 `crates/system-runtime/src/sandbox/`：
-  - `mod.rs`：`SandboxProvider` trait（`is_available()` / `wrap(...)`）+ 工厂；
-    不可用返回 `NoopSandbox` 并置 degraded 标记（对齐 ReflexionOS `NullSandbox`）；
-  - `seatbelt.rs`：生成 profile，以
+  - `mod.rs`：`SandboxProvider` trait（双路径：`wrap(...)` 包装 + `exec_direct(...)` 自持执行）+
+    工厂；不可用返回 `NoopSandbox` 并置 degraded 标记（对齐 ReflexionOS `NullSandbox`）；
+  - `seatbelt.rs`（macOS 下轮）：生成 profile，以
     `/usr/bin/sandbox-exec -p <profile> -- <login-shell> -l -c <command>` 执行；
+  - `windows/`（本轮 Windows 实现）：受限令牌 + 低完整性 + Job Object（见 §4.5）；
   - 一期 profile 策略（deny-based，参照 `seatbelt_profile.py`）：
     - `(allow default)`——保持开发工具链可用；
     - `(deny network*)`——核心红线：默认禁网；
@@ -83,6 +85,10 @@
     - `file-write*` 仅允许 workspace root 与进程 TMPDIR。
   - 可用性判定：macOS 且 `/usr/bin/sandbox-exec` 存在；被 MDM/安全软件拦截时以
     实际执行失败归类为不可用（见 4.4）。
+- **双路径 trait 设计**（ReflexionOS 2026-07-02 实测教训）：Seatbelt/bwrap 可"包装命令"
+  （前缀 launcher），Windows 受限令牌必须"自己 spawn 进程"（`CreateProcessAsUserW`），
+  `wrap` 形状装不下它；ReflexionOS 因此给基类补了 `run_command`/`run_shell_command`
+  自持方法。双路径 trait 是该教训的 Rust 化。详见设计 spec（§3）。
 - 协议扩展：`shell.execute` params 增加 `allowNetwork: boolean`（缺省 false）；
   result 增加 `sandbox: { active: boolean }` 便于 UI 展示与排障。
 - `handlers.rs`：`allowNetwork=true` 时校验 grant 中带网络放行声明（见 4.3），
@@ -104,10 +110,39 @@
 
 ### 4.4 状态上报与降级观测
 
-- `system.ready` / runtime.status 增加沙箱能力位：`sandbox: "seatbelt" | "none"`；
+- `system.ready` / runtime.status 增加沙箱能力位：`sandbox: "windows-token" | "none"`（开放枚举，未来追加 `"seatbelt"` / `"bwrap"`）；
   前端会话页可见当前沙箱状态，`none` 时提示"命令未沙箱化，仅保留路径边界与审批"。
 - 执行失败分类（参照 ReflexionOS `error_detector` 思路）：sandbox-exec 不存在 /
   启动失败 / profile 拒绝，分别映射为可读错误与降级决策，不静默吞掉。
+
+### 4.5 Windows 受限令牌沙箱（本轮实现，设计 spec §4）
+
+基于 Windows 受限令牌 + 低完整性 + Job Object（对齐 codex `unelevated` 档），全部
+`#[cfg(windows)]`。
+
+#### 机制
+
+| 层 | 实现 |
+| --- | --- |
+| Token（`token.rs`） | `OpenProcessToken` → `CreateRestrictedToken(DISABLE_MAX_PRIVILEGE, SidsToDisable=[Builtin\Administrators])` → `SetTokenInformation(TokenIntegrityLevel, LOW)`；句柄 `OnceLock` 缓存 |
+| ACL（`acl.rs`） | `SetNamedSecurityInfoW` 打 LOW 强制完整性标签（SACL `S:(ML;;OICI;;;LW)`，OI/CI 继承）；可写 root = workspace root + 专用沙盒临时目录（`<TEMP>/reflexion-sandbox`，TMP/TEMP 环境变量重定向给沙盒子进程） |
+| Launch（`launch.rs`） | 匿名管道捕获 stdout/stderr → `CreateProcessAsUserW(token, cmd /C, CREATE_SUSPENDED \| CREATE_NO_WINDOW)` → `CreateJobObjectW` + `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` → `ResumeThread` |
+
+#### 能力边界
+
+| 能力 | Windows-token | 说明 |
+| --- | --- | --- |
+| 网络强制禁断 | ❌ **不强制** | 审批是流程性闸门，同 codex unelevated（诚实标注"弱网络隔离"） |
+| 敏感路径读保护 | ❌ | 完整性级别不限制读 |
+| ACL 标签持久化 | ✅ 副作用 | workspace 目录增加 LOW 标签（幂等重设，LOW 标签文件任何完整性可写，权衡记录在案） |
+| 提权保护 | ✅ | 剥离全部特权 + 移除管理员 SID |
+| 写边界 | workspace root + 沙盒临时目录 | **不给整个用户 TEMP 打标签**（会放宽该目录的完整性约束，副作用过大）；沙盒临时目录通过 TMP/TEMP 环境变量重定向 |
+
+#### codex unelevated 对照
+
+codex unelevated 档也是受限令牌 + ACL 边界，弱网络隔离。本设计与其同族，差异：
+（1）codex 有 `Protected paths in writable roots`（`<root>/.git` 等只读化）留作后续加固；
+（2）codex `elevated` 档（专用沙盒用户 + 防火墙 + UAC setup）不实现（见 §2 非目标）。
 
 ## 5. 实施步骤与验收
 
@@ -118,6 +153,9 @@
 | S3 | `requires_network` + 网络审批闭环 | `npm install`（未审批）触发审批卡；allow once 后执行成功；session 放行后不再询问；无 grant 的 `allowNetwork` 被 Rust 拒绝 |
 | S4 | 状态上报 + 前端展示 + 错误分类 | ready/status 带 sandbox 位；UI 可见沙箱状态与降级提示 |
 | S5 | 文档与回归 | `AGENTS.md`、`PERMISSION-MODEL.md` 增补；现有 shell/审批测试全绿；desktop / cli / runtime 直连三端冒烟 |
+| W1 | SandboxProvider 工厂 + 双路径 trait + NoopSandbox | macOS 返回 none；cargo test 全绿 |
+| W2 | Windows 受限令牌 provider（`#[cfg(windows)]`） | `cargo check --target x86_64-pc-windows-msvc` 通过；真机验收：令牌生效、workspace 外写被拒、Job 树杀 |
+| W3 | 网络审批闭环（TS + Rust） | `requires_network` → 审批卡 → grant `sandboxNetwork` → Rust 核对；trusted 不旁路 |
 
 ## 6. 风险与开放问题
 
@@ -126,7 +164,7 @@
 - **登录 shell 副作用**：zshrc 输出污染 stdout、启动延迟；接受并在工具描述中提示，
   二期环境快照缓存作为可选项。
 - **sandbox-exec 被拦截的机器**：降级 none + 显式提示，不静默放行。
-- **Linux / Windows 沙箱排期**：未定；Windows 一期维持 `cmd /C` + 现状。
+- **Linux / Windows 沙箱排期**：Windows 已实现（受限令牌档）；Linux（bubblewrap）排期待定。
 - **codex 参照精度**：本地无 codex 源码，以官方文档（`developers.openai.com/codex`
   sandboxing/security）+ GitHub raw 源码核对；后续引入本地仓库可复核细节。
 
@@ -138,3 +176,8 @@
   非 git 兜底探测）。
 - 沙箱落点：`crates/system-runtime` 统一实现，三端共享。
 - 一期平台范围：macOS 沙箱 + 其他平台降级放行（待最终确认）。
+- Windows 机制档位：**受限令牌 + 低完整性 + Job Object**（codex unelevated 同族；免管理员；elevated/UAC 档桌面体验差；ReflexionOS 已趟通同构路线）——2026-09-12 确认。
+- trait 形状：**双路径（wrap + exec_direct）**——Windows 受限令牌必须自持 spawn（`CreateProcessAsUserW`），`wrap` 形状装不下；ReflexionOS 2026-07-02 实测教训。
+- 按命令网络授权：**本轮纳入（S3）**——codex 同语义；避免发布无人消费的 `allowNetwork` 孤儿参数；审批管线现成。
+- trusted 与网络审批：**不旁路**——网络独立链路，任何模式不自动放行（对齐 ReflexionOS "任何 mode 都不旁路"）。
+- fail-closed：**探测后不回退**——静默降级为无沙箱是最坏状态；降级只允许发生在工厂探测期（详见设计 spec §10）。
