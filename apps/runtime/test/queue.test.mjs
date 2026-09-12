@@ -112,3 +112,22 @@ test('queue entry carries trusted flag and defaults to false', () => {
     true,
   )
 })
+
+test('queue.changed 事件 seq 在会话流内单调递增，跨会话独立', () => {
+  const events = []
+  const service = new QueueService((event) => events.push(event))
+  service.enqueue('s1', { content: 'a' })
+  service.enqueue('s1', { content: 'b' })
+  service.enqueue('s2', { content: 'c' })
+  const s1 = events.filter(
+    (e) => e.type === 'queue.changed' && e.sessionId === 's1',
+  )
+  assert.equal(s1.length, 2)
+  assert.equal(s1[0].scope, 'session')
+  assert.equal(s1[0].seq, 0)
+  assert.equal(s1[1].seq, 1)
+  const s2 = events.filter(
+    (e) => e.type === 'queue.changed' && e.sessionId === 's2',
+  )
+  assert.equal(s2[0].seq, 0)
+})

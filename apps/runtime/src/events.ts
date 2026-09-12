@@ -30,6 +30,8 @@ export class ResourceEventEmitter {
     readonly identity: EventIdentity,
     private readonly notifier: EventNotifier,
   ) {
+    // 身份对象冻结：公开字段，防运行期被外部改写后污染全部信封。
+    Object.freeze(identity)
     this.scope = identity.scope
   }
 
@@ -37,10 +39,11 @@ export class ResourceEventEmitter {
     const candidate = {
       protocolVersion: PROTOCOL_VERSION,
       eventId: randomUUID(),
-      ...this.identity,
       seq: this.seq++,
       occurredAt: new Date().toISOString(),
       ...event,
+      // identity 后置 = 绝对权威：载荷不得覆写信封身份字段。
+      ...this.identity,
     }
     const parsed = RuntimeEventSchema.safeParse(candidate)
     if (!parsed.success) {

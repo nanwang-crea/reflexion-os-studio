@@ -128,7 +128,7 @@ export class ApprovalGateway {
     context: ApprovalContext
   }): Promise<'approved' | 'denied'> {
     const { toolCallId, emitter, operation, summary, signal, context } = input
-    // 侧栏按会话聚合待审批标记：事件携带 sessionId（envelope.runId 是 runId）。
+    // 侧栏按会话聚合待审批标记：事件载荷携带 sessionId（信封 scope=run + runId）。
     emitter.next({
       type: 'approval.required',
       toolCallId,
@@ -158,7 +158,7 @@ export class ApprovalGateway {
             type: 'approval.resolved',
             toolCallId,
             decision,
-            scope,
+            grantScope: scope,
           })
           resolve(decision)
         },

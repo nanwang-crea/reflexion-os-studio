@@ -4,7 +4,7 @@ import {
   type McpTool,
   type ToolSpec,
 } from '@reflexion-os-studio/contracts'
-import { RunEventEmitter, type EventNotifier } from '../events.js'
+import { ResourceEventEmitter, type EventNotifier } from '../events.js'
 import type { Store } from '../store/index.js'
 import { McpClient, type McpServerConfig } from './client.js'
 import { loadSecret } from '../secrets.js'
@@ -22,6 +22,8 @@ interface ConnectedServer {
  */
 export class McpManager {
   private readonly clients = new Map<string, ConnectedServer>()
+  /** 每 server 一个长生命周期发射器：mcp.changed 的 seq 在 server 流内单调。 */
+  private readonly emitters = new Map<string, ResourceEventEmitter>()
 
   constructor(
     private readonly store: Store,
@@ -45,6 +47,7 @@ export class McpManager {
     const connected = this.clients.get(id)
     connected?.client.dispose()
     this.clients.delete(id)
+    this.emitters.delete(id)
     return this.store.mcpServers.remove(id)
   }
 
@@ -202,10 +205,18 @@ export class McpManager {
       connected.client.dispose()
     }
     this.clients.clear()
+    this.emitters.clear()
   }
 
   private emitChanged(server: McpServer): void {
-    const emitter = new RunEventEmitter(server.id, this.notifier)
+    let emitter = this.emitters.get(server.id)
+    if (!emitter) {
+      emitter = new ResourceEventEmitter(
+        { scope: 'mcp', serverId: server.id },
+        this.notifier,
+      )
+      this.emitters.set(server.id, emitter)
+    }
     emitter.next({ type: 'mcp.changed', serverId: server.id, server })
   }
 }
