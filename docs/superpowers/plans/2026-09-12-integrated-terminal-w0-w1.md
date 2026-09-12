@@ -46,6 +46,7 @@ Expected: 空输出。
 ### Task 1: contracts——信封判别联合（TDD 先行）
 
 **Files:**
+
 - Modify: `packages/contracts/src/events.ts`
 - Modify: `packages/contracts/src/entities.ts`（如需；实际不动）
 - Test: `packages/contracts/test/validators.test.mjs`
@@ -190,10 +191,7 @@ test('resource-scoped events require their identity and reject runId smuggling',
   assert.equal(RuntimeEventSchema.safeParse(termState).success, true)
   const missingTerminalId = { ...termState }
   delete missingTerminalId.terminalId
-  assert.equal(
-    RuntimeEventSchema.safeParse(missingTerminalId).success,
-    false,
-  )
+  assert.equal(RuntimeEventSchema.safeParse(missingTerminalId).success, false)
 })
 
 test('tool and approval events validate envelope payloads', () => {
@@ -535,6 +533,7 @@ git commit -m "feat(contracts)!: 事件信封泛化为显式 scope 判别联合�
 ### Task 2: PROTOCOL_VERSION 1.0 → 1.1（三处同步）
 
 **Files:**
+
 - Modify: `packages/contracts/src/handshake.ts:3`
 - Modify: `crates/system-runtime/src/protocol.rs:10`
 - Test: `apps/runtime/test/fixtures/fake-system-runtime.mjs`（字面量处）
@@ -577,6 +576,7 @@ git commit -m "feat(protocols)!: PROTOCOL_VERSION 1.0 -> 1.1（信封变更随�
 ### Task 3: `apps/runtime/src/events.ts`——通用资源发射器
 
 **Files:**
+
 - Modify: `apps/runtime/src/events.ts`
 - Test: `apps/runtime/test/events-envelope.test.mjs`（Create，并登记进 package.json）
 
@@ -712,10 +712,7 @@ export class ResourceEventEmitter {
 
 /** run 通道便捷子类：构造签名与历史用法一致，agent/* 调用点零改动。 */
 export class RunEventEmitter extends ResourceEventEmitter {
-  constructor(
-    runId: string,
-    notifier: EventNotifier,
-  ) {
+  constructor(runId: string, notifier: EventNotifier) {
     super({ scope: 'run', runId }, notifier)
   }
 
@@ -745,6 +742,7 @@ git commit -m "feat(runtime): ResourceEventEmitter 显式作用域发射器，Ru
 ### Task 4: 生产者迁移（runtime.status / queue / mcp / workspace indexer）
 
 **Files:**
+
 - Modify: `apps/runtime/src/index.ts:13,57-58`
 - Modify: `apps/runtime/src/agent/queue.ts:136-144`（+ 发射器 Map 字段）
 - Modify: `apps/runtime/src/mcp/manager.ts:207-210`（+ 发射器 Map 字段）
@@ -814,10 +812,10 @@ const statusEmitter = new ResourceEventEmitter({ scope: 'runtime' }, notify)
 :35 替换（每次扫描一个实例、seq 按扫描流计数——与现状一致，消费端不使用 seq，W0 不改语义只改身份）：
 
 ```ts
-    const emitter = new ResourceEventEmitter(
-      { scope: 'project', projectId },
-      this.notifier,
-    )
+const emitter = new ResourceEventEmitter(
+  { scope: 'project', projectId },
+  this.notifier,
+)
 ```
 
 导入补 `ResourceEventEmitter`。
@@ -827,12 +825,12 @@ const statusEmitter = new ResourceEventEmitter({ scope: 'runtime' }, notify)
 :157-162 替换：
 
 ```ts
-          emitter.next({
-            type: 'approval.resolved',
-            toolCallId,
-            decision,
-            grantScope: scope,
-          })
+emitter.next({
+  type: 'approval.resolved',
+  toolCallId,
+  decision,
+  grantScope: scope,
+})
 ```
 
 :131 注释更新为"事件载荷携带 sessionId（信封 scope=run + runId）"。
@@ -848,12 +846,16 @@ test('queue.changed 事件 seq 在会话流内单调递增，跨会话独立', (
   service.enqueue('s1', { content: 'a' })
   service.enqueue('s1', { content: 'b' })
   service.enqueue('s2', { content: 'c' })
-  const s1 = events.filter((e) => e.type === 'queue.changed' && e.sessionId === 's1')
+  const s1 = events.filter(
+    (e) => e.type === 'queue.changed' && e.sessionId === 's1',
+  )
   assert.equal(s1.length, 2)
   assert.equal(s1[0].scope, 'session')
   assert.equal(s1[0].seq, 0)
   assert.equal(s1[1].seq, 1)
-  const s2 = events.filter((e) => e.type === 'queue.changed' && e.sessionId === 's2')
+  const s2 = events.filter(
+    (e) => e.type === 'queue.changed' && e.sessionId === 's2',
+  )
   assert.equal(s2[0].seq, 0)
 })
 ```
@@ -877,6 +879,7 @@ git commit -m "feat(runtime)!: 事件生产者迁移到显式作用域；queue/m
 ### Task 5: runtime-client——通知路径日志 + 测试（原零覆盖）
 
 **Files:**
+
 - Modify: `packages/runtime-client/src/transport.ts:151-164`
 - Test: `packages/runtime-client/test/transport-events.test.mjs`（Create；同时确认登记到 package.json test 脚本——该 package 现仅 `node --test test/transport.test.mjs`，改为 `node --test test/transport.test.mjs test/transport-events.test.mjs`）
 
@@ -942,10 +945,7 @@ test('合法事件经 onEvent 分发；畸形事件丢弃但必须留日志', as
   assert.equal(got.length, 1)
   assert.equal(got[0].type, 'message.delta')
   assert.equal(warnings.length, 1)
-  assert.match(
-    String(warnings[0]),
-    /malformed event/,
-  )
+  assert.match(String(warnings[0]), /malformed event/)
 })
 ```
 
@@ -955,21 +955,21 @@ Expected: FAIL（畸形事件当前静默丢弃、无 warn）。
 - [ ] **Step 2: transport.ts:156-164 替换**
 
 ```ts
-    if (typeof message.method === 'string' && message.id === undefined) {
-      const parsed = RuntimeEventSchema.safeParse(message.params)
-      if (parsed.success) {
-        for (const handler of this.eventHandlers) {
-          handler(parsed.data)
-        }
-      } else {
-        // 版本代际不一致/畸形事件必须显式可见（AGENTS：降级不等于静默）。
-        console.warn(
-          `[runtime-client] dropped malformed event ${message.method}:`,
-          parsed.error.issues.slice(0, 3),
-        )
-      }
-      return
+if (typeof message.method === 'string' && message.id === undefined) {
+  const parsed = RuntimeEventSchema.safeParse(message.params)
+  if (parsed.success) {
+    for (const handler of this.eventHandlers) {
+      handler(parsed.data)
     }
+  } else {
+    // 版本代际不一致/畸形事件必须显式可见（AGENTS：降级不等于静默）。
+    console.warn(
+      `[runtime-client] dropped malformed event ${message.method}:`,
+      parsed.error.issues.slice(0, 3),
+    )
+  }
+  return
+}
 ```
 
 （`{ scope: undefined }` 载荷经 JSON 往返后键消失——若测 `JSON.parse(JSON.stringify(...))` 更稳，执行者按实际断言调整，warn 计数仍为 1。）
@@ -993,6 +993,7 @@ git commit -m "feat(runtime-client)!: 畸形事件不再静默丢弃；补通知
 ### Task 6: 前端消费端类型修正
 
 **Files:**
+
 - Modify: `apps/desktop/frontend/hooks/useAppBootstrap.ts:335`
 
 - [ ] **Step 1: 修 `event.runId` 联合类型收窄**
@@ -1030,6 +1031,7 @@ git commit -m "fix(frontend): 事件联合按 scope 收窄 run 通道刷新路�
 ### Task 7: W0 出口——文档、回归、生成链
 
 **Files:**
+
 - Modify: `docs/EVENT-PROTOCOL.md`
 - Modify: `ARCHITECTURE.md`、`docs/ROADMAP.md`（Terminal Surface 立项文案）
 
@@ -1072,6 +1074,7 @@ git commit -m "docs: 事件协议 v1.1（显式 scope 信封）+ Terminal Surfac
 ### Task 8: 依赖引入（版本在 Task 15 固定）
 
 **Files:**
+
 - Modify: `crates/system-runtime/Cargo.toml`
 - Modify: `apps/desktop/frontend/package.json`
 
@@ -1107,6 +1110,7 @@ git commit -m "chore: 引入 portable-pty / base64 / xterm 依赖（终端 W1 �
 ### Task 9: Rust——shell 选择（TDD）
 
 **Files:**
+
 - Create: `crates/system-runtime/src/terminal/mod.rs`
 - Create: `crates/system-runtime/src/terminal/shell.rs`
 - Modify: `crates/system-runtime/src/main.rs`（`mod terminal;`）
@@ -1217,6 +1221,7 @@ git commit -m "feat(system-runtime): 终端默认 shell 选择（三平台显式
 ### Task 10: Rust——PTY 会话（帧、seq、退出收尾）
 
 **Files:**
+
 - Create/Replace: `crates/system-runtime/src/terminal/session.rs`
 - Test: 同文件 `#[cfg(test)]` + `#[cfg(unix)]` 集成测试
 
@@ -1445,6 +1450,7 @@ git commit -m "feat(system-runtime): PTY 会话——分帧输出/退出收尾/�
 ### Task 11: Rust——service 路由与协议接线
 
 **Files:**
+
 - Create/Replace: `crates/system-runtime/src/terminal/service.rs`
 - Modify: `crates/system-runtime/src/main.rs`（dispatch + shutdown 回收）
 
@@ -1628,6 +1634,7 @@ git commit -m "feat(system-runtime): terminal 协议方法与关停统一回收�
 ### Task 12: TS——SystemRuntimeClient 通知路由（补静默丢弃缺口）
 
 **Files:**
+
 - Modify: `apps/runtime/src/system.ts:31-70,166-218,220-272`
 - Create: `apps/runtime/test/fixtures/terminal-fake-system-runtime.mjs`
 - Test: `apps/runtime/test/system-notifications.test.mjs`（登记进 package.json 列表）
@@ -1656,10 +1663,10 @@ git commit -m "feat(system-runtime): terminal 协议方法与关停统一回收�
 2. 读线闭包携带代际（:195-197）：
 
 ```ts
-    const readline = createInterface({ input: child.stdout })
-    readline.on('line', (line) => {
-      this.handleLine(line.trim(), generation)
-    })
+const readline = createInterface({ input: child.stdout })
+readline.on('line', (line) => {
+  this.handleLine(line.trim(), generation)
+})
 ```
 
 3. `handleLine` 增加 generation 参数与通知分支（替换 :220-272 的消息处理尾部）：
@@ -1830,6 +1837,7 @@ git commit -m "feat(runtime): SystemRuntimeClient 通知路由 + 旧代际丢弃
 ### Task 13: 贯通验证——macOS 真机 spike + 记录
 
 **Files:**
+
 - Create: `scripts/terminal-spike.mjs`
 - Create: `docs/TERMINAL-SPIKE-REPORT.md`
 
@@ -1891,12 +1899,15 @@ const seqsFor = (terminalId) =>
     .filter((n) => n.params.terminalId === terminalId)
     .map((n) => n.params.outputSeq)
 
-const decode = (terminalId) => Buffer.concat(framesFor(terminalId)).toString('utf8')
+const decode = (terminalId) =>
+  Buffer.concat(framesFor(terminalId)).toString('utf8')
 
 const results = []
 function check(name, pass, detail = '') {
   results.push({ name, pass, detail })
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`)
+  console.log(
+    `${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`,
+  )
 }
 
 // 1. spawn
@@ -1906,7 +1917,11 @@ const spawnReply = await request('terminal.spawn', {
   rows: 24,
   cols: 80,
 })
-check('spawn 返回元数据', spawnReply.result?.terminalId === 's1' && typeof spawnReply.result?.generation === 'number')
+check(
+  'spawn 返回元数据',
+  spawnReply.result?.terminalId === 's1' &&
+    typeof spawnReply.result?.generation === 'number',
+)
 await delay(300) // 等 shell 提示符输出
 
 // 2. echo 往返
@@ -1915,7 +1930,11 @@ await request('terminal.write', {
   data: Buffer.from('echo 终端-OK-✅\r', 'utf8').toString('base64'),
 })
 await delay(600)
-check('UTF-8 中文/emoji 往返', decode('s1').includes('终端-OK-✅'), decode('s1').slice(0, 80))
+check(
+  'UTF-8 中文/emoji 往返',
+  decode('s1').includes('终端-OK-✅'),
+  decode('s1').slice(0, 80),
+)
 
 // 3. 输出帧 ≤16 KiB（yes 洪泛 3 秒后 Ctrl+C，再验证 shell 仍可响应）
 const before = framesFor('s1').length
@@ -1931,11 +1950,16 @@ await request('terminal.write', {
 await delay(300)
 const flood = framesFor('s1').slice(before)
 check('洪泛产生大量帧', flood.length > 50, `frames=${flood.length}`)
-check('单帧 ≤16 KiB', flood.every((frame) => frame.length <= 16 * 1024))
+check(
+  '单帧 ≤16 KiB',
+  flood.every((frame) => frame.length <= 16 * 1024),
+)
 const floodSeqs = seqsFor('s1').slice(before)
 check(
   'outputSeq 连续无缺口',
-  floodSeqs.every((seq, index) => index === 0 || seq === floodSeqs[index - 1] + 1),
+  floodSeqs.every(
+    (seq, index) => index === 0 || seq === floodSeqs[index - 1] + 1,
+  ),
 )
 const afterCtrlC = framesFor('s1').length
 await request('terminal.write', {
@@ -1974,22 +1998,39 @@ try {
 } catch {
   survivors = ''
 }
-check('close 后无 sleep 300 残留', survivors.trim() === '', survivors.trim().slice(0, 120))
+check(
+  'close 后无 sleep 300 残留',
+  survivors.trim() === '',
+  survivors.trim().slice(0, 120),
+)
 
 // 6. 幂等 close
 const again = await request('terminal.close', { terminalId: 's1' })
 check('重复 close 幂等成功', again.result?.closed === true)
 
 // 7. 协议 shutdown → 全部回收
-await request('terminal.spawn', { terminalId: 's2', cwd: tmpdir(), rows: 24, cols: 80 })
+await request('terminal.spawn', {
+  terminalId: 's2',
+  cwd: tmpdir(),
+  rows: 24,
+  cols: 80,
+})
 await delay(200)
 const shutdownStart = Date.now()
-child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: ++id, method: 'system.shutdown' })}\n`)
+child.stdin.write(
+  `${JSON.stringify({ jsonrpc: '2.0', id: ++id, method: 'system.shutdown' })}\n`,
+)
 await new Promise((resolve) => child.on('exit', resolve))
-check('shutdown 优雅退出', Date.now() - shutdownStart < 2000, `${Date.now() - shutdownStart}ms`)
+check(
+  'shutdown 优雅退出',
+  Date.now() - shutdownStart < 2000,
+  `${Date.now() - shutdownStart}ms`,
+)
 
 const failed = results.filter((r) => !r.pass)
-console.log(`\nspike summary: ${results.length - failed.length}/${results.length} passed`)
+console.log(
+  `\nspike summary: ${results.length - failed.length}/${results.length} passed`,
+)
 process.exit(failed.length === 0 ? 0 : 1)
 ```
 
@@ -2020,6 +2061,7 @@ git commit -m "test: 终端纵向切片 spike harness 与 macOS 真机验证记�
 ### Task 14: xterm / WebView 行为验证（临时页，验完删除）
 
 **Files:**
+
 - Create(临时): `apps/desktop/spike/terminal-spike.html`（vite 根在 `apps/desktop`（vite.config root='.'），放这里才能按根路径 URL 访问；验证完成后删除，不入库）
 
 - [ ] **Step 1: 验证页**
@@ -2034,8 +2076,15 @@ git commit -m "test: 终端纵向切片 spike harness 与 macOS 真机验证记�
     <script src="/node_modules/@xterm/xterm/lib/xterm.js"></script>
     <script src="/node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
     <style>
-      #visible { width: 800px; height: 300px; }
-      #hidden { display: none; width: 800px; height: 300px; }
+      #visible {
+        width: 800px;
+        height: 300px;
+      }
+      #hidden {
+        display: none;
+        width: 800px;
+        height: 300px;
+      }
     </style>
   </head>
   <body>
@@ -2070,7 +2119,8 @@ git commit -m "test: 终端纵向切片 spike harness 与 macOS 真机验证记�
         const tick = () => {
           term.write(chunk)
           bytes += chunk.length
-          if (performance.now() - start < seconds * 1000) requestAnimationFrame(tick)
+          if (performance.now() - start < seconds * 1000)
+            requestAnimationFrame(tick)
           else console.log('flood bytes/s', (bytes / seconds).toFixed(0))
         }
         tick()
@@ -2135,4 +2185,7 @@ Expected: 全绿。**Windows/Linux spike（同脚本 + Job Object 结论）在�
 - **W2（后端服务）依赖本计划交付**：terminal 契约命令（frontend→runtime 侧，生成白名单）、attach/消费者代际、256 KiB 窗口与暂停读取、attach 前缓冲、幂等记录 TTL、`terminal.*` RuntimeEvent 接线。评审遗留：queue/mcp 懒建 Map 在 n=3（terminal）时提取为 events.ts 发射器缓存助手；信封 stamping 字段（seq/occurredAt/eventId）与 payload 同键的遮蔽风险随 terminal.output 设计一并复核（W2 契约测试钉住）。
 - **W3（前端保活面板）依赖 Task 14 结论**：隐藏实例解析策略、setTimeout 合帧、实例宿主位置。
 - **W4（故障/性能/打包）依赖 Task 13 报告门槛**。
+
+```
+
 ```
