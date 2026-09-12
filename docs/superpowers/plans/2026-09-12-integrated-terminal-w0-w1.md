@@ -396,6 +396,20 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
   RunEnvelopeSchema.extend({
     type: z.literal('run.cancelled'),
   }),
+  // 计划工具事件（实现补录：原列表遗漏，载荷与旧契约逐字一致）。
+  RunEnvelopeSchema.extend({
+    type: z.literal('plan.created'),
+    plan: PlanSchema,
+  }),
+  RunEnvelopeSchema.extend({
+    type: z.literal('plan.step.updated'),
+    planId: z.string().min(1),
+    step: PlanStepSchema,
+  }),
+  RunEnvelopeSchema.extend({
+    type: z.literal('plan.updated'),
+    plan: PlanSchema,
+  }),
   // 工具调用与审批事件。
   RunEnvelopeSchema.extend({
     type: z.literal('tool.requested'),
