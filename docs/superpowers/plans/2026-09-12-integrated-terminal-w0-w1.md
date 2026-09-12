@@ -2132,7 +2132,7 @@ Expected: 全绿。**Windows/Linux spike（同脚本 + Job Object 结论）在�
 
 ## 后续计划的前置依赖（本计划不做，只登记）
 
-- **W2（后端服务）依赖本计划交付**：terminal 契约命令（frontend→runtime 侧，生成白名单）、attach/消费者代际、256 KiB 窗口与暂停读取、attach 前缓冲、幂等记录 TTL、`terminal.*` RuntimeEvent 接线。
+- **W2（后端服务）依赖本计划交付**：terminal 契约命令（frontend→runtime 侧，生成白名单）、attach/消费者代际、256 KiB 窗口与暂停读取、attach 前缓冲、幂等记录 TTL、`terminal.*` RuntimeEvent 接线。评审遗留：queue/mcp 懒建 Map 在 n=3（terminal）时提取为 events.ts 发射器缓存助手；信封 stamping 字段（seq/occurredAt/eventId）与 payload 同键的遮蔽风险随 terminal.output 设计一并复核（W2 契约测试钉住）。
 - **W3（前端保活面板）依赖 Task 14 结论**：隐藏实例解析策略、setTimeout 合帧、实例宿主位置。
 - **W4（故障/性能/打包）依赖 Task 13 报告门槛**。
 ```
