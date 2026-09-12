@@ -43,7 +43,10 @@
 - **Seatbelt provider**（macOS OS 级沙箱）与登录 shell 环境（原计划 S1/S2 的 macOS 部分）——
   下一轮；本轮 macOS 工厂返回 Noop。
 - **Linux bwrap**、codex `elevated` 档（专用沙盒用户 + netsh 防火墙 + UAC setup）、
-  私有桌面（`windows.sandbox_private_desktop` 对应物）、codex 式 network_proxy 域名策略。
+  私有桌面（`windows.sandbox_private_desktop` 对应物）、codex 式 network_proxy 域名策略；
+- **codex 式可写根内保护路径**（`<root>/.git`、`.codex` 等只读化）：Windows 完整性标签
+  方案可对子目录打更高级别标签实现，留作后续加固项（对齐 codex "Protected paths in
+  writable roots"）。
 - 沙箱能力位的前端 UI 展示（原计划 S4 的页面部分）。
 - deny-default 严格模式（codex `workspace-write` 式白名单）。
 
@@ -112,9 +115,11 @@ result 增加 "sandbox": { "active": bool, "provider": id }
 
 ### 4.2 文件写边界（`acl.rs`）
 
-- 对 workspace root 与进程 TMPDIR 调 `SetNamedSecurityInfoW` 打 LOW 强制完整性标签
-  （SACL `S:(ML;;OICI;;;LW)`，OI/CI 继承）；
-- 低完整性进程只能写 LOW 标签目录 → **仅 workspace/TMPDIR 可写**（Chrome 模型，与
+- 对可写 root 调 `SetNamedSecurityInfoW` 打 LOW 强制完整性标签
+  （SACL `S:(ML;;OICI;;;LW)`，OI/CI 继承）；可写 root = **workspace root + 专用沙盒
+  临时目录**（`<TEMP>/reflexion-sandbox`，通过 TMP/TEMP 环境变量重定向给沙盒子进程；
+  不给整个用户 TEMP 打标签——标签会放宽该目录的完整性约束，副作用过大）；
+- 低完整性进程只能写 LOW 标签目录 → **仅 workspace/沙盒临时目录可写**（Chrome 模型，与
   macOS Seatbelt 一期的写边界语义一致）；
 - 已打标签的 root 缓存于 `Mutex<HashSet<PathBuf>>`（幂等，避免每命令重复设 ACL）；
 - 标签设置失败 → provider 整体不可用（fail-closed），不允许"半沙箱"。
@@ -231,4 +236,5 @@ TS 侧零破坏：result 新字段向后兼容；params 新字段可选。工具
 | 按命令网络授权 | 本轮纳入（S3） | codex 同语义；避免发布无人消费的 allowNetwork 孤儿参数；审批管线现成 |
 | trusted 与网络审批 | 不旁路 | 网络独立链路，任何模式不自动放行 |
 | Windows 网络强制 | 不做，如实上报 | 无免管理员机制；同 codex unelevated 诚实标注"弱网络隔离" |
+| 沙盒临时目录 | 专用子目录 + TMP/TEMP 重定向 | 给整个用户 TEMP 打 LOW 标签副作用过大（放宽完整性约束） |
 | fail-closed | 探测后不回退 | 静默降级为无沙箱是最坏状态；降级只允许发生在工厂探测期 |
