@@ -9,6 +9,10 @@ use std::sync::OnceLock;
 use crate::shell::ShellOutcome;
 
 pub(crate) mod noop;
+// Seatbelt/bwrap 渲染器全平台编译（纯字符串/std::process），便于跨机单测；
+// select() 仅在对应平台 cfg 分支消费。
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) mod macos;
 #[cfg(windows)]
 pub(crate) mod windows;
 
