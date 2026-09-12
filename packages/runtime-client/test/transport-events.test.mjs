@@ -49,11 +49,22 @@ test('合法事件经 onEvent 分发；畸形事件丢弃且必须留日志', as
     const legacy = { ...VALID_DELTA.params }
     delete legacy.scope
     deliver({ jsonrpc: '2.0', method: 'message.delta', params: legacy })
+    // runtime.ready 是握手通知（宿主消费），既不该告警也不该当事件分发。
+    deliver({
+      jsonrpc: '2.0',
+      method: 'runtime.ready',
+      params: {
+        protocolVersion: '1.1',
+        runtimeVersion: '0.1.0',
+        capabilities: ['chat'],
+      },
+    })
   } finally {
     console.warn = original
   }
   assert.equal(got.length, 1)
   assert.equal(got[0].type, 'message.delta')
   assert.equal(warnings.length, 1)
-  assert.match(String(warnings[0]), /malformed event/)
+  assert.match(warnings[0][0], /malformed event/)
+  assert.match(warnings[0][0], /message\.delta/)
 })
