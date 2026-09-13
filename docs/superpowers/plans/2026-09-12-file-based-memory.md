@@ -983,11 +983,18 @@ export function createMemoryRememberTool(ctx: ToolContext): ToolDefinition {
     },
     execute: async ({ args }) => {
       const scope = requireString(args, 'scope')
+      if (scope !== 'global' && scope !== 'project') {
+        return {
+          content: 'scope 必须是 global 或 project。',
+          isError: true,
+          code: 'invalid_request',
+        }
+      }
       const content = requireString(args, 'content')
       const session = ctx.store.sessions.get(ctx.sessionId)
       const outcome = await remember({
         store: ctx.store,
-        scope: scope === 'project' ? 'project' : 'global',
+        scope,
         content,
         projectId: session?.projectId ?? null,
       })
@@ -1068,6 +1075,8 @@ test('instructions.get/save 经 handler 往返', async () => {
 ```
 
 （`requireString` 的 requestId 由 dispatch 层剥离，handler 直调测试不传。）
+
+> Task 4 审查项落地（与 shipped 同步）：execute 层非法 scope 显式拒绝（不回落 global），并追加 5 个 execute/装配用例（valid global、无项目 project → no_project、'Project' 笔误 → invalid_request 且全局 MEMORY.md 不落盘、项目会话 project → memories/<id>、`createToolRegistry` 含 memory.remember）与 1 个"注入与命令面读同一真相源"集成钉（`instructions.test.mjs`）。
 
 Run（workdir `apps/runtime`）: `npx tsc -p tsconfig.json && node --disable-warning=ExperimentalWarning --import ./test/set-test-data-dir.mjs --test test/instructions.test.mjs test/command-coverage.test.mjs test/permissions.test.mjs test/runner.test.mjs`
 Expected: 全 PASS（memory.test.mjs 仍独立绿——旧管线未拆）。

@@ -27,6 +27,8 @@ import {
 import { commandHandlers } from '../dist/handlers.js'
 import { PermissionGate } from '../dist/agent/permissions.js'
 import { PRIMARY_AGENT_SYSTEM_PROMPT } from '../dist/agent/prompts/index.js'
+import { createMemoryRememberTool } from '../dist/agent/tools/instructions.js'
+import { createToolRegistry } from '../dist/agent/tools/index.js'
 
 function freshStore() {
   return new Store(mkdtempSync(join(tmpdir(), 'reflexion-instructions-')))
@@ -533,4 +535,82 @@ test('注入与命令面读同一真相源：同一 AGENTS.md 两处内容一致
   )
   assert.equal(got.content, text)
   assert.ok(block.includes(text))
+})
+
+// memory.remember execute 层测试：最小 ToolContext（对齐 plans.test.mjs 的
+// baseCtx 模式；本工具只用 store + sessionId，其余字段为 createToolRegistry 装配兜底）。
+function rememberCtx(store, sessionId) {
+  return {
+    store,
+    sessionId,
+    messageId: 'message-1',
+    runId: 'run-1',
+    emitter: { next: () => {} },
+    system: null,
+    workspaceRoot: null,
+    skills: { get: () => null, list: () => [] },
+    mcp: null,
+  }
+}
+
+function callScope(tool, scope, content) {
+  return tool.execute({
+    args: { scope, content },
+    signal: new AbortController().signal,
+  })
+}
+
+test('memory.remember execute: 合法 global → 写入数据目录、消息含路径', async () => {
+  const store = freshStore()
+  const session = store.sessions.create(null)
+  const tool = createMemoryRememberTool(rememberCtx(store, session.id))
+  const result = await callScope(tool, 'global', '回复统一用中文。')
+  assert.equal(result.isError, false)
+  const text = await readFile(
+    join(process.env.REFLEXION_DATA_DIR, 'MEMORY.md'),
+    'utf8',
+  )
+  assert.ok(text.startsWith('# 记忆'))
+  assert.match(text, /- \d{4}-\d{2}-\d{2} 回复统一用中文。/)
+  assert.ok(result.content.includes(process.env.REFLEXION_DATA_DIR))
+})
+
+test('memory.remember execute: 无项目会话 scope=project → no_project', async () => {
+  const store = freshStore()
+  const session = store.sessions.create(null)
+  const tool = createMemoryRememberTool(rememberCtx(store, session.id))
+  const result = await callScope(tool, 'project', '项目纪律')
+  assert.equal(result.isError, true)
+  assert.equal(result.code, 'no_project')
+})
+
+test('memory.remember execute: 非法 scope 显式拒绝、不回落 global 写盘', async () => {
+  const store = freshStore()
+  const session = store.sessions.create(null)
+  const tool = createMemoryRememberTool(rememberCtx(store, session.id))
+  const result = await callScope(tool, 'Project', '大小写笔误')
+  assert.equal(result.isError, true)
+  assert.equal(result.code, 'invalid_request')
+  assert.equal(
+    existsSync(join(process.env.REFLEXION_DATA_DIR, 'MEMORY.md')),
+    false,
+  )
+})
+
+test('memory.remember execute: 项目会话 scope=project → memories/<id>/MEMORY.md', async () => {
+  const store = freshStore()
+  const { project, session } = sessionInProject(store)
+  const tool = createMemoryRememberTool(rememberCtx(store, session.id))
+  const result = await callScope(tool, 'project', '本项目依赖统一 pnpm。')
+  assert.equal(result.isError, false)
+  const text = await readFile(
+    join(process.env.REFLEXION_DATA_DIR, 'memories', project.id, 'MEMORY.md'),
+    'utf8',
+  )
+  assert.ok(text.includes('本项目依赖统一 pnpm。'))
+})
+
+test('工具装配：createToolRegistry 始终注册 memory.remember', () => {
+  const registry = createToolRegistry(rememberCtx(freshStore(), 'session-1'))
+  assert.ok(registry.list().some((tool) => tool.name === 'memory.remember'))
 })

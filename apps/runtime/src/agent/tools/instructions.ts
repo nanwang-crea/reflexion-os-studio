@@ -22,11 +22,18 @@ export function createMemoryRememberTool(ctx: ToolContext): ToolDefinition {
     },
     execute: async ({ args }) => {
       const scope = requireString(args, 'scope')
+      if (scope !== 'global' && scope !== 'project') {
+        return {
+          content: 'scope 必须是 global 或 project。',
+          isError: true,
+          code: 'invalid_request',
+        }
+      }
       const content = requireString(args, 'content')
       const session = ctx.store.sessions.get(ctx.sessionId)
       const outcome = await remember({
         store: ctx.store,
-        scope: scope === 'project' ? 'project' : 'global',
+        scope,
         content,
         projectId: session?.projectId ?? null,
       })
