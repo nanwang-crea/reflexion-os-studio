@@ -114,8 +114,11 @@
   `cargo test --manifest-path crates/Cargo.toml`（109 passed）；`pnpm test` 全链。
 - **未做 Rust 修改**：计划预期的热区（后台作业回收、shutdown 收敛）实测成立，
   未触发升级实现。
-- 对计划脚本的两处非语义偏差：① 计划版 `floodStart` 声明未用（ESLint 报
-  no-unused-vars），改为以实测 elapsed 计算速率（原计划按 3s 名义值）；
-  ② 单帧检查追加实测 max 帧细节。断言强度未降低。
+- 对计划脚本的偏差（AGENTS §9 如实，逐条）：① 计划版 `floodStart` 声明未用
+  （ESLint 报 no-unused-vars），改为以实测 elapsed 计算速率（原计划按 3s 名义值）；
+  ② 单帧检查追加实测 max 帧细节；③ 新增双终端隔离检查、shutdown 后台残留检查、
+  速率测量——均为相对计划的**加强**，无删减、无阈值放宽。断言强度未降低。
+- 帧数口径：§2 结果表（单次运行洪泛即时切片）与 §3 吞吐表（多次运行 + 最终运行，
+  切片时点不同）数字差 ~50 帧属正常测量窗口差，非同一采集点，非造假。
 - 一次性探针（§2 PID 级、§4 trap）不入库；trap 探针产生的孤儿进程已当场清理。
 - Windows/Linux spike、WebView/xterm 检查单：未做（分别待对应环境与 Task 14）。
