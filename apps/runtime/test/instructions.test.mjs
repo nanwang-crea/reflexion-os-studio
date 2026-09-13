@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import { test, beforeEach } from 'node:test'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  writeFileSync,
+} from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -335,4 +341,152 @@ test('get/save 指令文件往返', async () => {
     kind: 'agents',
   })
   assert.equal(saved.content, text)
+})
+
+test('remember: 拒绝内嵌换行（伪造条目注入），不写文件', async () => {
+  const store = freshStore()
+  const outcome = await remember({
+    store,
+    scope: 'global',
+    content: '第一行\n第二行伪造条目\n- 2000-01-01 注入',
+    projectId: null,
+  })
+  assert.equal(outcome.ok, false)
+  assert.equal(outcome.code, 'too_long')
+  assert.ok(
+    !existsSync(join(process.env.REFLEXION_DATA_DIR, 'MEMORY.md')),
+    '被拒绝的内容不得落盘（文件不应存在）',
+  )
+})
+
+test('remember: 追加不与缺尾换行的旧行粘连', async () => {
+  const store = freshStore()
+  await saveInstruction({
+    store,
+    scope: 'global',
+    projectId: null,
+    kind: 'memory',
+    content: '# 记忆\n\n## 记忆条目\n- 旧条目（无尾换行）',
+  })
+  await remember({
+    store,
+    scope: 'global',
+    content: '新条目',
+    projectId: null,
+  })
+  const text = await readFile(
+    join(process.env.REFLEXION_DATA_DIR, 'MEMORY.md'),
+    'utf8',
+  )
+  const lines = text.split('\n')
+  assert.ok(
+    lines.includes('- 旧条目（无尾换行）'),
+    '旧条目须独占一行，不能被新条目粘到同一行尾',
+  )
+  assert.ok(
+    lines.some((line) => line.startsWith('- ') && line.includes('新条目')),
+    '新条目须作为独立行出现',
+  )
+})
+
+test('remember: 拒绝 U+2028/U+2029 行分隔符（split("\\n") 看是单行、实为多行）', async () => {
+  const store = freshStore()
+  const outcome = await remember({
+    store,
+    scope: 'global',
+    content: '甲\u2028乙\u2029丙',
+    projectId: null,
+  })
+  assert.equal(outcome.ok, false)
+  assert.equal(outcome.code, 'too_long')
+  assert.ok(
+    !existsSync(join(process.env.REFLEXION_DATA_DIR, 'MEMORY.md')),
+    '含行分隔符的内容不得落盘',
+  )
+})
+
+test('remember/save 共链串行：覆盖写与追加交错不丢条目', async () => {
+  const store = freshStore()
+  const dataDir = process.env.REFLEXION_DATA_DIR
+  const a = '串行甲'
+  const b = '串行乙'
+  const c = '串行丙'
+  // save 覆盖写整文件（含甲/乙两条目），两侧各有一次 remember 追加。
+  // 不共链时 rename 可能落在两次追加之间，把先写的条目（含丙）冲掉。
+  const saveContent = `# 记忆\n\n## 记忆条目\n- ${a}\n- ${b}\n`
+  const outcomes = await Promise.all([
+    remember({ store, scope: 'global', content: a, projectId: null }),
+    saveInstruction({
+      store,
+      scope: 'global',
+      projectId: null,
+      kind: 'memory',
+      content: saveContent,
+    }),
+    remember({ store, scope: 'global', content: c, projectId: null }),
+  ])
+  assert.deepEqual(
+    outcomes.map((o) => o.ok),
+    [true, true, true],
+  )
+  const text = await readFile(join(dataDir, 'MEMORY.md'), 'utf8')
+  const lines = text.split('\n')
+  // 表头只出现一次（不共链时两条并发 remember 会各写一份表头）
+  assert.equal(lines.filter((l) => l === '# 记忆').length, 1)
+  // 三条载荷俱在，且每条独占一行、以 '- ' 起始
+  assert.ok(lines.includes(`- ${a}`))
+  assert.ok(lines.includes(`- ${b}`))
+  assert.ok(lines.some((l) => l.startsWith('- ') && l.includes(c)))
+  for (const line of lines) {
+    if (line === '') continue
+    assert.ok(
+      line.startsWith('#') || line.startsWith('- '),
+      `非法行（疑似粘连/丢尾）：${line}`,
+    )
+  }
+})
+
+test('remember: MEMORY.md 是目录时折叠 io_error（不 reject）', async () => {
+  const store = freshStore()
+  mkdirSync(join(process.env.REFLEXION_DATA_DIR, 'MEMORY.md'))
+  const outcome = await remember({
+    store,
+    scope: 'global',
+    content: '任意内容',
+    projectId: null,
+  })
+  assert.equal(outcome.ok, false)
+  assert.equal(outcome.code, 'io_error')
+  assert.ok(typeof outcome.message === 'string' && outcome.message !== '')
+})
+
+test('不可读的 MEMORY.md：getInstruction 抛错、remember 折叠 io_error', async (t) => {
+  if (typeof process.getuid !== 'function' || process.getuid() === 0) {
+    t.skip('需非 root POSIX（Windows/root 下 000 权限不生效）')
+    return
+  }
+  const store = freshStore()
+  const path = join(process.env.REFLEXION_DATA_DIR, 'MEMORY.md')
+  writeFileSync(path, '# 记忆\n- 原始内容\n')
+  chmodSync(path, 0o000)
+  try {
+    await assert.rejects(() =>
+      getInstruction({
+        store,
+        scope: 'global',
+        projectId: null,
+        kind: 'memory',
+      }),
+    )
+    const outcome = await remember({
+      store,
+      scope: 'global',
+      content: '追加内容',
+      projectId: null,
+    })
+    assert.equal(outcome.ok, false)
+    assert.equal(outcome.code, 'io_error')
+  } finally {
+    chmodSync(path, 0o600)
+  }
 })

@@ -3,6 +3,7 @@ import {
   mkdir,
   readFile,
   rename,
+  rm,
   writeFile,
 } from 'node:fs/promises'
 import { dirname } from 'node:path'
@@ -19,16 +20,20 @@ const MEMORY_FILE_HEADER =
   '# 记忆\n\n本文件由 ReflexionOS Studio 的 remember 工具与用户共同维护。\n\n## 记忆条目\n'
 const MAX_ENTRY_CHARS = 200
 /** MEMORY.md 体积上限：超限拒绝追加，提示到指令页整理（本轮不做自动治理）。 */
-export const MAX_MEMORY_FILE_BYTES = 64 * 1024
+const MAX_MEMORY_FILE_BYTES = 64 * 1024
 /** 指令页保存的内容上限（AGENTS.md 允许更大，用户在编辑器里写长文）。 */
 const MAX_SAVE_BYTES = 256 * 1024
 
-/** remember 工具与手动写入共用一条进程内串行链，避免并发 Run 交错。 */
+/**
+ * remember 与 saveInstruction 共用一条进程内串行链：两者都对同一 MEMORY.md
+ * 做「读-改-写」，并发 Run 的工具写入与用户在指令页的整文件保存必须互斥，
+ * 否则 rename 会冲掉交错写入的条目。链本身对错误免疫（见各 .catch）。
+ */
 let writeChain: Promise<unknown> = Promise.resolve()
 
 export interface RememberOutcome {
   ok: boolean
-  code?: 'no_project' | 'too_long' | 'secret_like' | 'too_large'
+  code?: 'no_project' | 'too_long' | 'secret_like' | 'too_large' | 'io_error'
   message: string
   path?: string
   entry?: string
@@ -42,7 +47,7 @@ export function remember(input: {
   projectId: string | null
 }): Promise<RememberOutcome> {
   const task = writeChain.then(() => rememberNow(input))
-  // rememberNow 内部不抛错（全部折叠为 outcome）；catch 仅保链不断。
+  // rememberNow 把一切（含 IO 错误）折叠为 outcome，不会抛错；catch 仅兜底保链。
   writeChain = task.catch(() => undefined)
   return task
 }
@@ -60,6 +65,14 @@ async function rememberNow(input: {
       ok: false,
       code: 'too_long',
       message: `记忆内容必须非空且不超过 ${MAX_ENTRY_CHARS} 字，当前 ${content.length} 字。`,
+    }
+  }
+  // 单行不变量：条目独占一行才能安全聚合/截断，内嵌换行会伪造多条目注入。
+  if (/[\r\n\u2028\u2029]/.test(content)) {
+    return {
+      ok: false,
+      code: 'too_long',
+      message: '记忆内容必须是单行，不能包含换行。',
     }
   }
   if (containsSecretLike(content)) {
@@ -85,36 +98,61 @@ async function rememberNow(input: {
       message: '项目不存在，无法写项目级记忆；请改用 global 范围。',
     }
   }
-  const existing = await readIfAbsent(path)
-  if (Buffer.byteLength(existing, 'utf8') > MAX_MEMORY_FILE_BYTES) {
+  // 读-判-写整段都是磁盘操作，任一环节抛错（EISDIR/EACCES/ENOSPC…）折叠成
+  // io_error：remember 是模型侧工具，绝不能因磁盘异常把异常抛回 Run 循环。
+  try {
+    const existing = await readIfAbsent(path)
+    if (Buffer.byteLength(existing, 'utf8') > MAX_MEMORY_FILE_BYTES) {
+      return {
+        ok: false,
+        code: 'too_large',
+        message: `记忆文件已超 ${MAX_MEMORY_FILE_BYTES / 1024}KB 上限，请到指令页整理既有条目。`,
+      }
+    }
+    const entry = `- ${new Date().toLocaleDateString('en-CA')} ${content}`
+    await mkdir(dirname(path), { recursive: true })
+    const prefix = existing === '' ? `${MEMORY_FILE_HEADER}\n` : ''
+    // 旧文件缺尾换行时先补 \n，避免新条目粘在旧行行尾。
+    const glue = existing === '' || existing.endsWith('\n') ? '' : '\n'
+    await appendFile(path, `${prefix}${glue}${entry}\n`, 'utf8')
+    return {
+      ok: true,
+      message: `已记住（${path}）：${content}`,
+      path,
+      entry,
+    }
+  } catch (error) {
     return {
       ok: false,
-      code: 'too_large',
-      message: `记忆文件已超 ${MAX_MEMORY_FILE_BYTES / 1024}KB 上限，请到指令页整理既有条目。`,
+      code: 'io_error',
+      message: `记忆文件写入失败：${ioReason(error)}`,
     }
-  }
-  const entry = `- ${new Date().toISOString().slice(0, 10)} ${content}`
-  await mkdir(dirname(path), { recursive: true })
-  const body =
-    existing === '' ? `${MEMORY_FILE_HEADER}\n${entry}\n` : `${entry}\n`
-  await appendFile(path, body, 'utf8')
-  return {
-    ok: true,
-    message: `已记住（${path}）：${content}`,
-    path,
-    entry,
   }
 }
 
+/** 只在「确实不存在」时视作空内容；权限/目录等真实故障上抛给调用方判定。 */
 async function readIfAbsent(path: string): Promise<string> {
   try {
     return await readFile(path, 'utf8')
-  } catch {
-    return ''
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException | null)?.code
+    // 有意与 loader.readOptionalFile 分道：注入路径对缺失容错、吞掉一切；
+    // 这里编辑器/写入路径不得把「不可读」伪装成「空」，非缺失错误一律上抛。
+    if (code === 'ENOENT' || code === 'ENOTDIR') return ''
+    throw error
   }
 }
 
-/** 定位（可能不存在的）指令文件并返回内容；无路径位置 → path null + 空内容。 */
+function ioReason(error: unknown): string {
+  const code = (error as NodeJS.ErrnoException | null)?.code
+  if (code) return code
+  return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * 定位（可能不存在的）指令文件并返回内容；无路径位置 → path null + 空内容。
+ * 文件存在但不可读时向上抛错——由命令 handler 按内部错误映射，编辑器不得静默显示为空。
+ */
 export async function getInstruction(input: {
   store: Store
   scope: InstructionScope
@@ -131,8 +169,24 @@ export async function getInstruction(input: {
   return { path, content: await readIfAbsent(path) }
 }
 
-/** 指令页保存：临时文件 + rename 原子替换；UTF-8 无 BOM、\n 换行。 */
-export async function saveInstruction(input: {
+/**
+ * 指令页保存：与 remember 共用串行链（读-改-写互斥）。守卫失败返回 ok:false；
+ * 真实磁盘故障沿链上抛（与 getInstruction 一致），由 handler 按内部错误处理。
+ */
+export function saveInstruction(input: {
+  store: Store
+  scope: InstructionScope
+  projectId: string | null
+  kind: InstructionKind
+  content: string
+}): Promise<{ ok: boolean; message: string }> {
+  const task = writeChain.then(() => saveInstructionNow(input))
+  // save 可能因磁盘故障 reject：catch 只保链不断，reject 仍原样交给本次调用方。
+  writeChain = task.catch(() => undefined)
+  return task
+}
+
+async function saveInstructionNow(input: {
   store: Store
   scope: InstructionScope
   projectId: string | null
@@ -163,11 +217,18 @@ export async function saveInstruction(input: {
   }
 }
 
+/** 临时文件 + rename 原子替换；失败清理半成品 tmp，随机后缀防同毫秒同名冲突。 */
 async function writeFileWithRename(
   path: string,
   content: string,
 ): Promise<void> {
-  const tmp = `${path}.tmp-${process.pid}-${Date.now()}`
-  await writeFile(tmp, content, 'utf8')
-  await rename(tmp, path)
+  const suffix = Math.random().toString(36).slice(2, 8)
+  const tmp = `${path}.tmp-${process.pid}-${Date.now()}-${suffix}`
+  try {
+    await writeFile(tmp, content, 'utf8')
+    await rename(tmp, path)
+  } catch (error) {
+    await rm(tmp, { force: true })
+    throw error
+  }
 }
