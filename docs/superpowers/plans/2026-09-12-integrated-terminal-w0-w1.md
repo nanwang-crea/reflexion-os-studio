@@ -2185,6 +2185,8 @@ Expected: 全绿。**Windows/Linux spike（同脚本 + Job Object 结论）在�
 - **W2（后端服务）依赖本计划交付**：terminal 契约命令（frontend→runtime 侧，生成白名单）、attach/消费者代际、256 KiB 窗口与暂停读取、attach 前缓冲、幂等记录 TTL、`terminal.*` RuntimeEvent 接线。评审遗留：queue/mcp 懒建 Map 在 n=3（terminal）时提取为 events.ts 发射器缓存助手；信封 stamping 字段（seq/occurredAt/eventId）与 payload 同键的遮蔽风险随 terminal.output 设计一并复核（W2 契约测试钉住）。
 - **W3（前端保活面板）依赖 Task 14 结论**：隐藏实例解析策略、setTimeout 合帧、实例宿主位置。
 - **W4（故障/性能/打包）依赖 Task 13 报告门槛**。
+- **PTY 回收升级（Task 10 评审 Important）**：unix killer 是裸 SIGHUP 且 `close()` 无超时——`trap '' HUP` 的 shell 会卡关停。W2 必须加 SIGKILL 升级（带时限），前端 close 命令也要有超时语义。
+- **残留后代持有 slave fd**：读线程不 EOF、退出线程滞留——W2 消费者代际/回收策略覆盖；`base64` 已定 STANDARD 表，W2 解码侧同表。
 - **Windows shell 探测遗留**（Task 9 评审）：pwsh PATH 探测无超时（AV/GPO 首启可拖慢开终端），Windows 真机验收时补 wait-timeout 或线程化探测；探测候选顺序逻辑在 Windows 环境补单测。
 
 ```
