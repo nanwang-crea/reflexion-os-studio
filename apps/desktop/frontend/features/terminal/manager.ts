@@ -21,6 +21,10 @@ export interface TerminalTabView {
   label: string
   status: TerminalStatus
   exitCode: number | null | undefined
+  /** attach 竞态失效标记（M-1）：标题显示「终端已失效」。 */
+  expired: boolean
+  /** terminal.state 携带的失败原因（M-2；仅 failed 态有展示意义，可缺省）。 */
+  errorMessage?: string
 }
 
 export interface TerminalSnapshot {
@@ -28,7 +32,6 @@ export interface TerminalSnapshot {
   activeId: string | null
   panelOpen: boolean
   heightPx: number
-  firstRunNoticed: boolean
 }
 
 const PREF_OPEN = 'terminal.panel.open'
@@ -90,7 +93,6 @@ class TerminalManager {
       activeId: this.activeByProject.get(key) ?? null,
       panelOpen: this.panelOpen,
       heightPx: this.heightPx,
-      firstRunNoticed: localStorage.getItem(PREF_FIRST_RUN) === '1',
     }
     this.snapshotCache.set(key, snapshot)
     return snapshot
@@ -139,6 +141,7 @@ class TerminalManager {
       const existing = this.runtime.get(meta.terminalId)
       if (existing) {
         existing.meta = meta
+        existing.expired = false // list 中仍可见 = 后端还在跟踪，撤销失效猜测
       } else {
         const inst = this.runtime.register(meta)
         if (!DEAD_STATUSES.has(meta.status)) void this.runtime.attach(inst)
@@ -196,6 +199,14 @@ class TerminalManager {
       this.runtime.render()
       inst.term?.focus()
     }
+  }
+
+  /** 项目内未到终态（starting/running/closing）的终端数：删除项目确认文案用。 */
+  activeCount(projectId: string): number {
+    return this.tabsOf(projectId).filter((id) => {
+      const inst = this.runtime.get(id)
+      return inst !== undefined && !DEAD_STATUSES.has(inst.meta.status)
+    }).length
   }
 
   async closeTab(projectId: string, terminalId: string): Promise<void> {
@@ -340,6 +351,10 @@ class TerminalManager {
       label: shellNameOf(inst.meta),
       status: inst.closing ? 'closing' : inst.meta.status,
       exitCode: inst.meta.exitCode,
+      expired: inst.expired,
+      ...(inst.meta.errorMessage !== undefined
+        ? { errorMessage: inst.meta.errorMessage }
+        : {}),
     }
   }
 

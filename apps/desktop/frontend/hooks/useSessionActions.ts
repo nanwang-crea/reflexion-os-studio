@@ -9,6 +9,7 @@ import {
 } from '../api/projects'
 import * as sessionsApi from '../api/sessions'
 import type { SessionData } from '../api/sessions'
+import { terminalManager } from '../features/terminal/manager'
 
 interface SessionActionsDeps {
   // 选择状态（渲染值）
@@ -111,9 +112,15 @@ export function useSessionActions(deps: SessionActionsDeps): {
       return
     }
     const project = deps.projects.find((item) => item.id === projectId)
+    // spec §2：删除项目必须让用户看到终端去向（关闭标签是唯一 halt 出口）。
+    const activeTerminals = terminalManager.activeCount(projectId)
+    const terminalWarning =
+      activeTerminals > 0
+        ? `该项目还有 ${activeTerminals} 个运行中的终端，删除前将先关闭它们。`
+        : ''
     const confirmed = await deps.confirm({
       title: '删除项目',
-      message: `删除项目“${project?.name ?? ''}”会一并删除其下所有会话和聊天记录，且无法恢复。确定删除？`,
+      message: `删除项目“${project?.name ?? ''}”会一并删除其下所有会话和聊天记录，且无法恢复。${terminalWarning}确定删除？`,
       danger: true,
       confirmLabel: '删除',
     })

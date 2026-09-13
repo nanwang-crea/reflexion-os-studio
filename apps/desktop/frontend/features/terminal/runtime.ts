@@ -10,9 +10,14 @@ import { decodeBase64, encodeBase64, utf8Length } from './binary'
 import { InputSendError, TerminalInputChannel } from './input-channel'
 import { AckTracker } from './ack-tracker'
 import { PreMountBuffer } from './output-buffer'
-import { extractErrorCode, isUncertainError } from './notices'
+import {
+  extractErrorCode,
+  isUncertainError,
+  notifyTerminalError,
+} from './notices'
 import type { RuntimeEvent } from '@reflexion-os-studio/runtime-client'
 import { transport } from '../../lib/transport'
+import { DEAD_STATUSES } from './types'
 import type { TerminalInstance, TerminalMeta } from './types'
 
 /**
@@ -27,6 +32,8 @@ const PASTE_LIMIT_BYTES = 1024 * 1024
 const RESIZE_DEBOUNCE_MS = 50
 const HOST_DEFAULT_WIDTH = 800
 const HOST_DEFAULT_HEIGHT = 300
+/** attach not_found 竞态：无 state 事件到达时判定标签失效的等待窗口。 */
+const ATTACH_EXPIRY_MS = 2000
 
 const XTERM_THEME = {
   background: '#1e1e1e', // 与 --bg-editor 同值
@@ -83,6 +90,7 @@ export class TerminalRuntime {
       resizeTimer: null,
       observer: null,
       closing: false,
+      expired: false,
     }
     inst.input = new TerminalInputChannel({
       send: (seq, bytes) => this.sendInput(inst, seq, bytes),
@@ -114,10 +122,35 @@ export class TerminalRuntime {
         inst.consumerId,
       )
       inst.meta = terminal
+      inst.expired = false
     } catch (error) {
       console.debug('[terminal] attach failed', error)
+      const code = extractErrorCode(error)
+      if (code === 'terminal_not_found') {
+        // create 与 attach 之间被后端回收：等终态 state 事件；没等到即失效。
+        this.watchAttachLoss(inst)
+      } else if (
+        code !== 'terminal_not_running' &&
+        !DEAD_STATUSES.has(inst.meta.status)
+      ) {
+        // not_running 交给 terminal.state 事件驱动 UI；meta 已终态时 attach
+        // 失败无信息量；其余意外失败必须可见。
+        notifyTerminalError(error, '终端绑定输出失败')
+      }
     }
     this.options.notify()
+  }
+
+  /** not_found 且 2s 内无 terminal.state 事件到达：标签降级为只读失效态。 */
+  private watchAttachLoss(inst: TerminalInstance): void {
+    const statusAtCatch = inst.meta.status
+    setTimeout(() => {
+      if (this.instances.get(inst.meta.terminalId) !== inst) return
+      if (inst.expired || inst.meta.status !== statusAtCatch) return
+      inst.expired = true
+      inst.meta = { ...inst.meta, status: 'disconnected' } // 只读 + dead 态 UI
+      this.options.notify()
+    }, ATTACH_EXPIRY_MS)
   }
 
   /**
@@ -194,10 +227,16 @@ export class TerminalRuntime {
       }
       return
     }
+    // terminal.state 到达即证明后端仍跟踪该终端：撤销失效猜测（M-1）。
+    inst.expired = false
     inst.meta = {
       ...inst.meta,
       status: event.status,
       ...(event.exitCode !== undefined ? { exitCode: event.exitCode } : {}),
+      // 失败原因（契约事件可选字段，可能缺省）：随 meta 留存供状态标题展示。
+      ...(event.errorMessage !== undefined
+        ? { errorMessage: event.errorMessage }
+        : {}),
     }
     if (event.status === 'closing') inst.closing = true
     this.options.notify()

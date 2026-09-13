@@ -1,10 +1,14 @@
+import * as terminalClient from '@reflexion-os-studio/runtime-client'
 import type { Terminal } from '@reflexion-os-studio/runtime-client'
-import { request } from './client'
+import { newRequestId, transport } from '../lib/transport'
 
 /**
  * 集成终端前端请求入口（W2）：用户本机 shell，不经 Agent 通道。
- * requestId 由 request() 统一注入；组件不得直连 transport。
+ * 方法名与 wire 参数形状由 runtime-client 的 terminal facade 唯一持有
+ * （AGENTS §2）；本层只注入 transport 与 requestId。组件不得直连 transport。
  */
+
+const options = () => ({ transport, requestId: newRequestId() })
 
 /** 在当前项目 workspace 下新建终端；initialCwd=启动目录，非 shell 当前目录。 */
 export function createTerminal(
@@ -12,18 +16,14 @@ export function createTerminal(
   rows: number,
   cols: number,
 ): Promise<{ terminal: Terminal }> {
-  return request<{ terminal: Terminal }>('terminal.create', {
-    projectId,
-    rows,
-    cols,
-  })
+  return terminalClient.createTerminal({ ...options(), projectId, rows, cols })
 }
 
 /** 列出某项目的全部终端及状态。 */
 export function listTerminals(
   projectId: string,
 ): Promise<{ terminals: Terminal[] }> {
-  return request<{ terminals: Terminal[] }>('terminal.list', { projectId })
+  return terminalClient.listTerminals({ ...options(), projectId })
 }
 
 /** 绑定输出消费者（consumerId=xterm 宿主实例身份），开始按序交付输出。 */
@@ -32,10 +32,12 @@ export function attachTerminal(
   terminalId: string,
   consumerId: string,
 ): Promise<{ terminal: Terminal; replayedBytes: number }> {
-  return request<{ terminal: Terminal; replayedBytes: number }>(
-    'terminal.attach',
-    { projectId, terminalId, consumerId },
-  )
+  return terminalClient.attachTerminal({
+    ...options(),
+    projectId,
+    terminalId,
+    consumerId,
+  })
 }
 
 /** 送入一批带序号的输入（base64 字节帧）；accepted 仅表示已入队，非命令执行完成。 */
@@ -45,11 +47,12 @@ export function writeTerminal(
   inputSeq: number,
   dataBase64: string,
 ): Promise<{ accepted: true; inputSeq: number }> {
-  return request<{ accepted: true; inputSeq: number }>('terminal.write', {
+  return terminalClient.writeTerminal({
+    ...options(),
     projectId,
     terminalId,
     inputSeq,
-    data: dataBase64,
+    dataBase64,
   })
 }
 
@@ -60,7 +63,8 @@ export function resizeTerminal(
   rows: number,
   cols: number,
 ): Promise<{ ok: true }> {
-  return request<{ ok: true }>('terminal.resize', {
+  return terminalClient.resizeTerminal({
+    ...options(),
     projectId,
     terminalId,
     rows,
@@ -74,7 +78,8 @@ export function ackTerminal(
   terminalId: string,
   throughOutputSeq: number,
 ): Promise<{ ok: true }> {
-  return request<{ ok: true }>('terminal.ack', {
+  return terminalClient.ackTerminal({
+    ...options(),
     projectId,
     terminalId,
     throughOutputSeq,
@@ -86,5 +91,5 @@ export function closeTerminal(
   projectId: string,
   terminalId: string,
 ): Promise<{ closed: true }> {
-  return request<{ closed: true }>('terminal.close', { projectId, terminalId })
+  return terminalClient.closeTerminal({ ...options(), projectId, terminalId })
 }

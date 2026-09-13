@@ -1,5 +1,6 @@
 import { TransportError } from '@reflexion-os-studio/runtime-client'
 import { showToast } from '../../components/Toast'
+import { INPUT_OUT_OF_ORDER_MESSAGE } from './input-channel'
 
 /**
  * 终端错误分类与用户可见通知（W3）：后端稳定 code → 中文提示映射。
@@ -15,6 +16,11 @@ const TERMINAL_ERROR_NOTICES: Record<string, string> = {
   terminal_not_found: '终端已不存在',
   terminal_not_running: '终端已退出，无法执行该操作',
   terminal_closed: '终端已关闭',
+  terminal_input_out_of_order: INPUT_OUT_OF_ORDER_MESSAGE,
+  too_many_terminals:
+    '系统终端会话已满（含未清理的退出会话），请关闭一些终端标签后重试。',
+  pty_error: '终端创建失败：无法启动 shell。',
+  io_error: '终端 I/O 失败，标签可能已失效。',
   project_not_found: '项目未找到或未打开',
 }
 

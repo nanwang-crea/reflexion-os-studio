@@ -144,7 +144,8 @@ export function TerminalPanel(props: TerminalPanelProps): React.JSX.Element {
                     aria-hidden="true"
                   />
                   <span className="terminal-tab-label">{tab.label}</span>
-                  {tab.status === 'disconnected' && (
+                  {tab.expired && <span className="terminal-chip">已失效</span>}
+                  {tab.status === 'disconnected' && !tab.expired && (
                     <span className="terminal-chip">已断开</span>
                   )}
                   {tab.status === 'exited' && tab.exitCode !== undefined && (
@@ -225,6 +226,7 @@ export function TerminalPanel(props: TerminalPanelProps): React.JSX.Element {
 }
 
 function statusTitle(tab: TerminalTabView): string {
+  if (tab.expired) return '终端已失效'
   switch (tab.status) {
     case 'running':
       return '运行中'
@@ -239,7 +241,10 @@ function statusTitle(tab: TerminalTabView): string {
     case 'disconnected':
       return '已断开：系统 Runtime 重启，可重新创建'
     case 'failed':
-      return '启动失败，可重新创建'
+      // 失败原因来自 terminal.state 可选字段，可能缺省。
+      return tab.errorMessage
+        ? `启动失败，可重新创建：${tab.errorMessage}`
+        : '启动失败，可重新创建'
     default:
       return '已关闭'
   }
