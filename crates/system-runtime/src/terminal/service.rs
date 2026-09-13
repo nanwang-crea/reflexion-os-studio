@@ -46,13 +46,32 @@ fn json_meta(session: &TerminalSession) -> Value {
     })
 }
 
+/// rows/cols 校验（M-2）：PTY 几何参数是 16 位——超 u16::MAX 报
+/// invalid_request，绝不静默 `as u16` 回绕。default 为 Some 时字段可缺省
+/// （spawn 走默认值），为 None 时必填（resize 语义，缺省/非整数都报错）。
+fn dimension(params: &Value, key: &str, default: Option<u16>) -> Result<u16, OpError> {
+    let invalid = || {
+        OpError::new(
+            "invalid_request",
+            format!("{key} must be an integer ≤ {}", u16::MAX),
+        )
+    };
+    match params.get(key) {
+        None => default.ok_or_else(invalid),
+        Some(value) => value
+            .as_u64()
+            .and_then(|number| u16::try_from(number).ok())
+            .ok_or_else(invalid),
+    }
+}
+
 /// spawn 幂等（同 ID 不产生第二个 shell，spec §5）。终端以**未 attach**
 /// 状态启动：输出先进有界缓冲（W2-2 门控），attach 超时的回收决策归 TS。
 pub fn handle_spawn(params: Value) -> Result<Value, OpError> {
     let terminal_id = required_str(&params, "terminalId")?;
     let cwd = required_str(&params, "cwd")?;
-    let rows = params.get("rows").and_then(Value::as_u64).unwrap_or(24) as u16;
-    let cols = params.get("cols").and_then(Value::as_u64).unwrap_or(80) as u16;
+    let rows = dimension(&params, "rows", Some(24))?;
+    let cols = dimension(&params, "cols", Some(80))?;
     let mut table = sessions()
         .lock()
         .map_err(|_| OpError::new("internal", "session table poisoned".to_string()))?;
@@ -123,16 +142,8 @@ pub fn handle_write(params: Value) -> Result<Value, OpError> {
 
 pub fn handle_resize(params: Value) -> Result<Value, OpError> {
     let id = required_str(&params, "terminalId")?;
-    let rows = params
-        .get("rows")
-        .and_then(Value::as_u64)
-        .ok_or_else(|| OpError::new("invalid_request", "rows required".to_string()))?
-        as u16;
-    let cols = params
-        .get("cols")
-        .and_then(Value::as_u64)
-        .ok_or_else(|| OpError::new("invalid_request", "cols required".to_string()))?
-        as u16;
+    let rows = dimension(&params, "rows", None)?;
+    let cols = dimension(&params, "cols", None)?;
     session_by_id(&id)?
         .resize(rows, cols)
         .map_err(|message| OpError::new("io_error", message))?;
@@ -242,15 +253,33 @@ mod tests {
     }
 
     /// W2-2 服务面：attach 幂等且返回缓冲快照；ack 累计确认幂等。
+    /// M-4：不再 sleep-then-assert——有界轮询（≤5 s）幂等 spawn 重放的
+    /// outputSeq（无门控副作用）：≥2 帧编号且相邻采样稳定（fetch_add 先于
+    /// push，稳定一轮说明在途帧已入队）后才做一次真实 attach——attach 门
+    /// 未开过，字节只会留在缓冲里。
     #[test]
     fn attach_is_idempotent_and_ack_releases_ok() {
-        handle_spawn(json!({ "terminalId": "svc-attach", "cwd": "/tmp", "rows": 24, "cols": 80 }))
-            .expect("spawn");
+        let params = json!({ "terminalId": "svc-attach", "cwd": "/tmp", "rows": 24, "cols": 80 });
+        handle_spawn(params.clone()).expect("spawn");
         handle_write(
             json!({ "terminalId": "svc-attach", "data": base64::engine::general_purpose::STANDARD.encode("echo SVC_HELD\r") }),
         )
         .expect("write");
-        std::thread::sleep(std::time::Duration::from_millis(300));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let mut last_seq = 0u64;
+        loop {
+            let meta = handle_spawn(params.clone()).expect("幂等重放读 meta");
+            let seq = meta["outputSeq"].as_u64().unwrap_or(0);
+            if seq >= 2 && seq == last_seq {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "超时：提示符+回显未编号入队，meta={meta}"
+            );
+            last_seq = seq;
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
         let first = handle_attach(json!({ "terminalId": "svc-attach", "consumerId": "c1" }))
             .expect("attach");
         assert!(
@@ -297,6 +326,37 @@ mod tests {
                 .unwrap_err()
                 .code,
             "invalid_request"
+        );
+    }
+
+    /// M-2：rows/cols 超 u16::MAX 或非法类型报 invalid_request，
+    /// 绝不静默 `as u16` 回绕；恰为 65535 合法（走到会话查找的
+    /// terminal_closed，证明校验边界而非一律拒绝）。
+    #[test]
+    fn oversized_dimensions_are_rejected_not_wrapped() {
+        assert_eq!(
+            handle_spawn(json!({ "terminalId": "dims", "cwd": "/tmp", "rows": 70000 }))
+                .unwrap_err()
+                .code,
+            "invalid_request"
+        );
+        assert_eq!(
+            handle_resize(json!({ "terminalId": "dims", "rows": 24, "cols": 65536 }))
+                .unwrap_err()
+                .code,
+            "invalid_request"
+        );
+        assert_eq!(
+            handle_resize(json!({ "terminalId": "dims", "rows": 24, "cols": "wide" }))
+                .unwrap_err()
+                .code,
+            "invalid_request"
+        );
+        assert_eq!(
+            handle_resize(json!({ "terminalId": "ghost-dims", "rows": 65535, "cols": 65535 }))
+                .unwrap_err()
+                .code,
+            "terminal_closed"
         );
     }
 }

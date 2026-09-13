@@ -46,17 +46,28 @@ fn resize_on_live_session_succeeds() {
 /// W2-2（真实 PTY）：attach 前输出只进缓冲、不对外发；attach 必须报告
 /// 可补放的字节数（≥ echo 命令回显长度），且 output_seq 照常递增——
 /// 「已编号」与「已交付」解耦的最小实证。
+/// M-4：有界轮询（≤5 s）替换固定 sleep——≥2 帧编号且相邻采样稳定
+/// （fetch_add 先于 push，稳定一轮说明在途帧已入队）再 attach。
 #[test]
 fn pre_attach_buffer_then_replay() {
     let session = spawn("itest4".to_string(), 7, "/tmp", 24, 80).expect("spawn");
     session
         .write_input(b"echo HELD_ONELINE\r\n")
         .expect("write");
-    std::thread::sleep(std::time::Duration::from_millis(300));
-    assert!(
-        session.output_seq.load(Ordering::SeqCst) > 0,
-        "未 attach 也必须完成编号入队"
-    );
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut last_seq = 0u64;
+    loop {
+        let seq = session.output_seq.load(Ordering::SeqCst);
+        if seq >= 2 && seq == last_seq {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "超时：未 attach 的编号入队未稳定完成，seq={seq}"
+        );
+        last_seq = seq;
+        std::thread::sleep(Duration::from_millis(50));
+    }
     let replayed = session.attach("tester");
     assert!(
         replayed >= 10,

@@ -216,7 +216,66 @@ check(
     decode('b').includes('BBBB'),
 )
 
-// 8. shutdown 优雅退出（含活跃终端 s2 的回收）
+// 8. exited 严格后于尾部帧写出（I-1 回归钉）：shell 内先打印尾部标记再
+// exit——exited 不得抢在携带 TAILMARKER 的 output 帧之前进入协议流，
+// 且标记帧 base64 解码完整。
+await request('terminal.spawn', {
+  terminalId: 'ord',
+  cwd: tmpdir(),
+  rows: 24,
+  cols: 80,
+})
+await request('terminal.attach', { terminalId: 'ord', consumerId: 'spike' })
+await delay(300) // 等 shell 就绪，避免输入被启动噪声吞掉
+await request('terminal.write', {
+  terminalId: 'ord',
+  data: Buffer.from('echo TAILMARKER-ORD-7c1a; exit\r', 'utf8').toString(
+    'base64',
+  ),
+})
+// 有界轮询：等 ord 的 exited 出现（超时 = 交付链断裂，同样必须失败）。
+const orderDeadline = Date.now() + 5000
+while (
+  Date.now() < orderDeadline &&
+  !notifications.some(
+    (n) =>
+      n.method === 'terminal.state' &&
+      n.params.terminalId === 'ord' &&
+      n.params.status === 'exited',
+  )
+) {
+  await delay(50)
+}
+const markerFrameIdx = notifications.reduce(
+  (last, n, index) =>
+    n.method === 'terminal.output' &&
+    n.params.terminalId === 'ord' &&
+    Buffer.from(n.params.data, 'base64')
+      .toString('utf8')
+      .includes('TAILMARKER-ORD-7c1a')
+      ? index
+      : last,
+  -1,
+)
+const exitedIdx = notifications.findIndex(
+  (n) =>
+    n.method === 'terminal.state' &&
+    n.params.terminalId === 'ord' &&
+    n.params.status === 'exited',
+)
+check(
+  'exited 严格后于 TAILMARKER 尾部帧（I-1 顺序钉）',
+  markerFrameIdx >= 0 &&
+    exitedIdx >= 0 &&
+    markerFrameIdx < exitedIdx &&
+    Buffer.from(notifications[markerFrameIdx].params.data, 'base64')
+      .toString('utf8')
+      .includes('TAILMARKER-ORD-7c1a'),
+  `marker@${markerFrameIdx} exited@${exitedIdx}`,
+)
+lastSeq.delete('ord')
+
+// 9. shutdown 优雅退出（含活跃终端 b 与已退出 ord 的回收）
 await request('terminal.write', {
   terminalId: 'b',
   data: Buffer.from('sleep 300 &\r', 'utf8').toString('base64'),

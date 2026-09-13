@@ -25,7 +25,7 @@ use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, Pt
 use serde_json::json;
 
 use crate::protocol::emit;
-use crate::terminal::output_queue::{Frame, OutputQueue, MAX_FRAME_BYTES};
+use crate::terminal::output_queue::{chunk_frames, Frame, OutputQueue};
 use crate::terminal::shell_command::default_shell_argv;
 
 /// SIGHUP 后等待 shell 自行收敛的时限；超时即 SIGKILL 升级（W2-3）。
@@ -157,7 +157,7 @@ pub fn spawn(
                 Err(ref error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
                 Err(_) => break,
             };
-            for chunk in buffer[..n].chunks(MAX_FRAME_BYTES) {
+            for (_delta, chunk) in chunk_frames(&buffer[..n]) {
                 let seq = produce_seq.fetch_add(1, Ordering::SeqCst);
                 // 窗口满会在这里阻塞（暂停 PTY 读取、不丢字符流）；
                 // close 后转丢弃模式（push 返回 false），继续排空到 EOF。
@@ -175,18 +175,22 @@ pub fn spawn(
 
     // 唯一 sender：attach 且未关闭才交付；take_emit_batch 已把帧字节克隆出
     // 锁，emit（内部拿 STDOUT_LOCK）时不持队列锁——避免锁序嵌套。
+    // 整批写出后才 mark_delivered（重入取批循环之前）：exit 线程的
+    // wait_final_delivery 以「已写出」为判据，exited 严格后于尾部帧
+    // 进入 STDOUT（I-1，spec §6 尾部先于 exited）。
     let send_queue = queue.clone();
     let send_id = terminal_id.clone();
     std::thread::spawn(move || {
-        while let Some(batch) = send_queue.take_emit_batch() {
+        while let Some((batch, batch_end)) = send_queue.take_emit_batch() {
             for frame in batch {
                 emit_frame(&send_id, generation, frame.seq, &frame.bytes);
             }
+            send_queue.mark_delivered(batch_end);
         }
     });
 
     // 退出线程：先 wait 拿退出码，再等读线程尾部交付完毕，最后等 sender 把
-    // 队列中既有帧全部发出（spec §6「尾部输出先于退出事件」；read EOF 与
+    // 队列中既有帧全部写出（spec §6「尾部输出先于退出事件」；read EOF 与
     // wait 完成先后不保证），最后发 terminal.state。
     let exit_child = session.child.clone();
     let exit_queue = queue.clone();
@@ -303,6 +307,13 @@ impl TerminalSession {
                 break;
             }
             std::thread::sleep(Duration::from_millis(20));
+        }
+        // SIGKILL 前最后再收割一次（M-5）：20 ms 轮询粒度下子进程可能恰在
+        // break 前已退出——先确认，避免向可能已被新进程复用的 pgid 发组信号。
+        if let Ok(mut child) = self.child.try_lock() {
+            if !matches!(child.try_wait(), Ok(None)) {
+                return;
+            }
         }
         // 日志只记状态（升级事件是关停诊断的关键事实），不记输出内容。
         eprintln!(
