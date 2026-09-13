@@ -102,9 +102,13 @@ function sessionInProject(store) {
   return { project, projectDir, session }
 }
 
-test('estimateTextTokens: CJK 按字、拉丁按 4 字符', () => {
+test('estimateTextTokens: 复用 agent-core 口径（假名按字、其余按码点向上取整）', () => {
   assert.equal(estimateTextTokens('四个汉字'), 4)
   assert.equal(estimateTextTokens('abcdefgh'), 2)
+  // 假名落在 \u3000-\u9fff 区间按字计（旧本地正则从 \u4e00 起，会把它误判成 1）
+  assert.equal(estimateTextTokens('ひらがな'), 4)
+  // emoji 按码点而非 UTF-16 单元计：与 abc 共 4 码点 → ceil(4/4)=1（旧口径按长度 5 得 2）
+  assert.equal(estimateTextTokens('🙂abc'), 1)
 })
 
 test('clipToTokenBudget: 预算内原样、超预算保头截断并标记', () => {
@@ -148,15 +152,22 @@ test('buildInstructionBlock: 独立会话只有全局两层', async () => {
   assert.ok(!block.includes('项目指令'))
 })
 
-test('buildInstructionBlock: 超长文件截断并标注', async () => {
+test('buildInstructionBlock: 超长文件截断并标注、同块短文件段不误标', async () => {
   const store = freshStore()
   const session = store.sessions.create(null)
-  writeFileSync(
-    join(process.env.REFLEXION_DATA_DIR, 'AGENTS.md'),
-    '字'.repeat(6000),
-  )
+  const dataDir = process.env.REFLEXION_DATA_DIR
+  writeFileSync(join(dataDir, 'AGENTS.md'), '字'.repeat(6000))
+  writeFileSync(join(dataDir, 'MEMORY.md'), '记忆短条目')
   const block = await buildInstructionBlock(store, session.id)
-  assert.ok(block.includes('已截断'))
+  const sections = block.split('\n\n')
+  const truncated = sections.find((s) => s.includes('=== 全局指令'))
+  const short = sections.find((s) => s.includes('=== 全局记忆'))
+  // 超长段：标注截断，且注入正文严格短于 6000 字输入
+  assert.ok(truncated.includes('已截断'))
+  assert.ok((truncated.match(/字/g) ?? []).length < 6000)
+  // 同块短文件段：内容原样注入，不得被误标为截断
+  assert.ok(short.includes('记忆短条目'))
+  assert.ok(!short.includes('已截断'))
 })
 
 test('buildInstructionBlock: 全部缺失返回空串', async () => {

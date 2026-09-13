@@ -65,8 +65,9 @@
   - 项目 MEMORY.md：`join(dataDir, 'memories', projectId, 'MEMORY.md')`
 - `render.ts`：渲染注入块。顺序固定：base system prompt → 全局 AGENTS →
   项目 AGENTS → 全局 MEMORY → 项目 MEMORY；项目 AGENTS 段头部标注
-  "与全局指令冲突时以本段为准"。每文件预算 4000 token（沿用
-  recall.ts 的 CJK 估算口径，函数迁移到 `render.ts`），超限保头截断并在段尾
+  "与全局指令冲突时以本段为准"。每文件预算 4000 token（复用 agent-core 的
+  `estimateTokens` 估算口径，`render.ts` 以别名 `estimateTextTokens` 再导出，
+  不本地复刻），超限保头截断并在段尾
   标注 "⚠️ 内容过长，已截断"。
 - 接线点：`agent/context.ts:207` 的 `buildMemoryBlock` 调用整体替换为
   `buildInstructionBlock(store, session)`；异常吞掉返回空串（与现 memory

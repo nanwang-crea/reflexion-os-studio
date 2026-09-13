@@ -1,3 +1,4 @@
+import { estimateTokens } from '@reflexion-os-studio/agent-core'
 import type { Store } from '../../store/index.js'
 import { readOptionalFile } from './loader.js'
 import {
@@ -6,26 +7,23 @@ import {
   type InstructionScope,
 } from './paths.js'
 
-/** 单个指令文件的注入预算（token）；超限保头截断并显式标注。 */
-export const INSTRUCTION_FILE_TOKEN_BUDGET = 4000
+/** 复用 agent-core 的 token 估算口径（单一真源，不再本地复刻）：CJK/假名按字、其余按码点每 4 字符向上取整。 */
+export { estimateTokens as estimateTextTokens }
 
-/** 召回 token 估算：CJK≈1 token/字，其余约 4 字符 1 token（与 agent-core 口径一致）。 */
-export function estimateTextTokens(text: string): number {
-  const cjk = (text.match(/[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/g) ?? [])
-    .length
-  return cjk + Math.ceil((text.length - cjk) / 4)
-}
+/** 单个指令文件的注入预算（token）；超限保头截断并显式标注。仅模块内使用。 */
+const INSTRUCTION_FILE_TOKEN_BUDGET = 4000
 
 /** 按 token 预算保头截断；先按比例收缩再逐步收敛。 */
 export function clipToTokenBudget(
   text: string,
   budget: number,
 ): { text: string; truncated: boolean } {
-  if (estimateTextTokens(text) <= budget) return { text, truncated: false }
-  const ratio = budget / estimateTextTokens(text)
+  const total = estimateTokens(text)
+  if (total <= budget) return { text, truncated: false }
+  const ratio = budget / total
   let end = Math.max(0, Math.floor(text.length * ratio))
   let piece = text.slice(0, end)
-  while (end > 0 && estimateTextTokens(piece) > budget) {
+  while (end > 0 && estimateTokens(piece) > budget) {
     end = Math.max(0, end - 64)
     piece = text.slice(0, end)
   }
