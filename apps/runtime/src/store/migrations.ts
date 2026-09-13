@@ -73,7 +73,7 @@ function tableColumns(db: DatabaseSync, table: string): TableColumn[] {
  *          runs 增加 agent_id/parent_run_id/delegation_id、provider_profiles 增加 capabilities、
  *          tool_calls 表由 SCHEMA 创建。
  * v4 → v5：A2 Memory——memories 表 + FTS5 索引 + 同步触发器由 SCHEMA 创建（全新表，
- *          无历史数据回填；升级只推进版本号）。
+ *          无历史数据回填；升级只推进版本号）。该组表已于 v23 删除。
  * v5 → v6：runs 增加 skill_id 列（Skill 激活来源记录；加列可直接 ALTER TABLE）。
  * v12 → v13：assets 表（Phase 1B Asset Store；全新表，由 SCHEMA 创建，升级只推进版本号）。
  * v15 → v16：mcp_servers.env_json 明文 {key,value} → {key,secretRef}。旧版本把 MCP
@@ -294,8 +294,8 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
       )
     }
     // v20: context_checkpoints / memory_jobs 为加法迁移，全新表由 SCHEMA
-    // 创建，升级只推进版本号；不回填历史 Checkpoint，也不为历史 Run
-    // 自动创建 Memory Job。
+    // 创建，升级只推进版本号；不回填历史 Checkpoint。memory_jobs 于 v20
+    // 创建，v23 起随 SQLite 记忆链路整体删除。
     if (version < 21) {
       // v21：Plan 移除失败态（计划是任务进度板，"失败"的只是某次 Run）。
       // 存量 failed 计划/步骤改写为 cancelled，summary/note 保留作历史记录。

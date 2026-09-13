@@ -13,9 +13,11 @@ import { join } from 'node:path'
 import { Store } from '../dist/store/index.js'
 import { instructionPath } from '../dist/agent/instructions/paths.js'
 import {
+  deleteProjectMemoryDir,
   getInstruction,
   remember,
   saveInstruction,
+  sweepOrphanMemoryDirs,
 } from '../dist/agent/instructions/service.js'
 import { readOptionalFile } from '../dist/agent/instructions/loader.js'
 import { containsSecretLike } from '../dist/agent/instructions/secretGuard.js'
@@ -613,4 +615,70 @@ test('memory.remember execute: 项目会话 scope=project → memories/<id>/MEMO
 test('工具装配：createToolRegistry 始终注册 memory.remember', () => {
   const registry = createToolRegistry(rememberCtx(freshStore(), 'session-1'))
   assert.ok(registry.list().some((tool) => tool.name === 'memory.remember'))
+})
+
+test('deleteProjectMemoryDir: 项目记忆目录整体删除、重复调用无害', async () => {
+  const store = freshStore()
+  const { project } = sessionInProject(store)
+  const outcome = await remember({
+    store,
+    scope: 'project',
+    content: '项目纪律A。',
+    projectId: project.id,
+  })
+  assert.equal(outcome.ok, true)
+  const dir = join(process.env.REFLEXION_DATA_DIR, 'memories', project.id)
+  assert.ok(existsSync(dir))
+  await deleteProjectMemoryDir(project.id)
+  assert.equal(existsSync(dir), false)
+  // 目录已不存在：force 语义，不抛错。
+  await deleteProjectMemoryDir(project.id)
+})
+
+test('project.delete handler: 行删除成功后项目记忆目录随清', async () => {
+  const store = freshStore()
+  const { project } = sessionInProject(store)
+  await remember({
+    store,
+    scope: 'project',
+    content: '随项目删除。',
+    projectId: project.id,
+  })
+  const dir = join(process.env.REFLEXION_DATA_DIR, 'memories', project.id)
+  assert.ok(existsSync(dir))
+  const ctx = {
+    store,
+    agent: { clearQueue: () => {} },
+    assets: { deleteProjectDir: async () => {} },
+  }
+  const result = await commandHandlers['project.delete'](
+    { projectId: project.id },
+    ctx,
+  )
+  assert.equal(result.removed, true)
+  assert.equal(existsSync(dir), false)
+})
+
+test('sweepOrphanMemoryDirs: 无项目行的孤儿目录删除、在者保留', async () => {
+  const store = freshStore()
+  const { project: live } = sessionInProject(store)
+  const { project: dead } = sessionInProject(store)
+  const dirOf = (id) => join(process.env.REFLEXION_DATA_DIR, 'memories', id)
+  await remember({
+    store,
+    scope: 'project',
+    content: '活项目。',
+    projectId: live.id,
+  })
+  await remember({
+    store,
+    scope: 'project',
+    content: '死项目。',
+    projectId: dead.id,
+  })
+  // 模拟行删除成功但目录清理失败/进程中断后的残留。
+  store.projects.delete(dead.id)
+  await sweepOrphanMemoryDirs(store)
+  assert.equal(existsSync(dirOf(dead.id)), false)
+  assert.ok(existsSync(dirOf(live.id)))
 })

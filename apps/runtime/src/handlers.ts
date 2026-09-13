@@ -9,6 +9,7 @@ import {
   type CommandResult,
 } from './command-utils.js'
 import { instructionsCommandHandlers } from './agent/instructions/handlers.js'
+import { deleteProjectMemoryDir } from './agent/instructions/service.js'
 import { workspaceCommandHandlers } from './workspace/handlers.js'
 import { assetCommandHandlers } from './assets/handlers.js'
 import { mcpCommandHandlers } from './mcp/handlers.js'
@@ -153,6 +154,8 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
       // Asset 内容目录同步清掉（DB 行已随项目级联删除，事务已提交）；
       // 失败不回滚项目删除，孤立文件由启动巡检补偿清理。
       await assets.deleteProjectDir(projectId)
+      // 项目记忆目录（memories/<projectId>）同口径随清，孤儿由启动清扫兜底。
+      await deleteProjectMemoryDir(projectId)
     }
     return { removed }
   },

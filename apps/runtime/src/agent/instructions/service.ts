@@ -1,13 +1,15 @@
 import {
   appendFile,
   mkdir,
+  readdir,
   readFile,
   rename,
   rm,
   writeFile,
 } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
 import type { Store } from '../../store/index.js'
+import { resolveDataDir } from '../../store/shared.js'
 import {
   instructionPath,
   memoryPath,
@@ -230,5 +232,40 @@ async function writeFileWithRename(
   } catch (error) {
     await rm(tmp, { force: true })
     throw error
+  }
+}
+
+/** 项目删除后清理其记忆目录；失败不阻塞删除本身（孤儿目录由启动清扫兜底）。 */
+export async function deleteProjectMemoryDir(projectId: string): Promise<void> {
+  try {
+    await rm(join(resolveDataDir(), 'memories', projectId), {
+      recursive: true,
+      force: true,
+    })
+  } catch (error) {
+    process.stderr.write(
+      `[runtime] memory dir cleanup failed for project ${projectId}: ${error instanceof Error ? error.message : String(error)}\n`,
+    )
+  }
+}
+
+/**
+ * 启动清扫（与 Asset recover 同构语义）：删除 <dataDir>/memories/ 下
+ * 无项目行对应的孤儿目录（project.delete 行删成功但目录清理失败/中断的
+ * 残留）；单个目录删除失败只记 stderr，下次启动再试。
+ */
+export async function sweepOrphanMemoryDirs(store: Store): Promise<void> {
+  const root = join(resolveDataDir(), 'memories')
+  const entries = await readdir(root, { withFileTypes: true }).catch(() => [])
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    if (store.projects.get(entry.name)) continue
+    try {
+      await rm(join(root, entry.name), { recursive: true, force: true })
+    } catch (error) {
+      process.stderr.write(
+        `[runtime] orphan memory dir cleanup failed (${entry.name}): ${error instanceof Error ? error.message : String(error)}\n`,
+      )
+    }
   }
 }
