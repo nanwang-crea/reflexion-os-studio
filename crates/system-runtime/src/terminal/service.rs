@@ -1,6 +1,7 @@
 //! 终端服务：terminalId → 会话表、进程代际、协议方法入口
-//! （spawn/write/resize/close）与关停统一回收 close_all。
-//! 额度、背压窗口与消费者代际在 W2 补。
+//! （spawn/attach/write/resize/ack/close）与关停统一回收 close_all。
+//! attach/ack 为内部 TS→Rust 方法（不进 Tauri 白名单）：Rust 拥有背压
+//! 原语（W2-2），消费者代际与 16ms 合帧在 TS 侧。
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -45,6 +46,8 @@ fn json_meta(session: &TerminalSession) -> Value {
     })
 }
 
+/// spawn 幂等（同 ID 不产生第二个 shell，spec §5）。终端以**未 attach**
+/// 状态启动：输出先进有界缓冲（W2-2 门控），attach 超时的回收决策归 TS。
 pub fn handle_spawn(params: Value) -> Result<Value, OpError> {
     let terminal_id = required_str(&params, "terminalId")?;
     let cwd = required_str(&params, "cwd")?;
@@ -78,6 +81,32 @@ fn session_by_id(terminal_id: &str) -> Result<Arc<TerminalSession>, OpError> {
         .get(terminal_id)
         .cloned()
         .ok_or_else(|| OpError::new("terminal_closed", "no such terminal".to_string()))
+}
+
+/// attach：打开输出交付闸门。幂等（重复 attach 换消费者、重新快照）；
+/// 未知/已回收终端与 write/resize 同一稳定错误码。
+pub fn handle_attach(params: Value) -> Result<Value, OpError> {
+    let id = required_str(&params, "terminalId")?;
+    let consumer_id = required_str(&params, "consumerId")?;
+    let replayed_bytes = session_by_id(&id)?.attach(&consumer_id);
+    Ok(json!({ "replayedBytes": replayed_bytes }))
+}
+
+/// ack：累计确认已消费输出，释放 Rust 侧未确认窗口。未知/已回收终端报
+/// terminal_closed；对存活终端的过期/重复 ack 幂等成功（spec §6）。
+pub fn handle_ack(params: Value) -> Result<Value, OpError> {
+    let id = required_str(&params, "terminalId")?;
+    let through_output_seq = params
+        .get("throughOutputSeq")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| {
+            OpError::new(
+                "invalid_request",
+                "throughOutputSeq is required".to_string(),
+            )
+        })?;
+    session_by_id(&id)?.ack(through_output_seq);
+    Ok(json!({ "ok": true }))
 }
 
 pub fn handle_write(params: Value) -> Result<Value, OpError> {
@@ -141,7 +170,7 @@ pub fn handle_close(params: Value) -> Result<Value, OpError> {
 }
 
 /// 关停回收：全部并行 close（spec §8：不逐个等待；失败不假装——
-/// 每个 close 自身阻塞到收割，SIGHUP-trap 边界见计划 W2 遗留）。
+/// 每个 close 自身阻塞到收割，含 500ms 时限的 SIGKILL 升级兜底）。
 pub fn close_all() -> usize {
     let drained: Vec<Arc<TerminalSession>> = {
         let Ok(mut table) = sessions().lock() else {
@@ -192,11 +221,55 @@ mod tests {
                 .code,
             "terminal_closed"
         );
+        // W2-2：attach/ack 与 write/resize 同一稳定错误码（未知/已回收）。
+        assert_eq!(
+            handle_attach(json!({ "terminalId": "ghost", "consumerId": "c" }))
+                .unwrap_err()
+                .code,
+            "terminal_closed"
+        );
+        assert_eq!(
+            handle_ack(json!({ "terminalId": "ghost", "throughOutputSeq": 0 }))
+                .unwrap_err()
+                .code,
+            "terminal_closed"
+        );
         // close 幂等：未知 ID 仍成功。
         assert_eq!(
             handle_close(json!({ "terminalId": "ghost" })).unwrap()["closed"],
             true
         );
+    }
+
+    /// W2-2 服务面：attach 幂等且返回缓冲快照；ack 累计确认幂等。
+    #[test]
+    fn attach_is_idempotent_and_ack_releases_ok() {
+        handle_spawn(json!({ "terminalId": "svc-attach", "cwd": "/tmp", "rows": 24, "cols": 80 }))
+            .expect("spawn");
+        handle_write(
+            json!({ "terminalId": "svc-attach", "data": base64::engine::general_purpose::STANDARD.encode("echo SVC_HELD\r") }),
+        )
+        .expect("write");
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        let first = handle_attach(json!({ "terminalId": "svc-attach", "consumerId": "c1" }))
+            .expect("attach");
+        assert!(
+            first["replayedBytes"].as_u64().expect("number") >= 10,
+            "attach 前缓冲必须被快照报告：{first}"
+        );
+        let second = handle_attach(json!({ "terminalId": "svc-attach", "consumerId": "c2" }))
+            .expect("reattach 幂等");
+        assert!(second["replayedBytes"].is_number());
+        // 超前/重复 ack：对存活终端一律幂等 ok:true（队列层 no-op）。
+        assert_eq!(
+            handle_ack(json!({ "terminalId": "svc-attach", "throughOutputSeq": 0 })).unwrap()["ok"],
+            true
+        );
+        assert_eq!(
+            handle_ack(json!({ "terminalId": "svc-attach", "throughOutputSeq": 0 })).unwrap()["ok"],
+            true
+        );
+        handle_close(json!({ "terminalId": "svc-attach" })).expect("close");
     }
 
     #[test]
@@ -209,6 +282,18 @@ mod tests {
         );
         assert_eq!(
             handle_write(json!({ "terminalId": "svc2", "data": "!!!" }))
+                .unwrap_err()
+                .code,
+            "invalid_request"
+        );
+        assert_eq!(
+            handle_attach(json!({ "terminalId": "svc2" }))
+                .unwrap_err()
+                .code,
+            "invalid_request"
+        );
+        assert_eq!(
+            handle_ack(json!({ "terminalId": "svc2" }))
                 .unwrap_err()
                 .code,
             "invalid_request"

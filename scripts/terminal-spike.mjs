@@ -17,6 +17,9 @@ const rl = createInterface({ input: child.stdout })
 let id = 0
 const pending = new Map()
 const notifications = []
+// W2-2：Rust 侧未确认窗口 256 KiB——spike 模拟 TS 消费者，跟踪每终端收到的
+// 最大 outputSeq 并定期累计 ack（见下方 ackTimer）。
+const lastSeq = new Map()
 rl.on('line', (line) => {
   let message
   try {
@@ -30,6 +33,9 @@ rl.on('line', (line) => {
     pending.delete(message.id)
     return
   }
+  if (message.method === 'terminal.output') {
+    lastSeq.set(message.params.terminalId, message.params.outputSeq)
+  }
   if (message.method) notifications.push(message)
 })
 
@@ -40,6 +46,16 @@ function request(method, params) {
   )
   return new Promise((resolve) => pending.set(requestId, resolve))
 }
+
+// W2-2：Rust 输出交付需先 attach 开门控；ack 心跳见上方 lastSeq/ackTimer。
+const ackTimer = setInterval(() => {
+  for (const [terminalId, seq] of lastSeq) {
+    child.stdin.write(
+      `${JSON.stringify({ jsonrpc: '2.0', id: ++id, method: 'terminal.ack', params: { terminalId, throughOutputSeq: seq } })}\n`,
+    )
+  }
+}, 100)
+ackTimer.unref()
 
 const framesFor = (terminalId) =>
   notifications
@@ -76,6 +92,7 @@ check(
   spawnReply.result?.terminalId === 's1' &&
     typeof spawnReply.result?.generation === 'number',
 )
+await request('terminal.attach', { terminalId: 's1', consumerId: 'spike' })
 await delay(300) // 等 shell 提示符输出
 
 // 2. echo 往返（UTF-8 中文/emoji）
@@ -149,6 +166,7 @@ await request('terminal.write', {
 })
 await delay(400)
 await request('terminal.close', { terminalId: 's1' })
+lastSeq.delete('s1')
 await delay(500)
 let survivors = ''
 try {
@@ -173,12 +191,14 @@ await request('terminal.spawn', {
   rows: 24,
   cols: 80,
 })
+await request('terminal.attach', { terminalId: 'a', consumerId: 'spike' })
 await request('terminal.spawn', {
   terminalId: 'b',
   cwd: tmpdir(),
   rows: 24,
   cols: 80,
 })
+await request('terminal.attach', { terminalId: 'b', consumerId: 'spike' })
 await delay(300)
 await request('terminal.write', {
   terminalId: 'a',

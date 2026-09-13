@@ -66,8 +66,10 @@ fn handle_request(request: &Value) -> (Value, bool) {
         Some("git.remote_add") => handlers_git::handle_git_remote_add(id, params),
         Some("git.remote_remove") => handlers_git::handle_git_remote_remove(id, params),
         Some("terminal.spawn") => finish(id, handlers::handle_terminal_spawn(params)),
+        Some("terminal.attach") => finish(id, handlers::handle_terminal_attach(params)),
         Some("terminal.write") => finish(id, handlers::handle_terminal_write(params)),
         Some("terminal.resize") => finish(id, handlers::handle_terminal_resize(params)),
+        Some("terminal.ack") => finish(id, handlers::handle_terminal_ack(params)),
         Some("terminal.close") => finish(id, handlers::handle_terminal_close(params)),
         Some(name) => Err(OpError::new(
             "method_not_found",
