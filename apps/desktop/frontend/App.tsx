@@ -81,6 +81,7 @@ export default function App() {
     selectTab,
     reorderTabs,
     resetWorkspaceFiles,
+    reloadAllTextTabs,
     dirtyPaths,
     setTabDirty,
   } = useWorkspacePanel()
@@ -142,15 +143,16 @@ export default function App() {
   )
 
   const filePanelRef = useRef<FileViewerPanelHandle>(null)
-  const { requestCloseTab, guardedResetWorkspaceFiles } = useWorkspaceTabGuard({
-    openTabs,
-    dirtyPaths,
-    closeTab,
-    resetWorkspaceFiles,
-    confirmAction,
-    setNotice,
-    filePanelRef,
-  })
+  const { requestCloseTab, guardDirtyBuffersThen, guardedResetWorkspaceFiles } =
+    useWorkspaceTabGuard({
+      openTabs,
+      dirtyPaths,
+      closeTab,
+      resetWorkspaceFiles,
+      confirmAction,
+      setNotice,
+      filePanelRef,
+    })
   useAppHotkeys({
     saveActive: () => {
       // 面板对用户不可见时不动作：工作区收起或不在聊天视图时，
@@ -366,6 +368,8 @@ export default function App() {
         onFocusConsumed={() => setFilesFocusAssetId(null)}
         onOpenFile={openFile}
         onOpenDiff={openDiff}
+        guardDirtyBuffersThen={guardDirtyBuffersThen}
+        reloadAllTextTabs={reloadAllTextTabs}
         onEnterProjectFiles={enterProjectFiles}
         onBackToChat={backToChat}
         onSelectProject={selectProject}

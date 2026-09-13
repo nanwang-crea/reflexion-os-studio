@@ -6,7 +6,8 @@ use serde_json::{json, Value};
 
 use crate::grant::{require_grant, require_network_approval};
 use crate::params::{
-    EditParams, GitBranchesParams, GitDiffParams, GitStatusParams, GlobParams, GrantPathParams,
+    EditParams, GitBranchCreateParams, GitBranchesParams, GitCheckoutParams, GitCommitParams,
+    GitDiffParams, GitPathsParams, GitRootParams, GitStatusParams, GlobParams, GrantPathParams,
     GrepParams, ListParams, MoveParams, OperationSource, ReadParams, ShellParams, WriteParams,
 };
 use crate::protocol::{emit, error_response, ok_response, running_shells, workspace_root, OpError};
@@ -228,6 +229,143 @@ pub fn handle_git_branches(id: Value, params: Value) -> Result<(Value, bool), Op
             id,
             serde_json::to_value(&outcome).unwrap_or(Value::Null),
         )),
+        Err(error) => emit(error_response(
+            id,
+            -32000,
+            &error.message,
+            Some(json!({ "code": error.code })),
+        )),
+    });
+    Ok((Value::Null, false))
+}
+
+/// 以下 git 写命令同构：解析参数与 workspace 边界在主线程完成，
+/// git 进程在异步线程执行后 emit（UI 直接动作免 grant，来源由 Runtime 声明；
+/// argv 固定拼装与路径/分支名校验在 git::writes 内完成）。
+pub fn handle_git_stage(id: Value, params: Value) -> Result<(Value, bool), OpError> {
+    let params: GitPathsParams = serde_json::from_value(params)
+        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
+    let root = workspace_root(&params.workspace_root)?;
+    let paths = params.paths;
+    std::thread::spawn(move || match git::stage(&root, &paths) {
+        Ok(outcome) => emit(ok_response(id, outcome)),
+        Err(error) => emit(error_response(
+            id,
+            -32000,
+            &error.message,
+            Some(json!({ "code": error.code })),
+        )),
+    });
+    Ok((Value::Null, false))
+}
+
+pub fn handle_git_unstage(id: Value, params: Value) -> Result<(Value, bool), OpError> {
+    let params: GitPathsParams = serde_json::from_value(params)
+        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
+    let root = workspace_root(&params.workspace_root)?;
+    let paths = params.paths;
+    std::thread::spawn(move || match git::unstage(&root, &paths) {
+        Ok(outcome) => emit(ok_response(id, outcome)),
+        Err(error) => emit(error_response(
+            id,
+            -32000,
+            &error.message,
+            Some(json!({ "code": error.code })),
+        )),
+    });
+    Ok((Value::Null, false))
+}
+
+pub fn handle_git_commit(id: Value, params: Value) -> Result<(Value, bool), OpError> {
+    let params: GitCommitParams = serde_json::from_value(params)
+        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
+    let root = workspace_root(&params.workspace_root)?;
+    let message = params.message;
+    std::thread::spawn(move || match git::commit(&root, &message) {
+        Ok(outcome) => emit(ok_response(id, outcome)),
+        Err(error) => emit(error_response(
+            id,
+            -32000,
+            &error.message,
+            Some(json!({ "code": error.code })),
+        )),
+    });
+    Ok((Value::Null, false))
+}
+
+pub fn handle_git_fetch(id: Value, params: Value) -> Result<(Value, bool), OpError> {
+    let params: GitRootParams = serde_json::from_value(params)
+        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
+    let root = workspace_root(&params.workspace_root)?;
+    std::thread::spawn(move || match git::fetch(&root) {
+        Ok(outcome) => emit(ok_response(id, outcome)),
+        Err(error) => emit(error_response(
+            id,
+            -32000,
+            &error.message,
+            Some(json!({ "code": error.code })),
+        )),
+    });
+    Ok((Value::Null, false))
+}
+
+pub fn handle_git_pull(id: Value, params: Value) -> Result<(Value, bool), OpError> {
+    let params: GitRootParams = serde_json::from_value(params)
+        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
+    let root = workspace_root(&params.workspace_root)?;
+    std::thread::spawn(move || match git::pull(&root) {
+        Ok(outcome) => emit(ok_response(id, outcome)),
+        Err(error) => emit(error_response(
+            id,
+            -32000,
+            &error.message,
+            Some(json!({ "code": error.code })),
+        )),
+    });
+    Ok((Value::Null, false))
+}
+
+pub fn handle_git_push(id: Value, params: Value) -> Result<(Value, bool), OpError> {
+    let params: GitRootParams = serde_json::from_value(params)
+        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
+    let root = workspace_root(&params.workspace_root)?;
+    std::thread::spawn(move || match git::push(&root) {
+        Ok(outcome) => emit(ok_response(id, outcome)),
+        Err(error) => emit(error_response(
+            id,
+            -32000,
+            &error.message,
+            Some(json!({ "code": error.code })),
+        )),
+    });
+    Ok((Value::Null, false))
+}
+
+pub fn handle_git_branch_create(id: Value, params: Value) -> Result<(Value, bool), OpError> {
+    let params: GitBranchCreateParams = serde_json::from_value(params)
+        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
+    let root = workspace_root(&params.workspace_root)?;
+    let name = params.name;
+    let checkout = params.checkout.unwrap_or(false);
+    std::thread::spawn(move || match git::branch_create(&root, &name, checkout) {
+        Ok(outcome) => emit(ok_response(id, outcome)),
+        Err(error) => emit(error_response(
+            id,
+            -32000,
+            &error.message,
+            Some(json!({ "code": error.code })),
+        )),
+    });
+    Ok((Value::Null, false))
+}
+
+pub fn handle_git_branch_switch(id: Value, params: Value) -> Result<(Value, bool), OpError> {
+    let params: GitCheckoutParams = serde_json::from_value(params)
+        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
+    let root = workspace_root(&params.workspace_root)?;
+    let name = params.name;
+    std::thread::spawn(move || match git::checkout(&root, &name) {
+        Ok(outcome) => emit(ok_response(id, outcome)),
         Err(error) => emit(error_response(
             id,
             -32000,

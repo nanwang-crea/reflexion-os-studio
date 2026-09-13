@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   GitChangeEntry,
   Project,
@@ -23,6 +23,10 @@ interface ProjectFilesProps {
     path: string,
     options: { staged?: boolean; oldPath?: string },
   ) => void
+  /** 切分支/pull 前的脏 buffer 三键守卫（透传给 Git 面板）；内部链，App 恒提供。 */
+  guardDirtyBuffersThen: () => Promise<boolean>
+  /** checkout/pull 成功后强制重载全部文本标签（透传给 Git 面板）。 */
+  reloadAllTextTabs?: () => void
   /** 请求聚焦预览的 Asset（点击消息里的 asset:// 链接）。 */
   focusAssetId?: string | null
   onFocusConsumed?: () => void
@@ -63,24 +67,27 @@ export function ProjectFiles(props: ProjectFilesProps): React.JSX.Element {
     if (projectId !== null) void startIndex(projectId).catch(() => {})
   }, [projectId])
 
-  // 每个项目拉一次 Git 状态，用于文件树行内标记（只读）。
-  useEffect(() => {
+  // 每个项目拉一次 Git 状态，用于文件树行内标记（只读）；Git 面板变更后复用同一函数。
+  const badgeGeneration = useRef(0)
+  const refreshBadges = useCallback(async (): Promise<void> => {
     if (projectId === null || !props.systemReady) return
-    let disposed = false
-    void gitStatus(projectId)
-      .then((result) => {
-        if (disposed) return
-        const map = new Map<string, GitChangeEntry['status']>()
-        for (const entry of result.entries) {
-          map.set(entry.path, entry.status)
-        }
-        setGitStatusMap(map)
-      })
-      .catch(() => {})
-    return () => {
-      disposed = true
+    const generation = ++badgeGeneration.current
+    try {
+      const result = await gitStatus(projectId)
+      if (generation !== badgeGeneration.current) return
+      const map = new Map<string, GitChangeEntry['status']>()
+      for (const entry of result.entries) {
+        map.set(entry.path, entry.status)
+      }
+      setGitStatusMap(map)
+    } catch {
+      // 静默：徽章是尽力而为的指示器，不拦截文件树。
     }
   }, [projectId, props.systemReady])
+
+  useEffect(() => {
+    void refreshBadges()
+  }, [refreshBadges])
 
   // 文件名搜索：防抖 250ms；清空时回到文件树。
   useEffect(() => {
@@ -204,6 +211,9 @@ export function ProjectFiles(props: ProjectFilesProps): React.JSX.Element {
             systemReady={props.systemReady}
             onOpenFile={props.onOpenFile}
             onOpenDiff={props.onOpenDiff}
+            guardDirtyBuffersThen={props.guardDirtyBuffersThen}
+            reloadAllTextTabs={props.reloadAllTextTabs}
+            onAfterMutation={() => void refreshBadges()}
           />
         ) : (
           <AssetsPanel

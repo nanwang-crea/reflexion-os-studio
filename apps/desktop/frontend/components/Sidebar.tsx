@@ -55,6 +55,10 @@ interface SidebarProps {
     path: string,
     options: { staged?: boolean; oldPath?: string },
   ) => void
+  /** 切分支/pull 前的脏 buffer 三键守卫（透传给 Git 面板）；内部链，App 恒提供。 */
+  guardDirtyBuffersThen: () => Promise<boolean>
+  /** checkout/pull 成功后强制重载全部文本标签（透传给 Git 面板）。 */
+  reloadAllTextTabs?: () => void
   /** 底部导航切换；点击已激活页回到聊天。 */
   onSelectView: (view: OtherView) => void
   onSelectProject: (projectId: string) => void
@@ -141,6 +145,8 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
           onFocusConsumed={props.onFocusConsumed}
           onOpenFile={props.onOpenFile}
           onOpenDiff={props.onOpenDiff}
+          guardDirtyBuffersThen={props.guardDirtyBuffersThen}
+          reloadAllTextTabs={props.reloadAllTextTabs}
         />
       </aside>
     )

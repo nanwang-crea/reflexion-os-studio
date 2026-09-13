@@ -4,6 +4,11 @@ import { extractRevision } from '../agent/tools/read-state.js'
 import { requireString, type CommandHandler } from '../command-utils.js'
 import type { SystemRuntimeClient } from '../system.js'
 import { workspaceFileState } from './file-state.js'
+import { withGitQueue } from './git-queue.js'
+
+/** 外层必须大于 Rust 内层超时，避免 Rust 仍在等待时 TS 先断：本地写 35s（Rust 30s）、网络 130s（Rust 120s）。 */
+const GIT_LOCAL_WRITE_TIMEOUT_MS = 35_000
+const GIT_NETWORK_TIMEOUT_MS = 130_000
 
 /**
  * Phase 1B Workspace 命令：索引生命周期 + 文件树/查看器 + 编辑器读写。
@@ -125,11 +130,23 @@ export const workspaceCommandHandlers: Record<string, CommandHandler> = {
     )
     const result = (await requestSystem(system, 'git.status', {
       workspaceRoot: project.folderPath,
-    })) as { repo: boolean; entries?: unknown[]; truncated?: boolean }
+    })) as {
+      repo: boolean
+      entries?: unknown[]
+      truncated?: boolean
+      branch?: string | null
+      upstream?: string | null
+      ahead?: number | null
+      behind?: number | null
+    }
     return {
       repo: result.repo,
       entries: result.entries ?? [],
       truncated: result.truncated ?? false,
+      branch: result.branch ?? null,
+      upstream: result.upstream ?? null,
+      ahead: result.ahead ?? null,
+      behind: result.behind ?? null,
     }
   },
   'workspace.git_diff': async (p, { store, system }) => {
@@ -171,6 +188,148 @@ export const workspaceCommandHandlers: Record<string, CommandHandler> = {
       current: result.current ?? null,
       branches: result.branches ?? [],
     }
+  },
+  // ---------- Git 写操作：同一 workspaceRoot 串行（index.lock），Rust 免审批枚举 ----------
+  'workspace.git_stage': async (p, { store, system }) => {
+    const project = requireWorkspaceProject(
+      store,
+      requireString(p, 'projectId'),
+    )
+    const paths = requireStringArray(p, 'paths')
+    await withGitQueue(project.folderPath, () =>
+      requestSystem(
+        system,
+        'git.stage',
+        {
+          workspaceRoot: project.folderPath,
+          paths: paths.map(assertRelativePath),
+        },
+        GIT_LOCAL_WRITE_TIMEOUT_MS,
+      ),
+    )
+    return { ok: true as const }
+  },
+  'workspace.git_unstage': async (p, { store, system }) => {
+    const project = requireWorkspaceProject(
+      store,
+      requireString(p, 'projectId'),
+    )
+    const paths = requireStringArray(p, 'paths')
+    await withGitQueue(project.folderPath, () =>
+      requestSystem(
+        system,
+        'git.unstage',
+        {
+          workspaceRoot: project.folderPath,
+          paths: paths.map(assertRelativePath),
+        },
+        GIT_LOCAL_WRITE_TIMEOUT_MS,
+      ),
+    )
+    return { ok: true as const }
+  },
+  'workspace.git_commit': async (p, { store, system }) => {
+    const project = requireWorkspaceProject(
+      store,
+      requireString(p, 'projectId'),
+    )
+    const message = requireString(p, 'message')
+    await withGitQueue(project.folderPath, () =>
+      requestSystem(
+        system,
+        'git.commit',
+        {
+          workspaceRoot: project.folderPath,
+          message,
+        },
+        GIT_LOCAL_WRITE_TIMEOUT_MS,
+      ),
+    )
+    return { ok: true as const }
+  },
+  'workspace.git_fetch': async (p, { store, system }) => {
+    const project = requireWorkspaceProject(
+      store,
+      requireString(p, 'projectId'),
+    )
+    await withGitQueue(project.folderPath, () =>
+      requestSystem(
+        system,
+        'git.fetch',
+        { workspaceRoot: project.folderPath },
+        GIT_NETWORK_TIMEOUT_MS,
+      ),
+    )
+    return { ok: true as const }
+  },
+  'workspace.git_push': async (p, { store, system }) => {
+    const project = requireWorkspaceProject(
+      store,
+      requireString(p, 'projectId'),
+    )
+    await withGitQueue(project.folderPath, () =>
+      requestSystem(
+        system,
+        'git.push',
+        { workspaceRoot: project.folderPath },
+        GIT_NETWORK_TIMEOUT_MS,
+      ),
+    )
+    return { ok: true as const }
+  },
+  'workspace.git_pull': async (p, { store, system }) => {
+    const project = requireWorkspaceProject(
+      store,
+      requireString(p, 'projectId'),
+    )
+    await withGitQueue(project.folderPath, () =>
+      requestSystem(
+        system,
+        'git.pull',
+        { workspaceRoot: project.folderPath },
+        GIT_NETWORK_TIMEOUT_MS,
+      ),
+    )
+    return { ok: true as const }
+  },
+  'workspace.git_branch_create': async (p, { store, system }) => {
+    const project = requireWorkspaceProject(
+      store,
+      requireString(p, 'projectId'),
+    )
+    const name = requireString(p, 'name')
+    await withGitQueue(project.folderPath, () =>
+      requestSystem(
+        system,
+        'git.branch_create',
+        {
+          workspaceRoot: project.folderPath,
+          name,
+          ...(typeof p.checkout === 'boolean' ? { checkout: p.checkout } : {}),
+        },
+        GIT_LOCAL_WRITE_TIMEOUT_MS,
+      ),
+    )
+    return { ok: true as const }
+  },
+  'workspace.git_branch_switch': async (p, { store, system }) => {
+    const project = requireWorkspaceProject(
+      store,
+      requireString(p, 'projectId'),
+    )
+    const name = requireString(p, 'name')
+    await withGitQueue(project.folderPath, () =>
+      requestSystem(
+        system,
+        'git.branch_switch',
+        {
+          workspaceRoot: project.folderPath,
+          name,
+        },
+        GIT_LOCAL_WRITE_TIMEOUT_MS,
+      ),
+    )
+    return { ok: true as const }
   },
   'workspace.write_file': async (p, { store, system }) => {
     const project = requireWorkspaceProject(
@@ -245,6 +404,7 @@ async function requestSystem(
   system: SystemRuntimeClient,
   method: string,
   params: Record<string, unknown>,
+  timeoutMs = 30_000,
 ): Promise<unknown> {
   if (!system.available) {
     throw new CommandError(
@@ -253,7 +413,7 @@ async function requestSystem(
     )
   }
   try {
-    return await system.request(method, params, { timeoutMs: 30_000 })
+    return await system.request(method, params, { timeoutMs })
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') throw error
     throw new CommandError(
@@ -261,4 +421,19 @@ async function requestSystem(
       error instanceof Error ? error.message : String(error),
     )
   }
+}
+
+/** 校验非空字符串数组（paths 之类）；空数组或含非字符串项都视为非法请求。 */
+function requireStringArray(
+  params: Record<string, unknown>,
+  key: string,
+): string[] {
+  const value = params[key]
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new CommandError('invalid_request', `missing param: ${key}`)
+  }
+  if (!value.every((item) => typeof item === 'string' && item !== '')) {
+    throw new CommandError('invalid_request', `invalid param: ${key}`)
+  }
+  return value as string[]
 }

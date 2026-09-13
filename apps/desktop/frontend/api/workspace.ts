@@ -89,13 +89,23 @@ export function searchFiles(
 }
 
 /** Git 变更列表（porcelain 状态聚合）；repo=false 表示不是 Git 仓库。 */
-export function gitStatus(
-  projectId: string,
-): Promise<{ repo: boolean; entries: GitChangeEntry[]; truncated: boolean }> {
+export function gitStatus(projectId: string): Promise<{
+  repo: boolean
+  entries: GitChangeEntry[]
+  truncated: boolean
+  branch: string | null
+  upstream: string | null
+  ahead: number | null
+  behind: number | null
+}> {
   return request<{
     repo: boolean
     entries: GitChangeEntry[]
     truncated: boolean
+    branch: string | null
+    upstream: string | null
+    ahead: number | null
+    behind: number | null
   }>('workspace.git_status', { projectId })
 }
 
@@ -132,6 +142,44 @@ export function gitBranches(
     { projectId },
   )
 }
+
+type GitOk = { ok: true }
+
+function gitWrite(
+  method: string,
+  projectId: string,
+  extra: Record<string, unknown> = {},
+): Promise<GitOk> {
+  return request<GitOk>(method, { projectId, ...extra })
+}
+
+/** 暂存指定路径到索引区。 */
+export const gitStage = (projectId: string, paths: string[]) =>
+  gitWrite('workspace.git_stage', projectId, { paths })
+/** 取消暂存指定路径（索引区→工作树）。 */
+export const gitUnstage = (projectId: string, paths: string[]) =>
+  gitWrite('workspace.git_unstage', projectId, { paths })
+/** 以给定提交信息提交已暂存变更。 */
+export const gitCommit = (projectId: string, message: string) =>
+  gitWrite('workspace.git_commit', projectId, { message })
+/** 拉取远端更新（不合并）。 */
+export const gitFetch = (projectId: string) =>
+  gitWrite('workspace.git_fetch', projectId)
+/** 推送本地已提交到远端。 */
+export const gitPush = (projectId: string) =>
+  gitWrite('workspace.git_push', projectId)
+/** 拉取并合并远端更新（会改变工作树，需先过缓冲守卫）。 */
+export const gitPull = (projectId: string) =>
+  gitWrite('workspace.git_pull', projectId)
+/** 新建分支；checkout=true 时同时切换过去。 */
+export const gitBranchCreate = (
+  projectId: string,
+  name: string,
+  checkout: boolean,
+) => gitWrite('workspace.git_branch_create', projectId, { name, checkout })
+/** 切换到指定分支（会改变工作树，需先过缓冲守卫）。 */
+export const gitBranchSwitch = (projectId: string, name: string) =>
+  gitWrite('workspace.git_branch_switch', projectId, { name })
 
 export type WorkspaceIndexEvent = Extract<
   RuntimeEvent,

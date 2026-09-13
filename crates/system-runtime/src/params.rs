@@ -134,6 +134,41 @@ pub struct GitDiffParams {
     pub staged: Option<bool>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GitPathsParams {
+    pub workspace_root: String,
+    pub paths: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GitCommitParams {
+    pub workspace_root: String,
+    pub message: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GitRootParams {
+    pub workspace_root: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GitBranchCreateParams {
+    pub workspace_root: String,
+    pub name: String,
+    pub checkout: Option<bool>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GitCheckoutParams {
+    pub workspace_root: String,
+    pub name: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

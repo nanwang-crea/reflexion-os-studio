@@ -40,6 +40,8 @@ export interface WorkspacePanelState {
   reorderTabs: (ids: string[]) => void
   /** 切换项目时清空属于上一个项目的文件标签与聚焦。 */
   resetWorkspaceFiles: () => void
+  /** git checkout/pull 后强制所有文本标签从磁盘重载（bump nonce）。 */
+  reloadAllTextTabs: () => void
   /** 已修改未保存的文件路径集合（按 path 键控，仅 content 标签会脏）。 */
   dirtyPaths: Set<string>
   /** 编辑内核脏状态上抛入口（值不变时 no-op，防键击级重渲染）。 */
@@ -199,6 +201,14 @@ export function useWorkspacePanel(): WorkspacePanelState {
     setDirtyPaths(new Set())
   }, [])
 
+  /** git checkout/pull 后强制所有文本标签从磁盘重载（bump nonce）。 */
+  const reloadAllTextTabs = useCallback((): void => {
+    const stamp = Date.now()
+    setOpenTabs((tabs) =>
+      tabs.map((tab) => (tab.mode === 'diff' ? tab : { ...tab, nonce: stamp })),
+    )
+  }, [])
+
   return {
     workspaceOpen,
     setWorkspaceOpen,
@@ -217,6 +227,7 @@ export function useWorkspacePanel(): WorkspacePanelState {
     selectTab,
     reorderTabs,
     resetWorkspaceFiles,
+    reloadAllTextTabs,
     dirtyPaths,
     setTabDirty,
   }

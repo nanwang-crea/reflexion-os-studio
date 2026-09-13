@@ -500,6 +500,11 @@ export const CommandSchemaRegistry = {
       repo: z.boolean(),
       entries: z.array(GitChangeEntrySchema),
       truncated: z.boolean(),
+      // 分支上下文（porcelain v2 --branch）；detached/无仓库时 null。
+      branch: z.string().nullable(),
+      upstream: z.string().nullable(),
+      ahead: z.number().int().nonnegative().nullable(),
+      behind: z.number().int().nonnegative().nullable(),
     }),
   },
   'workspace.git_diff': {
@@ -530,6 +535,70 @@ export const CommandSchemaRegistry = {
       current: z.string().min(1).nullable(),
       branches: z.array(z.string().min(1)),
     }),
+  },
+  // ---------- Git 写操作（方案 A：UI 直接动作免审批凭据；Rust 枚举拼装 argv） ----------
+  'workspace.git_stage': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+      paths: z.array(z.string().min(1)).min(1),
+    }),
+    result: z.object({ ok: z.literal(true) }),
+  },
+  'workspace.git_unstage': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+      paths: z.array(z.string().min(1)).min(1),
+    }),
+    result: z.object({ ok: z.literal(true) }),
+  },
+  'workspace.git_commit': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+      message: z.string().min(1),
+    }),
+    result: z.object({ ok: z.literal(true) }),
+  },
+  'workspace.git_fetch': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+    }),
+    result: z.object({ ok: z.literal(true) }),
+  },
+  'workspace.git_push': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+    }),
+    result: z.object({ ok: z.literal(true) }),
+  },
+  'workspace.git_pull': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+    }),
+    result: z.object({ ok: z.literal(true) }),
+  },
+  'workspace.git_branch_create': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+      name: z.string().min(1),
+      // true 时创建并切换（checkout -b）；缺省仅创建。
+      checkout: z.boolean().optional(),
+    }),
+    result: z.object({ ok: z.literal(true) }),
+  },
+  'workspace.git_branch_switch': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+      name: z.string().min(1),
+    }),
+    result: z.object({ ok: z.literal(true) }),
   },
   'workspace.write_file': {
     params: z.object({

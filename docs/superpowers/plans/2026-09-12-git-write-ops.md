@@ -17,6 +17,7 @@
 ### Task 1: contracts 命令契约
 
 **Files:**
+
 - Modify: `packages/contracts/src/commands.ts`
 
 - [ ] **Step 1: 在 `workspace.git_branches` 条目后新增 8 个命令 schema + 扩展 git_status result**
@@ -103,6 +104,7 @@
 ### Task 2: Rust exec 层：操作级超时 + 防交互 env
 
 **Files:**
+
 - Modify: `crates/system-runtime/src/git/exec.rs`
 
 - [ ] **Step 1: 抽出 `run_git_opts`，`run_git` 变薄委托**
@@ -149,6 +151,7 @@ pub(super) fn run_git_opts(
 ### Task 3: Rust status v2：branch/upstream/ahead/behind
 
 **Files:**
+
 - Modify: `crates/system-runtime/src/git/status.rs`
 
 - [ ] **Step 1: StatusOutcome 增加字段**
@@ -297,6 +300,7 @@ status.rs tests：`parses_porcelain_v1_z_records` 重写为 v2 样例——输�
 ### Task 4: Rust 写命令（git/writes.rs + 分发）
 
 **Files:**
+
 - Create: `crates/system-runtime/src/git/writes.rs`
 - Modify: `crates/system-runtime/src/git/mod.rs`、`git/service.rs`（re-export）、`params.rs`、`handlers.rs`、`main.rs`
 
@@ -569,6 +573,7 @@ mod tests {
 ### Task 5: Runtime workspace 命令 + 串行队列
 
 **Files:**
+
 - Create: `apps/runtime/src/workspace/git-queue.ts`
 - Modify: `apps/runtime/src/workspace/handlers.ts`、`apps/runtime/test/command-coverage.test.mjs`
 
@@ -578,10 +583,16 @@ mod tests {
 /** 按 workspaceRoot 串行化 git 变更命令：index.lock 互斥是硬约束。 */
 const chains = new Map<string, Promise<unknown>>()
 
-export function withGitQueue<T>(root: string, task: () => Promise<T>): Promise<T> {
+export function withGitQueue<T>(
+  root: string,
+  task: () => Promise<T>,
+): Promise<T> {
   const prev = chains.get(root) ?? Promise.resolve()
   const next = prev.then(task, task)
-  chains.set(root, next.catch(() => {}))
+  chains.set(
+    root,
+    next.catch(() => {}),
+  )
   return next
 }
 ```
@@ -614,16 +625,16 @@ async function requestSystem(
 
 `requireStringArray` 加到 handlers.ts 私有助手（空数组/非字符串 → invalid_request）。对照表：
 
-| 命令 | Rust 方法 | params | 超时 |
-| --- | --- | --- | --- |
-| git_stage | git.stage | paths→`paths.map(assertRelativePath)` | 默认 |
-| git_unstage | git.unstage | 同上 | 默认 |
-| git_commit | git.commit | message=requireString 非空 | 默认 |
-| git_fetch | git.fetch | — | 120_000 |
-| git_push | git.push | — | 120_000 |
-| git_pull | git.pull | — | 120_000 |
-| git_branch_create | git.branch_create | name=requireString, checkout=typeof boolean | 默认 |
-| git_branch_switch | git.branch_switch | name | 默认 |
+| 命令              | Rust 方法         | params                                      | 超时    |
+| ----------------- | ----------------- | ------------------------------------------- | ------- |
+| git_stage         | git.stage         | paths→`paths.map(assertRelativePath)`       | 默认    |
+| git_unstage       | git.unstage       | 同上                                        | 默认    |
+| git_commit        | git.commit        | message=requireString 非空                  | 默认    |
+| git_fetch         | git.fetch         | —                                           | 120_000 |
+| git_push          | git.push          | —                                           | 120_000 |
+| git_pull          | git.pull          | —                                           | 120_000 |
+| git_branch_create | git.branch_create | name=requireString, checkout=typeof boolean | 默认    |
+| git_branch_switch | git.branch_switch | name                                        | 默认    |
 
 全部返回 `{ ok: true as const }`（Rust 已回 `{"ok":true}`，透传 `as { ok: boolean }`）。`workspace.git_status` handler 透传补四字段：`branch: result.branch ?? null, upstream: result.upstream ?? null, ahead: result.ahead ?? null, behind: result.behind ?? null`。
 
@@ -636,6 +647,7 @@ async function requestSystem(
 ### Task 6: Tauri 白名单
 
 **Files:**
+
 - Modify: `apps/desktop/src-tauri/src/lib.rs`（或 `grep -rn "RUNTIME_METHODS =" apps/desktop/src-tauri/src` 找到定义处）
 
 - [ ] **Step 1:** `RUNTIME_METHODS` 数组追加 8 个方法名（`workspace.git_stage` … `workspace.git_branch_switch`）。
@@ -646,6 +658,7 @@ async function requestSystem(
 ### Task 7: 前端 api + 状态层
 
 **Files:**
+
 - Modify: `apps/desktop/frontend/api/workspace.ts`、`hooks/useWorkspacePanel.ts`、`features/workspace/FileViewerPanel.tsx`、`hooks/useWorkspaceTabGuard.ts`
 
 - [ ] **Step 1: api/workspace.ts**
@@ -671,10 +684,15 @@ export const gitCommit = (projectId: string, message: string) =>
   gitWrite('workspace.git_commit', projectId, { message })
 export const gitFetch = (projectId: string) =>
   gitWrite('workspace.git_fetch', projectId)
-export const gitPush = (projectId: string) => gitWrite('workspace.git_push', projectId)
-export const gitPull = (projectId: string) => gitWrite('workspace.git_pull', projectId)
-export const gitBranchCreate = (projectId: string, name: string, checkout: boolean) =>
-  gitWrite('workspace.git_branch_create', projectId, { name, checkout })
+export const gitPush = (projectId: string) =>
+  gitWrite('workspace.git_push', projectId)
+export const gitPull = (projectId: string) =>
+  gitWrite('workspace.git_pull', projectId)
+export const gitBranchCreate = (
+  projectId: string,
+  name: string,
+  checkout: boolean,
+) => gitWrite('workspace.git_branch_create', projectId, { name, checkout })
 export const gitBranchSwitch = (projectId: string, name: string) =>
   gitWrite('workspace.git_branch_switch', projectId, { name })
 ```
@@ -682,13 +700,13 @@ export const gitBranchSwitch = (projectId: string, name: string) =>
 - [ ] **Step 2: useWorkspacePanel 增加 reloadAllTextTabs**
 
 ```ts
-  /** git checkout/pull 后强制所有文本标签从磁盘重载（bump nonce）。 */
-  const reloadAllTextTabs = useCallback((): void => {
-    const stamp = Date.now()
-    setOpenTabs((tabs) =>
-      tabs.map((tab) => (tab.mode === 'diff' ? tab : { ...tab, nonce: stamp })),
-    )
-  }, [])
+/** git checkout/pull 后强制所有文本标签从磁盘重载（bump nonce）。 */
+const reloadAllTextTabs = useCallback((): void => {
+  const stamp = Date.now()
+  setOpenTabs((tabs) =>
+    tabs.map((tab) => (tab.mode === 'diff' ? tab : { ...tab, nonce: stamp })),
+  )
+}, [])
 ```
 
 接口与 return 补 `reloadAllTextTabs: () => void`。
@@ -705,29 +723,29 @@ export const gitBranchSwitch = (projectId: string, name: string) =>
 把 `guardedResetWorkspaceFiles` 的"检查→三键→保存全部→成功/放弃"段提取为：
 
 ```ts
-  /** 缓冲守卫：dirtyPaths 非空时三键（保存全部/放弃/取消），返回是否可继续。 */
-  const guardDirtyBuffersThen = useCallback(async (): Promise<boolean> => {
-    const { dirtyPaths, confirmAction, setNotice, filePanelRef } = latest.current
-    if (dirtyPaths.size === 0) return true
-    const result = await confirmAction({
-      title: '有未保存的修改',
-      message: `接下来将改变工作区文件，${dirtyPaths.size} 个未保存文件需先处理。`,
-      confirmLabel: '保存全部并继续',
-      tertiaryLabel: '放弃修改并继续',
-    })
-    if (result === 'cancel') return false
-    if (result === 'confirm') {
-      const { failed } = (await filePanelRef.current?.saveAllDirty()) ?? {
-        saved: [],
-        failed: ['（文件句柄不可用）'],
-      }
-      if (failed.length > 0) {
-        setNotice(`保存失败：${failed.join('、')}，已中止操作。`)
-        return false
-      }
+/** 缓冲守卫：dirtyPaths 非空时三键（保存全部/放弃/取消），返回是否可继续。 */
+const guardDirtyBuffersThen = useCallback(async (): Promise<boolean> => {
+  const { dirtyPaths, confirmAction, setNotice, filePanelRef } = latest.current
+  if (dirtyPaths.size === 0) return true
+  const result = await confirmAction({
+    title: '有未保存的修改',
+    message: `接下来将改变工作区文件，${dirtyPaths.size} 个未保存文件需先处理。`,
+    confirmLabel: '保存全部并继续',
+    tertiaryLabel: '放弃修改并继续',
+  })
+  if (result === 'cancel') return false
+  if (result === 'confirm') {
+    const { failed } = (await filePanelRef.current?.saveAllDirty()) ?? {
+      saved: [],
+      failed: ['（文件句柄不可用）'],
     }
-    return true
-  }, [])
+    if (failed.length > 0) {
+      setNotice(`保存失败：${failed.join('、')}，已中止操作。`)
+      return false
+    }
+  }
+  return true
+}, [])
 ```
 
 `guardedResetWorkspaceFiles` 改为复用它 + `resetWorkspaceFiles()`（保持原行为与文案语义：把"切换项目"专用 message 参数化——`guardDirtyBuffersThen(message?: string)`，默认文案如上，guardedReset 传原文案）。接口加 `guardDirtyBuffersThen`。
@@ -739,6 +757,7 @@ export const gitBranchSwitch = (projectId: string, name: string) =>
 ### Task 8: GitChanges SCM 面板重构 + BranchPicker
 
 **Files:**
+
 - Create: `apps/desktop/frontend/features/workspace/BranchPicker.tsx`
 - Rewrite: `apps/desktop/frontend/features/workspace/GitChanges.tsx`
 - Modify: `apps/desktop/frontend/features/workspace/workspace.css`
@@ -792,6 +811,7 @@ Props：`{ branch: string|null; ahead: number|null; behind: number|null; branche
 ### Task 9: 接线（ProjectFiles/Sidebar/App）+ e2e
 
 **Files:**
+
 - Modify: `apps/desktop/frontend/features/workspace/ProjectFiles.tsx`、`components/Sidebar.tsx`、`App.tsx`
 - Create: `apps/runtime/test/system-e2e-git.test.mjs`（并登记进 `apps/runtime/package.json` test 脚本清单）
 

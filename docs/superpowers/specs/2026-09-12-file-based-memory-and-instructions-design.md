@@ -40,11 +40,11 @@
 
 ## 3. 三层上下文模型
 
-| 层 | 位置 | 谁写 | 角色 |
-| --- | --- | --- | --- |
-| 指令 | `<DATA_DIR>/AGENTS.md` + `<project.folderPath>/AGENTS.md` | 用户 / 仓库作者 | 纪律与规范，只读注入 |
-| 记忆 | `<DATA_DIR>/MEMORY.md` + `<DATA_DIR>/memories/<projectId>/MEMORY.md` | remember 工具 + 用户 | 稳定结论/偏好/教训，注入 + 可写 |
-| 原始事实 | SQLite（messages / runs / tool_calls） | 系统 | 不提取、不冗余；未来 mem0 的检索对象 |
+| 层       | 位置                                                                 | 谁写                 | 角色                                 |
+| -------- | -------------------------------------------------------------------- | -------------------- | ------------------------------------ |
+| 指令     | `<DATA_DIR>/AGENTS.md` + `<project.folderPath>/AGENTS.md`            | 用户 / 仓库作者      | 纪律与规范，只读注入                 |
+| 记忆     | `<DATA_DIR>/MEMORY.md` + `<DATA_DIR>/memories/<projectId>/MEMORY.md` | remember 工具 + 用户 | 稳定结论/偏好/教训，注入 + 可写      |
+| 原始事实 | SQLite（messages / runs / tool_calls）                               | 系统                 | 不提取、不冗余；未来 mem0 的检索对象 |
 
 决策记录：
 

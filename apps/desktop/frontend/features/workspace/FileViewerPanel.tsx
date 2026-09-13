@@ -146,7 +146,7 @@ export function FileViewerPanel(
         const active = tabIdOf(tab) === props.activeTabId
         return (
           <div
-            key={tab.path}
+            key={`${tab.path}#${tab.nonce ?? 0}`}
             className="workspace-tab-page"
             style={{ display: active ? 'flex' : 'none' }}
           >

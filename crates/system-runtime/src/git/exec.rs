@@ -18,8 +18,37 @@ pub(super) struct GitOutput {
     pub timed_out: bool,
 }
 
+/// git 运行选项：默认档（只读，15s）与写/网络档（30s / 120s + 禁交互提示）。
+#[derive(Clone, Copy)]
+pub(super) struct GitRunOpts {
+    pub timeout_ms: u64,
+    /// 网络命令禁止 git 挂起等待终端/askpass 输入（凭据缺失快速失败，stderr 引导）。
+    pub noninteractive: bool,
+}
+
+pub(super) const GIT_RO: GitRunOpts = GitRunOpts {
+    timeout_ms: DEFAULT_TIMEOUT_MS,
+    noninteractive: false,
+};
+pub(super) const GIT_LOCAL_WRITE: GitRunOpts = GitRunOpts {
+    timeout_ms: 30_000,
+    noninteractive: false,
+};
+pub(super) const GIT_NETWORK: GitRunOpts = GitRunOpts {
+    timeout_ms: 120_000,
+    noninteractive: true,
+};
+
 /// 运行 git 并收集输出：超时杀进程，stdout/stderr 各限 512KB（防大 diff 撑爆内存）。
 pub(super) fn run_git(workspace_root: &Path, args: &[&str]) -> Result<GitOutput, GitError> {
+    run_git_opts(workspace_root, args, GIT_RO)
+}
+
+pub(super) fn run_git_opts(
+    workspace_root: &Path,
+    args: &[&str],
+    opts: GitRunOpts,
+) -> Result<GitOutput, GitError> {
     let executable = find_git_executable().ok_or_else(|| {
         GitError::new(
             "git_unavailable",
@@ -34,6 +63,11 @@ pub(super) fn run_git(workspace_root: &Path, args: &[&str]) -> Result<GitOutput,
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    if opts.noninteractive {
+        command
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .env("GIT_ASKPASS", "");
+    }
     let mut child = command.spawn().map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
             GitError::new("git_unavailable", "git not found".to_string())
@@ -46,7 +80,7 @@ pub(super) fn run_git(workspace_root: &Path, args: &[&str]) -> Result<GitOutput,
     let stdout_handle = drain_pipe(&mut stdout_pipe);
     let stderr_handle = drain_pipe(&mut stderr_pipe);
 
-    let deadline = Instant::now() + Duration::from_millis(DEFAULT_TIMEOUT_MS);
+    let deadline = Instant::now() + Duration::from_millis(opts.timeout_ms);
     let mut timed_out = false;
     let status = loop {
         match child.try_wait() {
@@ -139,4 +173,14 @@ fn drain_pipe<T: Read + Send + 'static>(
 
 pub(super) fn first_line(text: &str) -> &str {
     text.lines().next().unwrap_or("unknown error").trim()
+}
+
+/// stdout 末个非空行：git 写命令的失败摘要（如 "nothing to commit, working
+/// tree clean" / "no changes added to commit"）写在 stdout 末尾而非首行。
+pub(super) fn last_nonempty_line(text: &str) -> &str {
+    text.lines()
+        .rev()
+        .find(|line| !line.trim().is_empty())
+        .unwrap_or("unknown error")
+        .trim()
 }

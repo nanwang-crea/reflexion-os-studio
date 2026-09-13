@@ -465,3 +465,130 @@ test('workspace.write_file rejects overwrite when last read was paginated', asyn
     false,
   )
 })
+
+test('workspace.git_stage forwards paths and serializes mutations per workspace', async () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/workspace' })
+  const calls = []
+  let release
+  const gate = new Promise((resolve) => {
+    release = resolve
+  })
+  const system = {
+    available: true,
+    request: async (method, params, options) => {
+      calls.push({ method, params, timeoutMs: options?.timeoutMs })
+      // 第一个请求挂起：第二个必须排队，直到 release 才允许开始。
+      if (calls.length === 1) await gate
+      return { ok: true }
+    },
+  }
+  const first = dispatchCommand(
+    'workspace.git_stage',
+    { projectId: project.id, paths: ['src/a.ts', 'b.txt'] },
+    { store, system },
+  )
+  const second = dispatchCommand(
+    'workspace.git_unstage',
+    { projectId: project.id, paths: ['c.txt'] },
+    { store, system },
+  )
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(calls.length, 1, '第二个命令不得先于第一个完成而启动')
+  release()
+  assert.deepEqual(await Promise.all([first, second]), [
+    { ok: true },
+    { ok: true },
+  ])
+  assert.deepEqual(
+    calls.map((call) => call.method),
+    ['git.stage', 'git.unstage'],
+  )
+  assert.deepEqual(calls[0].params, {
+    workspaceRoot: '/workspace',
+    paths: ['src/a.ts', 'b.txt'],
+  })
+  assert.deepEqual(calls[1].params, {
+    workspaceRoot: '/workspace',
+    paths: ['c.txt'],
+  })
+  // 外层 35s > Rust 内层 30s（GIT_LOCAL_WRITE），失败信息以 Rust 侧为准。
+  assert.equal(calls[0].timeoutMs, 35_000)
+})
+
+test('workspace.git_commit rejects empty message and git_fetch raises timeout', async () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/workspace' })
+  const calls = []
+  const system = {
+    available: true,
+    request: async (method, params, options) => {
+      calls.push({ method, timeoutMs: options?.timeoutMs })
+      return { ok: true }
+    },
+  }
+  await assert.rejects(
+    () =>
+      dispatchCommand(
+        'workspace.git_commit',
+        { projectId: project.id, message: '' },
+        { store, system },
+      ),
+    (error) => error.code === 'invalid_request',
+  )
+  assert.deepEqual(calls, [])
+  await dispatchCommand(
+    'workspace.git_commit',
+    { projectId: project.id, message: 'feat: x' },
+    { store, system },
+  )
+  await dispatchCommand(
+    'workspace.git_fetch',
+    { projectId: project.id },
+    { store, system },
+  )
+  assert.deepEqual(calls, [
+    { method: 'git.commit', timeoutMs: 35_000 },
+    { method: 'git.fetch', timeoutMs: 130_000 },
+  ])
+})
+
+test('workspace.git_status passes through branch context and defaults to null', async () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/workspace' })
+  const full = {
+    repo: true,
+    entries: [{ path: 'a.ts', status: 'M', staged: true }],
+    truncated: false,
+    branch: 'main',
+    upstream: 'origin/main',
+    ahead: 2,
+    behind: 0,
+  }
+  const result = await dispatchCommand(
+    'workspace.git_status',
+    { projectId: project.id },
+    {
+      store,
+      system: { available: true, request: async () => full },
+    },
+  )
+  assert.deepEqual(result, full)
+  const bare = await dispatchCommand(
+    'workspace.git_status',
+    { projectId: project.id },
+    {
+      store,
+      system: { available: true, request: async () => ({ repo: false }) },
+    },
+  )
+  assert.deepEqual(bare, {
+    repo: false,
+    entries: [],
+    truncated: false,
+    branch: null,
+    upstream: null,
+    ahead: null,
+    behind: null,
+  })
+})

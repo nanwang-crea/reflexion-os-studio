@@ -2,7 +2,8 @@
 //! 仅查看与定位；编辑/暂存/提交等写操作后续阶段经权限策略接入。
 //! git 为外部二进制：未安装返回 git_unavailable，非仓库返回 repo=false，
 //! 其余失败 git_failed。
-//! 实现拆分：状态解析在 status.rs、diff 内容读取在 diff.rs、进程执行在 exec.rs。
+//! 实现拆分：状态解析在 status.rs、diff 内容读取在 diff.rs、进程执行在 exec.rs、
+//! 写子命令见 writes.rs。
 
 use std::path::Path;
 
@@ -121,60 +122,10 @@ fn trim_to_none(text: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::PathBuf;
-    use std::process::Command;
 
     use super::super::exec::find_git_executable;
+    use super::super::testutil::{git_cli, temp_repo, temp_workspace, write};
     use super::*;
-
-    fn temp_workspace(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "reflexion-git-{tag}-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
-    /// 供测试用的 git CLI 执行（find_git_executable 为真源）；不可用则跳过用例。
-    fn git_cli(root: &Path, args: &[&str]) -> bool {
-        let Some(executable) = find_git_executable() else {
-            eprintln!("skip: git executable not found");
-            return false;
-        };
-        let status = Command::new(executable)
-            .current_dir(root)
-            .args(args)
-            .env("GIT_AUTHOR_NAME", "t")
-            .env("GIT_AUTHOR_EMAIL", "t@example.com")
-            .env("GIT_COMMITTER_NAME", "t")
-            .env("GIT_COMMITTER_EMAIL", "t@example.com")
-            .status()
-            .expect("spawn git for test fixture");
-        assert!(status.success(), "git {args:?} failed in fixture");
-        true
-    }
-
-    /// 初始化带一次提交的临时仓库；git 不可用时返回 false（用例跳过）。
-    fn temp_repo(tag: &str) -> Option<PathBuf> {
-        let root = temp_workspace(tag);
-        if !git_cli(&root, &["init", "-q"]) {
-            return None;
-        }
-        Some(root)
-    }
-
-    fn write(root: &Path, relative: &str, content: &[u8]) {
-        let path = root.join(relative);
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).unwrap();
-        }
-        fs::write(path, content).unwrap();
-    }
 
     #[test]
     fn diff_unstaged_uses_index_as_original_and_worktree_as_modified() {

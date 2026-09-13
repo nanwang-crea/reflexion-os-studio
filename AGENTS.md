@@ -20,7 +20,7 @@ React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
   - **Skills**：内置 code-review / web-research / workspace-report；斜杠命令激活 + skill.use 工具加载全文；
   - **Memory**：Run 结束后自动提取-合并（会话/项目级，user 级待确认流程落地前不产出候选项）、记忆管理页、上下文召回注入；
   - **MCP**：stdio 协议 client（握手/tools/list/call、严格超时）+ 管理服务（配置/启停/重连/工具清单）、工具桥注册为 `serverId/toolName`、默认 ask 审批、设置页 MCP 面板、mcp_servers 表；
-  - **Workspace（Phase 1B 第一部分）**：异步 Indexer（progress/cancel/stale/failed、忽略目录与符号链接、快照落库）、文件树按需加载、只读代码/文档查看器（行号/复制/跳转行/分段加载/Markdown·JSON 预览）、**Git 变更（状态列表 + 单文件 diff 预览，只读查看与定位，编辑/暂存/提交不在第一阶段）**，全部经 Rust 侧 workspace 边界；
+  - **Workspace（Phase 1B 第一部分）**：异步 Indexer（progress/cancel/stale/failed、忽略目录与符号链接、快照落库）、文件树按需加载、代码/文档查看器与编辑器保存（行号/复制/跳转行/分段加载/Markdown·JSON 预览）、**Git 变更（状态列表 + 单文件 diff 预览）与写操作（stage/unstage/commit/fetch/push/pull(--ff-only)/分支创建与切换：UI 直接动作免审批、磁盘未提交改动交给 git 原生、内存脏 buffer 在切分支/pull 前三键守卫并成功后强制重载）**，全部经 Rust 侧 workspace 边界；
   - **Asset / ResourceLink（Phase 1B 第二部分）**：Asset Store（数据目录按项目隔离、sha256 元数据、导入/列表/预览/删除/复制引用）；消息内资源引用渲染（`workspace://<projectId>/<path>#L<行号>` 进查看器定位、`asset://<assetId>` 进资产预览、https 链接经 Tauri 白名单命令转系统浏览器，仅 https 放行）；Run 回复的引用聚合为 Artifact 卡片；导出/下载/系统应用打开留后续阶段；
   - **存储**：`node:sqlite`（WAL、外键、启动把未完成 Run/Message 恢复为 interrupted、终态单事务、workspace_index 快照表、assets 表）。
 - **尚未实现、不得提前实现**：Phase 1B 剩余（Browser Surface）、Phase 2 剩余（Provider/Tool 插件、Browser 工具、user 级记忆写入确认）、Phase 3 多 Agent、Phase 4 Workflow、Phase 5 多模态、Phase 6 硬化与激活码许可。
@@ -37,7 +37,7 @@ React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
 | `packages/agent-core/`     | Agent 循环内核（内部 SDK）：runAgentLoop / ToolRegistry / 上下文压缩，不碰 SQLite 与传输                                                                 |
 | `packages/runtime-client/` | 前端唯一 typed facade，不得绕过它直连任何进程                                                                                                            |
 | `packages/*`（其余）       | 仅 README 占位，不要在其中堆放实现代码                                                                                                                   |
-| `crates/system-runtime/`   | Rust System Runtime sidecar（独立 Cargo workspace，根目录 `Cargo.toml` 不存在；`git/` 子模块按 status/diff/exec 拆分）                                   |
+| `crates/system-runtime/`   | Rust System Runtime sidecar（独立 Cargo workspace，根目录 `Cargo.toml` 不存在；`git/` 子模块按 status/diff/exec/writes 拆分）                            |
 | `scripts/`                 | bash 构建编排                                                                                                                                            |
 | `docs/`                    | 设计文档；改架构先改文档                                                                                                                                 |
 
@@ -106,7 +106,7 @@ cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml   # Tauri 宿主
 pnpm build:desktop         # 打包安装包（beforeBuildCommand 自动准备 sidecar 资源）
 ```
 
-常用命令：`pnpm dev`（开发模式启动桌面应用）、`pnpm build`（全量 + 打包安装包）、`pnpm clean`。涉及事件接线 / 流式渲染的性能敏感改动，验证流程之外还须过第 10 节"性能纪律"清单并在 dev 模式实测空闲资源占用。
+常用命令：`pnpm dev`（开发模式启动桌面应用）、`pnpm build`（全量 + 打包安装包）、`pnpm clean`。涉及事件接线 / 流式渲染的性能敏感改动，验证流程之外还须过第 11 节"性能纪律"清单并在 dev 模式实测空闲资源占用。
 
 打包说明：`pnpm build` / `pnpm build:desktop` 会产出**自包含安装包**——`prepare-package.sh` 把 TS Runtime 打成单文件 `runtime.mjs`（esbuild），下载并随包内置固定版本 Node（`scripts/fetch-node-dist.mjs`，缓存于 `.cache/node-dist/`），拷贝 `reflexion-system-runtime`（release）进 `package-resources/`，由 `bundle.resources` 打进安装包。宿主编译时从 `resource_dir/pkg/` 解析三个 sidecar，开发态回退仓库路径与 PATH `node`，`pnpm dev` 行为不变。安装包产物位于 `apps/desktop/src-tauri/target/release/bundle/`。
 
@@ -148,7 +148,16 @@ pnpm build:desktop         # 打包安装包（beforeBuildCommand 自动准备 s
 - 每次交付说明：通过了什么验证、跳过了什么及原因，不夸大完成度。
 - 核心模块超过约 300–500 行时重新审视职责拆分（`ARCHITECTURE.md` 验收标准）；新代码的拆分要求见第 4 节"按职责拆分"，不满足即返工。
 
-## 10. 性能纪律（事件接线 / 流式渲染类改动必过清单）
+## 10. 搜索纪律（工具使用软约束）
+
+背景：曾出现整轮无效搜索——在猜测的路径（如 `apps/desktop/src/lib/`，实际为 `apps/desktop/frontend/`）与不存在的文件名（如 `bridge.ts`）上连发多次 grep/glob，空结果未被当作假设错误信号处理。
+
+- **先验证骨架再搜索**：对目录结构或文件名没有把握时，先用一次 `ls` / `find <dir> -maxdepth 2 -type d` / glob 确认，禁止在猜测路径上连发内容搜索；本仓库布局以第 2 节目录表为准。
+- **0 命中两次即停**：同一关键词 + glob 组合两次无结果，停止变换 glob 写法，改用 shell（`find` / `grep -rn`）核实路径与文件名假设；工具返回"无匹配"≠"关键词不存在"，也可能是 glob 未命中任何文件，须区分对待。
+- **读已知文件用 Read**：确切文件路径已知时直接 Read，不用 grep 的 glob 凑单文件过滤；跨文件检索仍优先内置 grep/glob（更快、结构化、自动忽略生成物）。
+- **独立搜索合批**：多个无依赖的关键词搜索在同一轮并行发出，减少串行试错轮次。
+
+## 11. 性能纪律（事件接线 / 流式渲染类改动必过清单）
 
 背景：`useAppBootstrap` 的 effect 依赖数组曾包含每次渲染都是新身份的 hook 返回对象，形成「渲染 → 重挂订阅 → setState → 再渲染」自激循环，WebView 空转 ~100% CPU、内存涨到 GB 级且长期未被发现（2026-09-10 修复）。做任何涉及事件订阅、列表渲染、流式更新的改动时必须过一遍：
 

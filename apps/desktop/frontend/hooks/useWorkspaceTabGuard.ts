@@ -20,6 +20,13 @@ interface WorkspaceTabGuardDeps {
 export interface WorkspaceTabGuard {
   /** 关闭标签请求（按 tabId）：脏文件先弹三键确认（保存并关闭/不保存/取消）。 */
   requestCloseTab: (id: string) => Promise<void>
+  /** 缓冲守卫：dirtyPaths 非空时三键（保存全部/放弃/取消），返回是否可继续。 */
+  /** 通用缓冲守卫（切分支/拉取前用）：文案可按场景覆盖。 */
+  guardDirtyBuffersThen: (options?: {
+    message?: string
+    confirmLabel?: string
+    tertiaryLabel?: string
+  }) => Promise<boolean>
   /** 切项目/会话前的清空守卫：返回 false 表示用户取消切换。 */
   guardedResetWorkspaceFiles: () => Promise<boolean>
 }
@@ -71,39 +78,52 @@ export function useWorkspaceTabGuard(
     latest.current.closeTab(id)
   }, [])
 
-  const guardedResetWorkspaceFiles = useCallback(async (): Promise<boolean> => {
-    const {
-      dirtyPaths,
-      resetWorkspaceFiles,
-      confirmAction,
-      setNotice,
-      filePanelRef,
-    } = latest.current
-    if (dirtyPaths.size === 0) {
-      resetWorkspaceFiles()
+  /** 缓冲守卫：dirtyPaths 非空时三键（保存全部/放弃/取消），返回是否可继续。 */
+  const guardDirtyBuffersThen = useCallback(
+    async (options?: {
+      message?: string
+      confirmLabel?: string
+      tertiaryLabel?: string
+    }): Promise<boolean> => {
+      const { dirtyPaths, confirmAction, setNotice, filePanelRef } =
+        latest.current
+      if (dirtyPaths.size === 0) return true
+      const result = await confirmAction({
+        title: '有未保存的修改',
+        message:
+          options?.message ??
+          `接下来将改变工作区文件，${dirtyPaths.size} 个未保存文件需先处理。`,
+        confirmLabel: options?.confirmLabel ?? '保存全部并继续',
+        tertiaryLabel: options?.tertiaryLabel ?? '放弃修改并继续',
+      })
+      if (result === 'cancel') return false
+      if (result === 'confirm') {
+        const { failed } = (await filePanelRef.current?.saveAllDirty()) ?? {
+          saved: [],
+          failed: ['（文件句柄不可用）'],
+        }
+        if (failed.length > 0) {
+          setNotice(`保存失败：${failed.join('、')}，已中止操作。`)
+          return false
+        }
+      }
       return true
-    }
-    const result = await confirmAction({
-      title: '有未保存的修改',
+    },
+    [],
+  )
+
+  const guardedResetWorkspaceFiles = useCallback(async (): Promise<boolean> => {
+    const { dirtyPaths } = latest.current
+    const ok = await guardDirtyBuffersThen({
       message: `切换项目将关闭 ${dirtyPaths.size} 个已修改文件，未保存的修改将丢失。`,
       confirmLabel: '保存全部并切换',
       tertiaryLabel: '放弃修改并切换',
     })
-    if (result === 'cancel') return false
-    if (result === 'confirm') {
-      const { failed } = (await filePanelRef.current?.saveAllDirty()) ?? {
-        saved: [],
-        failed: ['（文件句柄不可用）'],
-      }
-      if (failed.length > 0) {
-        setNotice(`保存失败：${failed.join('、')}，已取消切换。`)
-        return false
-      }
-    }
+    if (!ok) return false
     // await 之后重新读取最新身份，避免用过期的 resetWorkspaceFiles 闭包。
     latest.current.resetWorkspaceFiles()
     return true
-  }, [])
+  }, [guardDirtyBuffersThen])
 
   // 关窗口拦截：脏文件存在时阻止默认关闭，弹窗确认后 destroy。
   // 挂载时接线一次，回调经 latest-ref 读当轮闭包（性能纪律）。
@@ -134,5 +154,9 @@ export function useWorkspaceTabGuard(
     }
   }, [])
 
-  return { requestCloseTab, guardedResetWorkspaceFiles }
+  return {
+    requestCloseTab,
+    guardDirtyBuffersThen,
+    guardedResetWorkspaceFiles,
+  }
 }

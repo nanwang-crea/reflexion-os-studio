@@ -26,19 +26,21 @@
 
 ### Rust 协议（system-runtime，新增）
 
-| 方法                 | argv                                                           | 备注                                                                                    |
-| -------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `git.stage`          | `git add -- <paths…>`                                          | paths 非空校验；"全部暂存"由前端枚举路径传入                                            |
-| `git.unstage`        | `git reset -- <paths…>`                                        | 用 reset 而非 restore（兼容老 git）                                                     |
-| `git.commit`         | `git commit -m <message>`                                      | message 非空；仅提交已暂存（无 -a）；hooks 由 git 原生执行，失败展示 stderr             |
-| `git.fetch`          | `git fetch origin`                                             | 长超时档                                                                                |
-| `git.push`           | 有 upstream：`git push`；无：`git push -u origin <current>`    | current 由 Rust 自查 symbolic-ref，前端不传分支名                                       |
-| `git.pull`           | `git pull --ff-only`                                           | 同上网络档                                                                              |
-| `git.branch_create`  | `git branch <name>` / `git checkout -b <name>`                 | `checkout:true` 时后者；name 服务端校验（`git check-ref-format --branch` 或字符白名单） |
-| `git.checkout`       | `git checkout <name>`                                          | name 同上校验                                                                           |
-| `git.status`（扩展） | porcelain=v2 `# branch.*` 头 + `rev-list --left-right --count` | 响应增加 `branch`、`upstream`、`ahead`、`behind`（无 upstream 时 null）                 |
+| 方法                 | argv                                                                                                                                                       | 备注                                                                                                 |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `git.stage`          | `git add -A -- <paths…>`                                                                                                                                   | paths 非空校验；"全部暂存"由前端枚举路径传入；`-A` 限定 pathspec，连删除一半（重命名旧路径）一并暂存 |
+| `git.unstage`        | `git reset -- <paths…>`                                                                                                                                    | 用 reset 而非 restore（兼容老 git）                                                                  |
+| `git.commit`         | `git commit -m <message>`                                                                                                                                  | message 非空；仅提交已暂存（无 -a）；hooks 由 git 原生执行，失败展示 stderr                          |
+| `git.fetch`          | `git fetch origin`                                                                                                                                         | 长超时档                                                                                             |
+| `git.push`           | 有 upstream：`git push`；无：`git push -u origin <current>`                                                                                                | current 由 Rust 自查 symbolic-ref，前端不传分支名                                                    |
+| `git.pull`           | `git pull --ff-only`                                                                                                                                       | 同上网络档                                                                                           |
+| `git.branch_create`  | `git branch <name>` / `git checkout -b <name>`                                                                                                             | `checkout:true` 时后者；name 服务端校验（`git check-ref-format --branch` 或字符白名单）              |
+| `git.branch_switch`  | `git checkout <name>`                                                                                                                                      | 实现命名（协议方法；Runtime 侧为 `workspace.git_branch_switch`）；name 同上校验                      |
+| `git.status`（扩展） | porcelain=v2 `--branch` 的 `# branch.*` 头（实现直接解析 `# branch.ab +N -M`，无 upstream 时 git 不输出该行 → None；不用 `rev-list --left-right --count`） | 响应增加 `branch`、`upstream`、`ahead`、`behind`（无 upstream 时 null）                              |
 
 全部新命令 async 分发（复用 status/diff 的 `(Value, bool)` 线程模式）。错误分类沿用 `git_unavailable / git_failed / timeout` + stderr 关键模式友好化：`no upstream`、`non-fast-forward`、`Your local changes…would be overwritten`、`nothing to commit`。
+
+> **实现注记（2026-09-13）· hooks 信任假设**：commit/checkout/pull 会触发工作区仓库自带的 git hooks（pre-commit、post-checkout、post-merge 等），以当前用户权限在 workspace 外无沙箱执行。这与用户在自己终端跑 git 等价——本方案全部是 UI 发起的对本地仓库的显式动作，视为用户意图的一部分，接受该风险并如实记录；不提供禁用 hooks 的开关（绕过 `core.hooksPath` 会掩盖仓库行为，反更不可预期）。
 
 ### Runtime 命令（workspace.git_*）
 
