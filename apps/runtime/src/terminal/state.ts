@@ -39,6 +39,13 @@ export function transitionStatus(
   if (TERMINAL.has(current) && !extra?.force) return false
   record.meta.status = next
   if (extra?.exitCode !== undefined) record.meta.exitCode = extra.exitCode
-  emitState(record, next, extra?.errorMessage)
+  if (extra?.errorMessage) {
+    // 失败原因存记录（前 200 字符，spec §9：只记诊断，绝不携带内容/密钥），
+    // 并在本次迁移的 terminal.state 事件上带出（status=failed 的展示契约）。
+    record.errorMessage = extra.errorMessage.slice(0, 200)
+    emitState(record, next, record.errorMessage)
+    return true
+  }
+  emitState(record, next)
   return true
 }

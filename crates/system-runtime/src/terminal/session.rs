@@ -35,6 +35,9 @@ const HUP_DEADLINE: Duration = Duration::from_millis(500);
 pub struct TerminalSession {
     pub id: String,
     pub generation: u64,
+    /// 实际启动 shell 的 argv（spec §4：元数据必须携带 shell，经 json_meta
+    /// 贯通到 spawn/attach 结果；TS 只透传展示，不做二次解析）。
+    pub shell_argv: Vec<String>,
     /// seq 源：仅生产者线程递增，帧在队列内编号连续；attach 门控解耦的是
     /// 「已编号」与「已发出」，service 的 json_meta 与消费端缺口检测都读它。
     pub output_seq: Arc<AtomicU64>,
@@ -124,6 +127,7 @@ pub fn spawn(
     let session = Arc::new(TerminalSession {
         id: terminal_id.clone(),
         generation,
+        shell_argv: argv,
         output_seq: Arc::new(AtomicU64::new(0)),
         queue: queue.clone(),
         writer: Mutex::new(writer),

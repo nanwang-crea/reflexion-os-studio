@@ -12,6 +12,8 @@ export class InboundProcessor {
   constructor(
     private readonly index: RecordIndex,
     private readonly pacer: EgressPacer,
+    /** Rust exited 后的额度回收回调（发 Rust close 释放会话表槽位）。 */
+    private readonly onRustExited: (record: TerminalRecord) => void,
   ) {}
 
   handle(method: string, params: unknown): void {
@@ -72,11 +74,24 @@ export class InboundProcessor {
       transitionStatus(record, 'running')
       return
     }
+    // 额度回收（#2）：TS 在 exited 后已自发 Rust close 释放会话表槽位，
+    // 这条 close 的 closed 回执不得覆盖「exited + exitCode」的展示契约
+    // （spec §2），整条通知吞掉（无事件、无降级）。
+    if (
+      status === 'closed' &&
+      record.meta.status === 'exited' &&
+      record.rustReclaimed
+    ) {
+      return
+    }
     // exited/closed：Rust 已保证尾帧先于状态；冲刷本侧残留队列再发状态事件。
     this.pacer.flushChannel(record.channel)
     if (exitCode !== undefined && !TERMINAL.has(record.meta.status)) {
       record.meta.exitCode = exitCode
     }
-    transitionStatus(record, status)
+    const changed = transitionStatus(record, status)
+    // 只有真实发生 →exited 迁移才回收：重复 exited 首次已触发；closed 后
+    // 迟到的 exited 早被吸收，其 Rust 槽位也已被 close 释放。
+    if (status === 'exited' && changed) this.onRustExited(record)
   }
 }

@@ -5,6 +5,7 @@ import type { SystemRuntimeClient } from '../system.js'
 import type { Terminal } from '@reflexion-os-studio/contracts'
 import { EgressPacer, type EgressChannel } from './egress.js'
 import { InboundProcessor } from './inbound.js'
+import { InputOrder } from './input-order.js'
 import {
   DEFAULTS,
   RecordIndex,
@@ -30,13 +31,15 @@ export interface TerminalServiceDeps {
  * 终端多会话服务：幂等创建 / 配额 / 输入序号串行化 / 输出公平调度回传 /
  * Rust 通知接线 / 回收与降级。状态机见 spec §5，跨进程顺序契约见 §5.5。
  * 索引/配额/幂等在 RecordIndex，回传限速/合并在 EgressPacer，通知在
- * InboundProcessor，状态迁移在 state.ts，本类只做编排。
+ * InboundProcessor，输入序号与间隙在 InputOrder，状态迁移在 state.ts，
+ * 本类只做编排。
  */
 export class TerminalService {
   private readonly config: TerminalServiceConfig
   private readonly index: RecordIndex
   private readonly pacer: EgressPacer
   private readonly inbound: InboundProcessor
+  private readonly inputOrder: InputOrder
 
   constructor(private readonly deps: TerminalServiceDeps) {
     this.config = { ...DEFAULTS, ...deps.config }
@@ -49,7 +52,12 @@ export class TerminalService {
         if (this.index.activeChannels().length === 0) this.pacer.stop()
       },
     )
-    this.inbound = new InboundProcessor(this.index, this.pacer)
+    this.inputOrder = new InputOrder(this.config, (record, data) =>
+      this.rustWrite(record, data),
+    )
+    this.inbound = new InboundProcessor(this.index, this.pacer, (record) =>
+      this.reclaimRust(record),
+    )
   }
 
   /** Rust 上推通知入口（terminal.output / terminal.state）。 */
@@ -117,6 +125,7 @@ export class TerminalService {
       // 输入序号 1-based：baseline 0 表示「尚未应用任何输入，下一个期望 seq=1」。
       appliedInputSeq: 0,
       pendingInputs: new Map(),
+      inputGapDropped: false,
     }
     this.index.add(record)
     // starting 是记录创建态，显式发一次事件（transitionStatus 会因同值去重而吞掉）。
@@ -153,9 +162,12 @@ export class TerminalService {
         'terminal.spawn',
         { terminalId, cwd, rows: record.meta.rows, cols: record.meta.cols },
         { timeoutMs: this.config.createTimeoutMs },
-      )) as { generation?: number }
+      )) as { generation?: number; shellArgv?: string[] }
       record.meta.generation = result.generation ?? record.meta.generation
       record.channel.generation = record.meta.generation
+      // spec §4：shell 由 Rust 裁决（default_shell_argv），元数据贯通回传；
+      // 旧 sidecar 缺字段时保留现值（不覆盖为空）。
+      record.meta.shellArgv = result.shellArgv ?? record.meta.shellArgv
       // Rust 成功即刻同步 emit running（去重：若 running 通知先到，此处不重复发）。
       transitionStatus(record, 'running')
       this.armAttachTimer(record)
@@ -179,6 +191,23 @@ export class TerminalService {
     } catch {
       // 幽灵未起或已 gone：close 报错可忽略。
     }
+  }
+
+  /**
+   * #2 exited 额度回收：Rust 会话表（硬上限 16）含 exited-not-closed，
+   * TS active 额度不含 → 16 个 exited 标签页会饿死新 spawn。shell 已死即
+   * fire-and-forget 一个 close（幂等）释放表槽位；其 closed 回执由
+   * rustReclaimed 守卫吞掉，meta 展示契约（exited + exitCode）不变（spec §2）。
+   */
+  private reclaimRust(record: TerminalRecord): void {
+    if (record.rustReclaimed) return
+    record.rustReclaimed = true
+    void this.deps.system
+      .request('terminal.close', { terminalId: record.meta.terminalId })
+      .catch(() => {
+        // 回收失败一律吞：sidecar 重启会自然清表；额度真满的信号仍是
+        // Rust 的 too_many_terminals。
+      })
   }
 
   /** 僵尸保护 + 额度释放（spec §5.5）：超时未 attach 的 running 终端自动关闭并计 failed。 */
@@ -235,35 +264,7 @@ export class TerminalService {
         `terminal ${terminalId} 非 running`,
       )
     }
-    if (inputSeq <= record.appliedInputSeq) {
-      return { accepted: true, inputSeq } // 重复/旧序号：确认但不重发。
-    }
-    if (inputSeq === record.appliedInputSeq + 1) {
-      await this.rustWrite(record, data)
-      record.appliedInputSeq = inputSeq
-      await this.flushPending(record)
-    } else {
-      if (record.pendingInputs.size >= this.config.inputPendingMax) {
-        throw new CommandError(
-          'terminal_input_backpressure',
-          '输入乱序缓冲已满，前端须重排/退避',
-        )
-      }
-      record.pendingInputs.set(inputSeq, data)
-    }
-    return { accepted: true, inputSeq }
-  }
-
-  private async flushPending(record: TerminalRecord): Promise<void> {
-    // applied 前进后，把连续可发序号按序刷出；某次失败即断链（抛出），保留其余缓冲。
-    for (;;) {
-      const next = record.appliedInputSeq + 1
-      const buffered = record.pendingInputs.get(next)
-      if (buffered === undefined) return
-      await this.rustWrite(record, buffered)
-      record.pendingInputs.delete(next)
-      record.appliedInputSeq = next
-    }
+    return this.inputOrder.write(record, inputSeq, data)
   }
 
   private async rustWrite(record: TerminalRecord, data: string): Promise<void> {
@@ -341,6 +342,20 @@ export class TerminalService {
   ): Promise<void> {
     // 仅当已 closed 时幂等短路；exited/failed/disconnected 仍允许走关闭收敛为 closed。
     if (record.meta.status === 'closed') return
+    if (record.meta.status === 'exited' && record.rustReclaimed) {
+      // #2 回收语义：Rust close 已随 exited 回收发出（幂等，不二次调用）；
+      // tab 即将从前端消失，不重发 closing/closed 事件——exited + exitCode
+      // 是回收路径的展示契约（spec §2），发 closed 只会造成状态闪烁。
+      // 本地静默收敛为 closed，仅清计时器与回传/缓冲残留。
+      record.meta.status = 'closed'
+      this.pacer.flushChannel(record.channel)
+      this.clearAttachTimer(record)
+      this.inputOrder.failPendingInputs(
+        record,
+        new CommandError('terminal_closed', 'terminal closed'),
+      )
+      return
+    }
     const wasDisconnected = record.meta.status === 'disconnected'
     transitionStatus(record, 'closing', { force: true })
     const terminalId = record.meta.terminalId
@@ -360,7 +375,10 @@ export class TerminalService {
     // 尾部帧先于 closed 状态发出（跨进程顺序契约）。
     this.pacer.flushChannel(record.channel)
     this.clearAttachTimer(record)
-    record.pendingInputs.clear()
+    this.inputOrder.failPendingInputs(
+      record,
+      new CommandError('terminal_closed', 'terminal closed'),
+    )
     transitionStatus(record, 'closed', { force: true })
   }
 
@@ -398,7 +416,10 @@ export class TerminalService {
       record.channel.queue = []
       record.channel.queuedBytes = 0
       this.clearAttachTimer(record)
-      record.pendingInputs.clear()
+      this.inputOrder.failPendingInputs(
+        record,
+        new CommandError('terminal_closed', `system runtime ${reason}`),
+      )
       transitionStatus(record, 'disconnected', {
         errorMessage: `system runtime ${reason}`,
       })

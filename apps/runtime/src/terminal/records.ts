@@ -39,6 +39,26 @@ export const TERMINAL: ReadonlySet<TerminalStatus> = new Set([
   'disconnected',
 ])
 
+/** 缓冲的乱序输入：写请求挂起等待补齐（resolve）或间隙过期/关闭（reject）。 */
+export interface PendingInput {
+  data: string
+  promise: Promise<void>
+  resolve: () => void
+  reject: (error: Error) => void
+}
+
+export function createPendingInput(data: string): PendingInput {
+  const set: { resolve: () => void; reject: (error: Error) => void } = {
+    resolve: () => {},
+    reject: () => {},
+  }
+  const promise = new Promise<void>((resolve, reject) => {
+    set.resolve = () => resolve()
+    set.reject = (error: Error) => reject(error)
+  })
+  return { data, promise, resolve: set.resolve, reject: set.reject }
+}
+
 export interface TerminalRecord {
   meta: Terminal
   consumerId?: string
@@ -46,8 +66,16 @@ export interface TerminalRecord {
   channel: EgressChannel
   ackedThrough: number
   appliedInputSeq: number
-  pendingInputs: Map<number, string>
+  pendingInputs: Map<number, PendingInput>
   attachTimer?: NodeJS.Timeout
+  /** 间隙过期计时器：每记录一个，覆盖最旧的待定缺口（spec §5 输入序号）。 */
+  gapTimer?: NodeJS.Timeout
+  /** 间隙已过期：期望 seq 到达前，一切乱序写立即拒绝（稳定码窗口）。 */
+  inputGapDropped: boolean
+  /** exited 回收已发起（Rust close 已发）：后续 closed 通知吞掉，不再重复发。 */
+  rustReclaimed?: boolean
+  /** 失败/异常原因（前 200 字符，仅诊断，不含内容）：failed 事件携带。 */
+  errorMessage?: string
 }
 
 export interface IdempotencyEntry {

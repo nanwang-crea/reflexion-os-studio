@@ -22,14 +22,18 @@ function fakeSystem(behavior = {}) {
       calls.push([method, params])
       if (method === 'terminal.spawn') {
         if (behavior.spawn === 'error')
-          throw new Error('pty_error: spawn failed')
+          throw new Error(behavior.spawnMessage ?? 'pty_error: spawn failed')
         if (behavior.spawn === 'timeout')
           throw new Error('system request timeout: terminal.spawn')
-        return {
+        const result = {
           terminalId: params.terminalId,
           generation: gen.value,
           outputSeq: 0,
         }
+        if (behavior.spawnShellArgv !== 'missing') {
+          result.shellArgv = behavior.spawnShellArgv ?? ['/bin/sh']
+        }
+        return result
       }
       if (method === 'terminal.attach') return { replayedBytes: 0 }
       if (method === 'terminal.close') return { closed: true }
@@ -111,21 +115,54 @@ test('create 顺序同 requestId → 复用留存记录，不重生', async () =
   assert.equal(h.sys.calls.filter(([m]) => m === 'terminal.spawn').length, 1)
 })
 
-// ---------------- 2. spawn 失败 / attach 超时（僵尸保护） ----------------
+// ---------------- 1b. shellArgv 贯通（spec §4：元数据必须携带 shell） ----------------
 
-test('spawn error → failed 且无 running', async () => {
-  const h = harness({ systemBehavior: { spawn: 'error' } })
-  await assert.rejects(() => h.service.create('rE', 'p1', 24, 80))
-  assert.deepEqual(h.stateEvents(), ['starting', 'failed'])
+test('create：Rust spawn 结果的 shellArgv 写入 meta（create + 幂等重放 + list）', async () => {
+  const h = harness({ systemBehavior: { spawnShellArgv: ['/bin/zsh', '-i'] } })
+  const { terminal } = await h.service.create('rSA', 'p1', 24, 80)
+  assert.deepEqual(terminal.shellArgv, ['/bin/zsh', '-i'])
+  const again = await h.service.create('rSA', 'p1', 24, 80)
+  assert.deepEqual(again.terminal.shellArgv, ['/bin/zsh', '-i'])
+  const [listed] = h.service.list('p1')
+  assert.deepEqual(listed.shellArgv, ['/bin/zsh', '-i'])
 })
 
-test('attach 超时 → close 触发 + failed + 额度释放', async () => {
+test('create：旧 sidecar 结果缺 shellArgv → 保留现值不清空', async () => {
+  const h = harness({ systemBehavior: { spawnShellArgv: 'missing' } })
+  const { terminal } = await h.service.create('rSM', 'p1', 24, 80)
+  assert.deepEqual(terminal.shellArgv, [])
+})
+
+// ---------------- 2. spawn 失败 / attach 超时（僵尸保护） ----------------
+
+test('spawn error → failed 且无 running，事件带截断到 200 的 errorMessage', async () => {
+  const h = harness({
+    systemBehavior: {
+      spawn: 'error',
+      spawnMessage: `pty_error: ${'x'.repeat(300)}`,
+    },
+  })
+  await assert.rejects(() => h.service.create('rE', 'p1', 24, 80))
+  assert.deepEqual(h.stateEvents(), ['starting', 'failed'])
+  const failed = h.events.filter(
+    (e) => e.type === 'terminal.state' && e.status === 'failed',
+  )
+  assert.equal(failed.length, 1)
+  assert.ok(failed[0].errorMessage.startsWith('pty_error:'))
+  assert.equal(failed[0].errorMessage.length, 200)
+})
+
+test('attach 超时 → close 触发 + failed（事件带失败原因）+ 额度释放', async () => {
   const h = harness({
     config: { attachTimeoutMs: 30, maxActivePerProject: 1 },
   })
   const { terminal } = await h.service.create('rZ', 'p1', 24, 80)
   await sleep(80)
   assert.ok(h.stateEvents().includes('failed'))
+  const failed = h.events.filter(
+    (e) => e.type === 'terminal.state' && e.status === 'failed',
+  )
+  assert.match(failed[failed.length - 1].errorMessage, /attach timeout/)
   const closes = h.sys.calls.filter(([m]) => m === 'terminal.close')
   assert.equal(closes[0][1].terminalId, terminal.terminalId)
   // 失败记录以 failed 留存（不计 active）→ active 额度已释放，故新 create 成功。
@@ -225,12 +262,14 @@ test('write 重复序号 → 确认但不重发', async () => {
   assert.equal(writes.length, 1)
 })
 
-test('write 乱序 1,3,2 → 到 Rust 顺序为 [1,2,3]', async () => {
+test('write 乱序 1,3,2 → 到 Rust 顺序为 [1,2,3]（乱序写等补齐后应答）', async () => {
   const h = harness()
   const { terminal } = await running(h)
-  await h.service.write('p1', terminal.terminalId, 1, 'MQ==')
-  await h.service.write('p1', terminal.terminalId, 3, 'Mw==')
-  await h.service.write('p1', terminal.terminalId, 2, 'Mg==')
+  const id = terminal.terminalId
+  await h.service.write('p1', id, 1, 'MQ==')
+  const held = h.service.write('p1', id, 3, 'Mw==')
+  await h.service.write('p1', id, 2, 'Mg==')
+  assert.deepEqual(await held, { accepted: true, inputSeq: 3 })
   const writes = h.sys.calls
     .filter(([m]) => m === 'terminal.write')
     .map(([, p]) => Buffer.from(p.data, 'base64').toString())
@@ -240,13 +279,72 @@ test('write 乱序 1,3,2 → 到 Rust 顺序为 [1,2,3]', async () => {
 test('write 缓冲超 inputPendingMax → terminal_input_backpressure', async () => {
   const h = harness({ config: { inputPendingMax: 2 } })
   const { terminal } = await running(h)
-  await h.service.write('p1', terminal.terminalId, 1, 'MQ==')
-  await h.service.write('p1', terminal.terminalId, 3, 'Mw==')
-  await h.service.write('p1', terminal.terminalId, 4, 'NA==')
-  await assert.rejects(
-    () => h.service.write('p1', terminal.terminalId, 5, 'NQ=='),
-    { code: 'terminal_input_backpressure' },
-  )
+  const id = terminal.terminalId
+  await h.service.write('p1', id, 1, 'MQ==')
+  const held3 = h.service.write('p1', id, 3, 'Mw==')
+  const held4 = h.service.write('p1', id, 4, 'NA==')
+  await assert.rejects(() => h.service.write('p1', id, 5, 'NQ=='), {
+    code: 'terminal_input_backpressure',
+  })
+  await h.service.write('p1', id, 2, 'Mg==') // 补齐缺口 → 3、4 依序刷出
+  await Promise.all([held3, held4])
+})
+
+test('输入间隙超时：缓冲的 seq=5 拒绝 terminal_input_out_of_order；seq=3 自愈', async () => {
+  const h = harness({ config: { inputGapWaitMs: 20 } })
+  const { terminal } = await running(h)
+  const id = terminal.terminalId
+  await h.service.write('p1', id, 1, 'MQ==')
+  await h.service.write('p1', id, 2, 'Mg==')
+  const held = h.service.write('p1', id, 5, 'NQ==')
+  await assert.rejects(held, { code: 'terminal_input_out_of_order' })
+  // 丢弃窗口内：晚到的乱序写立即拒绝（稳定码），直到期望 seq 到达。
+  await assert.rejects(() => h.service.write('p1', id, 6, 'Ng=='), {
+    code: 'terminal_input_out_of_order',
+  })
+  // 自愈：前端下一批会带 expected seq=3；落地即清除间隙状态。
+  const healed = await h.service.write('p1', id, 3, 'Mw==')
+  assert.deepEqual(healed, { accepted: true, inputSeq: 3 })
+  const writes = h.sys.calls
+    .filter(([m]) => m === 'terminal.write')
+    .map(([, p]) => Buffer.from(p.data, 'base64').toString())
+  assert.deepEqual(writes, ['1', '2', '3'])
+})
+
+test('间隙丢弃 stderr 指标行：terminalId + 丢弃数，不含内容', async () => {
+  const h = harness({ config: { inputGapWaitMs: 20 } })
+  const { terminal } = await running(h)
+  const id = terminal.terminalId
+  await h.service.write('p1', id, 1, 'MQ==')
+  const held3 = h.service.write('p1', id, 3, 'Mw==')
+  const held4 = h.service.write('p1', id, 4, 'NA==')
+  const original = process.stderr.write.bind(process.stderr)
+  let captured = ''
+  process.stderr.write = (chunk) => {
+    captured += String(chunk)
+    return true
+  }
+  try {
+    await assert.rejects(held3, { code: 'terminal_input_out_of_order' })
+    await assert.rejects(held4, { code: 'terminal_input_out_of_order' })
+  } finally {
+    process.stderr.write = original
+  }
+  assert.match(captured, new RegExp(`terminal=${id}`))
+  assert.match(captured, /dropped=2/)
+  assert.ok(!captured.includes('Mw=='), '指标行不得含输入内容')
+  assert.ok(!captured.includes('NA=='), '指标行不得含输入内容')
+})
+
+test('缓冲写未决时 close → 以 terminal_closed 拒绝（无悬挂 promise）', async () => {
+  const h = harness({ config: { inputGapWaitMs: 5_000 } })
+  const { terminal } = await running(h)
+  const id = terminal.terminalId
+  await h.service.write('p1', id, 1, 'MQ==')
+  const held = h.service.write('p1', id, 3, 'Mw==')
+  const assertion = assert.rejects(held, { code: 'terminal_closed' })
+  await h.service.close('p1', id)
+  await assertion
 })
 
 // ---------------- 6. egress 合并 / 限速 / 公平 ----------------
@@ -375,7 +473,7 @@ test('exited 事件仅一次', async () => {
   assert.equal(n(), 1)
 })
 
-test('exited 后 close → 收敛 closed，无重复 exited', async () => {
+test('exited 后 close → 静默收敛 closed（免重复 Rust close），无重复 exited', async () => {
   const h = harness()
   const { terminal } = await running(h)
   h.service.handleRustNotification('terminal.state', {
@@ -387,7 +485,70 @@ test('exited 后 close → 收敛 closed，无重复 exited', async () => {
   await h.service.close('p1', terminal.terminalId)
   const statuses = h.stateEvents()
   assert.equal(statuses.filter((s) => s === 'exited').length, 1)
-  assert.equal(statuses[statuses.length - 1], 'closed')
+  // 回收语义（#2）：Rust close 已由 exited 回收发出，closeTab 不再二次调用，
+  // 也不追加 closing/closed 事件——tab 直接消失，exited+exitCode 是展示契约。
+  assert.ok(!statuses.includes('closed'))
+  assert.ok(!statuses.includes('closing'))
+  assert.equal(h.sys.calls.filter(([m]) => m === 'terminal.close').length, 1)
+  const [listed] = h.service.list('p1')
+  assert.equal(listed.status, 'closed')
+})
+
+// ---------------- 7b. exited 额度回收（Rust 表含 exited-not-closed） ----------------
+
+const rustExited = (h, terminal, exitCode = 0) =>
+  h.service.handleRustNotification('terminal.state', {
+    terminalId: terminal.terminalId,
+    generation: terminal.generation,
+    status: 'exited',
+    exitCode,
+  })
+
+test('exited 通知 → 发出一次 Rust close 回收额度', async () => {
+  const h = harness()
+  const { terminal } = await running(h)
+  rustExited(h, terminal)
+  await sleep(10)
+  const closes = h.sys.calls.filter(([m]) => m === 'terminal.close')
+  assert.equal(closes.length, 1)
+  assert.equal(closes[0][1].terminalId, terminal.terminalId)
+})
+
+test('exited 后的 Rust closed 通知 → 吞掉：无新事件，meta 保持 exited+exitCode', async () => {
+  const h = harness()
+  const { terminal } = await running(h)
+  const before = h.stateEvents().length
+  rustExited(h, terminal, 7)
+  await sleep(10)
+  h.service.handleRustNotification('terminal.state', {
+    terminalId: terminal.terminalId,
+    generation: terminal.generation,
+    status: 'closed',
+    exitCode: null,
+  })
+  await sleep(10)
+  const after = h.stateEvents()
+  assert.equal(after.length, before + 1, 'closed 不得追加任何状态事件')
+  assert.equal(after[after.length - 1], 'exited')
+  const [listed] = h.service.list('p1')
+  assert.equal(listed.status, 'exited')
+  assert.equal(listed.exitCode, 7)
+})
+
+test('exited 额度释放：16 个 exited 不饿死新 spawn（TS active 与 Rust 表一致）', async () => {
+  const h = harness({ config: { maxActiveGlobal: 2 } })
+  const a = (await running(h, 'ra')).terminal
+  const b = (await running(h, 'rb')).terminal
+  await assert.rejects(() => h.service.create('rc', 'p1', 24, 80), {
+    code: 'terminal_quota_global',
+  })
+  rustExited(h, a)
+  rustExited(h, b)
+  await sleep(10)
+  const c = await h.service.create('rc', 'p1', 24, 80)
+  assert.equal(c.terminal.status, 'running')
+  // TS active 已排除 exited；Rust 表含 exited-not-closed → 必须看到回收 close。
+  assert.equal(h.sys.calls.filter(([m]) => m === 'terminal.close').length, 2)
 })
 
 test('close 前冲刷尾部输出：output 事件先于 closed 状态', async () => {

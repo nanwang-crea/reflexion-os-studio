@@ -43,6 +43,9 @@ fn json_meta(session: &TerminalSession) -> Value {
         "terminalId": session.id,
         "generation": session.generation,
         "outputSeq": session.output_seq.load(Ordering::SeqCst),
+        // spec §4：spawn ack / 幂等重放 / attach 结果共用本函数，shellArgv
+        // 由此贯通到 TS 与前端。
+        "shellArgv": session.shell_argv,
     })
 }
 
@@ -103,12 +106,16 @@ fn session_by_id(terminal_id: &str) -> Result<Arc<TerminalSession>, OpError> {
 }
 
 /// attach：打开输出交付闸门。幂等（重复 attach 换消费者、重新快照）；
-/// 未知/已回收终端与 write/resize 同一稳定错误码。
+/// 未知/已回收终端与 write/resize 同一稳定错误码。结果经 json_meta
+/// （spec §4：与 spawn ack 同样携带 shellArgv）再叠加快照字段。
 pub fn handle_attach(params: Value) -> Result<Value, OpError> {
     let id = required_str(&params, "terminalId")?;
     let consumer_id = required_str(&params, "consumerId")?;
-    let replayed_bytes = session_by_id(&id)?.attach(&consumer_id);
-    Ok(json!({ "replayedBytes": replayed_bytes }))
+    let session = session_by_id(&id)?;
+    let replayed_bytes = session.attach(&consumer_id);
+    let mut result = json_meta(&session);
+    result["replayedBytes"] = json!(replayed_bytes);
+    Ok(result)
 }
 
 /// ack：累计确认已消费输出，释放 Rust 侧未确认窗口。未知/已回收终端报
@@ -212,10 +219,43 @@ mod tests {
             first["generation"], second["generation"],
             "幂等重放必须同代际"
         );
+        // spec §4：元数据贯通 shell——spawn ack 带非空 shellArgv 且 unix 下
+        // argv[0] 为绝对路径；幂等重放同值。
+        let argv = first["shellArgv"].as_array().expect("shellArgv 数组");
+        assert!(!argv.is_empty(), "shellArgv 不得为空");
+        assert!(
+            std::path::Path::new(argv[0].as_str().expect("argv[0] 字符串")).is_absolute(),
+            "unix shellArgv[0] 必须是绝对路径"
+        );
+        assert_eq!(
+            first["shellArgv"], second["shellArgv"],
+            "重放必须同 shellArgv"
+        );
         handle_close(json!({ "terminalId": "svc1" })).expect("close");
         // 关闭后同 ID 再 spawn 成功（幂等记录短留由 W2 定义；W1 表即时移除）。
         handle_spawn(params).expect("respawn after close");
         handle_close(json!({ "terminalId": "svc1" })).expect("reclose");
+    }
+
+    /// attach 结果经 json_meta（spec §4）：与 spawn ack 同样携带 shellArgv。
+    #[test]
+    fn attach_result_carries_shell_argv() {
+        let params = json!({ "terminalId": "svc-argv", "cwd": "/tmp", "rows": 24, "cols": 80 });
+        let spawned = handle_spawn(params).expect("spawn");
+        let attached =
+            handle_attach(json!({ "terminalId": "svc-argv", "consumerId": "c" })).expect("attach");
+        assert!(
+            attached["shellArgv"]
+                .as_array()
+                .is_some_and(|argv| !argv.is_empty()),
+            "attach 结果必须携带非空 shellArgv：{attached}"
+        );
+        assert_eq!(
+            attached["shellArgv"], spawned["shellArgv"],
+            "attach 结果必须携带同一 shellArgv"
+        );
+        assert!(attached["replayedBytes"].is_number(), "attach 快照字段保留");
+        handle_close(json!({ "terminalId": "svc-argv" })).expect("close");
     }
 
     #[test]
