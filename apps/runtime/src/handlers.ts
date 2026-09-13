@@ -12,6 +12,7 @@ import { memoryCommandHandlers } from './agent/memory/handlers.js'
 import { workspaceCommandHandlers } from './workspace/handlers.js'
 import { assetCommandHandlers } from './assets/handlers.js'
 import { mcpCommandHandlers } from './mcp/handlers.js'
+import { terminalCommandHandlers } from './terminal/handlers.js'
 import {
   providerCommandHandlers,
   testProviderConnection,
@@ -131,8 +132,11 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
       }),
     }
   },
-  'project.delete': async (p, { store, agent, assets }) => {
+  'project.delete': async (p, { store, agent, assets, terminal }) => {
     const projectId = requireString(p, 'projectId')
+    // 终端回收先于删除：任一 close 失败即抛 terminal_cleanup_failed 且**保留项目**
+    // （spec §2，不留无主 shell）。项目无终端时 closeProject 快速 no-op。
+    await terminal.closeProject(projectId)
     const sessions = store.sessions.list(projectId)
     for (const session of sessions) {
       if (store.runs.activeForSession(session.id)) {
@@ -201,6 +205,7 @@ export const commandHandlers: Record<string, CommandHandler> = {
   ...workspaceCommandHandlers,
   ...assetCommandHandlers,
   ...mcpCommandHandlers,
+  ...terminalCommandHandlers,
   ...providerCommandHandlers,
   ...agentCommandHandlers,
 }

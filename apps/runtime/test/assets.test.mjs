@@ -197,7 +197,12 @@ test('project.delete removes asset content dir synchronously', async () => {
   const result = await dispatchCommand(
     'project.delete',
     { projectId: project.id },
-    { store, agent: { clearQueue() {} }, assets: service },
+    {
+      store,
+      agent: { clearQueue() {} },
+      assets: service,
+      terminal: { closeProject: async () => {} },
+    },
   )
   assert.equal(result.removed, true)
   assert.equal(

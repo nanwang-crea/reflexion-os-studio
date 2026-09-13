@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { QueueEntry } from '@reflexion-os-studio/contracts'
 import type { ChatCommand } from '@reflexion-os-studio/contracts'
-import { ResourceEventEmitter, type EventNotifier } from '../events.js'
+import { EmitterRegistry, type EventNotifier } from '../events.js'
 
 /** 队列等待项:发送参数(不含 requestId/sessionId,由出队时补全)。 */
 export interface QueuedItem {
@@ -18,10 +18,12 @@ export class QueueService {
   private readonly queues = new Map<string, QueuedItem[]>()
   /** 用户停止 Run 后的会话级暂停标记：暂停期间 pump 不自动出队，等 queue.resume 确认。 */
   private readonly paused = new Set<string>()
-  /** 每会话一个长生命周期发射器：queue.changed 的 seq 在会话流内单调。 */
-  private readonly emitters = new Map<string, ResourceEventEmitter>()
+  /** 每会话一个长生命周期发射器（registry 缓存）：queue.changed 的 seq 在会话流内单调。 */
+  private readonly emitters: EmitterRegistry
 
-  constructor(private readonly notifier: EventNotifier) {}
+  constructor(notifier: EventNotifier) {
+    this.emitters = new EmitterRegistry(notifier)
+  }
 
   enqueue(sessionId: string, params: QueuedItem['params']): QueuedItem {
     const entry: QueuedItem = { id: randomUUID(), params }
@@ -64,7 +66,7 @@ export class QueueService {
   removeSession(sessionId: string): void {
     this.queues.delete(sessionId)
     this.paused.delete(sessionId)
-    this.emitters.delete(sessionId)
+    this.emitters.evict({ scope: 'session', sessionId })
   }
 
   remove(sessionId: string, queueId: string): boolean {
@@ -137,14 +139,7 @@ export class QueueService {
   }
 
   private notify(sessionId: string): void {
-    let emitter = this.emitters.get(sessionId)
-    if (!emitter) {
-      emitter = new ResourceEventEmitter(
-        { scope: 'session', sessionId },
-        this.notifier,
-      )
-      this.emitters.set(sessionId, emitter)
-    }
+    const emitter = this.emitters.for({ scope: 'session', sessionId })
     emitter.next({
       type: 'queue.changed',
       sessionId,

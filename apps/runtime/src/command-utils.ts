@@ -6,6 +6,7 @@ import type { SystemRuntimeClient } from './system.js'
 import type { McpManager } from './mcp/manager.js'
 import type { WorkspaceIndexer } from './workspace/indexer.js'
 import type { AssetService } from './assets/service.js'
+import type { TerminalService } from './terminal/service.js'
 
 export type CommandResult = Record<string, unknown>
 
@@ -21,6 +22,8 @@ export interface CommandContext {
   mcp: McpManager | null
   /** Asset Store 服务（asset.* 命令；内容在数据目录，按项目隔离）。 */
   assets: AssetService
+  /** 集成终端多会话服务（terminal.* 命令；W2）。 */
+  terminal: TerminalService
 }
 
 export type CommandHandler = (

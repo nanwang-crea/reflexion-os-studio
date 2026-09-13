@@ -58,6 +58,11 @@ export class SystemRuntimeClient {
     return this.status
   }
 
+  /** 当前子进程代际（spec §4）：终端记录在 spawn 时落此 epoch，跨重启识别旧代际事件。 */
+  get currentGeneration(): number {
+    return this.generation
+  }
+
   start(): void {
     if (this.binaryPath === null) {
       this.setStatus('unavailable', 'Rust System Runtime binary not found')

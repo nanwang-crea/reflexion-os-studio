@@ -68,3 +68,47 @@ export class RunEventEmitter extends ResourceEventEmitter {
     return this.identity.runId
   }
 }
+
+/**
+ * 资源事件发射器注册表：以「作用域 + 资源身份」为 key 缓存长生命周期 emitter，
+ * 保证同一资源流内 seq 单调、跨资源独立。取代各服务各自手写的 Map（行为等价）。
+ * key 取 identity 中实际出现的资源字段拼接，缺省字段以空串占位避免歧义碰撞。
+ */
+export class EmitterRegistry {
+  private readonly emitters = new Map<string, ResourceEventEmitter>()
+
+  constructor(private readonly notifier: EventNotifier) {}
+
+  key(identity: EventIdentity): string {
+    const id = identity as Record<string, unknown>
+    return [
+      identity.scope,
+      (id.runId as string) ?? '',
+      (id.sessionId as string) ?? '',
+      (id.projectId as string) ?? '',
+      (id.terminalId as string) ?? '',
+      (id.serverId as string) ?? '',
+    ].join(':')
+  }
+
+  /** get-or-create：命中复用（保留已积累的 seq），未命中则新建。 */
+  for(identity: EventIdentity): ResourceEventEmitter {
+    const key = this.key(identity)
+    let emitter = this.emitters.get(key)
+    if (!emitter) {
+      emitter = new ResourceEventEmitter(identity, this.notifier)
+      this.emitters.set(key, emitter)
+    }
+    return emitter
+  }
+
+  /** 资源销毁（会话/服务器/终端删除）时驱逐，防止 Map 无界增长。 */
+  evict(identity: EventIdentity): void {
+    this.emitters.delete(this.key(identity))
+  }
+
+  /** 全量清空（服务 dispose / 进程退出路径）。 */
+  clear(): void {
+    this.emitters.clear()
+  }
+}

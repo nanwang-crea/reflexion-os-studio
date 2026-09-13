@@ -18,8 +18,29 @@ import { applyUserShellEnv } from './user-shell-env.js'
 import { McpManager } from './mcp/manager.js'
 import { WorkspaceIndexer } from './workspace/indexer.js'
 import { AssetService } from './assets/service.js'
+import { TerminalService } from './terminal/service.js'
 
 const RUNTIME_VERSION = '0.1.0'
+
+/**
+ * Rust → TS 通知路由：terminal.* 交终端服务，未知 terminal.* 记调试行。
+ * terminalService 在其后构造（依赖 store），用可变盒子闭包延迟绑定；通知只在 start() 后到达。
+ */
+const terminalServiceBox: { current?: TerminalService } = {}
+function routeSystemNotification(method: string, params: unknown): void {
+  if (method.startsWith('terminal.')) {
+    const service = terminalServiceBox.current
+    if (!service) {
+      process.stderr.write(
+        `[runtime] drop ${method}: terminal service not ready\n`,
+      )
+      return
+    }
+    service.handleRustNotification(method, params)
+    return
+  }
+  // 其他通知目前无消费者（system.ready 走 status，其余为请求响应）。
+}
 
 function write(message: JsonRpcMessage, onFlush?: () => void): void {
   process.stdout.write(`${JSON.stringify(message)}\n`, onFlush)
@@ -67,8 +88,13 @@ const systemRuntime = new SystemRuntimeClient(
     process.stderr.write(
       `[runtime] system runtime ${status}${detail ? `: ${detail}` : ''}\n`,
     )
+    // sidecar 离开 ready：其上的 PTY 已死，把活动终端标记 disconnected（不自动重跑）。
+    if (status !== 'ready') {
+      terminalServiceBox.current?.markAllDisconnected(String(status))
+    }
     statusEmitter.next({ type: 'runtime.status', status: getStatus() })
   },
+  routeSystemNotification,
 )
 
 function getStatus(): RuntimeStatus {
@@ -96,6 +122,15 @@ const mcpManager = new McpManager(store, notify)
 const agent = new ChatAgent(store, notify, systemRuntime, mcpManager)
 const workspaceIndexer = new WorkspaceIndexer(store, notify)
 const assetService = new AssetService(store, resolveDataDir())
+const terminalService = new TerminalService({
+  getProject: (id) => {
+    const project = store.projects.get(id)
+    return project ? { folderPath: project.folderPath } : null
+  },
+  system: systemRuntime,
+  notify,
+})
+terminalServiceBox.current = terminalService
 const commandContext = {
   store,
   agent,
@@ -104,6 +139,7 @@ const commandContext = {
   system: systemRuntime,
   mcp: mcpManager,
   assets: assetService,
+  terminal: terminalService,
 }
 
 // P1 环境继承：先探测用户 shell 环境快照（不阻塞 Chat 就绪），
@@ -146,12 +182,22 @@ async function handleRequestAsync(request: JsonRpcRequest): Promise<void> {
   }
 
   if (request.method === 'runtime.shutdown') {
-    // 先协议关停 Rust 子进程，再退出自身；宿主侧另有进程树兜底收割。
+    // 先收终端（对每个 shell 发协议 close），再协议关停 Rust 子进程，最后退自身；
+    // 宿主侧另有进程树兜底收割。顺序保持：terminal → system → mcp dispose → exit。
     sendResponse(request.id, { ok: true }, () => {
-      void systemRuntime.shutdown().finally(() => {
-        mcpManager.dispose()
-        process.exit(0)
-      })
+      void terminalService
+        .shutdown()
+        .catch((error: unknown) => {
+          process.stderr.write(
+            `[runtime] terminal shutdown error: ${String(error)}\n`,
+          )
+        })
+        .finally(() => {
+          void systemRuntime.shutdown().finally(() => {
+            mcpManager.dispose()
+            process.exit(0)
+          })
+        })
     })
     return
   }

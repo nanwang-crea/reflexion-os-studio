@@ -1,0 +1,464 @@
+import { randomUUID } from 'node:crypto'
+import { CommandError } from '../agent/errors.js'
+import type { EventNotifier } from '../events.js'
+import type { SystemRuntimeClient } from '../system.js'
+import type { Terminal } from '@reflexion-os-studio/contracts'
+import { EgressPacer, type EgressChannel } from './egress.js'
+import { InboundProcessor } from './inbound.js'
+import {
+  DEFAULTS,
+  RecordIndex,
+  TERMINAL,
+  isTimeoutError,
+  rustErrorCode,
+  type TerminalRecord,
+  type TerminalServiceConfig,
+} from './records.js'
+import { emitState, transitionStatus } from './state.js'
+
+export type { TerminalServiceConfig } from './records.js'
+export { RecordIndex } from './records.js'
+
+export interface TerminalServiceDeps {
+  getProject: (id: string) => { folderPath: string } | null | undefined
+  system: Pick<SystemRuntimeClient, 'request' | 'currentGeneration'>
+  notify: EventNotifier
+  config?: Partial<TerminalServiceConfig>
+}
+
+/**
+ * 终端多会话服务：幂等创建 / 配额 / 输入序号串行化 / 输出公平调度回传 /
+ * Rust 通知接线 / 回收与降级。状态机见 spec §5，跨进程顺序契约见 §5.5。
+ * 索引/配额/幂等在 RecordIndex，回传限速/合并在 EgressPacer，通知在
+ * InboundProcessor，状态迁移在 state.ts，本类只做编排。
+ */
+export class TerminalService {
+  private readonly config: TerminalServiceConfig
+  private readonly index: RecordIndex
+  private readonly pacer: EgressPacer
+  private readonly inbound: InboundProcessor
+
+  constructor(private readonly deps: TerminalServiceDeps) {
+    this.config = { ...DEFAULTS, ...deps.config }
+    this.index = new RecordIndex(deps.notify)
+    this.pacer = new EgressPacer(
+      this.config.egressBudgetBytesPerSec,
+      this.config.egressTickMs,
+      () => [...this.index.records.values()].map((r) => r.channel),
+      () => {
+        if (this.index.activeChannels().length === 0) this.pacer.stop()
+      },
+    )
+    this.inbound = new InboundProcessor(this.index, this.pacer)
+  }
+
+  /** Rust 上推通知入口（terminal.output / terminal.state）。 */
+  handleRustNotification(method: string, params: unknown): void {
+    this.inbound.handle(method, params)
+  }
+
+  list(projectId: string): Terminal[] {
+    return this.index.list(projectId)
+  }
+
+  // ---------------- 生命周期 ----------------
+
+  async create(
+    requestId: string,
+    projectId: string,
+    rows: number,
+    cols: number,
+  ): Promise<{ terminal: Terminal }> {
+    this.index.sweepIdempotency(Date.now())
+    const existing = this.index.createKeys.get(requestId)
+    if (existing) {
+      // 同 requestId：in-flight → 共享同一 spawn promise（并发只起一个 shell）；
+      // 已定 → 返回留存记录 meta（含 failed，绝不重生，见 runSpawn 上方语义注释）。
+      if (existing.promise) return { terminal: await existing.promise }
+      const record = this.index.get(existing.terminalId)
+      if (record) return { terminal: { ...record.meta } }
+      this.index.createKeys.delete(requestId)
+    }
+    const project = this.deps.getProject(projectId)
+    if (!project || !project.folderPath) {
+      throw new CommandError(
+        'project_not_found',
+        `project not found: ${projectId}`,
+      )
+    }
+    this.enforceQuota(projectId)
+    const terminalId = randomUUID()
+    const meta: Terminal = {
+      terminalId,
+      projectId,
+      initialCwd: project.folderPath,
+      shellArgv: [],
+      rows,
+      cols,
+      status: 'starting',
+      generation: this.deps.system.currentGeneration,
+      createdAt: new Date().toISOString(),
+    }
+    const channel: EgressChannel = {
+      terminalId,
+      projectId,
+      queue: [],
+      queuedBytes: 0,
+      peakBytes: 0,
+      emittedBytes: 0,
+      emitter: this.index.emitterFor(projectId, terminalId),
+      generation: meta.generation,
+    }
+    const record: TerminalRecord = {
+      meta,
+      attached: false,
+      channel,
+      ackedThrough: -1,
+      // 输入序号 1-based：baseline 0 表示「尚未应用任何输入，下一个期望 seq=1」。
+      appliedInputSeq: 0,
+      pendingInputs: new Map(),
+    }
+    this.index.add(record)
+    // starting 是记录创建态，显式发一次事件（transitionStatus 会因同值去重而吞掉）。
+    emitState(record, 'starting')
+    // 存 in-flight promise 于 await 之前，保证并发/超时后的重试命中同一 terminalId。
+    const promise = this.runSpawn(record, project.folderPath)
+    this.index.createKeys.set(requestId, {
+      terminalId,
+      storedAt: Date.now(),
+      promise,
+    })
+    try {
+      const terminal = await promise
+      return { terminal: { ...terminal } }
+    } finally {
+      const entry = this.index.createKeys.get(requestId)
+      if (entry && entry.terminalId === terminalId) entry.promise = undefined
+    }
+  }
+
+  /**
+   * 幂等 in-flight 语义（CAREFUL，spec §5）：key 在 spawn 之前落表；并发同
+   * requestId 共享同一 promise → 只 spawn 一次、同一 terminalId。spawn 超时/失败
+   * 后记录以 failed 留存且**保留 key**：用户以同 requestId 重试会拿到 failed meta
+   * 而非重开 shell（避免超时幽灵 shell + 新 shell 双开）；换新终端须用新 requestId。
+   */
+  private async runSpawn(
+    record: TerminalRecord,
+    cwd: string,
+  ): Promise<Terminal> {
+    const { terminalId } = record.meta
+    try {
+      const result = (await this.deps.system.request(
+        'terminal.spawn',
+        { terminalId, cwd, rows: record.meta.rows, cols: record.meta.cols },
+        { timeoutMs: this.config.createTimeoutMs },
+      )) as { generation?: number }
+      record.meta.generation = result.generation ?? record.meta.generation
+      record.channel.generation = record.meta.generation
+      // Rust 成功即刻同步 emit running（去重：若 running 通知先到，此处不重复发）。
+      transitionStatus(record, 'running')
+      this.armAttachTimer(record)
+      return record.meta
+    } catch (error) {
+      if (isTimeoutError(error)) {
+        // 幂等 close 兜底：spawn 请求超时≠shell 没起；晚到的幽灵 shell 会占额度，
+        // 这里 fire-and-forget 一个 close（Rust close 幂等）把它回收，避免僵尸。
+        void this.closeGhost(terminalId)
+      }
+      transitionStatus(record, 'failed', {
+        errorMessage: error instanceof Error ? error.message : String(error),
+      })
+      throw error
+    }
+  }
+
+  private async closeGhost(terminalId: string): Promise<void> {
+    try {
+      await this.deps.system.request('terminal.close', { terminalId })
+    } catch {
+      // 幽灵未起或已 gone：close 报错可忽略。
+    }
+  }
+
+  /** 僵尸保护 + 额度释放（spec §5.5）：超时未 attach 的 running 终端自动关闭并计 failed。 */
+  private armAttachTimer(record: TerminalRecord): void {
+    const timer = setTimeout(() => {
+      record.attachTimer = undefined
+      if (record.attached || record.meta.status !== 'running') return
+      // fire-and-forget 关 Rust 侧 shell（幂等，回收额度），本地直接标 failed。
+      void this.closeGhost(record.meta.terminalId)
+      transitionStatus(record, 'failed', {
+        errorMessage: 'attach timeout (zombie protection)',
+      })
+    }, this.config.attachTimeoutMs)
+    timer.unref?.()
+    record.attachTimer = timer
+  }
+
+  async attach(
+    projectId: string,
+    terminalId: string,
+    consumerId: string,
+  ): Promise<{ terminal: Terminal; replayedBytes: number }> {
+    const record = this.index.mustFind(projectId, terminalId)
+    if (record.meta.status !== 'starting' && record.meta.status !== 'running') {
+      throw new CommandError(
+        'terminal_not_running',
+        `terminal ${terminalId} 不可 attach`,
+      )
+    }
+    const result = (await this.deps.system.request('terminal.attach', {
+      terminalId,
+      consumerId,
+    })) as { replayedBytes?: number }
+    record.attached = true
+    record.consumerId = consumerId
+    record.channel.consumerId = consumerId
+    this.clearAttachTimer(record)
+    return {
+      terminal: { ...record.meta },
+      replayedBytes: result.replayedBytes ?? 0,
+    }
+  }
+
+  async write(
+    projectId: string,
+    terminalId: string,
+    inputSeq: number,
+    data: string,
+  ): Promise<{ accepted: true; inputSeq: number }> {
+    const record = this.index.mustFind(projectId, terminalId)
+    if (record.meta.status !== 'running') {
+      throw new CommandError(
+        'terminal_not_running',
+        `terminal ${terminalId} 非 running`,
+      )
+    }
+    if (inputSeq <= record.appliedInputSeq) {
+      return { accepted: true, inputSeq } // 重复/旧序号：确认但不重发。
+    }
+    if (inputSeq === record.appliedInputSeq + 1) {
+      await this.rustWrite(record, data)
+      record.appliedInputSeq = inputSeq
+      await this.flushPending(record)
+    } else {
+      if (record.pendingInputs.size >= this.config.inputPendingMax) {
+        throw new CommandError(
+          'terminal_input_backpressure',
+          '输入乱序缓冲已满，前端须重排/退避',
+        )
+      }
+      record.pendingInputs.set(inputSeq, data)
+    }
+    return { accepted: true, inputSeq }
+  }
+
+  private async flushPending(record: TerminalRecord): Promise<void> {
+    // applied 前进后，把连续可发序号按序刷出；某次失败即断链（抛出），保留其余缓冲。
+    for (;;) {
+      const next = record.appliedInputSeq + 1
+      const buffered = record.pendingInputs.get(next)
+      if (buffered === undefined) return
+      await this.rustWrite(record, buffered)
+      record.pendingInputs.delete(next)
+      record.appliedInputSeq = next
+    }
+  }
+
+  private async rustWrite(record: TerminalRecord, data: string): Promise<void> {
+    try {
+      await this.deps.system.request('terminal.write', {
+        terminalId: record.meta.terminalId,
+        data,
+      })
+    } catch (error) {
+      throw new CommandError(
+        rustErrorCode(error),
+        error instanceof Error ? error.message : String(error),
+      )
+    }
+  }
+
+  async resize(
+    projectId: string,
+    terminalId: string,
+    rows: number,
+    cols: number,
+  ): Promise<{ rows: number; cols: number }> {
+    const record = this.index.mustFind(projectId, terminalId)
+    if (record.meta.status !== 'running') {
+      throw new CommandError(
+        'terminal_not_running',
+        `terminal ${terminalId} 非 running`,
+      )
+    }
+    const result = (await this.deps.system.request('terminal.resize', {
+      terminalId,
+      rows,
+      cols,
+    })) as { rows?: number; cols?: number }
+    record.meta.rows = result.rows ?? rows
+    record.meta.cols = result.cols ?? cols
+    return { rows: record.meta.rows, cols: record.meta.cols }
+  }
+
+  async ack(
+    projectId: string,
+    terminalId: string,
+    throughOutputSeq: number,
+  ): Promise<{ ok: true }> {
+    const record = this.index.mustFind(projectId, terminalId)
+    if (throughOutputSeq <= record.ackedThrough) return { ok: true }
+    record.ackedThrough = throughOutputSeq
+    try {
+      await this.deps.system.request('terminal.ack', {
+        terminalId,
+        throughOutputSeq,
+      })
+    } catch (error) {
+      // 终端已消失：ack 无意义，吞掉 terminal_closed。
+      const message = error instanceof Error ? error.message : String(error)
+      if (!message.includes('terminal_closed')) {
+        throw new CommandError(rustErrorCode(error), message)
+      }
+    }
+    return { ok: true }
+  }
+
+  async close(
+    projectId: string,
+    terminalId: string,
+  ): Promise<{ closed: true }> {
+    const record = this.index.mustFind(projectId, terminalId)
+    await this.doClose(record, true)
+    return { closed: true }
+  }
+
+  private async doClose(
+    record: TerminalRecord,
+    throwOnError: boolean,
+  ): Promise<void> {
+    // 仅当已 closed 时幂等短路；exited/failed/disconnected 仍允许走关闭收敛为 closed。
+    if (record.meta.status === 'closed') return
+    const wasDisconnected = record.meta.status === 'disconnected'
+    transitionStatus(record, 'closing', { force: true })
+    const terminalId = record.meta.terminalId
+    // disconnected 意味着 sidecar 已重启、PTY 已死：不再向 Rust 发 close（会抛
+    // not-available），直接本地收敛。
+    if (!wasDisconnected) {
+      try {
+        await this.deps.system.request('terminal.close', { terminalId })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        process.stderr.write(
+          `[terminal] close ${terminalId} error: ${message}\n`,
+        )
+        if (throwOnError) throw new CommandError(rustErrorCode(error), message)
+      }
+    }
+    // 尾部帧先于 closed 状态发出（跨进程顺序契约）。
+    this.pacer.flushChannel(record.channel)
+    this.clearAttachTimer(record)
+    record.pendingInputs.clear()
+    transitionStatus(record, 'closed', { force: true })
+  }
+
+  /**
+   * 项目删除前回收其全部终端（spec §2）：任一 close 出错即抛
+   * terminal_cleanup_failed 且**不删项目**（避免留下无主 shell）。
+   */
+  async closeProject(projectId: string): Promise<void> {
+    const ids = this.index.projectIds(projectId)
+    if (!ids || ids.size === 0) return
+    const errors: string[] = []
+    for (const terminalId of [...ids]) {
+      const record = this.index.get(terminalId)
+      if (!record) continue
+      try {
+        await this.doClose(record, true)
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : String(error))
+      }
+    }
+    if (errors.length > 0) {
+      throw new CommandError(
+        'terminal_cleanup_failed',
+        `终端回收失败，保留项目: ${errors.join('; ')}`,
+      )
+    }
+    for (const terminalId of [...ids]) this.index.remove(terminalId)
+  }
+
+  /** sidecar 重启后 PTY 已死；不自动重跑（spec §2）。返回受影响记录数。 */
+  markAllDisconnected(reason: string): number {
+    let count = 0
+    for (const record of this.index.records.values()) {
+      if (TERMINAL.has(record.meta.status)) continue
+      record.channel.queue = []
+      record.channel.queuedBytes = 0
+      this.clearAttachTimer(record)
+      record.pendingInputs.clear()
+      transitionStatus(record, 'disconnected', {
+        errorMessage: `system runtime ${reason}`,
+      })
+      count += 1
+    }
+    return count
+  }
+
+  async shutdown(): Promise<void> {
+    this.pacer.halt()
+    const closing: Promise<void>[] = []
+    for (const record of this.index.records.values()) {
+      if (TERMINAL.has(record.meta.status)) continue
+      closing.push(this.doClose(record, false))
+    }
+    // ~900ms 上限：超时后强制标记，Rust close_all + Host kill 作兜底。
+    await Promise.race([
+      Promise.all(closing).then(() => undefined),
+      new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, 900)
+        timer.unref?.()
+      }),
+    ])
+    for (const record of this.index.records.values()) {
+      if (!TERMINAL.has(record.meta.status)) {
+        this.clearAttachTimer(record)
+        transitionStatus(record, 'closed', { force: true })
+      }
+    }
+  }
+
+  // ---------------- 配额与工具 ----------------
+
+  private clearAttachTimer(record: TerminalRecord): void {
+    if (record.attachTimer) {
+      clearTimeout(record.attachTimer)
+      record.attachTimer = undefined
+    }
+  }
+
+  private enforceQuota(projectId: string): void {
+    const { projectActive, globalActive, retained } =
+      this.index.quotaCounts(projectId)
+    if (projectActive >= this.config.maxActivePerProject) {
+      throw new CommandError(
+        'terminal_quota_project',
+        `项目活动终端数已达上限 ${this.config.maxActivePerProject}`,
+      )
+    }
+    if (globalActive >= this.config.maxActiveGlobal) {
+      throw new CommandError(
+        'terminal_quota_global',
+        `全局活动终端数已达上限 ${this.config.maxActiveGlobal}`,
+      )
+    }
+    if (retained >= this.config.maxRetained) {
+      throw new CommandError(
+        'terminal_quota_retained',
+        `留存终端数已达上限 ${this.config.maxRetained}，请清理已退出终端`,
+      )
+    }
+  }
+}
