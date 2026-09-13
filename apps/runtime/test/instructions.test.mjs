@@ -1,10 +1,16 @@
 import assert from 'node:assert/strict'
 import { test, beforeEach } from 'node:test'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Store } from '../dist/store/index.js'
 import { instructionPath } from '../dist/agent/instructions/paths.js'
+import {
+  getInstruction,
+  remember,
+  saveInstruction,
+} from '../dist/agent/instructions/service.js'
 import { readOptionalFile } from '../dist/agent/instructions/loader.js'
 import { containsSecretLike } from '../dist/agent/instructions/secretGuard.js'
 import {
@@ -175,4 +181,158 @@ test('buildInstructionBlock: 全部缺失返回空串', async () => {
   // 真实会话在场，但查询未知 sessionId：不得抛错，全局文件缺失 → 空串。
   store.sessions.create(null)
   assert.equal(await buildInstructionBlock(store, 'no-such-session'), '')
+})
+
+test('remember: 全局首建带表头，追加带日期条目', async () => {
+  const store = freshStore()
+  const outcome = await remember({
+    store,
+    scope: 'global',
+    content: '以后新建项目一律用 pnpm。',
+    projectId: null,
+  })
+  assert.equal(outcome.ok, true)
+  const text = await readFile(
+    join(process.env.REFLEXION_DATA_DIR, 'MEMORY.md'),
+    'utf8',
+  )
+  assert.ok(text.startsWith('# 记忆'))
+  assert.ok(text.includes('## 记忆条目'))
+  assert.match(text, /- \d{4}-\d{2}-\d{2} 以后新建项目一律用 pnpm。/)
+  await remember({
+    store,
+    scope: 'global',
+    content: '回复保持简短。',
+    projectId: null,
+  })
+  const again = await readFile(
+    join(process.env.REFLEXION_DATA_DIR, 'MEMORY.md'),
+    'utf8',
+  )
+  assert.equal(
+    again.split('\n').filter((line) => line.startsWith('- ')).length,
+    2,
+  )
+})
+
+test('remember: 项目记忆落在数据目录 memories/<id> 下', async () => {
+  const store = freshStore()
+  const { project } = sessionInProject(store)
+  const outcome = await remember({
+    store,
+    scope: 'project',
+    content: '本项目迁移只增不改。',
+    projectId: project.id,
+  })
+  assert.equal(outcome.ok, true)
+  const text = await readFile(
+    join(process.env.REFLEXION_DATA_DIR, 'memories', project.id, 'MEMORY.md'),
+    'utf8',
+  )
+  assert.ok(text.includes('本项目迁移只增不改。'))
+})
+
+test('remember: 拒绝机密形态/超长/空白，项目 scope 无项目报错', async () => {
+  const store = freshStore()
+  assert.equal(
+    (
+      await remember({
+        store,
+        scope: 'global',
+        content: 'token: abcdefghijklmnop1234',
+        projectId: null,
+      })
+    ).code,
+    'secret_like',
+  )
+  assert.equal(
+    (
+      await remember({
+        store,
+        scope: 'global',
+        content: '字'.repeat(201),
+        projectId: null,
+      })
+    ).code,
+    'too_long',
+  )
+  assert.equal(
+    (
+      await remember({
+        store,
+        scope: 'global',
+        content: '   ',
+        projectId: null,
+      })
+    ).code,
+    'too_long',
+  )
+  const noProject = await remember({
+    store,
+    scope: 'project',
+    content: '无项目',
+    projectId: null,
+  })
+  assert.equal(noProject.ok, false)
+  assert.equal(noProject.code, 'no_project')
+})
+
+test('remember: 项目不存在也拒绝（防路径逃逸）', async () => {
+  const store = freshStore()
+  const outcome = await remember({
+    store,
+    scope: 'project',
+    content: '逃逸尝试',
+    projectId: '../../evil',
+  })
+  assert.equal(outcome.ok, false)
+  assert.equal(outcome.code, 'no_project')
+})
+
+test('remember: 文件超 64KB 上限时拒绝并提示整理', async () => {
+  const store = freshStore()
+  await saveInstruction({
+    store,
+    scope: 'global',
+    projectId: null,
+    kind: 'memory',
+    content: 'x'.repeat(64 * 1024 + 10),
+  })
+  const outcome = await remember({
+    store,
+    scope: 'global',
+    content: '再记一条',
+    projectId: null,
+  })
+  assert.equal(outcome.ok, false)
+  assert.equal(outcome.code, 'too_large')
+})
+
+test('get/save 指令文件往返', async () => {
+  const store = freshStore()
+  const { project, projectDir } = sessionInProject(store)
+  const missing = await getInstruction({
+    store,
+    scope: 'global',
+    projectId: null,
+    kind: 'agents',
+  })
+  assert.equal(missing.content, '')
+  assert.ok(missing.path.endsWith('AGENTS.md'))
+  await saveInstruction({
+    store,
+    scope: 'project',
+    projectId: project.id,
+    kind: 'agents',
+    content: '# 项目指令\n写入用户仓库根。',
+  })
+  const text = await readFile(join(projectDir, 'AGENTS.md'), 'utf8')
+  assert.ok(text.includes('写入用户仓库根。'))
+  const saved = await getInstruction({
+    store,
+    scope: 'project',
+    projectId: project.id,
+    kind: 'agents',
+  })
+  assert.equal(saved.content, text)
 })

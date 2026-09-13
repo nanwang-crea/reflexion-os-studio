@@ -25,10 +25,21 @@ export function instructionPath(
     if (!project || project.folderPath === '') return null
     return join(project.folderPath, 'AGENTS.md')
   }
+  return memoryPath(store, scope, projectId)
+}
+
+/**
+ * MEMORY.md 路径：恒在应用数据目录（项目级隔离到 memories/<projectId>/）。
+ * 项目不存在返回 null——projectId 必须过 store 校验，防任意字符串携 ../ 逃出数据目录。
+ */
+export function memoryPath(
+  store: Store,
+  scope: InstructionScope,
+  projectId: string | null,
+): string | null {
+  const dataDir = resolveDataDir()
   if (scope === 'global') return join(dataDir, 'MEMORY.md')
   if (projectId === null) return null
-  // 记忆文件与 folderPath 无关，但 projectId 必须是真实存在的项目：
-  // 否则任意字符串直接 join 进路径，可携 ../ 逃出数据目录隔离。
   if (!store.projects.get(projectId)) return null
   return join(dataDir, 'memories', projectId, 'MEMORY.md')
 }
