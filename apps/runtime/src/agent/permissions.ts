@@ -41,6 +41,8 @@ const AUTOMATIC_OTHER_TOOLS = new Set([
   // manage_plan 为新名；update_plan 保留兼容别名映射到同一实现。
   'manage_plan',
   'update_plan',
+  // 记忆只写数据目录内应用自管的 MEMORY.md，不触用户工作区，免审批。
+  'memory.remember',
 ])
 
 export function policyFor(

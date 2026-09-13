@@ -9,6 +9,7 @@ import {
   type CommandResult,
 } from './command-utils.js'
 import { memoryCommandHandlers } from './agent/memory/handlers.js'
+import { instructionsCommandHandlers } from './agent/instructions/handlers.js'
 import { workspaceCommandHandlers } from './workspace/handlers.js'
 import { assetCommandHandlers } from './assets/handlers.js'
 import { mcpCommandHandlers } from './mcp/handlers.js'
@@ -198,6 +199,7 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
 export const commandHandlers: Record<string, CommandHandler> = {
   ...chatCommandHandlers,
   ...memoryCommandHandlers,
+  ...instructionsCommandHandlers,
   ...workspaceCommandHandlers,
   ...assetCommandHandlers,
   ...mcpCommandHandlers,

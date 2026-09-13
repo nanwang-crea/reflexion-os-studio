@@ -24,6 +24,9 @@ import {
   clipToTokenBudget,
   estimateTextTokens,
 } from '../dist/agent/instructions/render.js'
+import { commandHandlers } from '../dist/handlers.js'
+import { PermissionGate } from '../dist/agent/permissions.js'
+import { PRIMARY_AGENT_SYSTEM_PROMPT } from '../dist/agent/prompts/index.js'
 
 function freshStore() {
   return new Store(mkdtempSync(join(tmpdir(), 'reflexion-instructions-')))
@@ -489,4 +492,45 @@ test('不可读的 MEMORY.md：getInstruction 抛错、remember 折叠 io_error'
   } finally {
     chmodSync(path, 0o600)
   }
+})
+
+test('接线：instructions 命令有 handler、remember 工具免审批、prompt 有约定', () => {
+  assert.ok(commandHandlers['instructions.get'])
+  assert.ok(commandHandlers['instructions.save'])
+  const gate = new PermissionGate('workspace', false)
+  assert.equal(gate.decisionFor('memory.remember'), 'automatic')
+  assert.ok(PRIMARY_AGENT_SYSTEM_PROMPT.includes('memory.remember'))
+})
+
+test('instructions.get/save 经 handler 往返', async () => {
+  const store = freshStore()
+  const ctx = { store }
+  const saved = await commandHandlers['instructions.save'](
+    {
+      scope: 'global',
+      kind: 'memory',
+      content: '# 记忆\n\n## 记忆条目\n- 2026-09-12 手写条目',
+    },
+    ctx,
+  )
+  assert.equal(saved.ok, true)
+  const got = await commandHandlers['instructions.get'](
+    { scope: 'global', kind: 'memory' },
+    ctx,
+  )
+  assert.ok(got.content.includes('手写条目'))
+})
+
+test('注入与命令面读同一真相源：同一 AGENTS.md 两处内容一致', async () => {
+  const store = freshStore()
+  const { session } = sessionInProject(store)
+  const text = '全局纪律：注入与指令页必须看到同一份文件。'
+  writeFileSync(join(process.env.REFLEXION_DATA_DIR, 'AGENTS.md'), text)
+  const block = await buildInstructionBlock(store, session.id)
+  const got = await commandHandlers['instructions.get'](
+    { scope: 'global', kind: 'agents' },
+    { store },
+  )
+  assert.equal(got.content, text)
+  assert.ok(block.includes(text))
 })

@@ -11,7 +11,7 @@ import {
 } from '@reflexion-os-studio/agent-core'
 import type { Store } from '../store/index.js'
 import { streamChatCompletion } from '../provider.js'
-import { buildMemoryBlock } from './memory/recall.js'
+import { buildInstructionBlock } from './instructions/render.js'
 import { HISTORY_COMPACTOR_SYSTEM_PROMPT } from './prompts/index.js'
 import {
   framesToValidatedMessages,
@@ -203,12 +203,15 @@ export class ContextBuilder {
     signal: AbortSignal,
   ): Promise<ModelMessage[]> {
     const buildStartedAt = Date.now()
-    // A2 Memory 召回：失败/为空都不影响对话，只是没有记忆块。
-    const memoryBlock = await buildMemoryBlock(this.store, sessionId).catch(
-      () => '',
-    )
+    // 指令/记忆文件注入（文件即记忆 V2）：失败/为空都不影响对话。
+    const instructionBlock = await buildInstructionBlock(
+      this.store,
+      sessionId,
+    ).catch(() => '')
     const effectiveSystem =
-      memoryBlock === '' ? systemPrompt : `${systemPrompt}\n\n${memoryBlock}`
+      instructionBlock === ''
+        ? systemPrompt
+        : `${systemPrompt}\n\n${instructionBlock}`
     const { frames, messageIds } = reconstructSessionFramesWithIds(
       this.store,
       sessionId,
