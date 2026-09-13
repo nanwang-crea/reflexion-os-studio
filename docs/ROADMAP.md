@@ -2,8 +2,8 @@
 
 ## 当前状态（2026-08-31）
 
-Phase 1A 全部完成；Phase 2 的技能（Skills）、记忆（Memory，会话/项目级）与 MCP 子集已完成，其余待办如下：
-工具（`file.*`/`shell.execute`）、审批与权限 Profile、技能斜杠激活、记忆提取-合并-召回、MCP 工具桥（stdio,默认 ask 审批）均已接入对话链路与 UI。
+Phase 1A 全部完成；Phase 2 的技能（Skills）、记忆（Memory V2，文件即记忆）与 MCP 子集已完成，其余待办如下：
+工具（`file.*`/`shell.execute`）、审批与权限 Profile、技能斜杠激活、文件即记忆注入与 remember、MCP 工具桥（stdio,默认 ask 审批）均已接入对话链路与 UI。
 
 ## Phase 0：Architecture Foundation（已完成）
 
@@ -31,10 +31,11 @@ Rust File/Shell Service、Workspace 边界、read-only/workspace Profile、Chat 
 
 ## Phase 2：Agent Platform（进行中）
 
-- **已完成子集**：Skills（内置技能注册表、斜杠激活、skill.use）、Memory（持久化 memory_jobs 管线：终态入队 → 空闲 worker → 提取/合并 → 落库 → 复合召回注入；提取 transcript 脱敏）、MCP（stdio 协议 client、管理服务、工具桥默认 ask 审批、设置页面板）。
+- **已完成子集**：Skills（内置技能注册表、斜杠激活、skill.use）、MCP（stdio 协议 client、管理服务、工具桥默认 ask 审批、设置页面板）。
+- **已完成（2026-09，Memory V2 文件即记忆）**：AGENTS.md/MEMORY.md 四层注入 + memory.remember 免审批工具 + 指令页；A2 自动提取-合并-召回链路整体移除（v23 迁移删 memories/FTS/memory_jobs 表，不搬迁数据）；检索式记忆（mem0 直连原始对话数据）列为候选后续项。
 - **已完成（2026-09，Agent Loop Hardening 与 Context Engine V2）**：完成状态机（只有 stop 且无工具才算完成；length 限次续写；provider_protocol 如实失败）、Atomic Run Finalizer（单事务终态收敛）、Atomic Frames 与请求前校验、副作用感知调度（read 并行/mutation 串行/ToolCall 批量预建）、Loop Guard（重复/无进展拦截）、Run 预算（时长/token/工具数/续写）、增量 Context Checkpoint（source hash/single-flight）、AgentSettings 新预算字段与设置页循环分组。
 - **Terminal Surface（集成终端，进行中）**：设计与范围见 `docs/superpowers/specs/2026-09-12-integrated-terminal-design.md`，架构定位见 `ARCHITECTURE.md` §13。W0 已完成（事件信封泛化为显式 scope 判别联合、协议升 1.1、terminal 契约冻结）；W1（三平台 PTY 纵向切片）进行中；W2（后端多会话服务）、W3（前端多标签保活面板）、W4（故障/性能/打包验收）计划中。未合入前用户入口不存在，不设占位 UI；`terminal.*` 不注册为 Agent 工具。
-- **待完成**：Provider/Tool Plugins、Browser Tool、user 级记忆写入确认流程、更完整的资产检索。
+- **待完成**：Provider/Tool Plugins、Browser Tool、检索式记忆（mem0 候选）、更完整的资产检索。
 
 ## Phase 3：Multi-Agent Orchestration（未开始）
 

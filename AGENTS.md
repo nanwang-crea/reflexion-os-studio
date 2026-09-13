@@ -18,13 +18,13 @@ React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
     强制，真机验收过；Linux bwrap：userns+netns 禁网，渲染器验证过、运行时待真机）+ 按命令
     网络审批（requires_network → sandbox_network 卡 → grant.sandboxNetwork）；
   - **Skills**：内置 code-review / web-research / workspace-report；斜杠命令激活 + skill.use 工具加载全文；
-  - **Memory**：Run 结束后自动提取-合并（会话/项目级，user 级待确认流程落地前不产出候选项）、记忆管理页、上下文召回注入；
+  - **Memory（V2 文件即记忆）**：全局/项目 AGENTS.md + 全局/项目 MEMORY.md 四层文件注入（缺失静默、每文件 4000 token 截断）、`memory.remember` 免审批工具（仅 global/project 两档显式写入，无 user 档；单条≤200 字单行、机密拒绝、64KB 闸门）、指令页查看编辑；**不再有自动提取**（SQLite 自动记忆链路已删，v23 迁移不搬迁数据），未来检索式记忆直引 mem0 不自研；
   - **MCP**：stdio 协议 client（握手/tools/list/call、严格超时）+ 管理服务（配置/启停/重连/工具清单）、工具桥注册为 `serverId/toolName`、默认 ask 审批、设置页 MCP 面板、mcp_servers 表；
   - **Workspace（Phase 1B 第一部分）**：异步 Indexer（progress/cancel/stale/failed、忽略目录与符号链接、快照落库）、文件树按需加载、代码/文档查看器与编辑器保存（行号/复制/跳转行/分段加载/Markdown·JSON 预览）、**Git 变更（状态列表 + 单文件 diff 预览）与写操作（stage/unstage/commit/fetch/push/pull(--ff-only)/分支创建与切换：UI 直接动作免审批、磁盘未提交改动交给 git 原生、内存脏 buffer 在切分支/pull 前三键守卫并成功后强制重载）**、**提交历史浏览（分页 log / commit 文件 / 单文件 diff / 基于 commit 建分支 / 切换（detached））与远程管理（remote 列表/添加/移除、远程分支检出为本地跟踪、发布=推送）**，全部经 Rust 侧 workspace 边界；
   - **Asset / ResourceLink（Phase 1B 第二部分）**：Asset Store（数据目录按项目隔离、sha256 元数据、导入/列表/预览/删除/复制引用）；消息内资源引用渲染（`workspace://<projectId>/<path>#L<行号>` 进查看器定位、`asset://<assetId>` 进资产预览、https 链接经 Tauri 白名单命令转系统浏览器，仅 https 放行）；Run 回复的引用聚合为 Artifact 卡片；导出/下载/系统应用打开留后续阶段；
   - **存储**：`node:sqlite`（WAL、外键、启动把未完成 Run/Message 恢复为 interrupted、终态单事务、workspace_index 快照表、assets 表）。
-- **尚未实现、不得提前实现**：Phase 1B 剩余（Browser Surface）、Phase 2 剩余（Provider/Tool 插件、Browser 工具、user 级记忆写入确认）、Phase 3 多 Agent、Phase 4 Workflow、Phase 5 多模态、Phase 6 硬化与激活码许可。
-- 现有页面与占位边界：聊天区、落地页、技能页、记忆管理页、设置页（Provider）均为独立页面；工作区（索引状态+文件树+查看器）是对话区的**右侧可开合面板**（顶栏文件夹按钮切换，局部状态记忆），不是独立页；Automations 页是 Phase 4 占位（文案如实标注"尚未开放"），不要在占位页假装能力存在。
+- **尚未实现、不得提前实现**：Phase 1B 剩余（Browser Surface）、Phase 2 剩余（Provider/Tool 插件、Browser 工具、检索式记忆——按演进承诺直引 mem0，不得自研提取/召回管线）、Phase 3 多 Agent、Phase 4 Workflow、Phase 5 多模态、Phase 6 硬化与激活码许可。
+- 现有页面与占位边界：聊天区、落地页、技能页、指令页（AGENTS.md/MEMORY.md 四类文件管理）、设置页（Provider）均为独立页面；工作区（索引状态+文件树+查看器）是对话区的**右侧可开合面板**（顶栏文件夹按钮切换，局部状态记忆），不是独立页；Automations 页是 Phase 4 占位（文案如实标注"尚未开放"），不要在占位页假装能力存在。
 
 ## 2. 目录结构与职责
 
@@ -69,10 +69,10 @@ React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
   - 一个文件只承载一个职责；TypeScript 单文件超过约 300 行即应拆分，**500 行是硬上限**；本次变更中发现超纲文件就在当次拆掉，不留"以后再拆"。
   - **Runtime 存储**：`store/` 按领域分文件（projects / sessions / messages / runs / providers / toolCalls 各一个类），schema DDL 与当前版本号在 `store/schema.ts`，版本迁移逻辑在 `store/migrations.ts`，共享工具在 `store/shared.ts`，`store/index.ts` 只做门面（连接、事务边界、启动恢复编排）。业务代码只调领域方法（如 `store.sessions.list(null)`），不直接写 SQL。
   - **Runtime Agent**：`agent/` 按职责分文件——`prompts/`（一个 prompt 一个文件，禁止在代码里内联长 prompt）、`context.ts`（历史重建与压缩）、`permissions.ts`（权限策略表 + ApprovalGateway + PermissionGate）、`tools/`（按 Run 装配工具，Rust 工具经 SystemRuntimeClient）、`runner.ts`（Run 编排编排入口：循环调度+终态收敛；轮次持久化在 `model-turn.ts`，工具执行在 `tool-executor.ts`，共享状态在 `run-state.ts`）、`launcher.ts`（Run 装配：工具注册表+权限闸门+Provider 配置）、`delegation.ts`（子 Agent 委派）、`provider-resolver.ts`（Provider/采样解析）、`errors.ts`、`title.ts`，`agent/index.ts` 只做命令门面。循环算法本身在 `packages/agent-core`，不得把 SQLite/传输细节漏进去。
-  - **Runtime 命令与域目录**：命令 handler 跟随各自域目录——`agent/memory/handlers.ts`、`workspace/handlers.ts`、`assets/handlers.ts`、`mcp/handlers.ts`；`handlers.ts` 只保留 chat 核心（project/session/message/queue/run/approval/skill）与 `commandHandlers` 合并注册，`handlers-providers.ts` / `handlers-agents.ts` 拆出 provider 与 agent/delegation 命令。跨域基础设施（`events.ts` / `secrets.ts` / `system.ts` / `provider.ts` / `command-utils.ts`）留根目录，不归属单一 feature。
+  - **Runtime 命令与域目录**：命令 handler 跟随各自域目录——`agent/instructions/handlers.ts`、`workspace/handlers.ts`、`assets/handlers.ts`、`mcp/handlers.ts`；`handlers.ts` 只保留 chat 核心（project/session/message/queue/run/approval/skill）与 `commandHandlers` 合并注册，`handlers-providers.ts` / `handlers-agents.ts` 拆出 provider 与 agent/delegation 命令。跨域基础设施（`events.ts` / `secrets.ts` / `system.ts` / `provider.ts` / `command-utils.ts`）留根目录，不归属单一 feature。
   - **前端请求**：组件不得直接 `transport.request`。统一走 `api/` 层并按功能分文件（projects / sessions / chat / providers / client），`requestId` 由 api 层自动注入；组件调用具名函数（如 `createSession(projectId)`）。
   - **前端目录结构**：`apps/desktop/frontend/` 按功能模块分包，禁止根目录平铺组件/样式/hooks。
-    - `features/<name>/`：一个功能模块一个目录（chat / landing / memories / skills / settings / automations），模块内放页面组件 + 仅该模块使用的子组件 + 该模块 CSS（如 `features/chat/chat.css`、`features/settings/settings.css`）。
+    - `features/<name>/`：一个功能模块一个目录（chat / landing / instructions / skills / settings / workspace / automations），模块内放页面组件 + 仅该模块使用的子组件 + 该模块 CSS（如 `features/chat/chat.css`、`features/settings/settings.css`）。
     - `components/`：跨功能模块复用的共享组件（如 `Composer`、`SessionRow`、`Sidebar`、`ConfirmDialog`）。
     - `hooks/`：应用级/跨模块 hooks（如 `useAppBootstrap`、`useModelSelection`、`useSessionActions`）。
     - `api/`：唯一请求层，按领域分文件；`lib/`：传输与基础设施（如 `transport.ts`）；`styles/`：全局 base 与布局样式（如 `style.css`、`sidebar.css`）；`ui/`：通用图标等纯展示资源。

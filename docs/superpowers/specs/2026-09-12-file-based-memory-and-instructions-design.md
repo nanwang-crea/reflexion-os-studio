@@ -1,7 +1,7 @@
 # 设计：文件即记忆 —— AGENTS.md 指令层 + MEMORY.md 记忆层（Memory V2）
 
 日期：2026-09-12
-状态：已与用户逐节确认
+状态：已实施（分 6 次提交合入 feature/file-based-memory；实现与本文的差异见 §11「实施修订记录」，以代码为准）
 前置：A2 mem0 式本地记忆管线（提取/合并/召回/管理页）已上线，本设计将其整体移除。
 
 ## 1. 背景与问题
@@ -167,3 +167,26 @@ remember 追加/建文件/无项目报错/机密拒绝/64KB 上限、instruction
 5. `pnpm build` 全链 + 测试通过；旧库升级迁移平滑（drop 后启动正常）；
 6. 文档同步：本文件、`MEMORY-SYSTEM.md` 改写、`AGENTS.md` §1 能力清单与
    §2 目录表更新、`ROADMAP.md` 记录。
+
+## 11. 实施修订记录
+
+评审（Task 3–6）挣得的与正文的差异，以实现为准：
+
+1. **memoryPath 过 store 校验**（`instructions/paths.ts`）：项目级 MEMORY.md 路径
+   拼接前 `store.projects.get(projectId)` 必须命中，未命中返回 null——防任意字符串
+   携 `../` 逃出数据目录；正文 §4/§5 未提及该校验。
+2. **单行不变量**（`instructions/service.ts`）：remember 内容拒绝 `\r`/`\n`/
+   U+2028/U+2029——条目必须独占一行才能安全聚合与截断，内嵌换行会伪造多条目注入。
+3. **remember 与 save 共用一条串行写链**：两者对同一 MEMORY.md 都做读-改-写，
+   必须互斥（否则 rename 冲掉交错条目）；正文 §5/§8 只写了 remember 串行。
+   save 另有 256KB 内容上限（AGENTS.md 允许长文档，区别于 64KB 追加闸门）。
+4. **IO 错误折叠分层**：remember 把读-判-写全程异常折叠为 `io_error` 错误文案
+   （模型侧工具绝不抛异常中断 Run）；save/get 对真实磁盘故障**上抛**由命令层映射
+   internal（编辑器不得把"存在但不可读"伪装成空），仅 ENOENT/ENOTDIR 视作缺失。
+5. **前端脏草稿守卫**（`features/instructions/`）：切换 scope/项目前对未保存
+   修改弹应用内确认，与 FileViewerPanel 同源模式；正文 §6 未涉及。
+6. **记忆目录生命周期**：项目删除随清 `<dataDir>/memories/<projectId>/`
+   （失败不阻塞删除），启动时清扫无项目行对应的孤儿目录
+   （`sweepOrphanMemoryDirs`，与 Asset recover 同构）；正文未涉及。
+7. **token 口径复用 agent-core**：`render.ts` 以别名 `estimateTextTokens` 再导出
+   agent-core 的 `estimateTokens`，不本地复刻估算函数（正文 §4 已含此句，此处存档）。
