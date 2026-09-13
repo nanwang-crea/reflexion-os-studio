@@ -30,38 +30,39 @@
 
 ## 文件结构（改动地图）
 
-| 动作 | 路径 | 职责 |
-| --- | --- | --- |
-| Create | `apps/runtime/src/agent/instructions/paths.ts` | 四类文件（global/project × AGENTS/MEMORY）路径解析 |
-| Create | `apps/runtime/src/agent/instructions/loader.ts` | 可选文件读取（缺失→空串） |
-| Create | `apps/runtime/src/agent/instructions/secretGuard.ts` | 机密形态过滤（从 `memory/filter.ts` 迁入） |
-| Create | `apps/runtime/src/agent/instructions/render.ts` | token 估算/截断/注入块渲染 |
-| Create | `apps/runtime/src/agent/instructions/service.ts` | remember / get / save 读写服务 |
-| Create | `apps/runtime/src/agent/instructions/handlers.ts` | `instructions.get/save` 命令 handler |
-| Create | `apps/runtime/src/agent/tools/instructions.ts` | `memory.remember` 工具 |
-| Create | `apps/runtime/test/instructions.test.mjs` | 上述全部单测（随任务追加） |
-| Create | `apps/desktop/frontend/api/instructions.ts` | 前端命令封装 |
-| Create | `apps/desktop/frontend/features/instructions/InstructionsView.tsx` | 指令页 |
-| Create | `apps/desktop/frontend/features/instructions/instructions.css` | 指令页样式 |
-| Modify | `packages/contracts/src/commands.ts` / `entities.ts` / `events.ts` | 增 instructions.*；删 Memory* |
-| Modify | `packages/runtime-client/src/index.ts` | 删 Memory 再导出 |
-| Modify | `apps/runtime/src/agent/context.ts` | 注入点替换（context.ts:206-211） |
-| Modify | `apps/runtime/src/agent/index.ts` | 删 MemoryService/Worker 装配 |
-| Modify | `apps/runtime/src/agent/launcher.ts` / `runner.ts` / `run-finalizer.ts` | 删 onMemoryJob/enqueueMemoryJob 链 |
-| Modify | `apps/runtime/src/agent/permissions.ts` | `memory.remember` 免审批白名单 |
-| Modify | `apps/runtime/src/agent/tools/index.ts` | 注册工具 + 调度策略 |
-| Modify | `apps/runtime/src/agent/prompts/primary-agent.ts` | remember 行为约定 |
-| Modify | `apps/runtime/src/handlers.ts` | 合并 instructions handler；删 memory handler |
-| Modify | `apps/runtime/src/store/schema.ts` / `migrations.ts` / `index.ts` | v23 迁移删表 |
-| Delete | `apps/runtime/src/agent/memory/`、`prompts/memory-*.ts`、`store/memories.ts`、`store/memoryJobs.ts`、`apps/desktop/frontend/api/memory.ts`、`features/memories/`、`test/memory.test.mjs`、`test/memory-job.test.mjs` | 旧记忆链 |
-| Modify | 前端 `App.tsx`/`AppMain.tsx`/`Sidebar.tsx`/`TopBar.tsx`/`main.tsx`/`useAppBootstrap.ts`/`useSessionNavigation.ts` | 删记忆接线→加指令页 |
-| Modify | `docs/MEMORY-SYSTEM.md`、`AGENTS.md`、`docs/ROADMAP.md` | 文档同步 |
+| 动作   | 路径                                                                                                                                                                                                                 | 职责                                               |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Create | `apps/runtime/src/agent/instructions/paths.ts`                                                                                                                                                                       | 四类文件（global/project × AGENTS/MEMORY）路径解析 |
+| Create | `apps/runtime/src/agent/instructions/loader.ts`                                                                                                                                                                      | 可选文件读取（缺失→空串）                          |
+| Create | `apps/runtime/src/agent/instructions/secretGuard.ts`                                                                                                                                                                 | 机密形态过滤（从 `memory/filter.ts` 迁入）         |
+| Create | `apps/runtime/src/agent/instructions/render.ts`                                                                                                                                                                      | token 估算/截断/注入块渲染                         |
+| Create | `apps/runtime/src/agent/instructions/service.ts`                                                                                                                                                                     | remember / get / save 读写服务                     |
+| Create | `apps/runtime/src/agent/instructions/handlers.ts`                                                                                                                                                                    | `instructions.get/save` 命令 handler               |
+| Create | `apps/runtime/src/agent/tools/instructions.ts`                                                                                                                                                                       | `memory.remember` 工具                             |
+| Create | `apps/runtime/test/instructions.test.mjs`                                                                                                                                                                            | 上述全部单测（随任务追加）                         |
+| Create | `apps/desktop/frontend/api/instructions.ts`                                                                                                                                                                          | 前端命令封装                                       |
+| Create | `apps/desktop/frontend/features/instructions/InstructionsView.tsx`                                                                                                                                                   | 指令页                                             |
+| Create | `apps/desktop/frontend/features/instructions/instructions.css`                                                                                                                                                       | 指令页样式                                         |
+| Modify | `packages/contracts/src/commands.ts` / `entities.ts` / `events.ts`                                                                                                                                                   | 增 instructions._；删 Memory_                      |
+| Modify | `packages/runtime-client/src/index.ts`                                                                                                                                                                               | 删 Memory 再导出                                   |
+| Modify | `apps/runtime/src/agent/context.ts`                                                                                                                                                                                  | 注入点替换（context.ts:206-211）                   |
+| Modify | `apps/runtime/src/agent/index.ts`                                                                                                                                                                                    | 删 MemoryService/Worker 装配                       |
+| Modify | `apps/runtime/src/agent/launcher.ts` / `runner.ts` / `run-finalizer.ts`                                                                                                                                              | 删 onMemoryJob/enqueueMemoryJob 链                 |
+| Modify | `apps/runtime/src/agent/permissions.ts`                                                                                                                                                                              | `memory.remember` 免审批白名单                     |
+| Modify | `apps/runtime/src/agent/tools/index.ts`                                                                                                                                                                              | 注册工具 + 调度策略                                |
+| Modify | `apps/runtime/src/agent/prompts/primary-agent.ts`                                                                                                                                                                    | remember 行为约定                                  |
+| Modify | `apps/runtime/src/handlers.ts`                                                                                                                                                                                       | 合并 instructions handler；删 memory handler       |
+| Modify | `apps/runtime/src/store/schema.ts` / `migrations.ts` / `index.ts`                                                                                                                                                    | v23 迁移删表                                       |
+| Delete | `apps/runtime/src/agent/memory/`、`prompts/memory-*.ts`、`store/memories.ts`、`store/memoryJobs.ts`、`apps/desktop/frontend/api/memory.ts`、`features/memories/`、`test/memory.test.mjs`、`test/memory-job.test.mjs` | 旧记忆链                                           |
+| Modify | 前端 `App.tsx`/`AppMain.tsx`/`Sidebar.tsx`/`TopBar.tsx`/`main.tsx`/`useAppBootstrap.ts`/`useSessionNavigation.ts`                                                                                                    | 删记忆接线→加指令页                                |
+| Modify | `docs/MEMORY-SYSTEM.md`、`AGENTS.md`、`docs/ROADMAP.md`                                                                                                                                                              | 文档同步                                           |
 
 ---
 
 ### Task 1: instructions 模块基座（paths / loader / secretGuard）
 
 **Files:**
+
 - Create: `apps/runtime/src/agent/instructions/paths.ts`
 - Create: `apps/runtime/src/agent/instructions/loader.ts`
 - Create: `apps/runtime/src/agent/instructions/secretGuard.ts`
@@ -90,8 +91,14 @@ test('instructionPath: 全局两类文件在数据目录下', () => {
   const store = freshStore()
   const dataDir = process.env.REFLEXION_DATA_DIR
   assert.ok(dataDir, 'set-test-data-dir 应已注入 REFLEXION_DATA_DIR')
-  assert.equal(instructionPath(store, 'global', 'agents', null), join(dataDir, 'AGENTS.md'))
-  assert.equal(instructionPath(store, 'global', 'memory', null), join(dataDir, 'MEMORY.md'))
+  assert.equal(
+    instructionPath(store, 'global', 'agents', null),
+    join(dataDir, 'AGENTS.md'),
+  )
+  assert.equal(
+    instructionPath(store, 'global', 'memory', null),
+    join(dataDir, 'MEMORY.md'),
+  )
 })
 
 test('instructionPath: 项目 AGENTS.md 在项目 folderPath，项目 MEMORY.md 在数据目录', () => {
@@ -234,6 +241,7 @@ git commit -m "feat(memory): instructions 模块基座（四类文件路径/读�
 ### Task 2: 注入块渲染（render.ts）
 
 **Files:**
+
 - Create: `apps/runtime/src/agent/instructions/render.ts`
 - Test: `apps/runtime/test/instructions.test.mjs`（追加）
 
@@ -303,7 +311,11 @@ test('buildInstructionBlock: 独立会话只有全局两层', async () => {
 ```ts
 import type { Store } from '../../store/index.js'
 import { readOptionalFile } from './loader.js'
-import { instructionPath, type InstructionKind, type InstructionScope } from './paths.js'
+import {
+  instructionPath,
+  type InstructionKind,
+  type InstructionScope,
+} from './paths.js'
 
 /** 单个指令文件的注入预算（token）；超限保头截断并显式标注。 */
 export const INSTRUCTION_FILE_TOKEN_BUDGET = 4000
@@ -389,6 +401,7 @@ git commit -m "feat(memory): 指令/记忆四层注入块渲染（预算截断+�
 ### Task 3: 读写服务（remember / get / save）
 
 **Files:**
+
 - Create: `apps/runtime/src/agent/instructions/service.ts`
 - Test: `apps/runtime/test/instructions.test.mjs`（追加）
 
@@ -423,12 +436,19 @@ test('remember: 全局首建带表头，追加带日期条目', async () => {
   assert.ok(text.startsWith('# 记忆'))
   assert.ok(text.includes('## 记忆条目'))
   assert.match(text, /- \d{4}-\d{2}-\d{2} 以后新建项目一律用 pnpm。/)
-  await remember({ scope: 'global', content: '回复保持简短。', projectId: null })
+  await remember({
+    scope: 'global',
+    content: '回复保持简短。',
+    projectId: null,
+  })
   const again = await readFile(
     join(process.env.REFLEXION_DATA_DIR, 'MEMORY.md'),
     'utf8',
   )
-  assert.equal(again.split('\n').filter((line) => line.startsWith('- ')).length, 2)
+  assert.equal(
+    again.split('\n').filter((line) => line.startsWith('- ')).length,
+    2,
+  )
 })
 
 test('remember: 项目记忆落在数据目录 memories/<id> 下', async () => {
@@ -451,11 +471,23 @@ test('remember: 项目记忆落在数据目录 memories/<id> 下', async () => {
 test('remember: 拒绝机密形态/超长/空白，项目 scope 无项目报错', async () => {
   const store = freshStore()
   assert.equal(
-    (await remember({ scope: 'global', content: 'token: abcdefghijklmnop1234', projectId: null })).code,
+    (
+      await remember({
+        scope: 'global',
+        content: 'token: abcdefghijklmnop1234',
+        projectId: null,
+      })
+    ).code,
     'secret_like',
   )
   assert.equal(
-    (await remember({ scope: 'global', content: '字'.repeat(201), projectId: null })).code,
+    (
+      await remember({
+        scope: 'global',
+        content: '字'.repeat(201),
+        projectId: null,
+      })
+    ).code,
     'too_long',
   )
   assert.equal(
@@ -526,13 +558,25 @@ test('get/save 指令文件往返', async () => {
 `apps/runtime/src/agent/instructions/service.ts`：
 
 ```ts
-import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import {
+  appendFile,
+  mkdir,
+  readFile,
+  rename,
+  writeFile,
+} from 'node:fs/promises'
 import { dirname } from 'node:path'
 import type { Store } from '../../store/index.js'
-import { instructionPath, memoryPath, type InstructionKind, type InstructionScope } from './paths.js'
+import {
+  instructionPath,
+  memoryPath,
+  type InstructionKind,
+  type InstructionScope,
+} from './paths.js'
 import { containsSecretLike } from './secretGuard.js'
 
-const MEMORY_FILE_HEADER = '# 记忆\n\n本文件由 ReflexionOS Studio 的 remember 工具与用户共同维护。\n\n## 记忆条目\n'
+const MEMORY_FILE_HEADER =
+  '# 记忆\n\n本文件由 ReflexionOS Studio 的 remember 工具与用户共同维护。\n\n## 记忆条目\n'
 const MAX_ENTRY_CHARS = 200
 /** MEMORY.md 体积上限：超限拒绝追加，提示到指令页整理（本轮不做自动治理）。 */
 export const MAX_MEMORY_FILE_BYTES = 64 * 1024
@@ -665,8 +709,7 @@ export async function saveInstruction(input: {
   await writeFileWithRename(path, normalized)
   return {
     ok: true,
-    message:
-      normalized.trim() === '' ? `已清空 ${path}。` : `已保存 ${path}。`,
+    message: normalized.trim() === '' ? `已清空 ${path}。` : `已保存 ${path}。`,
   }
 }
 
@@ -710,6 +753,7 @@ git commit -m "feat(memory): remember/get/save 读写服务（串行写+机密�
 ### Task 4: 命令面 + 工具注册 + 注入接线
 
 **Files:**
+
 - Modify: `packages/contracts/src/commands.ts`（memory.list 块之后，commands.ts:424 附近）
 - Create: `apps/runtime/src/agent/instructions/handlers.ts`
 - Modify: `apps/runtime/src/handlers.ts:11,200`
@@ -860,6 +904,7 @@ export function createMemoryRememberTool(ctx: ToolContext): ToolDefinition {
 ```
 
 `apps/runtime/src/agent/tools/index.ts`：
+
 - `alwaysAvailableTools` 数组中 `createSkillUseTool(ctx.skills),` 之后加 `createMemoryRememberTool(ctx),`；顶部 `import { createMemoryRememberTool } from './instructions.js'`。
 - `BUILTIN_POLICIES` 加 `'memory.remember': STATE_POLICY,`（写数据目录文件，串行足够）。
 
@@ -877,19 +922,20 @@ export function createMemoryRememberTool(ctx: ToolContext): ToolDefinition {
 ```
 
 `apps/runtime/src/agent/context.ts`：
+
 - :14 `import { buildMemoryBlock } from './memory/recall.js'` → `import { buildInstructionBlock } from './instructions/render.js'`
 - :206-211 替换为：
 
 ```ts
-      // 指令/记忆文件注入（文件即记忆 V2）：失败/为空都不影响对话。
-      const instructionBlock = await buildInstructionBlock(
-        this.store,
-        sessionId,
-      ).catch(() => '')
-      const effectiveSystem =
-        instructionBlock === ''
-          ? systemPrompt
-          : `${systemPrompt}\n\n${instructionBlock}`
+// 指令/记忆文件注入（文件即记忆 V2）：失败/为空都不影响对话。
+const instructionBlock = await buildInstructionBlock(
+  this.store,
+  sessionId,
+).catch(() => '')
+const effectiveSystem =
+  instructionBlock === ''
+    ? systemPrompt
+    : `${systemPrompt}\n\n${instructionBlock}`
 ```
 
 - [ ] **Step 5: 追加接线测试并跑全 runtime 测试**
@@ -943,6 +989,7 @@ git commit -m "feat(memory): instructions 命令面 + memory.remember 工具 + �
 ### Task 5: 删除 SQLite 记忆链路（runtime + 存储 + 契约 + 前端旧接线）
 
 **Files:**
+
 - Delete: `apps/runtime/src/agent/memory/`（10 文件）、`apps/runtime/src/agent/prompts/memory-extractor.ts`、`memory-merger.ts`、`apps/runtime/src/store/memories.ts`、`memoryJobs.ts`、`apps/runtime/test/memory.test.mjs`、`memory-job.test.mjs`、`apps/desktop/frontend/api/memory.ts`、`apps/desktop/frontend/features/memories/`
 - Modify: `apps/runtime/src/agent/index.ts`、`launcher.ts`、`runner.ts`、`run-finalizer.ts`、`handlers.ts`、`prompts/index.ts`、`store/schema.ts`、`store/migrations.ts`、`store/index.ts`、`apps/runtime/package.json`、`packages/contracts/src/{entities,commands,events}.ts`、`packages/runtime-client/src/index.ts`、前端 `App.tsx`、`AppMain.tsx`、`Sidebar.tsx`、`TopBar.tsx`、`main.tsx`、`useAppBootstrap.ts`、`useSessionNavigation.ts`
 
@@ -962,14 +1009,14 @@ git commit -m "feat(memory): instructions 命令面 + memory.remember 工具 + �
 `store/migrations.ts` 在 `if (version < 22) {…}` 后追加：
 
 ```ts
-    // v23（文件即记忆 V2）：删除 SQLite 记忆链路。存量 memories/FTS/
-    // memory_jobs 按用户决策整体 drop——记忆真相源迁移为 MEMORY.md 文件，
-    // 不做数据搬迁（自动提取的记忆本来就不具备保留价值）。
-    if (version < 23) {
-      db.exec('DROP TABLE IF EXISTS memories_fts')
-      db.exec('DROP TABLE IF EXISTS memories')
-      db.exec('DROP TABLE IF EXISTS memory_jobs')
-    }
+// v23（文件即记忆 V2）：删除 SQLite 记忆链路。存量 memories/FTS/
+// memory_jobs 按用户决策整体 drop——记忆真相源迁移为 MEMORY.md 文件，
+// 不做数据搬迁（自动提取的记忆本来就不具备保留价值）。
+if (version < 23) {
+  db.exec('DROP TABLE IF EXISTS memories_fts')
+  db.exec('DROP TABLE IF EXISTS memories')
+  db.exec('DROP TABLE IF EXISTS memory_jobs')
+}
 ```
 
 - [ ] **Step 3: 删除文件**
@@ -1025,6 +1072,7 @@ git commit -m "refactor(memory)!: 删除 SQLite 自动记忆链路（提取/合�
 ### Task 6: 前端"指令"页
 
 **Files:**
+
 - Create: `apps/desktop/frontend/api/instructions.ts`
 - Create: `apps/desktop/frontend/features/instructions/InstructionsView.tsx`
 - Create: `apps/desktop/frontend/features/instructions/instructions.css`
@@ -1119,7 +1167,9 @@ function InstructionPane(props: {
   return (
     <section className="instruction-pane">
       <h3>{props.title}</h3>
-      <p className="instruction-path">{path ?? '当前不可用（未关联项目或文件夹未设置）'}</p>
+      <p className="instruction-path">
+        {path ?? '当前不可用（未关联项目或文件夹未设置）'}
+      </p>
       <p className="instruction-hint">{props.hint}</p>
       <textarea
         value={draft ?? content}
@@ -1179,7 +1229,10 @@ export function InstructionsView(): React.JSX.Element {
     <div className="instructions-view">
       <header>
         <h2>指令</h2>
-        <p>全局 + 项目的 AGENTS.md（纪律）与 MEMORY.md（记忆），每次对话自动注入。</p>
+        <p>
+          全局 + 项目的 AGENTS.md（纪律）与
+          MEMORY.md（记忆），每次对话自动注入。
+        </p>
       </header>
       <div className="instructions-toolbar">
         <button
@@ -1215,7 +1268,13 @@ export function InstructionsView(): React.JSX.Element {
       {scope === 'project' && activeProjectId === null && (
         <p className="notice">请先选择一个项目。</p>
       )}
-      <div className={scope === 'project' && activeProjectId === null ? 'instructions-disabled' : undefined}>
+      <div
+        className={
+          scope === 'project' && activeProjectId === null
+            ? 'instructions-disabled'
+            : undefined
+        }
+      >
         {FILES.map((file) => (
           <InstructionPane
             key={`${scope}-${file.kind}`}
@@ -1305,6 +1364,7 @@ export function InstructionsView(): React.JSX.Element {
 ```
 
 接线（对称于 Task 5 删除处）：
+
 - `useSessionNavigation.ts` / `Sidebar.tsx` view union 加 `'instructions'`；Sidebar 原"记忆"位置加 NavItem：`label="指令"`、`active={props.view === 'instructions'}`、`onClick={() => props.onSelectView('instructions')}`（图标沿用 `ArchiveIcon`）。
 - `AppMain.tsx`：import `InstructionsView`；contextTitle 分支 `view === 'instructions' ? '指令'`；渲染分支 `view === 'instructions' ? <InstructionsView /> : …`；`AppMainProps` 无新增 prop（组件自包含）。
 - `main.tsx`：加 `import './features/instructions/instructions.css'`（原 memories.css 位置）。
@@ -1331,6 +1391,7 @@ git commit -m "feat(memory): 指令页（全局/项目 × AGENTS.md/MEMORY.md �
 ### Task 7: 文档同步与全链验收
 
 **Files:**
+
 - Modify: `docs/MEMORY-SYSTEM.md`（整体改写）、`AGENTS.md`（§1/§2/§4）、`docs/ROADMAP.md`
 - 无代码改动
 

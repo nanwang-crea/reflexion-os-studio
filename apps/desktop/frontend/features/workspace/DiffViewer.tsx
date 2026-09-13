@@ -8,6 +8,9 @@ interface DiffViewerProps {
   source?: 'git' | 'chat'
   before?: string
   after?: string
+  binary?: boolean
+  truncated?: boolean
+  label?: string
   onClose: () => void
 }
 
@@ -25,6 +28,9 @@ export function DiffViewer(props: DiffViewerProps): React.JSX.Element {
       source={props.source}
       before={props.before}
       after={props.after}
+      binary={props.binary}
+      truncated={props.truncated}
+      label={props.label}
       onClose={props.onClose}
     />
   )

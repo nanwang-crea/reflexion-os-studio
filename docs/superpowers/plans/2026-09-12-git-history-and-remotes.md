@@ -130,11 +130,11 @@ pub fn log(root: &Path, skip: usize, limit: usize) -> Result<LogOutcome, GitErro
             "--no-pager",
             "log",
             &format!("--pretty=format:{format}"),
-            "--no-merges=0",
             &format!("--skip={skip}"),
             &format!("--max-count={fetch}"),
         ],
     )?;
+    // 不过滤 merge：isMerge 由 %P 父数判，需展示。
     if output.timed_out {
         return Err(GitError::new("git_failed", "git log timed out".to_string()));
     }

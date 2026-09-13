@@ -10,8 +10,19 @@ import type { MonacoDiffEditorProps } from './types'
 export function MonacoDiffEditor(
   props: MonacoDiffEditorProps,
 ): React.JSX.Element {
-  const { projectId, path, oldPath, staged, source, before, after, onClose } =
-    props
+  const {
+    projectId,
+    path,
+    oldPath,
+    staged,
+    source,
+    before,
+    after,
+    binary: binaryProp,
+    truncated: truncatedProp,
+    label,
+    onClose,
+  } = props
   const [original, setOriginal] = useState('')
   const [modified, setModified] = useState('')
   const [loading, setLoading] = useState(true)
@@ -25,18 +36,22 @@ export function MonacoDiffEditor(
 
   const loadDiff = useCallback(async () => {
     setLoading(true)
-    setBinary(false)
-    setTruncated(false)
     setError(null)
 
-    // 直接传入 before/after（Chat diff 场景）
+    // 直接传入 before/after（Chat/历史快照 diff）：binary/truncated 由打开方
+    // 决定，props 缺省时重置为 false；不发起 git 请求。
     if (before !== undefined || after !== undefined) {
+      setBinary(binaryProp === true)
+      setTruncated(truncatedProp === true)
       setOriginal(before ?? '')
       setModified(after ?? '')
       setLoading(false)
       return
     }
 
+    // git 通道：binary/truncated 以 fetch 结果为准，先无条件重置。
+    setBinary(false)
+    setTruncated(false)
     try {
       const result = await gitDiff(projectId, path, staged)
       if (!result.repo) {
@@ -53,7 +68,7 @@ export function MonacoDiffEditor(
       setError(err instanceof Error ? err.message : String(err))
       setLoading(false)
     }
-  }, [projectId, path, staged, before, after])
+  }, [projectId, path, staged, before, after, binaryProp, truncatedProp])
 
   useEffect(() => {
     void loadDiff()
@@ -65,7 +80,7 @@ export function MonacoDiffEditor(
   }, [])
 
   const headerTitle =
-    source === 'chat' ? '本次编辑' : staged ? '暂存区' : '工作区'
+    label ?? (source === 'chat' ? '本次编辑' : staged ? '暂存区' : '工作区')
 
   return (
     <div className="content-view monaco-editor-container">

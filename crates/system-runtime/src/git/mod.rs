@@ -1,14 +1,22 @@
-//! git 子系统模块：状态/分支（status）、diff 内容读取（diff）、
-//! git 进程执行（exec）。对外仅暴露 `service::{status, diff, branches}`。
+//! git 子系统模块：状态/分支（status）、diff 内容读取（diff）、提交历史
+//! （log）、远程管理（remotes）、git 进程执行（exec）。对外仅暴露
+//! `service::{status, diff, commit_diff, branches}`、`log::{log, commit_files}`、
+//! `remotes::{remotes_list, remote_add, remote_remove}`、
+//! `writes::{写命令}` 与 `writes::is_hex_rev`（handler 侧 hash 预校验共用规则）
+//! （LogEntry/LogOutcome/ChangedFile 仅经 serde 序列化出边界，不外露类型名）。
 
 mod diff;
 mod exec;
+mod log;
+mod remotes;
 pub mod service;
 mod status;
 mod writes;
 
-pub use service::{branches, diff, status};
-pub use writes::{branch_create, checkout, commit, fetch, pull, push, stage, unstage};
+pub use log::{commit_files, log};
+pub use remotes::{add as remote_add, list as remotes_list, remove as remote_remove};
+pub use service::{branches, commit_diff, diff, status};
+pub use writes::{branch_create, commit, fetch, is_hex_rev, pull, push, stage, switch_to, unstage};
 
 /// 共享测试助手（service / status 集成测试复用）。
 #[cfg(test)]

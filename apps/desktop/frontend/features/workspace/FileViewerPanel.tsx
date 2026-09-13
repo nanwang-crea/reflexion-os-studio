@@ -184,6 +184,9 @@ export function FileViewerPanel(
           source={diffTab.source}
           before={diffTab.before}
           after={diffTab.after}
+          binary={diffTab.binary}
+          truncated={diffTab.truncated}
+          label={diffTab.label}
           onClose={() => props.onRequestCloseTab(tabIdOf(diffTab))}
         />
       )}

@@ -25,6 +25,12 @@ export interface MonacoDiffEditorProps {
   source?: 'git' | 'chat'
   before?: string
   after?: string
+  /** chat 通道（before/after 直传）的二进制提示：true 时呈现二进制占位。 */
+  binary?: boolean
+  /** chat 通道的截断提示：true 时呈现截断标记。 */
+  truncated?: boolean
+  /** 头部徽标文案覆盖（如历史对比），优先于按 source/staged 推导的默认文案。 */
+  label?: string
   onClose: () => void
 }
 

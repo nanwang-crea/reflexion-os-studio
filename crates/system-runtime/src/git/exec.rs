@@ -171,16 +171,93 @@ fn drain_pipe<T: Read + Send + 'static>(
     })
 }
 
-pub(super) fn first_line(text: &str) -> &str {
-    text.lines().next().unwrap_or("unknown error").trim()
+/// 剥除文本内所有 URL 凭据：`(scheme://)[^/\s]*@` → `$1***@`，userinfo 段按
+/// **最后一个** `@` 切分（宁多遮不漏遮）。对任意消息文本幂等；无
+/// `scheme://…@` 形态的文本（含普通路径、scp 形态 `git@host:path`）原样返回。
+pub(super) fn scrub_url_secrets(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(scheme_end) = rest.find("://") {
+        let after = &rest[scheme_end + 3..];
+        let authority_len = after
+            .find(|c: char| c == '/' || c.is_whitespace())
+            .unwrap_or(after.len());
+        let authority = &after[..authority_len];
+        out.push_str(&rest[..scheme_end + 3]);
+        match authority.rfind('@') {
+            Some(at) => {
+                out.push_str("***@");
+                rest = &after[at + 1..];
+            }
+            None => rest = after,
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
-/// stdout 末个非空行：git 写命令的失败摘要（如 "nothing to commit, working
-/// tree clean" / "no changes added to commit"）写在 stdout 末尾而非首行。
-pub(super) fn last_nonempty_line(text: &str) -> &str {
-    text.lines()
-        .rev()
-        .find(|line| !line.trim().is_empty())
-        .unwrap_or("unknown error")
-        .trim()
+/// 首行 + 统一剥除输出内 URL 凭据：所有 git_failed 消息经此进错误横幅/日志，
+/// 不得携带 fetch/push/pull 回显的 `https://TOKEN@host`（AGENTS §4 secret 纪律）。
+pub(super) fn first_line(text: &str) -> String {
+    scrub_url_secrets(text.lines().next().unwrap_or("unknown error").trim())
+}
+
+/// stdout 末个非空行 + 同规则剥凭据：git 写命令的失败摘要（如 "nothing to
+/// commit, working tree clean" / "no changes added to commit"）写在 stdout 末尾而非首行。
+pub(super) fn last_nonempty_line(text: &str) -> String {
+    scrub_url_secrets(
+        text.lines()
+            .rev()
+            .find(|line| !line.trim().is_empty())
+            .unwrap_or("unknown error")
+            .trim(),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn first_line_scrubs_url_secrets_and_keeps_plain_text() {
+        // 普通消息原样（含首行 trim 语义不变）。
+        assert_eq!(
+            first_line("  fatal: not a git repository  \nsecond line"),
+            "fatal: not a git repository"
+        );
+        // scheme + userinfo：遮蔽整个 userinfo 段。
+        assert_eq!(
+            first_line("fatal: unable to access 'https://tok@h/x.git': boom"),
+            "fatal: unable to access 'https://***@h/x.git': boom"
+        );
+        // 无 path 的 URL（authority 直到行尾）。
+        assert_eq!(
+            scrub_url_secrets("push to https://tok@h failed"),
+            "push to https://***@h failed"
+        );
+        // 最后一个 @ 规则：密码含 @ 时全段遮蔽（宁多遮不漏遮）。
+        assert_eq!(
+            scrub_url_secrets("https://user:pa@ss@host/x"),
+            "https://***@host/x"
+        );
+        // 幂等：二次剥除不变。
+        assert_eq!(
+            scrub_url_secrets(&scrub_url_secrets("https://tok@h/x")),
+            "https://***@h/x"
+        );
+        // scp 形态无 scheme 不动；path 段的 @ 不动（userinfo 止于首个 '/'）。
+        assert_eq!(
+            scrub_url_secrets("git@github.com:o/r.git https://host/a@b"),
+            "git@github.com:o/r.git https://host/a@b"
+        );
+    }
+
+    #[test]
+    fn last_nonempty_line_scrubs_too() {
+        assert_eq!(
+            last_nonempty_line("a\nTo https://tok@h/x.git\n"),
+            "To https://***@h/x.git"
+        );
+        assert_eq!(last_nonempty_line(""), "unknown error");
+    }
 }

@@ -70,10 +70,7 @@ pub(super) fn status(workspace_root: &Path) -> Result<StatusOutcome, GitError> {
             ahead: None,
             behind: None,
         }),
-        _ => Err(GitError::new(
-            "git_failed",
-            first_line(&output.stderr).to_string(),
-        )),
+        _ => Err(GitError::new("git_failed", first_line(&output.stderr))),
     }
 }
 

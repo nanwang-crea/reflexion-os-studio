@@ -9,6 +9,8 @@ import { ChevronIcon, FolderIcon } from '../../ui/icons'
 import { AssetsPanel } from './AssetsPanel'
 import { FileTree } from './FileTree'
 import { GitChanges } from './GitChanges'
+import { GitHistory } from './GitHistory'
+import type { OpenDiffHandler } from './types'
 
 interface ProjectFilesProps {
   /** 当前激活项目；null 时展示占位提示。 */
@@ -19,10 +21,7 @@ interface ProjectFilesProps {
   activePath: string | null
   /** 点击文件/Git 变更"打开文件"：交给右侧查看器打开标签。 */
   onOpenFile: (path: string, line?: number) => void
-  onOpenDiff?: (
-    path: string,
-    options: { staged?: boolean; oldPath?: string },
-  ) => void
+  onOpenDiff?: OpenDiffHandler
   /** 切分支/pull 前的脏 buffer 三键守卫（透传给 Git 面板）；内部链，App 恒提供。 */
   guardDirtyBuffersThen: () => Promise<boolean>
   /** checkout/pull 成功后强制重载全部文本标签（透传给 Git 面板）。 */
@@ -32,10 +31,10 @@ interface ProjectFilesProps {
   onFocusConsumed?: () => void
 }
 
-type View = 'files' | 'git' | 'assets'
+type View = 'files' | 'git' | 'history' | 'assets'
 
 /**
- * 侧边栏的项目文件工作区：文件 / Git 变更 / 资产 三视图 + 顶部文件名搜索。
+ * 侧边栏的项目文件工作区：文件 / Git 变更 / 提交历史 / 资产 四视图 + 顶部文件名搜索。
  * 文件树根目录即当前项目目录，惰性展开；搜索用只读 glob（workspace.search_files）
  * 全量匹配文件名，命中即点开右侧查看器。切换项目时重新触发一次索引。
  */
@@ -163,6 +162,13 @@ export function ProjectFiles(props: ProjectFilesProps): React.JSX.Element {
         </button>
         <button
           type="button"
+          className={`project-files-tab${view === 'history' ? ' active' : ''}`}
+          onClick={() => setView('history')}
+        >
+          历史
+        </button>
+        <button
+          type="button"
           className={`project-files-tab${view === 'assets' ? ' active' : ''}`}
           onClick={() => setView('assets')}
         >
@@ -210,6 +216,15 @@ export function ProjectFiles(props: ProjectFilesProps): React.JSX.Element {
             projectId={project.id}
             systemReady={props.systemReady}
             onOpenFile={props.onOpenFile}
+            onOpenDiff={props.onOpenDiff}
+            guardDirtyBuffersThen={props.guardDirtyBuffersThen}
+            reloadAllTextTabs={props.reloadAllTextTabs}
+            onAfterMutation={() => void refreshBadges()}
+          />
+        ) : view === 'history' ? (
+          <GitHistory
+            projectId={project.id}
+            systemReady={props.systemReady}
             onOpenDiff={props.onOpenDiff}
             guardDirtyBuffersThen={props.guardDirtyBuffersThen}
             reloadAllTextTabs={props.reloadAllTextTabs}

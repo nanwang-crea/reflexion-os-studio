@@ -171,10 +171,12 @@ async function checkGitDiff(runtime, projectId, wsRoot) {
   try {
     const runtime = startRuntime(dataDir)
     try {
-      // 等待 runtime 就绪。
-      for (let attempt = 0; attempt < 80; attempt++) {
+      // 等待 runtime 就绪；workspace 文件/git 步骤依赖系统通道，
+      // 必须等 systemAvailable（Runtime 启动改为 shell 环境快照后异步）。
+      for (let attempt = 0; attempt < 100; attempt++) {
         const ready = await runtime.request(1, 'runtime.get_status')
-        if (ready?.result?.state === 'ready') break
+        if (ready?.result?.state === 'ready' && ready?.result?.systemAvailable)
+          break
         await new Promise((resolve) => setTimeout(resolve, 100))
       }
 

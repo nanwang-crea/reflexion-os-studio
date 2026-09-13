@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import type {
+  DiffOpenOptions,
   OpenFileTab,
   WorkspaceOpenRequest,
 } from '../features/workspace/types'
@@ -22,16 +23,7 @@ export interface WorkspacePanelState {
   setWorkspaceRequest: Dispatch<SetStateAction<WorkspaceOpenRequest | null>>
   /** 在右侧查看器打开/激活一个文件标签；重复点击只切标签不重复创建。 */
   openFile: (path: string, line?: number) => void
-  openDiff: (
-    path: string,
-    options?: {
-      staged?: boolean
-      oldPath?: string
-      source?: 'git' | 'chat'
-      before?: string
-      after?: string
-    },
-  ) => void
+  openDiff: (path: string, options?: DiffOpenOptions) => void
   /** 按 tabId 关闭标签（同路径的 content 与 diff 标签互不影响）。 */
   closeTab: (id: string) => void
   /** 按 tabId 激活标签。 */
@@ -122,25 +114,31 @@ export function useWorkspacePanel(): WorkspacePanelState {
   }, [])
 
   const openDiff = useCallback(
-    (
-      path: string,
-      options: {
-        staged?: boolean
-        oldPath?: string
-        source?: 'git' | 'chat'
-        before?: string
-        after?: string
-      } = {},
-    ): void => {
+    (path: string, options: DiffOpenOptions = {}): void => {
       const nonce = Date.now()
       setOpenTabs((tabs) => {
         const existing = tabs.find(
           (tab) => tab.path === path && tab.mode === 'diff',
         )
         if (existing) {
+          // 合并更新以「本次入参」为完整事实：diff 全部可选字段显式覆写，
+          // 未提供即清空。spread-merge 会让上一次打开方（GitHistory/Chat）的
+          // 内容快照残留泄漏进 GitChanges 误点的实时 diff（快照优先渲染）。
           return tabs.map((tab) =>
             tab === existing
-              ? { ...tab, ...options, nonce, mode: 'diff' }
+              ? {
+                  ...tab,
+                  staged: options.staged,
+                  oldPath: options.oldPath,
+                  source: options.source,
+                  before: options.before,
+                  after: options.after,
+                  binary: options.binary,
+                  truncated: options.truncated,
+                  label: options.label,
+                  nonce,
+                  mode: 'diff',
+                }
               : tab,
           )
         }

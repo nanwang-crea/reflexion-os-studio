@@ -14,6 +14,7 @@ import { RunEventEmitter } from './events.js'
 import { dispatchCommand, testProviderConnection } from './handlers.js'
 import { resolveDataDir, Store } from './store/index.js'
 import { resolveSystemRuntimeBinary, SystemRuntimeClient } from './system.js'
+import { applyUserShellEnv } from './user-shell-env.js'
 import { McpManager } from './mcp/manager.js'
 import { WorkspaceIndexer } from './workspace/indexer.js'
 import { AssetService } from './assets/service.js'
@@ -105,14 +106,23 @@ const commandContext = {
   assets: assetService,
 }
 
-systemRuntime.start()
+// P1 环境继承：先探测用户 shell 环境快照（不阻塞 Chat 就绪），
+// 但 Rust sidecar 与 MCP server 的 spawn 必须等注入完成，才能继承补齐后的 PATH/env。
+const userShellEnvReady = applyUserShellEnv()
+void userShellEnvReady
+  .then(async () => {
+    systemRuntime.start()
+    // MCP:按配置连接全部已启用 server(失败标记 failed,不阻塞 Chat)。
+    await mcpManager.reload()
+  })
+  .catch((error: unknown) => {
+    process.stderr.write(
+      `[runtime] sidecar bootstrap failed: ${String(error)}\n`,
+    )
+  })
 // Asset Store 启动巡检/补偿清理：清理孤儿内容文件、标记缺内容的资产。
 void assetService.recover().catch((error: unknown) => {
   process.stderr.write(`[runtime] asset recovery failed: ${String(error)}\n`)
-})
-// MCP:按配置连接全部已启用 server(失败标记 failed,不阻塞 Chat)。
-void mcpManager.reload().catch((error: unknown) => {
-  process.stderr.write(`[runtime] mcp reload failed: ${String(error)}\n`)
 })
 // 初始状态上报：让 Host/前端立即拿到 systemAvailable 基线（后续变化走回调）。
 statusEmitter.next({ type: 'runtime.status', status: getStatus() })

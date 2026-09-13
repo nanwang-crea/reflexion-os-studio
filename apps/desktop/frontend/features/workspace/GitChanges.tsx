@@ -8,13 +8,19 @@ import {
   gitFetch,
   gitPull,
   gitPush,
+  gitRemoteAdd,
+  gitRemotes,
+  gitRemoteRemove,
   gitStage,
   gitStatus,
   gitUnstage,
+  type GitRemote,
 } from '../../api/workspace'
+import { classifyGitError } from '../../lib/git-errors'
 import { BranchPicker } from './BranchPicker'
 import { GitChangeList } from './GitChangeList'
 import { GitCommitBox } from './GitCommitBox'
+import type { OpenDiffHandler } from './types'
 
 type GitAction = 'commit' | 'push' | 'pull' | 'stage' | 'unstage' | 'branch'
 type Busy = GitAction | 'refresh'
@@ -24,10 +30,7 @@ interface GitChangesProps {
   systemReady: boolean
   /** 点击变更文件时直接交给右侧只读文件查看器。 */
   onOpenFile: (path: string) => void
-  onOpenDiff?: (
-    path: string,
-    options: { staged?: boolean; oldPath?: string },
-  ) => void
+  onOpenDiff?: OpenDiffHandler
   /** 切分支/pull 前的脏 buffer 守卫（返回 false 中止）；必选注入，缺省不得放行。 */
   guardDirtyBuffersThen: () => Promise<boolean>
   /** checkout/pull 成功后强制重载全部文本标签；缺省跳过（Rust 侧凭陈旧 revision 拒绝覆盖，fail-safe）。 */
@@ -46,33 +49,6 @@ const BUSY_LABELS: Record<Busy, string> = {
   refresh: '刷新中',
 }
 
-/** git 原始报错 → 中文引导文案（spec「错误处理」节）；未命中返回 null 走原文。 */
-const GIT_ERROR_HINTS: Array<[RegExp, string]> = [
-  [
-    /non-fast-forward|fetch first|\[rejected\]/i,
-    '远端有新提交，请先同步（↓更新）后再推送',
-  ],
-  [
-    /nothing to commit|no changes added to commit/i,
-    '没有已暂存的变更（nothing to commit）',
-  ],
-  [
-    /would be overwritten|local changes/i,
-    '本地未提交改动与目标分支冲突，请先提交或暂存',
-  ],
-  [
-    /does not appear to be a git repository|no configured push/i,
-    '未配置 origin 远端，请先在终端 git remote add',
-  ],
-]
-
-function classifyGitError(message: string): string | null {
-  for (const [pattern, friendly] of GIT_ERROR_HINTS) {
-    if (pattern.test(message)) return friendly
-  }
-  return null
-}
-
 /** Git SCM 面板：分支芯片 + 提交框 + 暂存区分组列表（VS Code 布局）。 */
 export function GitChanges(props: GitChangesProps): React.JSX.Element {
   const [repo, setRepo] = useState<boolean | null>(null)
@@ -82,6 +58,8 @@ export function GitChanges(props: GitChangesProps): React.JSX.Element {
   const [ahead, setAhead] = useState<number | null>(null)
   const [behind, setBehind] = useState<number | null>(null)
   const [branches, setBranches] = useState<string[]>([])
+  const [remoteBranches, setRemoteBranches] = useState<string[]>([])
+  const [remotes, setRemotes] = useState<GitRemote[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<Busy | null>(null)
@@ -93,12 +71,17 @@ export function GitChanges(props: GitChangesProps): React.JSX.Element {
   }, [props.onAfterMutation])
 
   const loadStatus = useCallback(async (): Promise<void> => {
-    const [status, branchList] = await Promise.all([
+    const [status, branchList, remoteList] = await Promise.all([
       gitStatus(props.projectId),
       gitBranches(props.projectId).catch(() => ({
         repo: false,
         current: null,
         branches: [] as string[],
+        remoteBranches: [] as string[],
+      })),
+      gitRemotes(props.projectId).catch(() => ({
+        repo: false,
+        remotes: [] as GitRemote[],
       })),
     ])
     setRepo(status.repo)
@@ -108,6 +91,22 @@ export function GitChanges(props: GitChangesProps): React.JSX.Element {
     setAhead(status.ahead)
     setBehind(status.behind)
     setBranches(branchList.branches)
+    setRemoteBranches(branchList.remoteBranches)
+    setRemotes(remoteList.remotes)
+  }, [props.projectId])
+
+  // 远端增删只动本地 config/refs：branches（remote remove 会删 refs/remotes/*）+
+  // remotes 轻量重载即可；工作树与 status 不变，不走全量 refresh、不联动徽章。
+  const refreshRefs = useCallback(async (): Promise<void> => {
+    const [branchList, remoteList] = await Promise.all([
+      gitBranches(props.projectId).catch(() => null),
+      gitRemotes(props.projectId).catch(() => null),
+    ])
+    if (branchList !== null) {
+      setBranches(branchList.branches)
+      setRemoteBranches(branchList.remoteBranches)
+    }
+    if (remoteList !== null) setRemotes(remoteList.remotes)
   }, [props.projectId])
 
   const refresh = useCallback(
@@ -142,6 +141,8 @@ export function GitChanges(props: GitChangesProps): React.JSX.Element {
     setAhead(null)
     setBehind(null)
     setBranches([])
+    setRemoteBranches([])
+    setRemotes([])
     setLoading(true)
     setError(null)
     void refresh(true)
@@ -221,13 +222,43 @@ export function GitChanges(props: GitChangesProps): React.JSX.Element {
     })
   }
 
-  const createBranch = (name: string, checkout: boolean): void => {
+  const createBranch = (
+    name: string,
+    checkout: boolean,
+    startRef?: string,
+  ): void => {
     void runAction(
       'branch',
-      () => gitBranchCreate(props.projectId, name, checkout),
+      () => gitBranchCreate(props.projectId, name, checkout, startRef),
       { guard: checkout, reloadTabs: checkout },
     )
   }
+
+  // 远端增删走轻量路径（refreshRefs）：不触碰工作树，故跳过脏 buffer 守卫、
+  // 标签重载、onAfterMutation 联动与静默 fetch；成败回传供 picker 清表单。
+  const runRemote = useCallback(
+    async (action: () => Promise<unknown>): Promise<boolean> => {
+      setBusy('branch')
+      setError(null)
+      try {
+        await action()
+        await refreshRefs()
+        return true
+      } catch (error_) {
+        setError(error_ instanceof Error ? error_.message : String(error_))
+        return false
+      } finally {
+        setBusy(null)
+      }
+    },
+    [refreshRefs],
+  )
+
+  const addRemote = (name: string, url: string): Promise<boolean> =>
+    runRemote(() => gitRemoteAdd(props.projectId, name, url))
+
+  const removeRemote = (name: string): Promise<boolean> =>
+    runRemote(() => gitRemoteRemove(props.projectId, name))
 
   const openEntry = (entry: GitChangeEntry): void => {
     if (props.onOpenDiff !== undefined) {
@@ -286,9 +317,13 @@ export function GitChanges(props: GitChangesProps): React.JSX.Element {
           ahead={ahead}
           behind={behind}
           branches={branches}
+          remoteBranches={remoteBranches}
+          remotes={remotes}
           busy={busy !== null}
           onSwitch={switchBranch}
           onCreate={createBranch}
+          onRemoteAdd={addRemote}
+          onRemoteRemove={removeRemote}
           onRefresh={() => void refresh()}
         />
         <div className="git-head-actions">

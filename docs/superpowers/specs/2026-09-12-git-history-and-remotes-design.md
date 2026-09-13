@@ -98,3 +98,10 @@ commands.ts 6 新命令 + `git.branches`/`git_branches` result 增 `remoteBranch
 Rust：`git/log.rs`（新）、diff.rs（commit 侧查询）、remotes 并入 service 或 `remote.rs`（新）、writes.rs（switch/create 扩展）、params/handlers/main + 各测；contracts commands.ts；runtime workspace/handlers.ts + git-queue 复用 + handlers.test；前端 `GitHistory.tsx`、`git-time.ts`（新）、BranchPicker/ProjectFiles/api/workspace.css；文档 AGENTS/ROADMAP 更新一句。
 
 **行数纪律**：handlers.rs 已 576 行（Rust）——本批触碰它时按计划拆出 `handlers_git.rs`（AGENTS §4 发现超纲当次拆）。GitHistory ≤300。
+
+## 实现修订（交付时与上文决策的差异，评审驱动）
+
+- **`git checkout` → `git switch` / `switch --detach`**（评审 I-1）：`git checkout <rev>` 在 rev 非 ref 且仓库恰有同名被跟踪文件（如 `v1.2`）时回退为 pathspec 模式，会静默丢弃该文件的磁盘修改（数据丢失攻击面）。branch_switch 与 branch_create 检出路径全部改为 ref-only 的 `switch`（hex → `switch --detach`），非 ref 即 fatal "invalid reference" 且工作树不受影响；上文 "`checkout -b <name> <startRef>`" 相应为 `switch -c <name> <startRef>`，tracking 自动建立语义不变（branch.autoSetupMerge 默认）。
+- **URL 掩码最终规则**：`scheme://` 形态且 authority 带 userinfo 时，scheme 为 http/https（GitHub 惯例把裸 token 放 user 段，`https://TOKEN@host` 无冒号也必须遮蔽）或 userinfo 含 `:`（任意 scheme 带密码形态）→ 整个 userinfo 替换为 `***`；username 恰为 `git`（`git@host:path`、`ssh://git@host`）非机密原样保留；无 scheme 的 scp 形态无法携带密码，原样返回。
+- **移除 remote 采用两步确认**（R4 决策）：行内点击「移除」→ 该进入确认态（按钮变「确认移除」+ 可取消），再点才发命令；不套三层 ConfirmDialog 模态。远端数据本就不被触碰，误点成本低于弹窗打扰。
+- **commit_diff 的 `binary`/`truncated` 经 `openDiff` 透传**（H 评审 I-2）：DiffViewer 标签与只读提示需要知道二进制/截断态，`{original, modified, binary, truncated}` 全量传给既有字符串通道，查看器按 flag 显示提示而非渲染补丁文本。

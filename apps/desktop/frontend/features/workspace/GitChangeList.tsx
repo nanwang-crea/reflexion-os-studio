@@ -13,7 +13,8 @@ interface GitChangeListProps {
   onRefresh: () => void
 }
 
-const STATUS_LABELS: Record<GitChangeEntry['status'], string> = {
+/** 变更状态 → 中文徽章文案；Git 变更与提交历史两个面板共用。 */
+export const STATUS_LABELS: Record<GitChangeEntry['status'], string> = {
   modified: '修改',
   added: '新增',
   deleted: '删除',

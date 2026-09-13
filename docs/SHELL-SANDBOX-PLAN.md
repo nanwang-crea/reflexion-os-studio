@@ -26,8 +26,11 @@
 
 一期目标：
 
-1. **登录 shell 环境**（macOS/Linux，未实施，已移入下方非目标）：探测用户登录 shell 并以 `-l -c` 执行命令；
-   Windows 维持 `cmd /C`（Windows 用户级环境变量 GUI 进程天然可见，无登录 shell 概念）。
+1. **环境继承（已实施，2026-09-13，方案改为快照）**：Runtime 启动时跑一次
+   `$SHELL -ilc 'env -0'` 取用户环境快照合并进 `process.env`（PATH 快照在前去重、
+   其余只补缺失），Rust sidecar / MCP / shell.execute 等全部子孙进程自然继承；
+   Windows 无登录 shell 概念，维持 `cmd /C` 且跳过探测。原"`-l -c` 每命令登录
+   shell"方案废弃（不读 `.zshrc`、每命令开销、不覆盖 MCP 链路）。
 2. **macOS Seatbelt 沙箱**：默认 deny 网络；workspace + 临时目录可写；deny 敏感路径
    （`~/.ssh`、`~/.gnupg`）；`sandbox-exec` 不可用时降级放行并显式上报状态（不静默）。
 3. **网络审批**：`requires_network` → 独立审批卡（once / session）→ grant；复用现有
@@ -41,7 +44,7 @@
 - 私有桌面（`windows.sandbox_private_desktop` 对应物）。
 - `network_proxy` 域名策略。
 - 可写根内保护路径（codex 对应物：`<root>/.git` 等只读化）。
-- S1 登录 shell（`-l -c` 环境继承，及随行的环境快照缓存）。
+- ~~S1 登录 shell（`-l -c` 环境继承，及随行的环境快照缓存）~~ → 2026-09-13 以快照方案落地（见 §2 目标 1）。
 
 ## 3. 参照实现对照
 
@@ -56,6 +59,9 @@
 ## 4. 方案设计
 
 ### 4.1 登录 shell（对应 P1）
+
+> **2026-09-13 已被取代**：本节 `-l -c` 方案未实施，改为启动时环境快照注入
+> （`apps/runtime/src/user-shell-env.ts`，交互+login 读 `.zshrc`，一次探测全链路继承）。保留原文供追溯。
 
 - 新模块 `crates/system-runtime/src/user_shell.rs`：
   - 探测顺序：`$SHELL`（校验文件存在且在允许名单）→ `libc::getpwuid_r`（对齐 codex，
@@ -147,26 +153,26 @@ codex unelevated 档也是受限令牌 + ACL 边界，弱网络隔离。本设�
 
 ## 5. 实施步骤与验收
 
-| 步骤 | 内容                                                                                | 验收                                                                                                                                                                                                                                                                                                                                                               |
-| ---- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| S1   | `user_shell.rs` 探测 + `-lc` 执行改造（Rust）                                       | cargo test 全绿；Finder 启动 desktop 后 `echo $PATH` 能看到 nvm/homebrew 路径，用户工具可执行                                                                                                                                                                                                                                                                      |
-| S2   | SandboxProvider + seatbelt profile + 协议扩展（已实施：轮次 B，macOS 真机验收全过） | 无网络审批时 `curl` 被拒；workspace 内读写正常；读 `~/.ssh` 被拒；`sandbox-exec` 缺失时降级为 `sandbox:"none"` 且状态可见                                                                                                                                                                                                                                          |
-| S3   | `requires_network` + 网络审批闭环                                                   | `npm install`（未审批）触发审批卡；allow once 后执行成功；session 放行后不再询问；无 grant 的 `allowNetwork` 被 Rust 拒绝                                                                                                                                                                                                                                          |
-| S4   | 状态上报 + 前端展示 + 错误分类                                                      | ready/status 带 sandbox 位；UI 可见沙箱状态与降级提示                                                                                                                                                                                                                                                                                                              |
-| S5   | 文档与回归                                                                          | `AGENTS.md`、`PERMISSION-MODEL.md` 增补；现有 shell/审批测试全绿；desktop / cli / runtime 直连三端冒烟                                                                                                                                                                                                                                                             |
-| W1   | SandboxProvider 工厂 + 双路径 trait + NoopSandbox                                   | macOS 返回 none；cargo test 全绿                                                                                                                                                                                                                                                                                                                                   |
-| W2   | Windows 受限令牌 provider（`#[cfg(windows)]`）                                      | `cargo check --target x86_64-pc-windows-msvc` 通过；真机验收：令牌生效、workspace 外写被拒、Job 树杀、TMP/TEMP 重定向生效（CREATE_UNICODE_ENVIRONMENT 修复后未经真机验证）、子进程 PATH 完整；follow-up 项：WAIT_FAILED 时轮询会空转到 deadline、`hStdInput` 建议显式 NUL 句柄、超时后孤儿子进程持有管道写端可能延迟 join、token.rs 错误路径句柄泄漏（仅失败分支） |
-| W3   | 网络审批闭环（TS + Rust）                                                           | `requires_network` → 审批卡 → grant `sandboxNetwork` → Rust 核对；trusted 不旁路；已知 UX：ask 模式下网络卡先于执行卡出现（与 spec §5.1 图示顺序相反，功能正确，待 UX 定稿调整）                                                                                                                                                                                   |
-| B1   | trait argv 化 + execute_argv                                                        | 既有测试全绿 + Windows 交叉编译保持绿                                                                                                                                                                                                                                                                                                                              |
-| B2   | macOS Seatbelt                                                                      | 真机：越界写被拒/敏感拒读/禁网 EPERM/审批后放行/超时树杀/常见命令不误杀（cargo test real_machine_tests 10 项）                                                                                                                                                                                                                                                     |
-| B3   | Linux bwrap                                                                         | 渲染器金样 6 项 + `cargo check --target x86_64-unknown-linux-gnu`；**运行时未验证（无 Linux 真机）**，真机验收清单：FIXED_TMP 别名与回退、存在路径遮蔽（文件/符号链接遮蔽会 fail-closed 退出）、PDEATHSIG 树杀等价、cgroup-ns 写失败（考虑 --unshare-cgroup-try）、userns 禁用→none、bwrap 缺失→none                                                               |
+| 步骤 | 内容                                                                                                                                                               | 验收                                                                                                                                                                                                                                                                                                                                                               |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| S1   | ~~`user_shell.rs` 探测 + `-lc` 执行改造（Rust）~~ **已改方案（2026-09-13）**：TS Runtime 启动时环境快照注入（`apps/runtime/src/user-shell-env.ts`），Rust 侧零改动 | `env -i PATH=/usr/bin:/bin` 模拟启动后快照恢复 nvm/anaconda/homebrew/pnpm/cargo 路径（实测 +16 PATH 条目）；Runtime 全量测试绿；Finder 启动 desktop 后 shell 工具与 MCP spawn 均继承完整环境（真机待验）                                                                                                                                                           |
+| S2   | SandboxProvider + seatbelt profile + 协议扩展（已实施：轮次 B，macOS 真机验收全过）                                                                                | 无网络审批时 `curl` 被拒；workspace 内读写正常；读 `~/.ssh` 被拒；`sandbox-exec` 缺失时降级为 `sandbox:"none"` 且状态可见                                                                                                                                                                                                                                          |
+| S3   | `requires_network` + 网络审批闭环                                                                                                                                  | `npm install`（未审批）触发审批卡；allow once 后执行成功；session 放行后不再询问；无 grant 的 `allowNetwork` 被 Rust 拒绝                                                                                                                                                                                                                                          |
+| S4   | 状态上报 + 前端展示 + 错误分类                                                                                                                                     | ready/status 带 sandbox 位；UI 可见沙箱状态与降级提示                                                                                                                                                                                                                                                                                                              |
+| S5   | 文档与回归                                                                                                                                                         | `AGENTS.md`、`PERMISSION-MODEL.md` 增补；现有 shell/审批测试全绿；desktop / cli / runtime 直连三端冒烟                                                                                                                                                                                                                                                             |
+| W1   | SandboxProvider 工厂 + 双路径 trait + NoopSandbox                                                                                                                  | macOS 返回 none；cargo test 全绿                                                                                                                                                                                                                                                                                                                                   |
+| W2   | Windows 受限令牌 provider（`#[cfg(windows)]`）                                                                                                                     | `cargo check --target x86_64-pc-windows-msvc` 通过；真机验收：令牌生效、workspace 外写被拒、Job 树杀、TMP/TEMP 重定向生效（CREATE_UNICODE_ENVIRONMENT 修复后未经真机验证）、子进程 PATH 完整；follow-up 项：WAIT_FAILED 时轮询会空转到 deadline、`hStdInput` 建议显式 NUL 句柄、超时后孤儿子进程持有管道写端可能延迟 join、token.rs 错误路径句柄泄漏（仅失败分支） |
+| W3   | 网络审批闭环（TS + Rust）                                                                                                                                          | `requires_network` → 审批卡 → grant `sandboxNetwork` → Rust 核对；trusted 不旁路；已知 UX：ask 模式下网络卡先于执行卡出现（与 spec §5.1 图示顺序相反，功能正确，待 UX 定稿调整）                                                                                                                                                                                   |
+| B1   | trait argv 化 + execute_argv                                                                                                                                       | 既有测试全绿 + Windows 交叉编译保持绿                                                                                                                                                                                                                                                                                                                              |
+| B2   | macOS Seatbelt                                                                                                                                                     | 真机：越界写被拒/敏感拒读/禁网 EPERM/审批后放行/超时树杀/常见命令不误杀（cargo test real_machine_tests 10 项）                                                                                                                                                                                                                                                     |
+| B3   | Linux bwrap                                                                                                                                                        | 渲染器金样 6 项 + `cargo check --target x86_64-unknown-linux-gnu`；**运行时未验证（无 Linux 真机）**，真机验收清单：FIXED_TMP 别名与回退、存在路径遮蔽（文件/符号链接遮蔽会 fail-closed 退出）、PDEATHSIG 树杀等价、cgroup-ns 写失败（考虑 --unshare-cgroup-try）、userns 禁用→none、bwrap 缺失→none                                                               |
 
 ## 6. 风险与开放问题
 
 - **profile 宽松度**：一期 allow default 弱于 codex 默认严格模式；红线是禁网 + 敏感
   路径 deny，二期评估 deny-default（对齐 codex `workspace-write`）。
-- **登录 shell 副作用**：zshrc 输出污染 stdout、启动延迟；接受并在工具描述中提示，
-  二期环境快照缓存作为可选项。
+- **登录 shell 副作用**：`-lc` 方案的 zshrc 污染/每命令延迟已随快照方案消除；快照方案
+  残余风险是启动 +≤2s 内 Rust/MCP spawn 延后（Chat 不受阻）与个别 rc 交互副作用，超时即降级。
 - **sandbox-exec 被拦截的机器**：降级 none + 显式提示，不静默放行。
 - **Linux / Windows 沙箱排期**：Windows 已实现（受限令牌档，运行时验收待真机）；Linux bwrap 已实现（轮次 B：渲染器金样 + Linux 交叉编译验证，运行时验收待真机，清单见 §5 B3 行）。
 - **codex 参照精度**：本地无 codex 源码，以官方文档（`developers.openai.com/codex`
@@ -174,7 +180,9 @@ codex unelevated 档也是受限令牌 + ACL 边界，弱网络隔离。本设�
 
 ## 7. 已确认决策记录
 
-- 环境策略：**登录 shell（`-l -c`）**（2026-09-11 确认，弃环境快照为二期可选项）。
+- 环境策略：登录 shell `-l -c`（2026-09-11 确认）→ **2026-09-13 改为启动时环境快照**
+  （`$SHELL -ilc 'env -0'` 一次探测合并进 `process.env`，对齐 VS Code/Claude Code）。
+  理由：`-lc` 非交互不读 `.zshrc`（nvm/conda 仍缺失）、每命令开销、覆盖不到 MCP/git 链路。
 - 网络审批：**进一期**（2026-09-11 确认）。
 - "先查找系统环境"现象根因：**shell 命令因瘦 PATH 找不到命令**（2026-09-11 确认，
   非 git 兜底探测）。

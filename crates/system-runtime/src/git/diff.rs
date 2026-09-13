@@ -10,6 +10,7 @@ use serde::Serialize;
 use crate::paths::resolve_in_workspace;
 
 use super::exec::{first_line, run_git};
+use super::log::commit_files;
 use super::service::GitError;
 
 /// diff 文本最大返回字节数（超出截断并标记）。
@@ -92,6 +93,43 @@ pub(super) fn diff(
     })
 }
 
+/// commit↔parent 单文件两侧内容（历史点开 diff 用）。两侧均 git 对象（恒 LF），
+/// 不需工作树 EOL 归一；<hash>^ 不存在（root/新增）→ 空；删除→右侧空。
+/// rename 场景：新路径在父树不存在 → 经 commit_files 的 oldPath 回退取
+/// 旧路径内容（git 对象 rename 只存新名，父侧必须按旧名解析）。
+pub(super) fn commit_diff(
+    workspace_root: &Path,
+    hash: &str,
+    relative: &str,
+) -> Result<DiffOutcome, GitError> {
+    resolve_in_workspace(workspace_root, relative)
+        .map_err(|message| GitError::new("path_outside_workspace", message))?;
+    let mut parent_lookup = read_git_blob(workspace_root, &format!("{hash}^:./{relative}"))?;
+    if matches!(parent_lookup, BlobLookup::Absent) {
+        if let Some(old_path) = rename_old_path(workspace_root, hash, relative) {
+            parent_lookup = read_git_blob(workspace_root, &format!("{hash}^:./{old_path}"))?;
+        }
+    }
+    let original = match parent_lookup {
+        BlobLookup::Content(c) => c,
+        BlobLookup::Absent => BlobContent::default(),
+        BlobLookup::NotARepo => return Ok(repo_false_diff()),
+    };
+    let modified = match read_git_blob(workspace_root, &format!("{hash}:./{relative}"))? {
+        BlobLookup::Content(c) => c,
+        BlobLookup::Absent => BlobContent::default(),
+        BlobLookup::NotARepo => return Ok(repo_false_diff()),
+    };
+    let binary = looks_binary(&original.text) || looks_binary(&modified.text);
+    Ok(DiffOutcome {
+        repo: true,
+        original: original.text,
+        modified: modified.text,
+        truncated: original.truncated || modified.truncated,
+        binary,
+    })
+}
+
 fn repo_false_diff() -> DiffOutcome {
     DiffOutcome {
         repo: false,
@@ -100,6 +138,16 @@ fn repo_false_diff() -> DiffOutcome {
         truncated: false,
         binary: false,
     }
+}
+
+/// 该 commit 是否把 `relative` 作为重命名目标引入（返回旧路径）。
+/// commit_files 失败按「无 rename」处理（保持原有的空基线语义，不放大错误）。
+fn rename_old_path(workspace_root: &Path, hash: &str, relative: &str) -> Option<String> {
+    let files = commit_files(workspace_root, hash).ok()?;
+    files
+        .into_iter()
+        .find(|file| file.path == relative && file.old_path.is_some())
+        .and_then(|file| file.old_path)
 }
 
 /// git 同款二进制启发式：前 8000 字节出现 NUL 视为二进制。
@@ -259,9 +307,6 @@ fn read_git_blob(workspace_root: &Path, query: &str) -> Result<BlobLookup, GitEr
         {
             Ok(BlobLookup::NotARepo)
         }
-        _ => Err(GitError::new(
-            "git_failed",
-            first_line(&output.stderr).to_string(),
-        )),
+        _ => Err(GitError::new("git_failed", first_line(&output.stderr))),
     }
 }

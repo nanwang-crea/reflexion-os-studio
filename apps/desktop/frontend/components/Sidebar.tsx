@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { Project, Session } from '@reflexion-os-studio/runtime-client'
 import { SessionRow } from './SessionRow'
 import { ProjectFiles } from '../features/workspace/ProjectFiles'
+import type { OpenDiffHandler } from '../features/workspace/types'
 import {
   ArchiveIcon,
   BoxIcon,
@@ -50,11 +51,8 @@ interface SidebarProps {
   onFocusConsumed?: () => void
   /** 点击文件：交给右侧查看器打开标签。 */
   onOpenFile: (path: string, line?: number) => void
-  /** 点击 Git 变更：在右侧查看器打开双栏 Diff。 */
-  onOpenDiff?: (
-    path: string,
-    options: { staged?: boolean; oldPath?: string },
-  ) => void
+  /** 点击 Git 变更/历史文件：在右侧查看器打开双栏 Diff。 */
+  onOpenDiff?: OpenDiffHandler
   /** 切分支/pull 前的脏 buffer 三键守卫（透传给 Git 面板）；内部链，App 恒提供。 */
   guardDirtyBuffersThen: () => Promise<boolean>
   /** checkout/pull 成功后强制重载全部文本标签（透传给 Git 面板）。 */

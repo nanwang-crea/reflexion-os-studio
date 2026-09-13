@@ -592,3 +592,319 @@ test('workspace.git_status passes through branch context and defaults to null', 
     behind: null,
   })
 })
+
+test('workspace.git_log forwards clamped paging and defaults empty fields', async () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/workspace' })
+  const calls = []
+  const commits = [
+    {
+      hash: 'deadbeef',
+      shortHash: 'deadbee',
+      timestampMs: 1_700_000_000_000,
+      authorName: 'me',
+      isMerge: false,
+      subject: 'feat: history',
+    },
+  ]
+  const result = await dispatchCommand(
+    'workspace.git_log',
+    { projectId: project.id, skip: -3, limit: 0 },
+    {
+      store,
+      system: {
+        available: true,
+        request: async (method, params) => {
+          calls.push({ method, params })
+          return { repo: true, commits, hasMore: true }
+        },
+      },
+    },
+  )
+  // skip 负值收敛到 0，limit 下限 1（与 list_dir 同一约定）。
+  assert.deepEqual(calls, [
+    {
+      method: 'git.log',
+      params: { workspaceRoot: '/workspace', skip: 0, limit: 1 },
+    },
+  ])
+  assert.deepEqual(result, { repo: true, commits, hasMore: true })
+  const bare = await dispatchCommand(
+    'workspace.git_log',
+    { projectId: project.id },
+    {
+      store,
+      system: { available: true, request: async () => ({ repo: false }) },
+    },
+  )
+  assert.deepEqual(bare, { repo: false, commits: [], hasMore: false })
+})
+
+test('workspace.git_commit_files rejects malformed hash before calling Rust', async () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/workspace' })
+  const calls = []
+  const system = {
+    available: true,
+    request: async (method, params) => {
+      calls.push({ method, params })
+      return { files: [{ path: 'a.ts', status: 'M' }] }
+    },
+  }
+  for (const hash of ['HEAD;rm', 'zzz', 'abc']) {
+    await assert.rejects(
+      () =>
+        dispatchCommand(
+          'workspace.git_commit_files',
+          { projectId: project.id, hash },
+          { store, system },
+        ),
+      (error) => error.code === 'invalid_request',
+    )
+  }
+  assert.deepEqual(calls, [])
+  const result = await dispatchCommand(
+    'workspace.git_commit_files',
+    { projectId: project.id, hash: 'deadbeef' },
+    { store, system },
+  )
+  assert.deepEqual(result, { files: [{ path: 'a.ts', status: 'M' }] })
+  assert.deepEqual(calls, [
+    {
+      method: 'git.commit_files',
+      params: { workspaceRoot: '/workspace', hash: 'deadbeef' },
+    },
+  ])
+})
+
+test('workspace.git_commit_diff validates hash and relative path, forwards both sides', async () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/workspace' })
+  const calls = []
+  const system = {
+    available: true,
+    request: async (method, params) => {
+      calls.push({ method, params })
+      return {
+        original: 'old',
+        modified: 'new',
+        binary: false,
+        truncated: false,
+      }
+    },
+  }
+  await assert.rejects(
+    () =>
+      dispatchCommand(
+        'workspace.git_commit_diff',
+        { projectId: project.id, hash: 'nothex', path: 'a.ts' },
+        { store, system },
+      ),
+    (error) => error.code === 'invalid_request',
+  )
+  await assert.rejects(
+    () =>
+      dispatchCommand(
+        'workspace.git_commit_diff',
+        { projectId: project.id, hash: 'deadbeef', path: '../secret' },
+        { store, system },
+      ),
+    (error) => error.code === 'invalid_request',
+  )
+  assert.deepEqual(calls, [])
+  const result = await dispatchCommand(
+    'workspace.git_commit_diff',
+    { projectId: project.id, hash: 'deadbeef', path: 'src/a.ts' },
+    { store, system },
+  )
+  assert.deepEqual(calls, [
+    {
+      method: 'git.commit_diff',
+      params: {
+        workspaceRoot: '/workspace',
+        hash: 'deadbeef',
+        path: 'src/a.ts',
+      },
+    },
+  ])
+  assert.deepEqual(result, {
+    original: 'old',
+    modified: 'new',
+    binary: false,
+    truncated: false,
+  })
+  const empty = await dispatchCommand(
+    'workspace.git_commit_diff',
+    { projectId: project.id, hash: 'deadbeef', path: 'src/a.ts' },
+    { store, system: { available: true, request: async () => ({}) } },
+  )
+  assert.deepEqual(empty, {
+    original: '',
+    modified: '',
+    binary: false,
+    truncated: false,
+  })
+})
+
+test('workspace.git_branch_create forwards optional startRef only when provided', async () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/workspace' })
+  const calls = []
+  const system = {
+    available: true,
+    request: async (method, params) => {
+      calls.push({ method, params })
+      return { ok: true }
+    },
+  }
+  await dispatchCommand(
+    'workspace.git_branch_create',
+    { projectId: project.id, name: 'feature', startRef: 'abc123' },
+    { store, system },
+  )
+  await dispatchCommand(
+    'workspace.git_branch_create',
+    { projectId: project.id, name: 'plain' },
+    { store, system },
+  )
+  assert.equal(calls[0].params.startRef, 'abc123')
+  assert.equal('startRef' in calls[1].params, false)
+})
+
+test('workspace.git_branches passes through remoteBranches and defaults to empty', async () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/workspace' })
+  const full = await dispatchCommand(
+    'workspace.git_branches',
+    { projectId: project.id },
+    {
+      store,
+      system: {
+        available: true,
+        request: async () => ({
+          repo: true,
+          current: 'main',
+          branches: ['main'],
+          remoteBranches: ['origin/main', 'origin/dev'],
+        }),
+      },
+    },
+  )
+  assert.deepEqual(full, {
+    repo: true,
+    current: 'main',
+    branches: ['main'],
+    remoteBranches: ['origin/main', 'origin/dev'],
+  })
+  const bare = await dispatchCommand(
+    'workspace.git_branches',
+    { projectId: project.id },
+    {
+      store,
+      system: { available: true, request: async () => ({ repo: false }) },
+    },
+  )
+  assert.deepEqual(bare, {
+    repo: false,
+    current: null,
+    branches: [],
+    remoteBranches: [],
+  })
+})
+
+test('workspace.git_remotes forwards root and defaults repo/remotes when empty', async () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/workspace' })
+  const calls = []
+  const remotes = [{ name: 'origin', url: 'https://***@example.com/a/b.git' }]
+  const result = await dispatchCommand(
+    'workspace.git_remotes',
+    { projectId: project.id },
+    {
+      store,
+      system: {
+        available: true,
+        request: async (method, params) => {
+          calls.push({ method, params })
+          return { repo: true, remotes }
+        },
+      },
+    },
+  )
+  assert.deepEqual(calls, [
+    { method: 'git.remotes', params: { workspaceRoot: '/workspace' } },
+  ])
+  assert.deepEqual(result, { repo: true, remotes })
+  const bare = await dispatchCommand(
+    'workspace.git_remotes',
+    { projectId: project.id },
+    { store, system: { available: true, request: async () => ({}) } },
+  )
+  assert.deepEqual(bare, { repo: false, remotes: [] })
+})
+
+test('workspace.git_remote_add validates params, forwards url untouched, queues per workspace', async () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/workspace' })
+  const calls = []
+  let release
+  const gate = new Promise((resolve) => {
+    release = resolve
+  })
+  const system = {
+    available: true,
+    request: async (method, params, options) => {
+      calls.push({ method, params, timeoutMs: options?.timeoutMs })
+      // 第一个请求挂起：第二个必须排队，直到 release 才允许开始。
+      if (calls.length === 1) await gate
+      return { ok: true }
+    },
+  }
+  // name/url 缺失或为空在任何 Rust 调用之前拒绝。
+  for (const params of [
+    { projectId: project.id, url: 'https://example.com/a.git' },
+    { projectId: project.id, name: 'origin' },
+    { projectId: project.id, name: '', url: 'https://example.com/a.git' },
+  ]) {
+    await assert.rejects(
+      () =>
+        dispatchCommand('workspace.git_remote_add', params, { store, system }),
+      (error) => error.code === 'invalid_request',
+    )
+  }
+  assert.deepEqual(calls, [])
+  // 非法 URL runtime 侧不拦截（URL 形状校验归 Rust），原样转发。
+  const first = dispatchCommand(
+    'workspace.git_remote_add',
+    { projectId: project.id, name: 'origin', url: 'ext::sh -c whoami' },
+    { store, system },
+  )
+  const second = dispatchCommand(
+    'workspace.git_remote_remove',
+    { projectId: project.id, name: 'old' },
+    { store, system },
+  )
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(calls.length, 1, '第二个命令不得先于第一个完成而启动')
+  release()
+  assert.deepEqual(await Promise.all([first, second]), [
+    { ok: true },
+    { ok: true },
+  ])
+  assert.deepEqual(
+    calls.map((call) => call.method),
+    ['git.remote_add', 'git.remote_remove'],
+  )
+  assert.deepEqual(calls[0].params, {
+    workspaceRoot: '/workspace',
+    name: 'origin',
+    url: 'ext::sh -c whoami',
+  })
+  assert.deepEqual(calls[1].params, {
+    workspaceRoot: '/workspace',
+    name: 'old',
+  })
+  // 本地 config 写：外层 35s > Rust 内层 30s。
+  assert.equal(calls[0].timeoutMs, 35_000)
+  assert.equal(calls[1].timeoutMs, 35_000)
+})

@@ -4,13 +4,15 @@
 //! 体量与超时上限、进程树回收、写/执行类操作的 grant 存在性检查。
 //!
 //! 职责拆分：`protocol`（IO/回包/错误类型）、`grant`（审批凭据校验）、
-//! `handlers`（各工具执行）分别独立成模块，本文件只留协议分发与主循环。
+//! `handlers`（文件/搜索/Shell 工具执行）与 `handlers_git`（git 全部方法）
+//! 分别独立成模块，本文件只留协议分发与主循环。
 
 mod files;
 mod git;
 mod glob;
 mod grant;
 mod handlers;
+mod handlers_git;
 mod mutate;
 mod params;
 mod paths;
@@ -45,17 +47,23 @@ fn handle_request(request: &Value) -> (Value, bool) {
         Some("file.move") => finish(id, handlers::handle_file_move(params)),
         Some("file.mkdir") => finish(id, handlers::handle_file_mkdir(params)),
         Some("shell.execute") => handlers::handle_shell_execute(id, params),
-        Some("git.status") => handlers::handle_git_status(id, params),
-        Some("git.diff") => handlers::handle_git_diff(id, params),
-        Some("git.branches") => handlers::handle_git_branches(id, params),
-        Some("git.stage") => handlers::handle_git_stage(id, params),
-        Some("git.unstage") => handlers::handle_git_unstage(id, params),
-        Some("git.commit") => handlers::handle_git_commit(id, params),
-        Some("git.fetch") => handlers::handle_git_fetch(id, params),
-        Some("git.push") => handlers::handle_git_push(id, params),
-        Some("git.pull") => handlers::handle_git_pull(id, params),
-        Some("git.branch_create") => handlers::handle_git_branch_create(id, params),
-        Some("git.branch_switch") => handlers::handle_git_branch_switch(id, params),
+        Some("git.status") => handlers_git::handle_git_status(id, params),
+        Some("git.diff") => handlers_git::handle_git_diff(id, params),
+        Some("git.branches") => handlers_git::handle_git_branches(id, params),
+        Some("git.log") => handlers_git::handle_git_log(id, params),
+        Some("git.commit_files") => handlers_git::handle_git_commit_files(id, params),
+        Some("git.commit_diff") => handlers_git::handle_git_commit_diff(id, params),
+        Some("git.stage") => handlers_git::handle_git_stage(id, params),
+        Some("git.unstage") => handlers_git::handle_git_unstage(id, params),
+        Some("git.commit") => handlers_git::handle_git_commit(id, params),
+        Some("git.fetch") => handlers_git::handle_git_fetch(id, params),
+        Some("git.push") => handlers_git::handle_git_push(id, params),
+        Some("git.pull") => handlers_git::handle_git_pull(id, params),
+        Some("git.branch_create") => handlers_git::handle_git_branch_create(id, params),
+        Some("git.branch_switch") => handlers_git::handle_git_branch_switch(id, params),
+        Some("git.remotes") => handlers_git::handle_git_remotes(id, params),
+        Some("git.remote_add") => handlers_git::handle_git_remote_add(id, params),
+        Some("git.remote_remove") => handlers_git::handle_git_remote_remove(id, params),
         Some(name) => Err(OpError::new(
             "method_not_found",
             format!("Method not found: {name}"),

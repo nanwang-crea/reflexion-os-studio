@@ -9,7 +9,7 @@ use std::path::Path;
 
 use serde::Serialize;
 
-use super::diff::{diff as diff_impl, DiffOutcome};
+use super::diff::{commit_diff as commit_diff_impl, diff as diff_impl, DiffOutcome};
 use super::exec::{first_line, run_git};
 use super::status::{status as status_impl, StatusOutcome};
 
@@ -37,6 +37,8 @@ pub struct BranchesOutcome {
     pub current: Option<String>,
     /// 本地分支名列表（refs/heads/*），按名称排序。
     pub branches: Vec<String>,
+    /// 远程跟踪分支（refs/remotes/*，形如 `origin/main`），剔除 `*/HEAD` 符号项。
+    pub remote_branches: Vec<String>,
 }
 
 /// 工作树 Git 状态（untracked 一并列出）；非仓库返回 repo=false。
@@ -47,6 +49,15 @@ pub fn status(workspace_root: &Path) -> Result<StatusOutcome, GitError> {
 /// 单文件 diff 两侧内容（详见 diff::diff）。
 pub fn diff(workspace_root: &Path, relative: &str, staged: bool) -> Result<DiffOutcome, GitError> {
     diff_impl(workspace_root, relative, staged)
+}
+
+/// commit↔parent 单文件两侧内容（详见 diff::commit_diff）。
+pub fn commit_diff(
+    workspace_root: &Path,
+    hash: &str,
+    relative: &str,
+) -> Result<DiffOutcome, GitError> {
+    commit_diff_impl(workspace_root, hash, relative)
 }
 
 /// 本地分支列表（refs/heads/*）与当前分支；非仓库返回 repo=false，HEAD detached
@@ -66,11 +77,12 @@ pub fn branches(workspace_root: &Path) -> Result<BranchesOutcome, GitError> {
                 repo: false,
                 current: None,
                 branches: Vec::new(),
+                remote_branches: Vec::new(),
             });
         }
         return Err(GitError::new(
             "git_failed",
-            first_line(&current_output.stderr).to_string(),
+            first_line(&current_output.stderr),
         ));
     }
     let current = trim_to_none(&current_output.stdout);
@@ -90,10 +102,7 @@ pub fn branches(workspace_root: &Path) -> Result<BranchesOutcome, GitError> {
         ));
     }
     if list_output.exit_code != Some(0) {
-        return Err(GitError::new(
-            "git_failed",
-            first_line(&list_output.stderr).to_string(),
-        ));
+        return Err(GitError::new("git_failed", first_line(&list_output.stderr)));
     }
     let branches = list_output
         .stdout
@@ -102,10 +111,40 @@ pub fn branches(workspace_root: &Path) -> Result<BranchesOutcome, GitError> {
         .filter(|line| !line.is_empty())
         .map(str::to_string)
         .collect();
+    // 远程跟踪分支：origin/HEAD 是"远端默认分支"指针（非可检出分支），剔除。
+    let remote_output = run_git(
+        workspace_root,
+        &[
+            "--no-pager",
+            "for-each-ref",
+            "--format=%(refname:short)",
+            "refs/remotes",
+        ],
+    )?;
+    if remote_output.timed_out {
+        return Err(GitError::new(
+            "git_failed",
+            "git remote branch list timed out".to_string(),
+        ));
+    }
+    if remote_output.exit_code != Some(0) {
+        return Err(GitError::new(
+            "git_failed",
+            first_line(&remote_output.stderr),
+        ));
+    }
+    let remote_branches = remote_output
+        .stdout
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.ends_with("/HEAD"))
+        .map(str::to_string)
+        .collect();
     Ok(BranchesOutcome {
         repo: true,
         current,
         branches,
+        remote_branches,
     })
 }
 
@@ -124,7 +163,9 @@ mod tests {
     use std::fs;
 
     use super::super::exec::find_git_executable;
-    use super::super::testutil::{git_cli, temp_repo, temp_workspace, write};
+    use super::super::testutil::{
+        default_branch, git_cli, temp_repo, temp_repo_with_commit, temp_workspace, write,
+    };
     use super::*;
 
     #[test]
@@ -290,5 +331,177 @@ mod tests {
         let error = diff(&root, "../outside.txt", false).unwrap_err();
         assert_eq!(error.code, "path_outside_workspace");
         fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn commit_diff_modified_file_shows_parent_vs_commit_sides() {
+        let Some(root) = temp_repo("commit-diff-mod") else {
+            return;
+        };
+        write(&root, "f.txt", b"old line\n");
+        assert!(git_cli(&root, &["add", "."]));
+        assert!(git_cli(&root, &["commit", "-q", "-m", "c1"]));
+        write(&root, "f.txt", b"new line\n");
+        assert!(git_cli(&root, &["add", "."]));
+        assert!(git_cli(&root, &["commit", "-q", "-m", "c2"]));
+        let second = head_hash(&root);
+        // 两侧取 git 对象而非工作树：工作树内容不影响 commit↔parent 结果。
+        write(&root, "f.txt", b"dirtied after commit\n");
+        let outcome = commit_diff(&root, &second, "f.txt").unwrap();
+        assert_eq!(outcome.repo, true);
+        assert_eq!(outcome.original, "old line\n");
+        assert_eq!(outcome.modified, "new line\n");
+        assert_eq!(outcome.binary, false);
+        assert_eq!(outcome.truncated, false);
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn commit_diff_added_file_has_empty_original() {
+        let Some(root) = temp_repo("commit-diff-add") else {
+            return;
+        };
+        write(&root, "seed.txt", b"seed\n");
+        assert!(git_cli(&root, &["add", "."]));
+        assert!(git_cli(&root, &["commit", "-q", "-m", "c1"]));
+        write(&root, "new.txt", b"whole file\n");
+        assert!(git_cli(&root, &["add", "."]));
+        assert!(git_cli(&root, &["commit", "-q", "-m", "c2"]));
+        let second = head_hash(&root);
+        let outcome = commit_diff(&root, &second, "new.txt").unwrap();
+        assert_eq!(outcome.original, "");
+        assert_eq!(outcome.modified, "whole file\n");
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn commit_diff_renamed_file_resolves_original_from_old_path() {
+        let Some(root) = temp_repo("commit-diff-rename") else {
+            return;
+        };
+        write(&root, "f.txt", b"line one\nline two\nline three\n");
+        assert!(git_cli(&root, &["add", "."]));
+        assert!(git_cli(&root, &["commit", "-q", "-m", "c1"]));
+        assert!(git_cli(&root, &["mv", "f.txt", "g.txt"]));
+        write(
+            &root,
+            "g.txt",
+            b"line one\nline two\nline three\nline four\n",
+        );
+        assert!(git_cli(&root, &["add", "."]));
+        assert!(git_cli(&root, &["commit", "-q", "-m", "c2"]));
+        let second = head_hash(&root);
+        let outcome = commit_diff(&root, &second, "g.txt").unwrap();
+        assert_eq!(outcome.original, "line one\nline two\nline three\n");
+        assert_eq!(
+            outcome.modified,
+            "line one\nline two\nline three\nline four\n"
+        );
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn commit_diff_deleted_file_has_empty_modified() {
+        let Some(root) = temp_repo("commit-diff-del") else {
+            return;
+        };
+        write(&root, "gone.txt", b"gone soon\n");
+        assert!(git_cli(&root, &["add", "."]));
+        assert!(git_cli(&root, &["commit", "-q", "-m", "c1"]));
+        fs::remove_file(root.join("gone.txt")).unwrap();
+        assert!(git_cli(&root, &["add", "-A", "--", "gone.txt"]));
+        assert!(git_cli(&root, &["commit", "-q", "-m", "c2"]));
+        let second = head_hash(&root);
+        let outcome = commit_diff(&root, &second, "gone.txt").unwrap();
+        assert_eq!(outcome.original, "gone soon\n");
+        assert_eq!(outcome.modified, "");
+        fs::remove_dir_all(&root).ok();
+    }
+
+    /// root commit 无父：`<hash>^` 报 invalid object name → 左按空处理（不 git_failed）。
+    #[test]
+    fn commit_diff_root_commit_has_empty_original() {
+        let Some(root) = temp_repo_with_commit("commit-diff-root") else {
+            return;
+        };
+        let first = head_hash(&root);
+        let outcome = commit_diff(&root, &first, "seed.txt").unwrap();
+        assert_eq!(outcome.repo, true);
+        assert_eq!(outcome.original, "");
+        assert_eq!(outcome.modified, "seed\n");
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn commit_diff_non_repo_reports_repo_false() {
+        let root = temp_workspace("commit-diff-non-repo");
+        write(&root, "f.txt", b"plain\n");
+        if find_git_executable().is_none() {
+            eprintln!("skip: git executable not found");
+            return;
+        }
+        let outcome = commit_diff(&root, "deadbeef", "f.txt").unwrap();
+        assert_eq!(outcome.repo, false);
+        assert_eq!(outcome.original, "");
+        assert_eq!(outcome.modified, "");
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn commit_diff_rejects_path_outside_workspace() {
+        let root = temp_workspace("commit-diff-outside");
+        if find_git_executable().is_none() {
+            eprintln!("skip: git executable not found");
+            return;
+        }
+        let error = commit_diff(&root, "deadbeef", "../outside.txt").unwrap_err();
+        assert_eq!(error.code, "path_outside_workspace");
+        fs::remove_dir_all(&root).ok();
+    }
+
+    fn head_hash(root: &Path) -> String {
+        let executable = find_git_executable().expect("git executable not found");
+        let output = std::process::Command::new(executable)
+            .current_dir(root)
+            .args(["rev-parse", "HEAD"])
+            .output()
+            .expect("spawn git rev-parse");
+        assert!(output.status.success(), "git rev-parse HEAD failed");
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    }
+
+    #[test]
+    fn branches_lists_remote_branches_and_drops_head_symref() {
+        let Some(root) = temp_repo_with_commit("b-remote") else {
+            return;
+        };
+        let origin = temp_workspace("b-remote-origin");
+        assert!(git_cli(&origin, &["init", "--bare", "-q", "."]));
+        let main = default_branch(&root);
+        let url = format!("file://{}", origin.display());
+        assert!(git_cli(&root, &["remote", "add", "origin", &url]));
+        assert!(git_cli(&root, &["push", "-q", "origin", &main]));
+        assert!(git_cli(&root, &["fetch", "-q", "origin"]));
+        // set-head 造出 refs/remotes/origin/HEAD：必须出现在仓里但被 branches 剔除。
+        assert!(git_cli(&root, &["remote", "set-head", "origin", "-a"]));
+        let outcome = branches(&root).unwrap();
+        assert_eq!(outcome.repo, true);
+        assert!(outcome.branches.contains(&main));
+        let remote_ref = format!("origin/{main}");
+        assert!(
+            outcome.remote_branches.contains(&remote_ref),
+            "remote_branches was {:?}",
+            outcome.remote_branches
+        );
+        assert!(
+            outcome
+                .remote_branches
+                .iter()
+                .all(|name| !name.ends_with("/HEAD")),
+            "remote_branches was {:?}",
+            outcome.remote_branches
+        );
+        fs::remove_dir_all(&root).ok();
+        fs::remove_dir_all(&origin).ok();
     }
 }

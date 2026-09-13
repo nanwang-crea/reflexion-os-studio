@@ -16,6 +16,7 @@ import {
   WorkspaceIndexSnapshotSchema,
   WorkspaceReadResultSchema,
   GitChangeEntrySchema,
+  GitChangeStatusSchema,
   AssetRefSchema,
   QueueEntrySchema,
   AgentSettingsSchema,
@@ -534,6 +535,8 @@ export const CommandSchemaRegistry = {
       repo: z.boolean(),
       current: z.string().min(1).nullable(),
       branches: z.array(z.string().min(1)),
+      // 远程跟踪分支（refs/remotes/*，剔除 */HEAD），`origin/main` 形态。
+      remoteBranches: z.array(z.string().min(1)),
     }),
   },
   // ---------- Git 写操作（方案 A：UI 直接动作免审批凭据；Rust 枚举拼装 argv） ----------
@@ -587,12 +590,98 @@ export const CommandSchemaRegistry = {
       requestId: RequestIdSchema,
       projectId: z.string().min(1),
       name: z.string().min(1),
-      // true 时创建并切换（checkout -b）；缺省仅创建。
+      // true 时创建并切换（switch -c）；缺省仅创建。
       checkout: z.boolean().optional(),
+      // 可选起点：commit 哈希（历史「基于此建分支」）或 `remote/branch`
+      // （远程分支检出为本地跟踪分支）。形态安全校验在 Rust。
+      startRef: z.string().min(1).optional(),
     }),
     result: z.object({ ok: z.literal(true) }),
   },
   'workspace.git_branch_switch': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+      name: z.string().min(1),
+    }),
+    result: z.object({ ok: z.literal(true) }),
+  },
+  // ---------- Git 提交历史（只读浏览 + 导航；hash 一律十六进制校验） ----------
+  'workspace.git_log': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+      skip: z.number().int().nonnegative().optional(),
+      limit: z.number().int().positive().optional(),
+    }),
+    result: z.object({
+      repo: z.boolean(),
+      commits: z.array(
+        z.object({
+          hash: z.string(),
+          shortHash: z.string(),
+          timestampMs: z.number().int().nonnegative(),
+          authorName: z.string(),
+          isMerge: z.boolean(),
+          subject: z.string(),
+        }),
+      ),
+      hasMore: z.boolean(),
+    }),
+  },
+  'workspace.git_commit_files': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+      hash: z.string().regex(/^[0-9a-fA-F]{4,64}$/),
+    }),
+    result: z.object({
+      files: z.array(
+        z.object({
+          path: z.string(),
+          oldPath: z.string().optional(),
+          status: GitChangeStatusSchema,
+        }),
+      ),
+    }),
+  },
+  'workspace.git_commit_diff': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+      hash: z.string().regex(/^[0-9a-fA-F]{4,64}$/),
+      path: z.string().min(1),
+    }),
+    // original = 该文件在 <hash>^ 的内容（root/新增→空），modified = <hash>。
+    result: z.object({
+      original: z.string(),
+      modified: z.string(),
+      binary: z.boolean(),
+      truncated: z.boolean(),
+    }),
+  },
+  // ---------- Git 远程管理（列出/添加/移除 remote；远程分支检出复用 branch API） ----------
+  'workspace.git_remotes': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+    }),
+    result: z.object({
+      repo: z.boolean(),
+      // url 回显已剥内嵌凭据（scheme://***@host）。
+      remotes: z.array(z.object({ name: z.string(), url: z.string() })),
+    }),
+  },
+  'workspace.git_remote_add': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+      name: z.string().min(1),
+      url: z.string().min(1),
+    }),
+    result: z.object({ ok: z.literal(true) }),
+  },
+  'workspace.git_remote_remove': {
     params: z.object({
       requestId: RequestIdSchema,
       projectId: z.string().min(1),

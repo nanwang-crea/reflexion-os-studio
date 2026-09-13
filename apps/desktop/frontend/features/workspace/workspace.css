@@ -670,6 +670,94 @@
   font-size: 12px;
 }
 
+/* ---------- 分支菜单分区 / 远程分支起点 / 远端管理（Git 远程管理 R4） ---------- */
+
+.git-branch-section {
+  padding: 8px 8px 4px;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+}
+
+.git-branch-start-ref {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.git-branch-start-clear {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.git-branch-start-clear:hover {
+  color: var(--text);
+}
+
+.git-remote-section {
+  display: flex;
+  flex-direction: column;
+  margin-top: 6px;
+  padding-top: 2px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.git-remote-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.git-remote-name {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.git-remote-url {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.git-remote-remove {
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 1px 6px;
+  cursor: pointer;
+}
+
+.git-remote-remove:hover:not(:disabled) {
+  color: var(--danger);
+}
+
+.git-remote-remove-confirm {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.git-remote-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 4px 2px;
+}
+
 .git-commit-box {
   padding: 8px 14px 0;
 }
@@ -746,6 +834,107 @@
   opacity: 1;
   background: var(--bg-hover);
   color: var(--text);
+}
+
+/* ---------- Git 提交历史面板（列表 / 展开文件 / 行菜单 / 内联建分支表单） ---------- */
+
+.git-hist-list {
+  flex: 1;
+  min-height: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0 0 8px;
+  overflow-y: auto;
+}
+
+.git-hist-entry {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding-right: 10px;
+}
+
+.git-hist-row {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 14px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  text-align: left;
+}
+
+.git-hist-row:hover {
+  background: var(--bg-hover);
+}
+
+.git-hist-subject {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.git-hist-subject-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.git-hist-merge {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.git-hist-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.git-hist-menu {
+  left: auto;
+  right: 4px;
+  min-width: 180px;
+  max-width: 240px;
+}
+
+.git-hist-files {
+  padding: 0 14px 8px 30px;
+  display: flex;
+  flex-direction: column;
+}
+
+.git-hist-files .git-hint {
+  padding: 4px 0;
+}
+
+.git-hist-file {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.git-hist-form {
+  margin: 0 14px 8px 30px;
+}
+
+.git-hist-more {
+  margin: 0 14px 10px;
+  padding: 4px 10px;
+  font-size: 12px;
 }
 
 .git-diff {
