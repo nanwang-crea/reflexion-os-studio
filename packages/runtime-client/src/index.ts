@@ -44,6 +44,8 @@ export type {
   DelegationStatus,
   RunEvent,
   RunEventType,
+  Terminal,
+  TerminalStatus,
 } from '@reflexion-os-studio/contracts'
 
 export {
@@ -68,3 +70,14 @@ export {
   type AgentDelegationUpdate,
   type RuntimeAgentClient,
 } from './agents.js'
+
+export {
+  createTerminal,
+  listTerminals,
+  attachTerminal,
+  writeTerminal,
+  resizeTerminal,
+  ackTerminal,
+  closeTerminal,
+  type TerminalClientRequestOptions,
+} from './terminal.js'

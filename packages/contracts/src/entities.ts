@@ -666,6 +666,45 @@ export const McpToolSchema = z.object({
 })
 export type McpTool = z.infer<typeof McpToolSchema>
 
+// ---------------- 集成终端（W2） ----------------
+
+/**
+ * 终端生命周期状态机（spec §5）。原声明于 events.ts，移入此处作为 Terminal
+ * 实体字段复用；entities 不依赖 events（events 反向 import 本文件），避免环。
+ */
+export const TerminalStatusSchema = z.enum([
+  'starting',
+  'running',
+  'closing',
+  'closed',
+  'exited',
+  'disconnected',
+  'failed',
+])
+export type TerminalStatus = z.infer<typeof TerminalStatusSchema>
+
+/**
+ * 用户终端实体：项目级、多会话。initialCwd 是启动目录（workspace 路径），
+ * 不是 shell 当前目录（首版无法可靠观测）；generation 为 Rust sidecar 进程代际。
+ */
+export const TerminalSchema = z.object({
+  terminalId: z.string().min(1),
+  projectId: z.string().min(1),
+  /** 初始目录（workspace 路径）；不是 shell 当前目录（首版无法可靠观测）。 */
+  initialCwd: z.string().min(1),
+  /** 启动 shell 的 argv（路径+独立参数，spec §6）。 */
+  shellArgv: z.array(z.string().min(1)),
+  rows: z.number().int().positive(),
+  cols: z.number().int().positive(),
+  status: TerminalStatusSchema,
+  /** 退出信息：仅 exited/closed 后有值。 */
+  exitCode: z.number().int().nullable().optional(),
+  /** Rust sidecar 进程代际（跨重启识别）。 */
+  generation: z.number().int().nonnegative(),
+  createdAt: IsoDateTimeSchema,
+})
+export type Terminal = z.infer<typeof TerminalSchema>
+
 /**
  * Context Checkpoint 结构化摘要（Context Engine V2）：
  * 每项限制长度与数量，不允许承载 API Key/cookie/token 等凭据或大段工具输出。

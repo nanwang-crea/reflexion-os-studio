@@ -15,6 +15,7 @@ import {
   RunSchema,
   RuntimeErrorSchema,
   RuntimeEventSchema,
+  TerminalSchema,
   ToolCallSchema,
   ToolSpecSchema,
   jsonSchemas,
@@ -830,4 +831,115 @@ test('parseResourceUri normalizes backslashes in workspace paths', () => {
   assert.equal(link.projectId, '')
   assert.equal(link.path, 'src/agent/runner.ts')
   assert.equal(link.line, 418)
+})
+
+const TERMINAL_BASE = {
+  terminalId: 't1',
+  projectId: 'p1',
+  // 初始目录=workspace 路径，不是 shell 当前目录。
+  initialCwd: '/tmp/demo',
+  shellArgv: ['/bin/zsh'],
+  rows: 24,
+  cols: 80,
+  status: 'running',
+  generation: 1,
+  createdAt: NOW,
+}
+
+test('TerminalSchema accepts a valid terminal and rejects invalid shapes', () => {
+  assert.equal(TerminalSchema.safeParse(TERMINAL_BASE).success, true)
+  // exitCode 可选：缺省/ null（信号终止或不可得）/ 数字退出码皆合法。
+  assert.equal(
+    TerminalSchema.safeParse({ ...TERMINAL_BASE, exitCode: null }).success,
+    true,
+  )
+  assert.equal(
+    TerminalSchema.safeParse({ ...TERMINAL_BASE, exitCode: 0 }).success,
+    true,
+  )
+  // 缺 terminalId 拒绝。
+  const missingId = { ...TERMINAL_BASE }
+  delete missingId.terminalId
+  assert.equal(TerminalSchema.safeParse(missingId).success, false)
+  // rows/cols 必须为正整数。
+  assert.equal(
+    TerminalSchema.safeParse({ ...TERMINAL_BASE, rows: 0 }).success,
+    false,
+  )
+  // generation 非负整数；负数拒绝。
+  assert.equal(
+    TerminalSchema.safeParse({ ...TERMINAL_BASE, generation: -1 }).success,
+    false,
+  )
+  // status 必须落在 TerminalStatus 枚举内。
+  assert.equal(
+    TerminalSchema.safeParse({ ...TERMINAL_BASE, status: 'paused' }).success,
+    false,
+  )
+})
+
+test('terminal.create params require requestId and projectId', () => {
+  const params = CommandSchemaRegistry['terminal.create'].params
+  assert.equal(
+    params.safeParse({ requestId: 'r1', projectId: 'p1', rows: 24, cols: 80 })
+      .success,
+    true,
+  )
+  assert.equal(
+    params.safeParse({ projectId: 'p1', rows: 24, cols: 80 }).success,
+    false,
+  )
+  assert.equal(
+    params.safeParse({ requestId: 'r1', rows: 24, cols: 80 }).success,
+    false,
+  )
+  assert.equal(
+    params.safeParse({ requestId: 'r1', projectId: 'p1', rows: 0, cols: 80 })
+      .success,
+    false,
+  )
+})
+
+test('terminal.write rejects negative inputSeq and empty data', () => {
+  const params = CommandSchemaRegistry['terminal.write'].params
+  const base = {
+    requestId: 'r1',
+    projectId: 'p1',
+    terminalId: 't1',
+    data: 'aGk=',
+  }
+  assert.equal(params.safeParse({ ...base, inputSeq: 0 }).success, true)
+  assert.equal(params.safeParse({ ...base, inputSeq: -1 }).success, false)
+  assert.equal(
+    params.safeParse({ ...base, inputSeq: 1, data: '' }).success,
+    false,
+  )
+})
+
+test('every terminal.* command is registered with params and result', () => {
+  const methods = [
+    'terminal.create',
+    'terminal.list',
+    'terminal.attach',
+    'terminal.write',
+    'terminal.resize',
+    'terminal.ack',
+    'terminal.close',
+  ]
+  for (const method of methods) {
+    const entry = CommandSchemaRegistry[method]
+    assert.ok(entry, `${method} registered`)
+    assert.equal(
+      typeof entry.params.safeParse,
+      'function',
+      `${method} params schema`,
+    )
+    assert.equal(
+      typeof entry.result.safeParse,
+      'function',
+      `${method} result schema`,
+    )
+    // 命令 params 一律要求 requestId。
+    assert.equal(entry.params.safeParse({}).success, false, method)
+  }
 })

@@ -13,6 +13,7 @@ import {
   PlanSchema,
   PlanStepSchema,
   DelegationSchema,
+  TerminalStatusSchema,
 } from './entities.js'
 import { RuntimeErrorSchema } from './errors.js'
 import { RuntimeStatusSchema } from './handshake.js'
@@ -56,17 +57,6 @@ const RunEnvelopeSchema = RuntimeEventEnvelopeSchema.extend({
   scope: z.literal('run'),
   runId: z.string().min(1),
 })
-
-export const TerminalStatusSchema = z.enum([
-  'starting',
-  'running',
-  'closing',
-  'closed',
-  'exited',
-  'disconnected',
-  'failed',
-])
-export type TerminalStatus = z.infer<typeof TerminalStatusSchema>
 
 // terminal 作用域公共信封（事件在 W2 接线，契约在本阶段冻结）。
 const TerminalEnvelopeSchema = RuntimeEventEnvelopeSchema.extend({
