@@ -47,6 +47,7 @@ export class SystemRuntimeClient {
       status: SystemAvailability,
       detail?: string,
     ) => void,
+    private readonly onNotification?: (method: string, params: unknown) => void,
   ) {}
 
   get available(): boolean {
@@ -194,7 +195,7 @@ export class SystemRuntimeClient {
 
     const readline = createInterface({ input: child.stdout })
     readline.on('line', (line) => {
-      this.handleLine(line.trim())
+      this.handleLine(line.trim(), generation)
     })
     child.stderr?.on('data', (chunk: Buffer) => {
       process.stderr.write(`[system] ${chunk.toString()}`)
@@ -217,7 +218,7 @@ export class SystemRuntimeClient {
     })
   }
 
-  private handleLine(line: string): void {
+  private handleLine(line: string, generation: number): void {
     if (line === '') return
     let message: {
       id?: unknown
@@ -253,6 +254,15 @@ export class SystemRuntimeClient {
       // 重新协商成功：重置重启预算，避免历史崩溃累计导致后续无谓降级。
       this.restarts = 0
       this.setStatus('ready', parsed.data.runtimeVersion)
+      return
+    }
+    if (
+      typeof message.method === 'string' &&
+      (message.id === undefined || message.id === null)
+    ) {
+      // 通知路由：旧代际进程迟到的行必须丢弃（spec §4 代际规则）。
+      if (generation !== this.generation) return
+      this.onNotification?.(message.method, message.params)
       return
     }
     if (
