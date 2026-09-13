@@ -1,4 +1,4 @@
-import { DoubleChevronIcon, FolderIcon } from '../ui/icons'
+import { DoubleChevronIcon, FolderIcon, TerminalIcon } from '../ui/icons'
 
 /** Runtime 状态文案：顶栏角标与启动页共用。 */
 export const STATUS_LABELS: Record<string, string> = {
@@ -18,6 +18,10 @@ interface TopBarProps {
   showWorkspaceToggle: boolean
   workspaceOpen: boolean
   onToggleWorkspace: () => void
+  /** 仅聊天页显示终端面板开关。 */
+  showTerminalToggle: boolean
+  terminalOpen: boolean
+  onToggleTerminal: () => void
   /** A2 Memory：非打断式写入提示角标。 */
   memoryNotice: string | null
   /** 运行时状态；system-ready 时不显示角标。 */
@@ -50,6 +54,18 @@ export function TopBar(props: TopBarProps): React.JSX.Element {
           onClick={props.onToggleWorkspace}
         >
           <FolderIcon />
+        </button>
+      )}
+      {props.showTerminalToggle && (
+        <button
+          type="button"
+          className={`topbar-toggle${props.terminalOpen ? ' active' : ''}`}
+          title={props.terminalOpen ? '收起终端面板' : '终端'}
+          aria-label="终端"
+          aria-pressed={props.terminalOpen}
+          onClick={props.onToggleTerminal}
+        >
+          <TerminalIcon />
         </button>
       )}
       {props.memoryNotice && (

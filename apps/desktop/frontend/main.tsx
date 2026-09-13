@@ -9,6 +9,8 @@ import './features/settings/settings.css'
 import './features/memories/memory.css'
 import './features/skills/skills.css'
 import './features/workspace/workspace.css'
+import '@xterm/xterm/css/xterm.css'
+import './features/terminal/terminal.css'
 
 const rootElement = document.getElementById('root')
 if (!rootElement) throw new Error('#root not found')

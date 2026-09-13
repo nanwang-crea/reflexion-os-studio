@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import type {
   ProviderProfile,
   Project,
@@ -26,6 +33,7 @@ import { showToast, ToastHost } from './components/Toast'
 import { ResizeHandle } from './components/ResizeHandle'
 import { STATUS_LABELS } from './components/TopBar'
 import { Sidebar } from './components/Sidebar'
+import { terminalManager } from './features/terminal/manager'
 import type { FileViewerPanelHandle } from './features/workspace/FileViewerPanel'
 import { useWorkspaceTabGuard } from './hooks/useWorkspaceTabGuard'
 import { useAppHotkeys } from './hooks/useAppHotkeys'
@@ -93,6 +101,17 @@ export default function App() {
     handleTertiary,
     handleCancel,
   } = useConfirmDialog()
+
+  // 终端面板开合状态存在 manager 单例里（跨页面保活、键击零 React），
+  // App 只订阅 boolean 供顶栏按钮呈现激活态（AGENTS §11）。
+  const terminalOpen = useSyncExternalStore(
+    terminalManager.subscribe,
+    terminalManager.selectPanelOpen,
+  )
+  const handleToggleTerminal = useCallback(
+    () => terminalManager.togglePanel(),
+    [],
+  )
 
   const { permissionMode, changePermissionMode } = usePermissionMode()
   const { modelOptions, selectedModelKey, setSelectedModelKey } =
@@ -243,6 +262,15 @@ export default function App() {
 
   useEffect(() => {
     activeProjectRef.current = activeProjectId
+  }, [activeProjectId])
+
+  // 终端管理器单例：接线一次事件订阅（幂等守卫），并同步当前激活项目。
+  useEffect(() => {
+    terminalManager.init()
+  }, [])
+
+  useEffect(() => {
+    terminalManager.setActiveProject(activeProjectId)
   }, [activeProjectId])
 
   const {
@@ -487,6 +515,12 @@ export default function App() {
             onResourceClick: handleResourceClick,
             width: workspaceWidth,
           },
+        }}
+        terminal={{
+          open: terminalOpen,
+          onToggle: handleToggleTerminal,
+          activeProjectId,
+          confirm,
         }}
       />
       <ConfirmDialog

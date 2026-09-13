@@ -8,18 +8,22 @@ import { SkillsView } from './features/skills/SkillsView'
 import { AutomationsView } from './features/automations/AutomationsView'
 import { SettingsView } from './features/settings/SettingsView'
 import { FileViewerPanel } from './features/workspace/FileViewerPanel'
+import { TerminalPanel } from './features/terminal/TerminalPanel'
 import { ResizeHandle } from './components/ResizeHandle'
 
 export interface AppMainProps {
   view: ViewName
   activeSessionId: string | null
-  /** TopBar 全部 props（contextTitle / 工作区开合除外，本组件内推导）。 */
+  /** TopBar 全部 props（contextTitle / 面板开关除外，本组件内推导）。 */
   topBar: Omit<
     ComponentProps<typeof TopBar>,
     | 'contextTitle'
     | 'showWorkspaceToggle'
     | 'workspaceOpen'
     | 'onToggleWorkspace'
+    | 'showTerminalToggle'
+    | 'terminalOpen'
+    | 'onToggleTerminal'
   >
   notice: string | null
   onDismissNotice: () => void
@@ -35,6 +39,12 @@ export interface AppMainProps {
     setWidth: Dispatch<SetStateAction<number>>
     panel: ComponentProps<typeof FileViewerPanel>
   }
+  terminal: {
+    open: boolean
+    onToggle: () => void
+    activeProjectId: string | null
+    confirm: ComponentProps<typeof FileViewerPanel>['confirm']
+  }
 }
 
 /**
@@ -43,7 +53,7 @@ export interface AppMainProps {
  * 用 ComponentProps 从视图组件派生，编译期约束、无平行类型。
  */
 export function AppMain(props: AppMainProps): React.JSX.Element {
-  const { view, activeSessionId, notice, workspace } = props
+  const { view, activeSessionId, notice, workspace, terminal } = props
   const contextTitle =
     view === 'settings'
       ? '设置'
@@ -67,6 +77,9 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
         showWorkspaceToggle={view === 'chat'}
         workspaceOpen={workspace.open}
         onToggleWorkspace={() => workspace.setOpen((open) => !open)}
+        showTerminalToggle={view === 'chat'}
+        terminalOpen={terminal.open}
+        onToggleTerminal={terminal.onToggle}
       />
       {notice && (
         <div className="notice" role="alert" aria-live="assertive">
@@ -94,6 +107,15 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
             <ChatView {...props.chat} />
           ) : (
             <LandingView {...props.landing} />
+          )}
+          {/* 底部终端面板：右侧文件查看器的下方对应物。实例保活在
+              terminalManager（模块级单例），页面切换/收起只是容器回
+              离屏宿主，不是销毁。 */}
+          {view === 'chat' && terminal.open && (
+            <TerminalPanel
+              activeProjectId={terminal.activeProjectId}
+              confirm={terminal.confirm}
+            />
           )}
         </div>
         <div

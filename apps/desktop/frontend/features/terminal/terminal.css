@@ -1,0 +1,237 @@
+/* 底部集成终端面板（W3）：多标签 + 可拖高容器。
+   与右侧工作区面板同族样式（深色主题、VS Code 式标签）。 */
+
+.terminal-panel {
+  flex: none;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-editor);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* 顶部拖高条：4px 命中区，光标纵向缩放。 */
+.terminal-resize-handle {
+  flex: none;
+  position: relative;
+  height: 4px;
+  margin-top: -4px;
+  z-index: 3;
+  cursor: ns-resize;
+  background: transparent;
+}
+
+.terminal-resize-handle:hover,
+.terminal-resize-handle.dragging {
+  background: var(--info);
+}
+
+.terminal-tabstrip {
+  flex: none;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 6px 0;
+  background: var(--bg-sidebar);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.terminal-tabs {
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+
+.terminal-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.terminal-tab {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  max-width: 200px;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+}
+
+.terminal-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.terminal-tab.active {
+  color: var(--text);
+  background: var(--bg-editor);
+  border-color: var(--border-subtle);
+  margin-bottom: -1px;
+}
+
+/* 关闭中/已终止标签整体变暗。 */
+.terminal-tab.dim {
+  opacity: 0.6;
+}
+
+.terminal-tab-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  padding: 6px 8px;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  border-radius: 0;
+}
+
+.terminal-tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 状态点：running 默认绿、exited 暗、disconnected 黄、closing 转圈。 */
+.terminal-status-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.terminal-status-dot.running {
+  background: var(--ok);
+}
+
+.terminal-status-dot.exited,
+.terminal-status-dot.failed,
+.terminal-status-dot.closed {
+  background: var(--text-muted);
+  opacity: 0.6;
+}
+
+.terminal-status-dot.disconnected {
+  background: var(--warning-text);
+}
+
+.terminal-status-dot.closing {
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--text-muted);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: terminal-spin 0.7s linear infinite;
+}
+
+@keyframes terminal-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.terminal-chip {
+  flex: none;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--warning-text);
+  background: var(--warning-bg);
+}
+
+.terminal-exit-code {
+  flex: none;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.terminal-tab-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  line-height: 1;
+  font-size: 14px;
+}
+
+.terminal-tab-close:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.terminal-new-tab {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 7px;
+}
+
+.terminal-new-tab:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.terminal-new-tab:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.terminal-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  padding: 4px 0 4px 8px;
+}
+
+/* 真实槽位：激活终端的容器被管理器搬进这里（re-parent，实例不销毁）。 */
+.terminal-slot {
+  position: absolute;
+  inset: 4px 8px 4px 8px;
+  min-height: 0;
+}
+
+.terminal-slot .xterm {
+  height: 100%;
+}
+
+.terminal-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 0 24px;
+}
+
+.terminal-notice {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--warning-text);
+  background: var(--warning-bg);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  border-radius: 8px;
+}
