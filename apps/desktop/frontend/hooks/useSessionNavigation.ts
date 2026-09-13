@@ -3,7 +3,8 @@ import type { Delegation } from '@reflexion-os-studio/runtime-client'
 import type { SessionData } from '../api/sessions'
 import type { SidebarMode } from './useSidebarPanel'
 
-export type ViewName = 'chat' | 'settings' | 'skills' | 'automations'
+export type ViewName =
+  'chat' | 'settings' | 'skills' | 'automations' | 'instructions'
 
 export interface SessionNavigationDeps {
   activeProjectId: string | null

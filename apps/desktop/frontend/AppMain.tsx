@@ -5,6 +5,7 @@ import { ChatView } from './features/chat/ChatView'
 import { LandingView } from './features/landing/LandingView'
 import { SkillsView } from './features/skills/SkillsView'
 import { AutomationsView } from './features/automations/AutomationsView'
+import { InstructionsView } from './features/instructions/InstructionsView'
 import { SettingsView } from './features/settings/SettingsView'
 import { FileViewerPanel } from './features/workspace/FileViewerPanel'
 import { ResizeHandle } from './components/ResizeHandle'
@@ -36,8 +37,8 @@ export interface AppMainProps {
 }
 
 /**
- * 主内容区：TopBar（标题按视图推导）+ 五视图分支（chat/landing/settings/
- * skills/automations）+ chat 视图的右侧工作区面板。各分组 props
+ * 主内容区：TopBar（标题按视图推导）+ 六视图分支（chat/landing/settings/
+ * skills/automations/instructions）+ chat 视图的右侧工作区面板。各分组 props
  * 用 ComponentProps 从视图组件派生，编译期约束、无平行类型。
  */
 export function AppMain(props: AppMainProps): React.JSX.Element {
@@ -49,11 +50,13 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
         ? '技能'
         : view === 'automations'
           ? '自动化'
-          : activeSessionId
-            ? (props.chat.sessionData?.session?.title ?? '对话')
-            : props.landing.project
-              ? props.landing.project.name
-              : '新对话'
+          : view === 'instructions'
+            ? '指令'
+            : activeSessionId
+              ? (props.chat.sessionData?.session?.title ?? '对话')
+              : props.landing.project
+                ? props.landing.project.name
+                : '新对话'
 
   return (
     <div className="main-pane">
@@ -84,6 +87,8 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
             <SkillsView onUseSkill={props.onUseSkill} />
           ) : view === 'automations' ? (
             <AutomationsView />
+          ) : view === 'instructions' ? (
+            <InstructionsView />
           ) : activeSessionId !== null ? (
             <ChatView {...props.chat} />
           ) : (

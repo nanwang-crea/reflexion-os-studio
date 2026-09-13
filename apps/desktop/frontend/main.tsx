@@ -7,6 +7,7 @@ import './features/chat/chat.css'
 import './styles/markdown.css'
 import './features/settings/settings.css'
 import './features/skills/skills.css'
+import './features/instructions/instructions.css'
 import './features/workspace/workspace.css'
 
 const rootElement = document.getElementById('root')
