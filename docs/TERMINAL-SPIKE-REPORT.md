@@ -203,5 +203,30 @@ Tauri supervisor→`app.emit` 跳与 WebView/xterm 渲染跳**尚未量化**。
 | Windows / Linux spike + 打包                                | 未验证   | §4 红线：本功能状态为 **macOS 已验证**，不得宣称三平台完成                                                                                                                                                                                                                                                                                        |
 | WebView rAF 节流/CPU 量化（§5 #3/#5）                       | deferred | W4 真实面板压力验收补测（§5 人工结论）                                                                                                                                                                                                                                                                                                            |
 | 三项延迟/有界性门槛量化测量                                 | deferred | W4（§9 证据范围声明）                                                                                                                                                                                                                                                                                                                             |
+| 终端故障矩阵端到端（W4-1）                                  | done     | §11（`scripts/terminal-faults.mjs`，已入 `scripts/test-all.sh`）                                                                                                                                                                                                                                                                                  |
 
 出口结论：**W1（macOS）达成**。W2 前置项以 §6 清单为准。
+
+## 11. W4-1 故障矩阵端到端自动化（2026-09-13）
+
+- harness：`scripts/terminal-faults.mjs`——驱动**真实链路**（`node apps/runtime/dist/index.js` +
+  debug `reflexion-system-runtime`，独立数据目录与 git-less 临时工作区），只用前端协议命令
+  （`terminal.*` / `project.*`）覆盖 spec 必测清单中的故障路径：
+  create→attach→echo→ack 闭环、attach 超时僵尸保护（failed 事件+额度释放，超时值从构建产物
+  `DEFAULTS` 动态读取）、exited/close 竞态（367c094 回收语义：Rust closed 回执吞掉、
+  用户 close 静默收敛不发事件）、并发重复 close（双 `closed:true`、恰一条 closed 事件）、
+  输入重复序号去重（marker 文件单字节钉死）与乱序间隙过期→`terminal_input_out_of_order`
+  稳定码→期望 seq 自愈、sidecar `kill -9` → disconnected + 自动重启 → 新代际可用 +
+  旧终端 write 拒绝、16 个 exited 不饿死第 17 个（`too_many_terminals` 回归钉）、
+  project.delete 带活动终端（含 sidecar 崩溃后 disconnected 项目的本地收敛路径）。
+- 运行成本：≈13s（attach 超时 10s 窗口与额度回收循环重叠），已注册进 `scripts/test-all.sh`。
+- **断言范围如实标注**：
+  - `terminal_cleanup_failed`（项目删除时任一 close 失败 → 保留项目）分支**只有单测覆盖**
+    （`apps/runtime/test/terminal-service.test.mjs` §10，本次补齐——此前该分支连单测都没有）；
+    e2e 不测：需要阻塞/失败化的 Rust close，真链路上无法安全构造。
+  - 崩溃代际过滤观察到良性现象：重启后新终端的首条 Rust `running` 通知按 sidecar 内部
+    代际（1）送达、早于 TS 把记录 generation 从 TS 重启纪元（2）回填，被入站守卫丢弃；
+    TS 在 spawn 应答路径同步合成 running，无用户可见丢事件（stderr 有 drop 调试行）。
+    留 W4 性能验收一并复核是否需要统一代际口径，**未据此改后端**。
+- 验证：连跑 2 次 26/26 PASS（无 flake）；Windows/Linux 路径分支（`taskkill`/PowerShell
+  子进程枚举）与本报告 §4 同口径——**未真机验证**。

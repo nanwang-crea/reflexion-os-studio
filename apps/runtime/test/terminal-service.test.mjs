@@ -36,7 +36,12 @@ function fakeSystem(behavior = {}) {
         return result
       }
       if (method === 'terminal.attach') return { replayedBytes: 0 }
-      if (method === 'terminal.close') return { closed: true }
+      if (method === 'terminal.close') {
+        if (behavior.closeFail) {
+          throw new Error(behavior.closeFailMessage ?? 'io_error: kill failed')
+        }
+        return { closed: true }
+      }
       if (method === 'terminal.write')
         return { acceptedBytes: params.data.length }
       if (method === 'terminal.resize')
@@ -615,4 +620,37 @@ test('ack 只向 Rust 转发更大值', async () => {
     .filter(([m]) => m === 'terminal.ack')
     .map(([, p]) => p.throughOutputSeq)
   assert.deepEqual(acks, [5, 7])
+})
+
+// ---------------- 10. closeProject（项目删除前的终端回收） ----------------
+
+test('closeProject：全部终端收敛 closed、Rust close 各一次、索引清空', async () => {
+  const h = harness()
+  const a = await h.service.create('ra', 'p1', 24, 80)
+  const b = await h.service.create('rb', 'p1', 24, 80)
+  await h.service.closeProject('p1')
+  const closes = h.sys.calls
+    .filter(([m]) => m === 'terminal.close')
+    .map(([, p]) => p.terminalId)
+  assert.deepEqual(
+    [...closes].sort(),
+    [a.terminal.terminalId, b.terminal.terminalId].sort(),
+  )
+  assert.deepEqual(h.service.list('p1'), [])
+  for (const id of closes) {
+    const states = h.events
+      .filter((e) => e.type === 'terminal.state' && e.terminalId === id)
+      .map((e) => e.status)
+    assert.equal(states.at(-1), 'closed')
+  }
+})
+
+test('closeProject：Rust close 失败 → terminal_cleanup_failed 且记录保留（项目不被删）', async () => {
+  const h = harness({ systemBehavior: { closeFail: true } })
+  await h.service.create('ra', 'p1', 24, 80)
+  await h.service.create('rb', 'p1', 24, 80)
+  await assert.rejects(() => h.service.closeProject('p1'), {
+    code: 'terminal_cleanup_failed',
+  })
+  assert.equal(h.service.list('p1').length, 2)
 })
