@@ -1,6 +1,7 @@
 // 可配置的假 Rust System Runtime：SystemRuntimeClient 测试夹具。
 // env: FAKE_MODE = normal | fail-startup | crash-after-ready | bad-protocol | malformed-ready
 import { createInterface } from 'node:readline'
+import { PROTOCOL_VERSION } from '@reflexion-os-studio/contracts'
 
 const mode = process.env.FAKE_MODE ?? 'normal'
 
@@ -36,7 +37,7 @@ if (mode === 'bad-protocol') {
     jsonrpc: '2.0',
     method: 'system.ready',
     params: {
-      protocolVersion: '1.0',
+      protocolVersion: PROTOCOL_VERSION,
       runtimeVersion: 'fake',
       capabilities: [],
     },

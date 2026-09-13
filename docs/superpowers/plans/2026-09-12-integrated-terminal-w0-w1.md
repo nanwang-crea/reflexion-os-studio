@@ -25,6 +25,8 @@ cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml
 
 ## W0：事件信封泛化
 
+> **树红窗口**：Task 1 起至 Task 6 止，`apps/runtime`/`runtime-client`/前端 typecheck 与部分 runtime 测试有意保持红色（生产者/消费者按任务顺序迁移）。bisect 起点 = Task 7 的全量绿。
+
 ### Task 0: 功能分支
 
 - [ ] **Step 1: 从 main 建分支**
@@ -393,6 +395,20 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
   }),
   RunEnvelopeSchema.extend({
     type: z.literal('run.cancelled'),
+  }),
+  // 计划工具事件（实现补录：原列表遗漏，载荷与旧契约逐字一致）。
+  RunEnvelopeSchema.extend({
+    type: z.literal('plan.created'),
+    plan: PlanSchema,
+  }),
+  RunEnvelopeSchema.extend({
+    type: z.literal('plan.step.updated'),
+    planId: z.string().min(1),
+    step: PlanStepSchema,
+  }),
+  RunEnvelopeSchema.extend({
+    type: z.literal('plan.updated'),
+    plan: PlanSchema,
   }),
   // 工具调用与审批事件。
   RunEnvelopeSchema.extend({
@@ -1060,7 +1076,7 @@ git commit -m "docs: 事件协议 v1.1（显式 scope 信封）+ Terminal Surfac
 **Files:**
 
 - Modify: `crates/system-runtime/Cargo.toml`
-- Modify: `apps/desktop/frontend/package.json`
+- Modify: `apps/desktop/package.json`（vite/react 所在包）
 
 - [ ] **Step 1: Rust 依赖**
 
@@ -2166,9 +2182,13 @@ Expected: 全绿。**Windows/Linux spike（同脚本 + Job Object 结论）在�
 
 ## 后续计划的前置依赖（本计划不做，只登记）
 
-- **W2（后端服务）依赖本计划交付**：terminal 契约命令（frontend→runtime 侧，生成白名单）、attach/消费者代际、256 KiB 窗口与暂停读取、attach 前缓冲、幂等记录 TTL、`terminal.*` RuntimeEvent 接线。
+- **W2（后端服务）依赖本计划交付**：terminal 契约命令（frontend→runtime 侧，生成白名单）、attach/消费者代际、256 KiB 窗口与暂停读取、attach 前缓冲、幂等记录 TTL、`terminal.*` RuntimeEvent 接线。评审遗留：queue/mcp 懒建 Map 在 n=3（terminal）时提取为 events.ts 发射器缓存助手；信封 stamping 字段（seq/occurredAt/eventId）与 payload 同键的遮蔽风险随 terminal.output 设计一并复核（W2 契约测试钉住）。另两项 W2 输入（Task 12 评审）：index.ts 构造 SystemRuntimeClient 时以稳定 dispatcher 按 method 前缀分发到可后注册的 handler 总线；system/notifications 测试补 try/finally 保证失败路径也 shutdown 子进程，防 node --test 挂起。
 - **W3（前端保活面板）依赖 Task 14 结论**：隐藏实例解析策略、setTimeout 合帧、实例宿主位置。
 - **W4（故障/性能/打包）依赖 Task 13 报告门槛**。
+- **代际语义（终审）**：Rust 侧 generation 为进程内常量 1，跨重启识别必须由 TS 侧从 SystemRuntimeClient 进程重启观察推导 disconnected；`terminal.*` RuntimeEvent 的 consumerId/projectId 由 TS 补 stamp。"exited 晚于 closed" 的发射竞态在 W2 需按可重复抑制处理并加契约测试。
+- **PTY 回收升级（Task 10 评审 Important）**：unix killer 是裸 SIGHUP 且 `close()` 无超时——`trap '' HUP` 的 shell 会卡关停。W2 必须加 SIGKILL 升级（带时限），前端 close 命令也要有超时语义。
+- **残留后代持有 slave fd**：读线程不 EOF、退出线程滞留——W2 消费者代际/回收策略覆盖；`base64` 已定 STANDARD 表，W2 解码侧同表。
+- **Windows shell 探测遗留**（Task 9 评审）：pwsh PATH 探测无超时（AV/GPO 首启可拖慢开终端），Windows 真机验收时补 wait-timeout 或线程化探测；探测候选顺序逻辑在 Windows 环境补单测。
 
 ```
 

@@ -10,7 +10,7 @@ import {
   type RuntimeStatus,
 } from '@reflexion-os-studio/contracts'
 import { ChatAgent, CommandError } from './agent/index.js'
-import { RunEventEmitter } from './events.js'
+import { ResourceEventEmitter } from './events.js'
 import { dispatchCommand, testProviderConnection } from './handlers.js'
 import { resolveDataDir, Store } from './store/index.js'
 import { resolveSystemRuntimeBinary, SystemRuntimeClient } from './system.js'
@@ -55,8 +55,8 @@ function notify(event: RuntimeEvent): void {
   write({ jsonrpc: '2.0', method: event.type, params: event })
 }
 
-// 全局状态事件信封（不归属任何 Run）。
-const statusEmitter = new RunEventEmitter('runtime', notify)
+// 全局状态事件信封（runtime 作用域，不归属任何 Run）。
+const statusEmitter = new ResourceEventEmitter({ scope: 'runtime' }, notify)
 
 // 方案 A：TS Runtime 拥有 Rust System Runtime 的通道与生命周期；
 // 系统可用性第一手在此产生，经 runtime.status 事件上报（Host/前端据此投影）。

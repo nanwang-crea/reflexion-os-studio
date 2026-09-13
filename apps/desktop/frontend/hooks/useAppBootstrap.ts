@@ -332,7 +332,10 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           }
           return
         }
-        if (EVENT_TYPES_TRIGGERING_REFRESH.has(event.type)) {
+        if (
+          event.scope === 'run' &&
+          EVENT_TYPES_TRIGGERING_REFRESH.has(event.type)
+        ) {
           if (event.type === 'message.completed') {
             // 最终正文先落缓存占位，等刷新落地后再由 prune 清理，避免闪空。
             cache.applyCompleted(event.messageId, event.runId, event.content)

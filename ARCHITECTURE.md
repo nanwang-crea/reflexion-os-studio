@@ -112,3 +112,18 @@ Agent、Memory、Skill、Context 和 Delegation/Policy 是一等领域，分别�
 ## 12. Agent Loop 内核与终态收敛（2026-09）
 
 `packages/agent-core` 是纯 TypeScript 循环内核（不依赖 SQLite/Provider/Tauri）：完成状态机（finish reason × toolCalls 判定，protocol_error 不得假成功）、length 限次续写、Atomic Context Frames（工具轮不可拆）、请求前序列校验与 Loop Guard 指纹属于内核；持久化、副作用调度、资源冲突、预算执行和事件通知由 Runtime 承担。全部 Run 终态经唯一入口 `run-finalizer.ts` 在单事务内收敛（pending 消息、未终态 ToolCall、活动 Plan、Run 终态、失败事件、memory job 幂等入队），回调最多执行一次。Context 压缩走增量 Checkpoint（`context_checkpoints`，source hash 失效）+ 最近 Frame 保留；Memory 写入走持久化 `memory_jobs`（空闲 worker、可抢占、可恢复）。详见 `docs/CONTEXT-MANAGEMENT.md` 与 `docs/RELIABILITY-AND-RECOVERY.md`。
+
+## 13. Terminal Surface（集成终端，Phase 2 建设中）
+
+项目级、多标签、跨页面保活的用户终端（xterm + portable-pty），设计规格见 `docs/superpowers/specs/2026-09-12-integrated-terminal-design.md`。与 Workspace/Asset 同属产品 Surface，但终端会话不落 SQLite、无历史回放承诺。
+
+| 层                  | 职责                                                                       |
+| ------------------- | -------------------------------------------------------------------------- |
+| Rust System Runtime | PTY 与 shell 进程、输入队列、输出缓冲与受管理进程回收                      |
+| TS Runtime          | 项目归属、终端元数据与幂等、资源额度、事件路由、输出公平调度               |
+| 前端                | 标签、xterm 实例、面板状态（实例宿主在页面条件渲染之外，导航仅切换可见性） |
+| Tauri Host          | 协议转发 + 进程树兜底监管，不承载终端业务                                  |
+
+权限边界：用户终端与 Agent `shell.execute` 完全隔离——`terminal.*` 不注册为 Agent 工具，终端输入输出不进上下文、记忆或工具轨迹。
+
+当前状态：W0 事件信封与契约已落地，W1 纵向切片进行中，功能入口未开放。

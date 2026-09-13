@@ -10,6 +10,7 @@ import {
   MessageSchema,
   PlanSchema,
   ProjectSchema,
+  PROTOCOL_VERSION,
   ProviderProfileSchema,
   RunSchema,
   RuntimeErrorSchema,
@@ -21,6 +22,15 @@ import {
 } from '../dist/index.js'
 
 const NOW = '2026-08-29T00:00:00.000Z'
+
+const RUN_ENV = {
+  protocolVersion: PROTOCOL_VERSION,
+  eventId: 'e1',
+  scope: 'run',
+  runId: 'r1',
+  seq: 0,
+  occurredAt: NOW,
+}
 
 test('ProjectSchema accepts a valid project and rejects missing fields', () => {
   const project = {
@@ -247,12 +257,8 @@ test('ChatCommand alias matches MessageSendParamsSchema', () => {
 
 test('RuntimeEventSchema validates message.delta envelope and rejects unknown type', () => {
   const delta = {
+    ...RUN_ENV,
     type: 'message.delta',
-    protocolVersion: '1.0',
-    eventId: 'e1',
-    runId: 'r1',
-    seq: 3,
-    occurredAt: NOW,
     messageId: 'm1',
     chunkSeq: 0,
     delta: 'he',
@@ -268,16 +274,21 @@ test('RuntimeEventSchema validates message.delta envelope and rejects unknown ty
       .success,
     false,
   )
+  // 旧信封（无 scope、只有 runId）必须被拒绝——版本代际不可混流。
+  const legacy = { ...delta }
+  delete legacy.scope
+  assert.equal(RuntimeEventSchema.safeParse(legacy).success, false)
+  // run 作用域事件不许带别的作用域。
+  assert.equal(
+    RuntimeEventSchema.safeParse({ ...delta, scope: 'project' }).success,
+    false,
+  )
 })
 
 test('RuntimeEventSchema message.reset requires envelope and messageId', () => {
   const envelope = {
+    ...RUN_ENV,
     type: 'message.reset',
-    protocolVersion: '1.0',
-    eventId: 'e1',
-    runId: 'r1',
-    seq: 4,
-    occurredAt: NOW,
     messageId: 'm1',
   }
   assert.equal(RuntimeEventSchema.safeParse(envelope).success, true)
@@ -290,6 +301,87 @@ test('RuntimeEventSchema message.reset requires envelope and messageId', () => {
     RuntimeEventSchema.safeParse({ ...envelope, messageId: '' }).success,
     false,
   )
+})
+
+test('resource-scoped events require their identity and reject runId smuggling', () => {
+  const base = {
+    protocolVersion: PROTOCOL_VERSION,
+    eventId: 'e1',
+    seq: 0,
+    occurredAt: NOW,
+  }
+  assert.equal(
+    RuntimeEventSchema.safeParse({
+      ...base,
+      type: 'runtime.status',
+      scope: 'runtime',
+      status: {
+        state: 'ready',
+        protocolVersion: PROTOCOL_VERSION,
+        runtimeVersion: '0.1.0',
+        capabilities: ['chat'],
+        chatAvailable: true,
+        systemAvailable: false,
+      },
+    }).success,
+    true,
+  )
+  // workspace.index.* 用 project 作用域 + projectId，不许再出现 runId。
+  const progress = {
+    ...base,
+    type: 'workspace.index.progress',
+    scope: 'project',
+    projectId: 'p1',
+    version: 1,
+    files: 2,
+    dirs: 1,
+  }
+  assert.equal(RuntimeEventSchema.safeParse(progress).success, true)
+  assert.equal(
+    RuntimeEventSchema.safeParse({ ...progress, scope: 'run', runId: 'r1' })
+      .success,
+    false,
+  )
+  const queue = {
+    ...base,
+    type: 'queue.changed',
+    scope: 'session',
+    sessionId: 's1',
+    items: [],
+  }
+  assert.equal(RuntimeEventSchema.safeParse(queue).success, true)
+  const mcp = {
+    ...base,
+    type: 'mcp.changed',
+    scope: 'mcp',
+    serverId: 'srv1',
+    server: {
+      id: 'srv1',
+      name: 'demo',
+      command: 'node',
+      args: [],
+      env: [],
+      enabled: true,
+      toolCount: 0,
+      status: 'disabled',
+      lastError: null,
+      updatedAt: NOW,
+    },
+  }
+  assert.equal(RuntimeEventSchema.safeParse(mcp).success, true)
+  // terminal 作用域：projectId + terminalId 同时必填（W2 事件用，先锁契约）。
+  const termState = {
+    ...base,
+    type: 'terminal.state',
+    scope: 'terminal',
+    projectId: 'p1',
+    terminalId: 't1',
+    status: 'running',
+  }
+  assert.equal(RuntimeEventSchema.safeParse(termState).success, true)
+  const missingTerminalId = { ...termState }
+  delete missingTerminalId.terminalId
+  assert.equal(RuntimeEventSchema.safeParse(missingTerminalId).success, false)
 })
 
 test('RuntimeErrorSchema enforces stable error codes', () => {
@@ -461,13 +553,7 @@ test('session.get result tolerates missing runEvents from legacy runtimes', () =
 })
 
 test('tool and approval events validate envelope payloads', () => {
-  const envelope = {
-    protocolVersion: '1.0',
-    eventId: 'e1',
-    runId: 'r1',
-    seq: 0,
-    occurredAt: NOW,
-  }
+  const envelope = RUN_ENV
   const cases = [
     {
       type: 'tool.requested',
@@ -491,7 +577,7 @@ test('tool and approval events validate envelope payloads', () => {
       type: 'approval.resolved',
       toolCallId: 't1',
       decision: 'approved',
-      scope: 'session',
+      grantScope: 'session',
     },
   ]
   for (const payload of cases) {
@@ -521,6 +607,28 @@ test('tool and approval events validate envelope payloads', () => {
       toolCallId: 't1',
       operation: '',
       summary: 'x',
+    }).success,
+    false,
+  )
+})
+
+test('approval.resolved 以 grantScope 承载授权范围，信封 scope 不被遮蔽', () => {
+  const parsed = RuntimeEventSchema.safeParse({
+    ...RUN_ENV,
+    type: 'approval.resolved',
+    toolCallId: 't1',
+    decision: 'approved',
+    grantScope: 'once',
+  })
+  assert.equal(parsed.success, true)
+  // payload 的 once/session 只能出现在 grantScope；信封 scope 仍是 run。
+  assert.equal(parsed.data.scope, 'run')
+  assert.equal(
+    RuntimeEventSchema.safeParse({
+      ...RUN_ENV,
+      type: 'approval.resolved',
+      toolCallId: 't1',
+      decision: 'approved',
     }).success,
     false,
   )
@@ -608,8 +716,9 @@ test('memory commands validate params and results', () => {
 
 test('memory.written event validates memory payloads', () => {
   const envelope = {
-    protocolVersion: '1.0',
+    protocolVersion: PROTOCOL_VERSION,
     eventId: 'e1',
+    scope: 'run',
     runId: 'r1',
     seq: 0,
     occurredAt: NOW,

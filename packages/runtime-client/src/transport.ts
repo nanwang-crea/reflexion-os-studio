@@ -43,6 +43,9 @@ interface EarlyResponse {
 
 const EARLY_RESPONSE_TTL_MS = 15_000
 
+/** 非事件类通知：runtime.ready 是握手信号，由宿主消费，不经事件通道。 */
+const NON_EVENT_NOTIFICATION_METHODS = new Set(['runtime.ready'])
+
 /**
  * 前端访问 Runtime 的唯一 typed 通道。
  * 响应按 JSON-RPC id 关联（Host 只负责透传），事件按通知分发。
@@ -154,11 +157,20 @@ export class RuntimeTransport {
     if (!message) return
 
     if (typeof message.method === 'string' && message.id === undefined) {
+      if (NON_EVENT_NOTIFICATION_METHODS.has(message.method)) {
+        return
+      }
       const parsed = RuntimeEventSchema.safeParse(message.params)
       if (parsed.success) {
         for (const handler of this.eventHandlers) {
           handler(parsed.data)
         }
+      } else {
+        // 版本代际不一致/畸形事件必须显式可见（架构红线：降级不等于静默）。
+        console.warn(
+          `[runtime-client] dropped malformed event ${message.method}:`,
+          parsed.error.issues.slice(0, 3),
+        )
       }
       return
     }

@@ -3,7 +3,7 @@ import type {
   WorkspaceIndexSnapshot,
   WorkspaceIndexStatus,
 } from '@reflexion-os-studio/contracts'
-import { RunEventEmitter, type EventNotifier } from '../events.js'
+import { ResourceEventEmitter, type EventNotifier } from '../events.js'
 import type { Store } from '../store/index.js'
 import { scanWorkspace } from './walker.js'
 
@@ -32,7 +32,11 @@ export class WorkspaceIndexer {
 
     const previous = this.store.workspaceIndex.get(projectId)
     const version = (previous?.version ?? 0) + 1
-    const emitter = new RunEventEmitter(projectId, this.notifier)
+    // 每次扫描一条事件流：seq 按扫描重置（消费端不做排序/去重，可接受）。
+    const emitter = new ResourceEventEmitter(
+      { scope: 'project', projectId },
+      this.notifier,
+    )
     const scanning: WorkspaceIndexSnapshot = {
       projectId,
       status: 'scanning',

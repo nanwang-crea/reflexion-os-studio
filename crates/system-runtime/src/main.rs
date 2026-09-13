@@ -21,6 +21,7 @@ mod sandbox;
 mod search;
 mod sha256;
 mod shell;
+mod terminal;
 mod walk;
 
 use serde_json::{json, Value};
@@ -64,6 +65,10 @@ fn handle_request(request: &Value) -> (Value, bool) {
         Some("git.remotes") => handlers_git::handle_git_remotes(id, params),
         Some("git.remote_add") => handlers_git::handle_git_remote_add(id, params),
         Some("git.remote_remove") => handlers_git::handle_git_remote_remove(id, params),
+        Some("terminal.spawn") => finish(id, handlers::handle_terminal_spawn(params)),
+        Some("terminal.write") => finish(id, handlers::handle_terminal_write(params)),
+        Some("terminal.resize") => finish(id, handlers::handle_terminal_resize(params)),
+        Some("terminal.close") => finish(id, handlers::handle_terminal_close(params)),
         Some(name) => Err(OpError::new(
             "method_not_found",
             format!("Method not found: {name}"),
@@ -199,6 +204,11 @@ fn main() {
             break;
         }
     }
+
+    // 关停统一回收（shutdown 与 stdin EOF 两条路径都收敛到这里）：
+    // 所有活跃终端会话并行 close，不留孤儿 PTY 子进程。
+    let reaped = terminal::service::close_all();
+    eprintln!("terminal sessions reaped: {reaped}");
 
     eprintln!("system runtime stopped");
 }
