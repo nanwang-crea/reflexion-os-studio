@@ -81,8 +81,8 @@
 ## 5. memory.remember 工具
 
 - 注册：`agent/tools/instructions.ts`，装配进每 Run 工具集（同 `skill.use`
-  纯 TS 工具路径）；命令面 `instructions.remember` 由 `instructions/handlers.ts`
-  提供，供工具实现与 UI 共用。
+  纯 TS 工具路径）；工具直接调用 `instructions/service.ts` 的 `remember()`
+  （与 UI 共用的 `instructions.get/save` 命令面只提供查看/保存，不提供 remember）。
 - 参数：`{ scope: 'global' | 'project', content: string }`；content 非空、
   ≤200 字、`containsSecretLike` 命中则拒绝（机密不进记忆，规则从旧
   `memory/filter.ts` 迁移为共享 util）。
