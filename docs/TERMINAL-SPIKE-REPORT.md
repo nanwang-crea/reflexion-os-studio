@@ -149,3 +149,59 @@
 - Windows/Linux spike：未做（待对应环境）。WebView/xterm 检查单：验证页与
   headless Chromium 自动部分已过（§5），Safari(WKWebView)+Chrome 人工部分
   待执行（Task 14-B），执行前 §5 各项结果一律记"待人工确认"。
+
+## 8. 版本固定（W1 出口）
+
+manifest 保留 caret 区间，**实测版本由提交的 lockfile 钉死**（`crates/Cargo.lock`、
+`pnpm-lock.yaml`、`apps/desktop/src-tauri/Cargo.lock` 均已入库 = 构建可复现）：
+
+| 依赖             | manifest 声明 | 实测/锁定版本 | 锁定来源                              |
+| ---------------- | ------------- | ------------- | ------------------------------------- |
+| portable-pty     | `0.8`         | **0.8.1**     | `crates/Cargo.lock`                   |
+| base64           | `0.22`        | **0.22.1**    | `crates/Cargo.lock`                   |
+| @xterm/xterm     | `^6.0.0`      | **6.0.0**     | `pnpm-lock.yaml`（node_modules 实测） |
+| @xterm/addon-fit | `^0.11.0`     | **0.11.0**    | `pnpm-lock.yaml`（node_modules 实测） |
+
+- **xterm caret 决策（一行）**：§5 的 v6 API 事实（无 `buffer.lines`、仅 DOM
+  渲染器、`open()` display:none 回退 80×24、fit 静默 no-op）本就是 v6 语义且
+  W3 代码将按 lockfile 版本开发，`^` 区间在 lockfile 约束下不引入未测版本，
+  故保留 caret、不上收 exact pin。
+- W2/W3 若升级任一依赖（尤其 `pnpm update @xterm/*`），须重跑 §5 检查单自动
+  部分并复核本节实测版本，lockfile diff 进评审。
+
+## 9. 性能门槛确认（spec §10，W1 固定，交付时不得放宽）
+
+门槛数值**一字不改**，与 spec §10"性能门槛"节完全一致：
+
+1. UI 消费至展示的聊天 delta 延迟：**p95 ≤100ms**，且相对无压力基线增量 **≤50ms**。
+2. 测试控制命令响应：**p95 ≤300ms**。
+3. 持续输出 **10 分钟**：队列不突破额度、内存无持续线性增长（有界）。
+
+**证据范围声明（关键限制，不得过度解读）**：本 spike 只测量了
+sidecar→stdio **第一跳**（§3：洪泛 ≈21k 帧/s、≈30 MiB/s 线体积）；
+Tauri supervisor→`app.emit` 跳与 WebView/xterm 渲染跳**尚未量化**。
+上述三项门槛的正式测量在 **W4** 用真实终端面板 + 录制回放测试 Provider +
+事件时间戳完成（spec §10 方法），空闲/内存采样按 AGENTS §10
+（`top -l`/`ps -o rss`，dev 模式与基线对比）。W1 不据此宣称任何门槛"已通过"，
+只确认门槛定义固定且测量方法已有归属阶段。
+
+## 10. W1 出口清单（Task 15）
+
+| 项                                                          | 状态     | 证据指针                                                                                                                                                                                                                                                                                                                                          |
+| ----------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 依赖版本固定（记录实测版本）                                | done     | §8（lockfile 均入库：`crates/Cargo.lock`/`pnpm-lock.yaml`）                                                                                                                                                                                                                                                                                       |
+| 性能门槛固定（不放宽、不改数字）                            | done     | §9（spec §10 原文钉死；量化留 W4）                                                                                                                                                                                                                                                                                                                |
+| `pnpm format:check` / `lint` / `typecheck` / 前端 typecheck | done     | Task 15 全链验证（本报告含格式）                                                                                                                                                                                                                                                                                                                  |
+| `pnpm build:packages`                                       | done     | contracts→runtime-client→runtime→前端 全绿                                                                                                                                                                                                                                                                                                        |
+| `cargo fmt --check` / `cargo test`（crates）                | done     | 109 passed; 0 failed                                                                                                                                                                                                                                                                                                                              |
+| `cargo check`（Tauri 宿主）                                 | done     | Finished `dev` profile                                                                                                                                                                                                                                                                                                                            |
+| `pnpm test`                                                 | done     | `scripts/test-all.sh` 退出码 0                                                                                                                                                                                                                                                                                                                    |
+| `node scripts/check-whitelist.mjs`                          | done     | 7 项 PASS（含 Host 白名单覆盖生成清单）                                                                                                                                                                                                                                                                                                           |
+| `pnpm build:desktop`                                        | done     | EXIT=0；产物：`bundle/macos/ReflexionOS Studio.app`（126M）、`bundle/dmg/ReflexionOS Studio_0.1.0_aarch64.dmg`（46M，未签名）                                                                                                                                                                                                                     |
+| 打包冒烟（AGENTS §7 第 3 条）                               | done     | 包内二进制启动至 `system-ready`；node/runtime.mjs/system-runtime 三 sidecar 全部从 `.app/Contents/Resources/pkg/` 解析（RESOURCES_OK，无仓库路径泄漏）；TERM 后按包路径 pgrep 无孤儿                                                                                                                                                              |
+| 包内代码含终端能力                                          | done     | `runtime.mjs` 含 `terminal.output`；release sidecar（mtime=本次构建）功能探针：`terminal.spawn` 进入参数校验（返回 `terminalId is required`，非 method-not-found）。注：`strings` 查 `"terminal.spawn"` 数据常量在 release 二进制**不可靠**——opt-level 下短字符串比较被编成 memcmp 立即数，字面量不落数据段（debug 二进制含该串），以功能探针为准 |
+| Windows / Linux spike + 打包                                | 未验证   | §4 红线：本功能状态为 **macOS 已验证**，不得宣称三平台完成                                                                                                                                                                                                                                                                                        |
+| WebView rAF 节流/CPU 量化（§5 #3/#5）                       | deferred | W4 真实面板压力验收补测（§5 人工结论）                                                                                                                                                                                                                                                                                                            |
+| 三项延迟/有界性门槛量化测量                                 | deferred | W4（§9 证据范围声明）                                                                                                                                                                                                                                                                                                                             |
+
+出口结论：**W1（macOS）达成**。W2 前置项以 §6 清单为准。
