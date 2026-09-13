@@ -27,5 +27,8 @@ export function instructionPath(
   }
   if (scope === 'global') return join(dataDir, 'MEMORY.md')
   if (projectId === null) return null
+  // 记忆文件与 folderPath 无关，但 projectId 必须是真实存在的项目：
+  // 否则任意字符串直接 join 进路径，可携 ../ 逃出数据目录隔离。
+  if (!store.projects.get(projectId)) return null
   return join(dataDir, 'memories', projectId, 'MEMORY.md')
 }

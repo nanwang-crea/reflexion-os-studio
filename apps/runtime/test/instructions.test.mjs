@@ -48,16 +48,35 @@ test('instructionPath: 无项目/空 folderPath 返回 null', () => {
   assert.equal(instructionPath(store, 'project', 'agents', bare.id), null)
 })
 
+test('instructionPath: 不存在的 projectId 不得拼出数据目录内路径', () => {
+  const store = freshStore()
+  assert.equal(
+    instructionPath(store, 'project', 'memory', 'no-such-project'),
+    null,
+  )
+})
+
 test('readOptionalFile: 缺失返回空串，存在返回内容', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'reflexion-read-'))
   assert.equal(await readOptionalFile(join(dir, 'nope.md')), '')
   writeFileSync(join(dir, 'ok.md'), '你好\n')
   assert.equal(await readOptionalFile(join(dir, 'ok.md')), '你好\n')
   assert.equal(await readOptionalFile(null), '')
+  assert.equal(await readOptionalFile(dir), '')
 })
 
 test('containsSecretLike: 拒绝凭据形态、放行普通句子', () => {
   assert.equal(containsSecretLike('我的 api_key: sk-abcdef0123456789'), true)
   assert.equal(containsSecretLike('密码：hunter2secret'), true)
+  assert.equal(
+    containsSecretLike(
+      'Authorization: Bearer eyJhbGciOiJIUzI1Ni5zdWJzdWJzdWJzdWJzdWJzdWI',
+    ),
+    true,
+  )
   assert.equal(containsSecretLike('项目统一使用 pnpm 管理依赖。'), false)
+  assert.equal(
+    containsSecretLike('API Key 统一存放在 secrets.json，不进日志。'),
+    false,
+  )
 })

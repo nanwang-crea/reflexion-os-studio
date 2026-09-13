@@ -177,6 +177,9 @@ export function instructionPath(
   }
   if (scope === 'global') return join(dataDir, 'MEMORY.md')
   if (projectId === null) return null
+  // 记忆文件与 folderPath 无关，但 projectId 必须是真实存在的项目：
+  // 否则任意字符串直接 join 进路径，可携 ../ 逃出数据目录隔离。
+  if (!store.projects.get(projectId)) return null
   return join(dataDir, 'memories', projectId, 'MEMORY.md')
 }
 ```
@@ -424,6 +427,7 @@ import {
 test('remember: 全局首建带表头，追加带日期条目', async () => {
   const store = freshStore()
   const outcome = await remember({
+    store,
     scope: 'global',
     content: '以后新建项目一律用 pnpm。',
     projectId: null,
@@ -437,6 +441,7 @@ test('remember: 全局首建带表头，追加带日期条目', async () => {
   assert.ok(text.includes('## 记忆条目'))
   assert.match(text, /- \d{4}-\d{2}-\d{2} 以后新建项目一律用 pnpm。/)
   await remember({
+    store,
     scope: 'global',
     content: '回复保持简短。',
     projectId: null,
@@ -455,6 +460,7 @@ test('remember: 项目记忆落在数据目录 memories/<id> 下', async () => {
   const store = freshStore()
   const { project, session } = sessionInProject(store)
   const outcome = await remember({
+    store,
     scope: 'project',
     content: '本项目迁移只增不改。',
     projectId: project.id,
@@ -473,6 +479,7 @@ test('remember: 拒绝机密形态/超长/空白，项目 scope 无项目报错'
   assert.equal(
     (
       await remember({
+        store,
         scope: 'global',
         content: 'token: abcdefghijklmnop1234',
         projectId: null,
@@ -483,6 +490,7 @@ test('remember: 拒绝机密形态/超长/空白，项目 scope 无项目报错'
   assert.equal(
     (
       await remember({
+        store,
         scope: 'global',
         content: '字'.repeat(201),
         projectId: null,
@@ -491,10 +499,18 @@ test('remember: 拒绝机密形态/超长/空白，项目 scope 无项目报错'
     'too_long',
   )
   assert.equal(
-    (await remember({ scope: 'global', content: '   ', projectId: null })).code,
+    (
+      await remember({
+        store,
+        scope: 'global',
+        content: '   ',
+        projectId: null,
+      })
+    ).code,
     'too_long',
   )
   const noProject = await remember({
+    store,
     scope: 'project',
     content: '无项目',
     projectId: null,
@@ -513,6 +529,7 @@ test('remember: 文件超 64KB 上限时拒绝并提示整理', async () => {
     content: 'x'.repeat(64 * 1024 + 10),
   })
   const outcome = await remember({
+    store,
     scope: 'global',
     content: '再记一条',
     projectId: null,
@@ -596,6 +613,7 @@ export interface RememberOutcome {
 
 /** 模型主动记忆入口：追加一条 `- YYYY-MM-DD content` 到对应 MEMORY.md。 */
 export function remember(input: {
+  store: Store
   scope: InstructionScope
   content: string
   projectId: string | null
@@ -607,6 +625,7 @@ export function remember(input: {
 }
 
 async function rememberNow(input: {
+  store: Store
   scope: InstructionScope
   content: string
   projectId: string | null
@@ -634,7 +653,15 @@ async function rememberNow(input: {
       message: '当前会话未关联项目，无法写项目级记忆；请改用 global 范围。',
     }
   }
-  const path = memoryPath(scope, projectId)
+  const path = memoryPath(input.store, scope, projectId)
+  if (path === null) {
+    // projectId 过了 store 校验才拼路径；不存在即拒，防目录逃逸。
+    return {
+      ok: false,
+      code: 'no_project',
+      message: '项目不存在，无法写项目级记忆；请改用 global 范围。',
+    }
+  }
   const existing = await readIfAbsent(path)
   if (Buffer.byteLength(existing, 'utf8') > MAX_MEMORY_FILE_BYTES) {
     return {
@@ -723,17 +750,22 @@ async function writeFileWithRename(
 }
 ```
 
-**paths.ts 同步改动**：memory 分支抽成独立导出（`instructionPath` 的 memory 路径委托它，Task 1 测试断言不变）：
+**paths.ts 同步改动**：memory 分支抽成独立导出（`instructionPath` 的 memory 分支改为 `return memoryPath(store, scope, projectId)` 委托它，store 校验保留在 `memoryPath` 内，Task 1 测试断言不变）：
 
 ```ts
-/** MEMORY.md 路径：恒在应用数据目录（项目级隔离到 memories/<projectId>/），不依赖 store。 */
+/**
+ * MEMORY.md 路径：恒在应用数据目录（项目级隔离到 memories/<projectId>/）。
+ * 项目不存在返回 null——projectId 必须过 store 校验，防任意字符串携 ../ 逃出数据目录。
+ */
 export function memoryPath(
+  store: Store,
   scope: InstructionScope,
   projectId: string | null,
-): string {
+): string | null {
   const dataDir = resolveDataDir()
   if (scope === 'global') return join(dataDir, 'MEMORY.md')
-  if (projectId === null) throw new Error('project scope requires projectId')
+  if (projectId === null) return null
+  if (!store.projects.get(projectId)) return null
   return join(dataDir, 'memories', projectId, 'MEMORY.md')
 }
 ```
@@ -891,6 +923,7 @@ export function createMemoryRememberTool(ctx: ToolContext): ToolDefinition {
       const content = requireString(args, 'content')
       const session = ctx.store.sessions.get(ctx.sessionId)
       const outcome = await remember({
+        store: ctx.store,
         scope: scope === 'project' ? 'project' : 'global',
         content,
         projectId: session?.projectId ?? null,
