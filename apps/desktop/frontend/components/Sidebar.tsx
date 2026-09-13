@@ -4,7 +4,6 @@ import { SessionRow } from './SessionRow'
 import { ProjectFiles } from '../features/workspace/ProjectFiles'
 import type { OpenDiffHandler } from '../features/workspace/types'
 import {
-  ArchiveIcon,
   BoxIcon,
   FolderIcon,
   GearIcon,
@@ -14,8 +13,7 @@ import {
   TrashIcon,
 } from '../ui/icons'
 
-export type AppView =
-  'chat' | 'settings' | 'memories' | 'skills' | 'automations'
+export type AppView = 'chat' | 'settings' | 'skills' | 'automations'
 
 /** 底部导航可打开的页面（chat 由会话行/新建入口进入，不进底部导航）。 */
 type OtherView = Exclude<AppView, 'chat'>
@@ -186,12 +184,6 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
           icon={<BoxIcon size={15} />}
           active={props.view === 'automations'}
           onClick={() => props.onSelectView('automations')}
-        />
-        <NavItem
-          label="记忆"
-          icon={<ArchiveIcon size={15} />}
-          active={props.view === 'memories'}
-          onClick={() => props.onSelectView('memories')}
         />
       </nav>
 

@@ -62,7 +62,6 @@ interface LatestBootstrapRefs {
   refreshAndPrune: (runId: string, messageId?: string) => void
   scheduleToolRefresh: () => void
   scheduleDelegationRefresh: (sessionId?: string) => void
-  showMemoryNotice: (text: string) => void
   setBootstrap: (snapshot: BootstrapSnapshot | null) => void
 }
 
@@ -82,7 +81,6 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
   clearPendingApproval: (toolCallId: string) => void
   /** 审批命令失败时恢复等待卡（保留可重试入口，不丢审批上下文）。 */
   restorePendingApproval: (entry: PendingApproval) => void
-  memoryNotice: string | null
   runningSessionIds: string[]
   completedSessionIds: string[]
   failedSessionIds: string[]
@@ -104,18 +102,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
   const approvals = usePendingApprovals()
   const sessionTracking = useRunSessionTracking()
 
-  // A2 Memory：非打断式写入提示（顶栏角标，自动消失），不用弹窗。
-  const [memoryNotice, setMemoryNotice] = useState<string | null>(null)
-  const memoryNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const toolRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const showMemoryNotice = useCallback((text: string): void => {
-    if (memoryNoticeTimer.current) clearTimeout(memoryNoticeTimer.current)
-    setMemoryNotice(text)
-    memoryNoticeTimer.current = setTimeout(() => {
-      memoryNoticeTimer.current = null
-      setMemoryNotice(null)
-    }, 6000)
-  }, [])
   // 工具事件触发的防抖刷新：Run 进行中让轨迹卡状态跟进，不必等 Run 结束。
   const scheduleToolRefresh = useCallback((): void => {
     if (toolRefreshTimer.current) clearTimeout(toolRefreshTimer.current)
@@ -180,7 +167,6 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     refreshAndPrune,
     scheduleToolRefresh,
     scheduleDelegationRefresh,
-    showMemoryNotice,
     setBootstrap,
   })
   useEffect(() => {
@@ -194,7 +180,6 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
       refreshAndPrune,
       scheduleToolRefresh,
       scheduleDelegationRefresh,
-      showMemoryNotice,
       setBootstrap,
     }
   })
@@ -224,7 +209,6 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           refreshAndPrune,
           scheduleToolRefresh,
           scheduleDelegationRefresh,
-          showMemoryNotice,
         } = latest.current
         if (event.type === 'message.reset') {
           cache.applyReset(event.messageId)
@@ -325,13 +309,6 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           scheduleToolRefresh()
           return
         }
-        // 记忆写入事件：轻提示，不打断对话；同时刷新会话数据无需做（记忆不进消息流）。
-        if (event.type === 'memory.written') {
-          if (event.memories.length > 0) {
-            showMemoryNotice(`已记住 ${event.memories.length} 条新信息`)
-          }
-          return
-        }
         if (
           event.scope === 'run' &&
           EVENT_TYPES_TRIGGERING_REFRESH.has(event.type)
@@ -382,7 +359,6 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     return () => {
       disposed = true
       if (toolRefreshTimer.current) clearTimeout(toolRefreshTimer.current)
-      if (memoryNoticeTimer.current) clearTimeout(memoryNoticeTimer.current)
       if (delegationRefreshTimer.current)
         clearTimeout(delegationRefreshTimer.current)
       unlistenState?.()
@@ -400,7 +376,6 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     clearPendingApprovals: approvals.clearForRun,
     clearPendingApproval: approvals.onApprovalResolved,
     restorePendingApproval: approvals.onApprovalRequired,
-    memoryNotice,
     runningSessionIds: sessionTracking.runningSessionIds,
     completedSessionIds: sessionTracking.completedSessionIds,
     failedSessionIds: sessionTracking.failedSessionIds,

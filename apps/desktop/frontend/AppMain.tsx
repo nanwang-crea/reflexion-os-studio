@@ -3,7 +3,6 @@ import type { ViewName } from './hooks/useSessionNavigation'
 import { TopBar } from './components/TopBar'
 import { ChatView } from './features/chat/ChatView'
 import { LandingView } from './features/landing/LandingView'
-import { MemoryView } from './features/memories/MemoryView'
 import { SkillsView } from './features/skills/SkillsView'
 import { AutomationsView } from './features/automations/AutomationsView'
 import { SettingsView } from './features/settings/SettingsView'
@@ -26,7 +25,6 @@ export interface AppMainProps {
   chat: ComponentProps<typeof ChatView>
   landing: ComponentProps<typeof LandingView>
   settings: ComponentProps<typeof SettingsView>
-  memories: ComponentProps<typeof MemoryView>
   onUseSkill: ComponentProps<typeof SkillsView>['onUseSkill']
   workspace: {
     open: boolean
@@ -39,7 +37,7 @@ export interface AppMainProps {
 
 /**
  * 主内容区：TopBar（标题按视图推导）+ 五视图分支（chat/landing/settings/
- * memories/skills/automations）+ chat 视图的右侧工作区面板。各分组 props
+ * skills/automations）+ chat 视图的右侧工作区面板。各分组 props
  * 用 ComponentProps 从视图组件派生，编译期约束、无平行类型。
  */
 export function AppMain(props: AppMainProps): React.JSX.Element {
@@ -47,17 +45,15 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
   const contextTitle =
     view === 'settings'
       ? '设置'
-      : view === 'memories'
-        ? '记忆'
-        : view === 'skills'
-          ? '技能'
-          : view === 'automations'
-            ? '自动化'
-            : activeSessionId
-              ? (props.chat.sessionData?.session?.title ?? '对话')
-              : props.landing.project
-                ? props.landing.project.name
-                : '新对话'
+      : view === 'skills'
+        ? '技能'
+        : view === 'automations'
+          ? '自动化'
+          : activeSessionId
+            ? (props.chat.sessionData?.session?.title ?? '对话')
+            : props.landing.project
+              ? props.landing.project.name
+              : '新对话'
 
   return (
     <div className="main-pane">
@@ -84,8 +80,6 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
         <div className="content-main">
           {view === 'settings' ? (
             <SettingsView {...props.settings} />
-          ) : view === 'memories' ? (
-            <MemoryView {...props.memories} />
           ) : view === 'skills' ? (
             <SkillsView onUseSkill={props.onUseSkill} />
           ) : view === 'automations' ? (

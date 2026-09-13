@@ -6,7 +6,6 @@ import './styles/sidebar.css'
 import './features/chat/chat.css'
 import './styles/markdown.css'
 import './features/settings/settings.css'
-import './features/memories/memory.css'
 import './features/skills/skills.css'
 import './features/workspace/workspace.css'
 

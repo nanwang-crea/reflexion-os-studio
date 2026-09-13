@@ -1,8 +1,5 @@
 import { z } from 'zod'
 import {
-  MemoryScopeSchema,
-  MemorySchema,
-  MemoryStatusSchema,
   MessageSchema,
   RunEventSchema,
   ProviderCapabilitySchema,
@@ -396,32 +393,6 @@ export const CommandSchemaRegistry = {
       model: z.string().min(1),
       error: z.string().nullable(),
     }),
-  },
-  'memory.list': {
-    // scopeId 语义与 Memory.scopeId 一致：省略 → 全部；null → user 级。
-    params: z.object({
-      requestId: RequestIdSchema,
-      scope: MemoryScopeSchema.optional(),
-      scopeId: z.union([z.string().min(1), z.null()]).optional(),
-    }),
-    result: z.object({ memories: z.array(MemorySchema) }),
-  },
-  'memory.update': {
-    // 记忆管理页的编辑/固定/归档；content 编辑会作废原 embedding（召回侧重建）。
-    params: z.object({
-      requestId: RequestIdSchema,
-      id: z.string().min(1),
-      content: z.string().min(1).optional(),
-      status: MemoryStatusSchema.optional(),
-    }),
-    result: z.object({ memory: MemorySchema.nullable() }),
-  },
-  'memory.delete': {
-    params: z.object({
-      requestId: RequestIdSchema,
-      id: z.string().min(1),
-    }),
-    result: z.object({ removed: z.boolean() }),
   },
   'instructions.get': {
     // 指令页读取单个文件；path 为 null 表示当前条件下没有该文件位置。

@@ -2,7 +2,6 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { MessageStore } from './messages.js'
-import { MemoryStore } from './memories.js'
 import { ProviderStore } from './providers.js'
 import { ProjectStore } from './projects.js'
 import { RunStore } from './runs.js'
@@ -19,7 +18,6 @@ import { AgentStore } from './agents.js'
 import { DelegationStore } from './delegations.js'
 import { RunEventStore } from './runEvents.js'
 import { ContextCheckpointStore } from './contextCheckpoints.js'
-import { MemoryJobStore } from './memoryJobs.js'
 
 export { DEFAULT_SESSION_TITLE, resolveDataDir } from './shared.js'
 
@@ -35,7 +33,6 @@ export class Store {
   readonly runs: RunStore
   readonly toolCalls: ToolCallStore
   readonly providers: ProviderStore
-  readonly memories: MemoryStore
   readonly workspaceIndex: WorkspaceIndexStore
   readonly assetStore: AssetStore
   readonly agentSettings: AgentSettingsStore
@@ -45,7 +42,6 @@ export class Store {
   readonly delegations: DelegationStore
   readonly runEvents: RunEventStore
   readonly contextCheckpoints: ContextCheckpointStore
-  readonly memoryJobs: MemoryJobStore
 
   constructor(dir: string) {
     mkdirSync(dir, { recursive: true })
@@ -64,7 +60,6 @@ export class Store {
     this.runs = new RunStore(this.db)
     this.toolCalls = new ToolCallStore(this.db)
     this.providers = new ProviderStore(this.db)
-    this.memories = new MemoryStore(this.db)
     this.workspaceIndex = new WorkspaceIndexStore(this.db)
     this.assetStore = new AssetStore(this.db)
     this.agentSettings = new AgentSettingsStore(this.db)
@@ -74,7 +69,6 @@ export class Store {
     this.delegations = new DelegationStore(this.db)
     this.runEvents = new RunEventStore(this.db)
     this.contextCheckpoints = new ContextCheckpointStore(this.db)
-    this.memoryJobs = new MemoryJobStore(this.db)
     this.agents.upsert({
       id: 'worker',
       name: 'Worker Agent',
@@ -90,7 +84,6 @@ export class Store {
     this.messages.recoverInterrupted()
     this.toolCalls.recoverUnfinished()
     this.workspaceIndex.recoverInterrupted()
-    this.memoryJobs.recoverRunning()
   }
 
   /** 单事务边界：同连接上的多个领域写入要么全部提交要么全部回滚。 */

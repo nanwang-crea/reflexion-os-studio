@@ -728,6 +728,50 @@ test('v3 schema migrates in place: parts backfill and new columns', () => {
   store.close()
 })
 
+test('v23 migration drops legacy memories/FTS/memory_jobs tables', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'reflexion-v23-'))
+  const db = new DatabaseSync(join(dir, 'reflexion.db'))
+  // 模拟 v22 时代库：memories + FTS + memory_jobs 存在、版本号为 22。
+  db.exec('PRAGMA user_version = 22')
+  db.exec(`
+    CREATE TABLE memories (id TEXT PRIMARY KEY, content TEXT NOT NULL);
+    CREATE TABLE memory_jobs (run_id TEXT PRIMARY KEY);
+    INSERT INTO memories (id, content) VALUES ('mem-old', '旧记忆');
+  `)
+  db.close()
+
+  const store = new Store(dir)
+  const after = new DatabaseSync(join(dir, 'reflexion.db'))
+  const names = after
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE name IN ('memories', 'memories_fts', 'memory_jobs')",
+    )
+    .all()
+    .map((row) => row.name)
+  assert.deepEqual(names, [])
+  const version = after.prepare('PRAGMA user_version').get()
+  assert.equal(Number(version.user_version), 23)
+  after.close()
+  store.close()
+})
+
+test('fresh store schema has no legacy memory tables and version 23', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'reflexion-v23-fresh-'))
+  const store = new Store(dir)
+  store.close()
+  const db = new DatabaseSync(join(dir, 'reflexion.db'))
+  const names = db
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE name IN ('memories', 'memories_fts', 'memory_jobs')",
+    )
+    .all()
+    .map((row) => row.name)
+  assert.deepEqual(names, [])
+  const version = db.prepare('PRAGMA user_version').get()
+  assert.equal(Number(version.user_version), 23)
+  db.close()
+})
+
 test('provider sampling params: set, keep on omitted, clear on null', () => {
   const store = freshStore()
   const created = store.providers.upsert({

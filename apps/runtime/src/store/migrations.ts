@@ -84,6 +84,8 @@ function tableColumns(db: DatabaseSync, table: string): TableColumn[] {
  *          消失后消息仍指向它的幽灵引用；消息本体属会话历史（跟随 session 级联），
  *          不随 Run 删除。升级时先把悬空 run_id 置空（防御性，正常库为空集），
  *          再重建 messages 表；复制按 (created_at, rowid) 排序保持插入序。
+ * v22 → v23：删除 SQLite 记忆链路——memories / memories_fts / memory_jobs
+ *          整体 drop（文件即记忆 V2，真相源迁 MEMORY.md，不做数据搬迁）。
  * 各步骤带形状检测：SCHEMA 刚建好的新库不会空跑重建。
  */
 export function runMigrations(db: DatabaseSync, dir: string): void {
@@ -330,6 +332,14 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
         )
         db.exec('DROP TABLE messages_v21')
       }
+    }
+    // v23（文件即记忆 V2）：删除 SQLite 记忆链路。存量 memories/FTS/
+    // memory_jobs 按用户决策整体 drop——记忆真相源迁移为 MEMORY.md 文件，
+    // 不做数据搬迁（自动提取的记忆本来就不具备保留价值）。
+    if (version < 23) {
+      db.exec('DROP TABLE IF EXISTS memories_fts')
+      db.exec('DROP TABLE IF EXISTS memories')
+      db.exec('DROP TABLE IF EXISTS memory_jobs')
     }
     db.exec('COMMIT')
     // 迁移全部执行完毕才推进版本号；否则下次启动会重复进入迁移分支。

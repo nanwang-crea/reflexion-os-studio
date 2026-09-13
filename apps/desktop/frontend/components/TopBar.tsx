@@ -18,8 +18,6 @@ interface TopBarProps {
   showWorkspaceToggle: boolean
   workspaceOpen: boolean
   onToggleWorkspace: () => void
-  /** A2 Memory：非打断式写入提示角标。 */
-  memoryNotice: string | null
   /** 运行时状态；system-ready 时不显示角标。 */
   runtimeState: string
   statusLabel: string
@@ -51,9 +49,6 @@ export function TopBar(props: TopBarProps): React.JSX.Element {
         >
           <FolderIcon />
         </button>
-      )}
-      {props.memoryNotice && (
-        <span className="badge badge-memory">{props.memoryNotice}</span>
       )}
       {props.runtimeState !== 'system-ready' && (
         <span className={`badge badge-${props.runtimeState}`}>

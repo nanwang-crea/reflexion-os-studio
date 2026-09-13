@@ -178,7 +178,6 @@ export default function App() {
     pendingApprovals,
     clearPendingApproval,
     restorePendingApproval,
-    memoryNotice,
     runningSessionIds,
     completedSessionIds,
     failedSessionIds,
@@ -401,7 +400,6 @@ export default function App() {
         topBar={{
           sidebarOpen,
           onToggleSidebar: () => setSidebarOpen((open) => !open),
-          memoryNotice,
           runtimeState: bootstrap?.state ?? '',
           statusLabel,
         }}
@@ -457,7 +455,6 @@ export default function App() {
           onBackToChat: () => setView('chat'),
           confirm,
         }}
-        memories={{ confirm }}
         onUseSkill={async (skillId, sessionId) => {
           if (!(await guardedResetWorkspaceFiles())) return
           setActiveProjectId(null)

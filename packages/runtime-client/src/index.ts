@@ -5,7 +5,6 @@ export type {
   JsonRpcRequest,
   JsonRpcResponse,
   JsonValue,
-  Memory,
   Message,
   Project,
   ProviderProfile,

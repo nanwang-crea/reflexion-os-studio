@@ -8,7 +8,6 @@ import {
   type CommandHandler,
   type CommandResult,
 } from './command-utils.js'
-import { memoryCommandHandlers } from './agent/memory/handlers.js'
 import { instructionsCommandHandlers } from './agent/instructions/handlers.js'
 import { workspaceCommandHandlers } from './workspace/handlers.js'
 import { assetCommandHandlers } from './assets/handlers.js'
@@ -21,7 +20,7 @@ import { agentCommandHandlers } from './handlers-agents.js'
 
 /**
  * Chat 核心命令：项目/会话/消息发送/队列/Run/审批/Skills 清单。
- * 各领域命令独立注册：memory/workspace/asset/mcp 在各自域目录，
+ * 各领域命令独立注册：instructions/workspace/asset/mcp 在各自域目录，
  * provider 与 agent/delegation 在 handlers-providers.ts / handlers-agents.ts。
  */
 const chatCommandHandlers: Record<string, CommandHandler> = {
@@ -123,9 +122,7 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
     return {
       removed: store.transaction(() => {
         const removed = store.sessions.delete(sessionId)
-        // memories.scope_id 无外键级联：会话删除时一并清理其记忆。
         if (removed) {
-          store.memories.removeByScope('session', sessionId)
           agent.clearQueue(sessionId)
         }
         return removed
@@ -146,10 +143,7 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
     const removed = store.transaction(() => {
       const removed = store.projects.delete(projectId)
       if (removed) {
-        // 项目与其下会话的记忆都无外键级联，随删除主体一并清理。
-        store.memories.removeByScope('project', projectId)
         for (const session of sessions) {
-          store.memories.removeByScope('session', session.id)
           agent.clearQueue(session.id)
         }
       }
@@ -198,7 +192,6 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
 
 export const commandHandlers: Record<string, CommandHandler> = {
   ...chatCommandHandlers,
-  ...memoryCommandHandlers,
   ...instructionsCommandHandlers,
   ...workspaceCommandHandlers,
   ...assetCommandHandlers,

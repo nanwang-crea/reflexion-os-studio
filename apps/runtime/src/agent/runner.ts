@@ -32,8 +32,6 @@ export interface RunStreamInput {
   approvals: ApprovalGateway
   /** 本轮运行使用的 Agent 全局设置快照。 */
   settings: AgentSettings
-  /** Run 终态后的 Memory Job 通知（可选；worker 由 ChatAgent 注入）。 */
-  onMemoryJob?: () => void
   controller: AbortController
   emitter: RunEventEmitter
   /** 门面预建的首轮 assistant 消息（保持 message.send 返回 messageId 的契约）。 */
@@ -132,9 +130,6 @@ export class RunRunner {
         },
         decision,
       )
-      if (decision.status === 'completed' && decision.enqueueMemoryJob) {
-        input.onMemoryJob?.()
-      }
       // 诊断指标（§17.1）：stopReason/轮次/工具数/耗时/缓存命中，单行 stderr。
       const usage = this.store.runs.get(run.id)?.usage
       const cacheHit =
@@ -231,7 +226,6 @@ export class RunRunner {
             errorCode: null,
             errorMessage: null,
             pendingMessage: null,
-            enqueueMemoryJob: true,
             resultContent: joinFinalFragments(finalFragments),
           })
           return
@@ -245,7 +239,6 @@ export class RunRunner {
           errorCode: outcome.reason,
           errorMessage: message,
           pendingMessage: null,
-          enqueueMemoryJob: false,
         })
       } finally {
         clearTimeout(timeoutHandle)
@@ -259,7 +252,6 @@ export class RunRunner {
             errorCode: reason.code,
             errorMessage: reason.message,
             pendingMessage: null,
-            enqueueMemoryJob: false,
           })
           return
         }
@@ -268,7 +260,6 @@ export class RunRunner {
           errorCode: null,
           errorMessage: null,
           pendingMessage: null,
-          enqueueMemoryJob: false,
         })
         return
       }
@@ -279,7 +270,6 @@ export class RunRunner {
           errorCode: error.code,
           errorMessage: error.message,
           pendingMessage: null,
-          enqueueMemoryJob: false,
         })
         return
       }
@@ -298,7 +288,6 @@ export class RunRunner {
         errorCode: code,
         errorMessage: message,
         pendingMessage: null,
-        enqueueMemoryJob: false,
       })
     }
   }
