@@ -1215,187 +1215,31 @@ export function saveInstruction(input: {
 
 - [ ] **Step 2: 视图组件**
 
-`apps/desktop/frontend/features/instructions/InstructionsView.tsx`：
+`apps/desktop/frontend/features/instructions/InstructionsView.tsx`：实现已合入（以代码为准，见 66e2695 与其后的守卫修复提交），此处只记录审查后定稿的关键设计：
 
-```tsx
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { Project } from '@reflexion-os-studio/runtime-client'
-import { listProjects } from '../../api/projects'
-import { getInstruction, saveInstruction } from '../../api/instructions'
+- 所有 `getInstruction / saveInstruction / listProjects` 链都带 `.catch`：错误上各 pane 状态行（红色），读失败清空并禁用编辑区，绝不静默留白或留旧内容；
+- 脏草稿守卫（三键守卫同款仓库模式）：`InstructionPane` 经 `onDirtyChange(kind, dirty)` 把脏态上抛，父级 `Record<Kind, boolean>` 聚合；pane 卸载 cleanup 报 `false`（key 含 scope/project，重挂载不残留脏计数）。凡会丢弃草稿的动作（重新读取、scope 切换、项目选择）统一走守卫：
 
-type Scope = 'global' | 'project'
-type Kind = 'agents' | 'memory'
-
-const FILES: { kind: Kind; title: string; hint: string }[] = [
-  {
-    kind: 'agents',
-    title: 'AGENTS.md · 纪律与规范',
-    hint: '写给所有工具的长期指令。项目级会写入项目文件夹根目录。',
-  },
-  {
-    kind: 'memory',
-    title: 'MEMORY.md · 沉淀的记忆',
-    hint: '模型经 memory.remember 追加的条目与本区的手写内容，全部自动注入对话。',
-  },
-]
-
-function InstructionPane(props: {
-  scope: Scope
-  projectId: string | null
-  kind: Kind
-  title: string
-  hint: string
-  refreshToken: number
-}): React.JSX.Element {
-  const [path, setPath] = useState<string | null>(null)
-  const [content, setContent] = useState('')
-  const [draft, setDraft] = useState<string | null>(null)
-  const [status, setStatus] = useState<string | null>(null)
-  useEffect(() => {
-    let alive = true
-    void getInstruction({
-      scope: props.scope,
-      projectId: props.projectId ?? undefined,
-      kind: props.kind,
-    }).then((file) => {
-      if (!alive) return
-      setPath(file.path)
-      setContent(file.content)
-      setDraft(null)
-      setStatus(null)
-    })
-    return () => {
-      alive = false
+  ```tsx
+  const guarded = (action: () => void, onCancel?: () => void): void => {
+    if (!anyDirty) {
+      action()
+      return
     }
-  }, [props.scope, props.projectId, props.kind, props.refreshToken])
-  const dirty = draft !== null && draft !== content
-  return (
-    <section className="instruction-pane">
-      <h3>{props.title}</h3>
-      <p className="instruction-path">
-        {path ?? '当前不可用（未关联项目或文件夹未设置）'}
-      </p>
-      <p className="instruction-hint">{props.hint}</p>
-      <textarea
-        value={draft ?? content}
-        onChange={(event) => setDraft(event.target.value)}
-        rows={12}
-        spellCheck={false}
-        disabled={path === null}
-      />
-      <div className="instruction-actions">
-        <button
-          type="button"
-          className="primary"
-          disabled={!dirty || path === null}
-          onClick={() => {
-            if (draft === null) return
-            void saveInstruction({
-              scope: props.scope,
-              projectId: props.projectId ?? undefined,
-              kind: props.kind,
-              content: draft,
-            }).then((result) => {
-              setStatus(result.message)
-              if (result.ok) {
-                setContent(draft)
-                setDraft(null)
-              }
-            })
-          }}
-        >
-          保存
-        </button>
-        {dirty && <span className="instruction-dirty">未保存的修改</span>}
-        {status && <span className="instruction-status">{status}</span>}
-      </div>
-    </section>
-  )
-}
+    void (async () => {
+      const ok = await props.confirm({
+        title: '有未保存的修改',
+        message:
+          '继续将重新读取文件并丢弃未保存的修改，建议先点「保存」。确定丢弃并继续？',
+        confirmLabel: '丢弃并继续',
+      })
+      if (ok) action()
+      else onCancel?.()
+    })()
+  }
+  ```
 
-export function InstructionsView(): React.JSX.Element {
-  const [projects, setProjects] = useState<Project[]>([])
-  const [scope, setScope] = useState<Scope>('global')
-  const [projectId, setProjectId] = useState<string | null>(null)
-  const [refreshToken, setRefreshToken] = useState(0)
-  useEffect(() => {
-    void listProjects().then((result) => {
-      setProjects(result.projects)
-      const first = result.projects.find((item) => item.folderPath !== '')
-      if (first) setProjectId(first.id)
-    })
-  }, [])
-  const activeProjectId = useMemo(
-    () => (scope === 'project' ? projectId : null),
-    [scope, projectId],
-  )
-  const reload = useCallback(() => setRefreshToken((token) => token + 1), [])
-  return (
-    <div className="instructions-view">
-      <header>
-        <h2>指令</h2>
-        <p>
-          全局 + 项目的 AGENTS.md（纪律）与
-          MEMORY.md（记忆），每次对话自动注入。
-        </p>
-      </header>
-      <div className="instructions-toolbar">
-        <button
-          type="button"
-          className={scope === 'global' ? 'primary' : 'ghost'}
-          onClick={() => setScope('global')}
-        >
-          全局
-        </button>
-        <button
-          type="button"
-          className={scope === 'project' ? 'primary' : 'ghost'}
-          onClick={() => setScope('project')}
-        >
-          项目
-        </button>
-        <select
-          value={projectId ?? ''}
-          onChange={(event) => setProjectId(event.target.value || null)}
-          disabled={scope !== 'project'}
-        >
-          <option value="">选择项目…</option>
-          {projects.map((project) => (
-            <option key={project.id} value={project.id}>
-              {project.name}
-            </option>
-          ))}
-        </select>
-        <button type="button" className="ghost" onClick={reload}>
-          重新读取
-        </button>
-      </div>
-      {scope === 'project' && activeProjectId === null && (
-        <p className="notice">请先选择一个项目。</p>
-      )}
-      <div
-        className={
-          scope === 'project' && activeProjectId === null
-            ? 'instructions-disabled'
-            : undefined
-        }
-      >
-        {FILES.map((file) => (
-          <InstructionPane
-            key={`${scope}-${file.kind}`}
-            scope={scope}
-            projectId={activeProjectId}
-            kind={file.kind}
-            title={file.title}
-            hint={file.hint}
-            refreshToken={refreshToken}
-          />
-        ))}
-      </div>
-    </div>
-  )
-}
-```
+- 保存按钮 `!dirty || path === null || saving || loading` 任一即禁用；任一 pane 保存中禁用「重新读取」（`onSavingChange` 上抛，防 get 与在途写盘竞态）；select 取消时经 ref 回弹 DOM value（受控值未变 React 不写回）；scope 按钮 `aria-pressed`、select/textarea `aria-label`。
 
 - [ ] **Step 3: 样式 + 接线**
 
@@ -1471,9 +1315,9 @@ export function InstructionsView(): React.JSX.Element {
 接线（对称于 Task 5 删除处）：
 
 - `useSessionNavigation.ts` / `Sidebar.tsx` view union 加 `'instructions'`；Sidebar 原"记忆"位置加 NavItem：`label="指令"`、`active={props.view === 'instructions'}`、`onClick={() => props.onSelectView('instructions')}`（图标沿用 `ArchiveIcon`）。
-- `AppMain.tsx`：import `InstructionsView`；contextTitle 分支 `view === 'instructions' ? '指令'`；渲染分支 `view === 'instructions' ? <InstructionsView /> : …`；`AppMainProps` 无新增 prop（组件自包含）。
+- `AppMain.tsx`：import `InstructionsView`；contextTitle 分支 `view === 'instructions' ? '指令'`；渲染分支 `<InstructionsView {...props.instructions} />`；`AppMainProps` 新增最小分组 `instructions: ComponentProps<typeof InstructionsView>`（脏草稿守卫需要 confirm 弹窗句柄）。
 - `main.tsx`：加 `import './features/instructions/instructions.css'`（原 memories.css 位置）。
-- `App.tsx`：`memories={{ confirm }}` 处已删，无新增。
+- `App.tsx`：`memories={{ confirm }}` 处已删；新增 `instructions={{ confirm }}`（复用 useConfirmDialog 的 `confirm`）。
 
 - [ ] **Step 4: 验证**
 

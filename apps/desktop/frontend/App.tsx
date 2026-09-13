@@ -455,6 +455,7 @@ export default function App() {
           onBackToChat: () => setView('chat'),
           confirm,
         }}
+        instructions={{ confirm }}
         onUseSkill={async (skillId, sessionId) => {
           if (!(await guardedResetWorkspaceFiles())) return
           setActiveProjectId(null)

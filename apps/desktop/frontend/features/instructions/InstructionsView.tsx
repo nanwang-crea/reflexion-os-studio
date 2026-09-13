@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Project } from '@reflexion-os-studio/runtime-client'
+import type { ConfirmDialogState } from '../../components/ConfirmDialog'
 import { listProjects } from '../../api/projects'
 import { getInstruction, saveInstruction } from '../../api/instructions'
 
@@ -35,6 +36,10 @@ function InstructionPane(props: {
   title: string
   hint: string
   refreshToken: number
+  /** 脏状态上抛给页面级守卫（同 FileViewerPanel 的 onDirtyChange 模式）。 */
+  onDirtyChange: (kind: Kind, dirty: boolean) => void
+  /** 保存中上抛：禁用"重新读取"，防 get 与在途 save 写盘竞态。 */
+  onSavingChange: (kind: Kind, saving: boolean) => void
 }): React.JSX.Element {
   const [path, setPath] = useState<string | null>(null)
   const [content, setContent] = useState('')
@@ -73,6 +78,21 @@ function InstructionPane(props: {
     }
   }, [props.scope, props.projectId, props.kind, props.refreshToken])
   const dirty = draft !== null && draft !== content
+  const { kind, onDirtyChange, onSavingChange } = props
+  useEffect(() => {
+    onDirtyChange(kind, dirty)
+    // 卸载（切 scope/项目后 key 重挂）必须归零，防止父级残留脏计数。
+    return () => {
+      onDirtyChange(kind, false)
+    }
+  }, [kind, dirty, onDirtyChange])
+  useEffect(() => {
+    onSavingChange(kind, saving)
+    // 卸载同样归零：保存中途切走不能让「重新读取」永久禁用。
+    return () => {
+      onSavingChange(kind, false)
+    }
+  }, [kind, saving, onSavingChange])
   const save = (): void => {
     if (draft === null || saving) return
     setSaving(true)
@@ -111,13 +131,14 @@ function InstructionPane(props: {
         onChange={(event) => setDraft(event.target.value)}
         rows={12}
         spellCheck={false}
+        aria-label={props.title}
         disabled={loading || path === null}
       />
       <div className="instruction-actions">
         <button
           type="button"
           className="primary"
-          disabled={!dirty || path === null || saving}
+          disabled={!dirty || path === null || saving || loading}
           onClick={save}
         >
           {saving ? '保存中…' : '保存'}
@@ -137,24 +158,78 @@ function InstructionPane(props: {
   )
 }
 
-export function InstructionsView(): React.JSX.Element {
+interface InstructionsViewProps {
+  /** 应用内确认弹窗（脏草稿守卫用），与 SettingsView/FileViewerPanel 同源。 */
+  confirm: (state: ConfirmDialogState) => Promise<boolean>
+}
+
+export function InstructionsView(
+  props: InstructionsViewProps,
+): React.JSX.Element {
   const [projects, setProjects] = useState<Project[]>([])
   const [scope, setScope] = useState<Scope>('global')
   const [projectId, setProjectId] = useState<string | null>(null)
   const [refreshToken, setRefreshToken] = useState(0)
   const [projectsError, setProjectsError] = useState<string | null>(null)
+  const [dirtyKinds, setDirtyKinds] = useState<Record<Kind, boolean>>({
+    agents: false,
+    memory: false,
+  })
+  const [savingKinds, setSavingKinds] = useState<Record<Kind, boolean>>({
+    agents: false,
+    memory: false,
+  })
+  const selectRef = useRef<HTMLSelectElement | null>(null)
   useEffect(() => {
+    let alive = true
     void listProjects()
       .then((result) => {
+        if (!alive) return
         setProjects(result.projects)
         setProjectsError(null)
         const first = result.projects.find((item) => item.folderPath !== '')
         if (first) setProjectId(first.id)
       })
       .catch((error: unknown) => {
+        if (!alive) return
         setProjectsError(messageOf(error))
       })
+    return () => {
+      alive = false
+    }
   }, [])
+  const handleDirtyChange = useCallback((kind: Kind, dirty: boolean): void => {
+    setDirtyKinds((current) =>
+      current[kind] === dirty ? current : { ...current, [kind]: dirty },
+    )
+  }, [])
+  const handleSavingChange = useCallback(
+    (kind: Kind, saving: boolean): void => {
+      setSavingKinds((current) =>
+        current[kind] === saving ? current : { ...current, [kind]: saving },
+      )
+    },
+    [],
+  )
+  const anyDirty = dirtyKinds.agents || dirtyKinds.memory
+  const anySaving = savingKinds.agents || savingKinds.memory
+  /** 会丢弃未保存草稿的动作统一过守卫：脏则弹确认，确认后才执行，取消走 onCancel。 */
+  const guarded = (action: () => void, onCancel?: () => void): void => {
+    if (!anyDirty) {
+      action()
+      return
+    }
+    void (async () => {
+      const ok = await props.confirm({
+        title: '有未保存的修改',
+        message:
+          '继续将重新读取文件并丢弃未保存的修改，建议先点「保存」。确定丢弃并继续？',
+        confirmLabel: '丢弃并继续',
+      })
+      if (ok) action()
+      else onCancel?.()
+    })()
+  }
   const activeProjectId = useMemo(
     () => (scope === 'project' ? projectId : null),
     [scope, projectId],
@@ -176,20 +251,40 @@ export function InstructionsView(): React.JSX.Element {
         <button
           type="button"
           className={scope === 'global' ? 'primary' : 'ghost'}
-          onClick={() => setScope('global')}
+          aria-pressed={scope === 'global'}
+          onClick={() => {
+            if (scope === 'global') return
+            guarded(() => setScope('global'))
+          }}
         >
           全局
         </button>
         <button
           type="button"
           className={scope === 'project' ? 'primary' : 'ghost'}
-          onClick={() => setScope('project')}
+          aria-pressed={scope === 'project'}
+          onClick={() => {
+            if (scope === 'project') return
+            guarded(() => setScope('project'))
+          }}
         >
           项目
         </button>
         <select
+          ref={selectRef}
+          aria-label="选择项目"
           value={projectId ?? ''}
-          onChange={(event) => setProjectId(event.target.value || null)}
+          onChange={(event) => {
+            const next = event.target.value || null
+            if (next === projectId) return
+            // 取消时 React 不会把同值写回 DOM，手动回弹选择框。
+            guarded(
+              () => setProjectId(next),
+              () => {
+                if (selectRef.current) selectRef.current.value = projectId ?? ''
+              },
+            )
+          }}
           disabled={scope !== 'project'}
         >
           <option value="">选择项目…</option>
@@ -199,7 +294,12 @@ export function InstructionsView(): React.JSX.Element {
             </option>
           ))}
         </select>
-        <button type="button" className="ghost" onClick={reload}>
+        <button
+          type="button"
+          className="ghost"
+          disabled={anySaving}
+          onClick={() => guarded(reload)}
+        >
           重新读取
         </button>
       </div>
@@ -222,6 +322,8 @@ export function InstructionsView(): React.JSX.Element {
             title={file.title}
             hint={file.hint}
             refreshToken={refreshToken}
+            onDirtyChange={handleDirtyChange}
+            onSavingChange={handleSavingChange}
           />
         ))}
       </div>

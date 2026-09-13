@@ -26,6 +26,7 @@ export interface AppMainProps {
   chat: ComponentProps<typeof ChatView>
   landing: ComponentProps<typeof LandingView>
   settings: ComponentProps<typeof SettingsView>
+  instructions: ComponentProps<typeof InstructionsView>
   onUseSkill: ComponentProps<typeof SkillsView>['onUseSkill']
   workspace: {
     open: boolean
@@ -88,7 +89,7 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
           ) : view === 'automations' ? (
             <AutomationsView />
           ) : view === 'instructions' ? (
-            <InstructionsView />
+            <InstructionsView {...props.instructions} />
           ) : activeSessionId !== null ? (
             <ChatView {...props.chat} />
           ) : (
