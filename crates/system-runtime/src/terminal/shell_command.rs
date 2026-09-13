@@ -8,7 +8,6 @@ use std::path::PathBuf;
 /// （cargo 默认多线程，set_var 是进程级共享状态，会与并发测试竞态）。
 /// 有效用户 shell 优先；不存在/为空/非普通文件回退 /bin/sh。
 #[cfg(unix)]
-#[allow(dead_code)] // Task 10/11 的 PTY 会话接线前，仅测试消费。
 fn shell_from_env(shell_env: Option<String>) -> Vec<String> {
     let user_shell = shell_env
         .filter(|value| !value.trim().is_empty() && PathBuf::from(value).is_file())
@@ -18,13 +17,11 @@ fn shell_from_env(shell_env: Option<String>) -> Vec<String> {
 
 /// 读取 SHELL 环境变量的薄包装。
 #[cfg(unix)]
-#[allow(dead_code)] // Task 10/11 的 PTY 会话接线前，仅测试消费。
 pub fn default_shell_argv() -> Vec<String> {
     shell_from_env(std::env::var("SHELL").ok())
 }
 
 #[cfg(windows)]
-#[allow(dead_code)] // Task 10/11 的 PTY 会话接线前，仅测试消费。
 pub fn default_shell_argv() -> Vec<String> {
     // 优先 pwsh.exe（PATH 探测，带/不带 .exe 都试），回退 powershell.exe。
     // 探测本身执行一次 `-Command` 取版本号：失败/不存在即继续下一个候选。
