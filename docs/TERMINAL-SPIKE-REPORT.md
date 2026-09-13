@@ -83,11 +83,36 @@
   Linux 行为均未在本 spike 覆盖，本功能当前状态为"macOS 已验证"（W1 出口
   Task 15 红线：不得宣称三平台完成）。
 
-## 5. WebView / xterm
+## 5. WebView / xterm（Task 14-A 已建页并跑自动部分，14-B 人工清单待 Safari/Chrome）
 
-**Pending——Task 14 未执行**（隐藏实例解析、跨 write 半字符 UTF-8、rAF 后台
-节流、resize/fit、空闲 CPU）。本报告不声称任何 WebView 侧结论；W3 保活面板
-方案以 Task 14 结论为准。
+页面：`apps/desktop/spike/terminal-spike.html`（验证完成后整目录删除，不入库——本报告为其唯一记录）。
+加载形态：两包 `lib/*.js` 实测为 **UMD**（挂全局 `Terminal` / `FitAddon.FitAddon`），按计划草案的 `<script src>` 直用，无需 ESM。
+起法：`pnpm --filter @reflexion-os-studio/desktop dev:frontend` → `http://localhost:5173/spike/terminal-spike.html`。
+自动部分已在 headless Chromium（Chrome --headless=new，`?autotest=1`）通过：vite 下 `/node_modules/@xterm/...` 三个 URL 全 200（CSS 按 `Accept: text/css` 返回真 CSS）、页面脚本无异常、断言 JSON 见下。
+
+| #   | 验证项                    | 做法（浏览器）                                                                                       | 预期                                                               | 结果                                                                                               |
+| --- | ------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| 1   | 跨 write 半字符 UTF-8     | `feedSplitUtf8(visible)`（✅ 前导字节 0xE2 后一刀切开，100ms 后补第二块；切点动态计算=8）            | 一次显示 `跨块-✅-完成`，无乱码/替换符（xterm 内部缓冲半码点）     | 待人工确认（Chromium autotest 已过：buffer 行文本 === `跨块-✅-完成`）                             |
+| 2   | display:none 实例持续解析 | `feedBurst(hidden, 5000)` 后 `lineCount(hidden)`（= `term.buffer.active.length`）                    | ≥5000（隐藏实例照常解析）；失败=W3 改 visibility:hidden/offscreen  | 待人工确认（Chromium autotest 已过：5001；且 `open()` 于 display:none **不抛异常**，按默认 80×24） |
+| 3   | rAF 后台节流              | `flood(hidden, 10)` 期间把整个标签页/窗口切后台（Safari 与 WKWebView 行为可能不同），看 fps 日志掉幅 | rAF 显著节流（~0）——据此确认 W3 合帧用 `setTimeout(16ms)` 不用 rAF | 待人工确认（虚拟时间无法复现真实节流，本项只能真机）                                               |
+| 4   | 重显后 fit() 合理 resize  | 合上 hidden 容器→喂数据→打开→点「打开并 fit(hidden)」按钮，看 cols/rows                              | fit 从默认 80×24 恢复为容器真实行列，buffer 不丢                   | 待人工确认（Chromium autotest 已过：78×16 / 720×300 容器）                                         |
+| 5   | 空闲 CPU ≈0               | 页面停 30s 无任何调用，活动监视器/Safari 网页能耗看该页（AGENTS §10 方法）                           | WebView 渲染进程 CPU ≈0%（xterm DOM 渲染器无常驻任务）             | 待人工确认（重点盯 WKWebView；DOM 渲染器逐行建节点，洪泛期开销另记）                               |
+
+**xterm v6.0.0 事实核对（W3 关键输入，推翻/修正计划草案假设）**：
+
+- 行数 API 是 `buffer.active.length`；**不存在 `buffer.lines`**——计划草案检查单里的 `hidden.buffer.lines.length` 写法错误，已按 typings 修正为 `lineCount()` 助手。行文本用 `buffer.active.getLine(y).translateToString()`。
+- v6 核心**只内置 DOM 渲染器**（`src/browser/renderer/` 仅 `dom`+`shared`；WebGL 是独立 addon 包，spec §2 已声明首版不启用；canvas 渲染器已不在核心）。含义：洪泛时 DOM 节点增删是渲染成本主体，检查单 #3/#5 在 WKWebView 上尤其要看。
+- `write()` 接受 `string | Uint8Array`；`.mjs` ESM 构建随包（node 下可直接 import、无顶层 DOM 访问），但 spike 无需。
+- `open()` 在 display:none 容器上不抛异常但量不到尺寸（回退默认 80×24）→ W3 合开面板必须"重显后 fit()"，本 spike #4 即验证该路径。
+- FitAddon 类名为 `FitAddon.FitAddon`（UMD 全局是命名空间对象）；提案尺寸钳制 cols≥2、rows≥1，且**渲染器 cell 尺寸为 0 时 `fit()` 静默 no-op**——隐藏中的终端调 fit 不会报错也不会改尺寸，W3 必须"先显示、再 fit"。
+
+### 人工验证结论（2026-09-13，用户 Safari/WKWebView 目测，指示继续）
+
+- 整体显示正常（#1/#2/#4 所见与 Chromium 自动结论一致）；**#3 rAF 节流幅度与
+  #5 空闲 CPU 未取具体数值**——精确量化随 W3 真面板在 W4 压力验收中补测，
+  W1 仅据此定性采纳"W3 合帧用 setTimeout(16ms)、不用 rAF"的设计决策。
+- 页面键入无响应为**预期行为**：验证页刻意未接 onData→PTY；真实输入链路
+  （terminal.write 往返、Ctrl+C、echo）已由 §2/§5 侧车 spike 覆盖。
 
 ## 6. 遗留到 W2 的清单
 
@@ -121,4 +146,6 @@
 - 帧数口径：§2 结果表（单次运行洪泛即时切片）与 §3 吞吐表（多次运行 + 最终运行，
   切片时点不同）数字差 ~50 帧属正常测量窗口差，非同一采集点，非造假。
 - 一次性探针（§2 PID 级、§4 trap）不入库；trap 探针产生的孤儿进程已当场清理。
-- Windows/Linux spike、WebView/xterm 检查单：未做（分别待对应环境与 Task 14）。
+- Windows/Linux spike：未做（待对应环境）。WebView/xterm 检查单：验证页与
+  headless Chromium 自动部分已过（§5），Safari(WKWebView)+Chrome 人工部分
+  待执行（Task 14-B），执行前 §5 各项结果一律记"待人工确认"。
