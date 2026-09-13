@@ -65,7 +65,6 @@ fn emit_state(terminal_id: &str, generation: u64, status: &str, exit_code: Optio
     }));
 }
 
-#[allow(dead_code)] // W1 分步交付：Task 11 服务接线前仅测试消费。
 pub fn spawn(
     terminal_id: String,
     generation: u64,
@@ -117,6 +116,10 @@ pub fn spawn(
         closed: Arc::new(AtomicBool::new(false)),
     });
 
+    // running 先于两个线程启动（Task 10 评审修复）：退出线程一启动子进程就
+    // 可能死亡并发 exited，必须保证同终端的 exited 永不在 running 之前送达。
+    emit_state(&terminal_id, generation, "running", None);
+
     // 读线程：EOF（子进程退出/最后一个从属 fd 关闭）后交付完毕，通知退出线程收尾。
     let read_session = session.clone();
     let (tail_tx, tail_rx) = mpsc::channel::<()>();
@@ -152,13 +155,9 @@ pub fn spawn(
         }
     });
 
-    emit_state(&terminal_id, generation, "running", None);
     Ok(session)
 }
 
-// 服务消费方（Task 11）接线前，以下方法仅被 unix 测试驱动；方法体也是
-// writer/master/killer 字段的唯一读者，故整块豁免 dead_code。
-#[allow(dead_code)]
 impl TerminalSession {
     pub fn write_input(&self, bytes: &[u8]) -> Result<(), String> {
         let mut writer = self
@@ -193,6 +192,9 @@ impl TerminalSession {
     /// 不能直接对 child 锁 kill：退出线程的 `wait()` 长期持有 child 锁，
     /// 故 clone_killer 是这里唯一的正确入口。master/writer 随 Arc 引用清零
     /// 释放，内核向会话前台进程组发 SIGHUP 兜住作业控制后代。
+    /// 诚实边界：unix 的 kill 只是发给会话领导者的 SIGHUP——`trap '' HUP`
+    /// 的 shell 会永远无视它，本方法末尾的阻塞 wait 就会被卡住（关停无超时
+    /// 升级）；带时限的 SIGKILL 升级已登记为 W2 遗留，见计划 W2 遗留。
     pub fn close(&self) {
         self.closed.store(true, Ordering::SeqCst);
         if let Ok(mut killer) = self.killer.lock() {

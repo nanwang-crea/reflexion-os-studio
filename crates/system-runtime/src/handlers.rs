@@ -361,6 +361,19 @@ pub fn handle_cancel(params: &Value) {
     }
 }
 
+pub fn handle_terminal_spawn(params: Value) -> Result<Value, OpError> {
+    crate::terminal::service::handle_spawn(params)
+}
+pub fn handle_terminal_write(params: Value) -> Result<Value, OpError> {
+    crate::terminal::service::handle_write(params)
+}
+pub fn handle_terminal_resize(params: Value) -> Result<Value, OpError> {
+    crate::terminal::service::handle_resize(params)
+}
+pub fn handle_terminal_close(params: Value) -> Result<Value, OpError> {
+    crate::terminal::service::handle_close(params)
+}
+
 #[cfg(test)]
 mod file_write_source_tests {
     use super::*;
