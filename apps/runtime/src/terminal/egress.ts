@@ -59,6 +59,8 @@ export class EgressPacer {
   private running = false
   private lastActivityAt = 0
   private readonly capacity: number
+  /** 轮询游标：每轮从上一轮最后发出者之后开扫，防固定顺序饿死靠后的终端。 */
+  private cursor = 0
 
   constructor(
     private readonly budgetBytesPerSec: number,
@@ -117,20 +119,33 @@ export class EgressPacer {
   }
 
   /**
-   * 一轮泵：轮询每个有积压的通道，各贡献「至多一个事件」。
+   * 一轮泵：从轮询游标起环形遍历每个有积压的通道，各贡献「至多一个事件」。
    * 额度不足即本轮跳过该通道，帧留队到下个 tick
    * （Rust 在窗口上限暂停读 → 串联有界，绝不丢帧）。
+   * 游标推进到最后发出者之后：W4 实测（16 终端洪泛）证明固定插入顺序开扫会让
+   * 首个积压通道吞掉全部令牌、靠后通道整段窗口 +0B 饿死，轮询公平必须靠
+   * 环形游标实现，而非只靠「每通道每轮至多一个事件」。
    */
   private pump(): void {
     this.refill()
-    for (const channel of this.allChannels()) {
-      if (channel.queue.length === 0) continue
-      // 合并上限按整帧边界取（≥ 单帧），避免把一个 PTY 帧拆到两个事件里。
-      const take = this.coalesceHead(channel)
-      const cost = encodedSize(take) + EVENT_OVERHEAD
-      if (cost > this.tokens) continue
-      this.emitHead(channel, take)
-      this.tokens -= cost
+    const channels = this.allChannels()
+    const n = channels.length
+    if (n > 0) {
+      const start = this.cursor % n
+      let lastServed = -1
+      for (let i = 0; i < n; i += 1) {
+        const index = (start + i) % n
+        const channel = channels[index]
+        if (channel.queue.length === 0) continue
+        // 合并上限按整帧边界取（≥ 单帧），避免把一个 PTY 帧拆到两个事件里。
+        const take = this.coalesceHead(channel)
+        const cost = encodedSize(take) + EVENT_OVERHEAD
+        if (cost > this.tokens) continue
+        this.emitHead(channel, take)
+        this.tokens -= cost
+        lastServed = index
+      }
+      if (lastServed >= 0) this.cursor = (lastServed + 1) % n
     }
     this.onTick()
   }

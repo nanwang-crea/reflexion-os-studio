@@ -185,6 +185,99 @@ Tauri supervisor→`app.emit` 跳与 WebView/xterm 渲染跳**尚未量化**。
 （`top -l`/`ps -o rss`，dev 模式与基线对比）。W1 不据此宣称任何门槛"已通过"，
 只确认门槛定义固定且测量方法已有归属阶段。
 
+### 9.1 W4-2a 实测：harness 与 P0/P1（2026-09-14，macOS 26.6.2 / Apple Silicon）
+
+harness：`scripts/terminal-perf.mjs`——驱动**真实链路**（`node apps/runtime/dist/index.js` +
+debug `reflexion-system-runtime`、独立 tmp 数据目录、只用前端协议命令），mock provider
+内嵌（OpenAI 兼容 SSE，400 delta/回复）。用法：
+
+```bash
+pnpm build:packages && cargo build --manifest-path crates/Cargo.toml
+node scripts/terminal-perf.mjs --quick      # P0 + 60s P1（约 75s wall，仅逻辑冒烟，不入库 test-all，见下）
+node scripts/terminal-perf.mjs --p1         # P0 + 120s P1（正式测量）
+node scripts/terminal-perf.mjs --p2-only    # P2 长稳 600s（正式测量；--duration-override <秒> 可做机制冒烟）
+```
+
+相位结构为独立函数：`--p2-only` 复用同一 `bootStack()`（runtime+sidecar+provider 装配），
+不重跑 P1。每相位末行输出 `PERF-SUMMARY {json}`（grep 友好），退出码 = 全执行相位 PASS。
+
+**结果表（门槛数字与 spec §10 一致，未做任何放宽）：**
+
+| 门槛                                  | 阈值          | P0（10s 空闲）                  | P1（120s 正式）           | P1（240s 延长复测）        | 结果                         |
+| ------------------------------------- | ------------- | ------------------------------- | ------------------------- | -------------------------- | ---------------------------- |
+| 聊天 delta p95                        | ≤100ms        | p95_base=**1ms** (n=1200)       | **1ms** (n=9600)          | 1ms (n=19200)              | PASS                         |
+| 相对基线增量                          | ≤50ms         | —                               | **+0ms**                  | +0ms                       | PASS                         |
+| 控制命令响应 p95                      | ≤300ms        | —                               | **35ms** (n=59，注3)      | 34ms (n=119)               | PASS                         |
+| 控制命令丢失                          | 0             | —                               | **0/59**                  | 0/119                      | PASS                         |
+| 饿死（每 10s 全终端流增长）           | 0 窗口        | —                               | **0**（修复后）           | 0                          | PASS（修复前 8/15 终端 +0B） |
+| terminal.output JSON 吞吐             | ≤1.1 MiB/s    | —                               | **0.606**（max10s 0.618） | 0.595                      | PASS（原始值照报）           |
+| runtime RSS 斜率（末 45s 拟合）       | <1 MiB/min    | —                               | **2.501**（注5）          | **0.362**，平台期≈140.6MiB | 120s 窗 FAIL / 240s PASS     |
+| sidecar RSS 斜率                      | <1 MiB/min    | —                               | **0.022**                 | 0                          | PASS                         |
+| 队列有界（metrics queued 峰）         | ≤256+16KiB    | —                               | **256.3KiB**              | 256.3KiB                   | PASS（串联合载窗口钉死）     |
+| 空闲 CPU（累计 CPU 秒窗差分）         | <5%（§11 ≈0） | **rt 1.6% / sc 0%**             | —                         | —                          | PASS                         |
+| 空闲 RSS 峰值                         | 报告值        | rt **77.9–79.0MiB** / sc 3.1MiB | —                         | —                          | 报告                         |
+| P2（600s、末 120s 拟合、有界+无卡死） | 见 harness    | —                               | —                         | —                          | **待跑（`--p2-only`）**      |
+
+P1 洪泛构成：两临时项目 8+8=16 终端（=全局活动额度上限），15×`yes` 洪泛 + 1 控制终端，
+100ms 全局 ack 循环（累计最大 seq），每 5s 流式聊天 / 每 2s 控制 PING / 每 10s 存活+吞吐 /
+每 5s RSS。聊天 120s 窗 24 条消息全部 completed（含 Run 后记忆提取后台压力）。
+
+**方法注记（AGENTS §9 如实，逐条）：**
+
+1. **harness 边界（最重要）**：延迟测到的是 **runtime 发射事件（`occurredAt`）→ harness
+   收到 stdout 行**这一跳，含 TS 全链（入站解析、egress 泵、令牌桶、合帧）与 Rust sidecar
+   往返，**不含 Tauri supervisor→`app.emit`→WebView/xterm 渲染跳**。本表数字不能直接当
+   "UI 展示延迟"引用；spec §10 门槛原文（"消费至展示"）在本阶段以"发射至协议消费"口径
+   实测，口径差如实登记，WebView 跳仍挂 §5/W4 面板验收。
+2. **PING 终端不跑 `yes`（15×yes + #1 保持提示符，偏离任务原文）**：一次性 raw-pty 探针
+   （`zsh -f -i`，不经本产品）证实 macOS 内核事实——前台 job 运行期间 cooked-mode 输入
+   **不回显**（提示符期的"回显"是 zle 重绘，非 ldisc echo；`stty` 显示 `echo icanon` 亦然）、
+   内核输入队列约 255B 后**静默丢弃**（60+ 行排队仅 ~2 行最终执行）、约 1KB 未读输入后
+   **master write 阻塞**。因此"PING 进忙碌 shell 等回显"在本平台不可实现；改为控制终端保持
+   提示符，PING 走完整链路（write RPC→Rust→pty→zsh 真执行→输出回传），是比"内核回显"
+   更强的控制面断言。命令用 `echo PING_$(( n ))_X` 使提交回显不含字面 token，检测只命中
+   执行输出行；RTT 自发出 write 起算。
+3. **ping#1 洪泛起点瞬态**：120s/240s 各只有一个 RTT 离群点（1.6/1.7s），全部是"洪泛开始
+   后 0.2s 发出的第一条 PING"——15 终端启动风暴（每终端 ≤256KiB 窗口初灌 + runtime 堆
+   预热）所致；其余 p50=13ms/p95=34–35ms。n=59 时单点不影响 p95。样本如实保留未剔除。
+4. **egress 指标行来源**：`[terminal-metrics] <id> queued= peak= emitted=` 由 **TS 回传泵**
+   写 runtime stderr（`egress.ts report()`），并非 Rust sidecar 自身输出——任务原文"sidecar
+   stderr"在本代码库对应"TS 泵 stderr"（Rust 侧无等价行）；harness 按实际来源解析
+   （385–769 行/运行），无方法缺口。
+5. **120s 窗 RSS 斜率 FAIL = V8 堆预热台阶，非泄漏**：曲线台阶式收敛（0s:92 → 25s:117 →
+   60s:134 → 100s:136 → 240s:140.6MiB），台阶全部落在前 ~100s；120s 正式窗的"末 45s"拟合
+   罩住 60–65s 的 +13MiB 台阶 → 2.501 MiB/min。240s 延长同门槛复测 **0.362 PASS**。门槛
+   数字未动；正式有界性判据是门槛 3 原文"持续 10 分钟"→ 由 P2 末 120s 拟合裁决，待跑。
+6. **顺带发现的鲁棒性问题（未修复，登记后续）**：注 2 同因——sidecar 在协议读循环内
+   同步 `write_all` 到 master fd（`main.rs` 单循环 → `session.rs write_input`），一个终端
+   的内核输入队列满即可卡死**整个 sidecar 请求环**（探针实测一次 `terminal.close` 超时）。
+   真实用户等价物是"对忙碌 shell 大量粘贴"。修复涉及输入溢出策略设计（每终端写线程/
+   有界队列/非阻塞拒绝码），超出 W4-2a 性能 harness 范围，**登记为 W4 后续项**；
+   本 harness 方法（控制终端保持提示符）不触发该路径。
+7. **`ps %cpu` 在 macOS 是寿命均值**：空闲门禁用两次采样间 `time=`（累计 CPU 秒）差分的
+   窗口占用率，`%cpu` 原值照报；`yes` 洪泛源与 harness 自身的 CPU 不计入门槛（负载发生器）。
+8. **清理纪律**：只 TERM/核验本脚本跟踪的 runtime pid、发现到的 sidecar pid 与登记的
+   `yes` 孙进程 pid（洪泛开始时快照），绝不按名字宽泛 pkill；120s/240s/P2 冒烟运行
+   cleanup 均 `clean:true`（无孤儿）。
+9. **Windows/Linux：未验证**（POSIX 主路径，同 §4/§11 口径；`yes` 与 `ps` 格式均 POSIX）。
+
+**后端修复（本次唯一）——egress 泵轮询公平**：修复前 `EgressPacer.pump()` 每 tick 从
+records **插入序**头部开扫、全局令牌桶（一个 16KiB 满事件成本 > 单 tick 补充量）→ 16
+终端饱和时首个积压通道吞掉全部额度、其后通道整段窗口 **0 字节**（实测 8/15 终端饿死，
+总吞吐 0.56 MiB/s ≈ 单通道独吞速率）。修复：环形游标——每轮从上一轮最后发出者之后开扫
+（`egress.ts` 约 +20 行）。新增单测 `egress 饱和轮询：4 积压通道环形分发，无一饿死
+（W4 修复）`，变异验证：不带修复时以"前 4 事件未覆盖全部通道"失败，带修复通过。
+修复后 P1 全窗口 starve=0、吞吐按预算均匀分布、控制面 p95 34–35ms。
+
+**test-all 决策**：`--quick` 实测 75s wall < 90s，但**不入库**——其 60s 窗的"末 45s RSS
+斜率"必然罩住注 5 的堆预热台阶（实测 18.1 MiB/min，结构性必红），且逼近预算线；
+test-all 保持现状，正式测量按上方用法手工执行。
+
+**验证**：`pnpm format:check` / `pnpm lint` / 根与前端 `typecheck` /
+`pnpm --filter @reflexion-os-studio/runtime test`（229 项，含新单测）/ `cargo fmt --check` +
+`cargo test`（crates，本次未改 Rust）全绿；P1 120s 与 240s、P2 20s 机制冒烟结果如上。
+P2 正式 600s **未跑**（由控制方执行 `--p2-only`）。
+
 ## 10. W1 出口清单（Task 15）
 
 | 项                                                          | 状态     | 证据指针                                                                                                                                                                                                                                                                                                                                          |

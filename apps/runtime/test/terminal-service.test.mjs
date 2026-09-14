@@ -443,6 +443,39 @@ test('egress 两终端轮询公平（交替发出）', async () => {
   assert.ok(ids.includes(a.terminalId) && ids.includes(bb.terminalId))
 })
 
+test('egress 饱和轮询：4 积压通道环形分发，无一饿死（W4 修复）', async () => {
+  // 预算 ≈ 每 5-6 tick 发得出一个满事件：固定插入顺序开扫会让首个通道吞掉
+  // 全部令牌、其后通道整段窗口 0 字节（W4 P1 实测钉出的缺陷）。
+  const h = harness({
+    config: { egressTickMs: 2, egressBudgetBytesPerSec: 2 * 1024 * 1024 },
+  })
+  const terms = []
+  for (let i = 0; i < 4; i += 1) {
+    terms.push((await running(h, `rr${i}`)).terminal)
+  }
+  for (const [i, term] of terms.entries()) {
+    for (let f = 0; f < 10; f += 1) {
+      h.service.handleRustNotification('terminal.output', {
+        terminalId: term.terminalId,
+        generation: term.generation,
+        outputSeq: f,
+        data: b64(Buffer.alloc(16 * 1024, i + 1)),
+      })
+    }
+  }
+  await sleep(250)
+  const ids = h.events
+    .filter((e) => e.type === 'terminal.output')
+    .map((e) => e.terminalId)
+  assert.ok(ids.length >= 8, `发出事件数过低: ${ids.length}`)
+  const first = ids.slice(0, terms.length)
+  assert.deepEqual(
+    [...new Set(first)].sort(),
+    terms.map((t) => t.terminalId).sort(),
+    `前 ${terms.length} 个事件未覆盖全部通道（顺序: ${first.join(',')}）`,
+  )
+})
+
 // ---------------- 7. 通知接线与顺序 ----------------
 
 test('旧代际通知丢弃', async () => {
