@@ -11,7 +11,7 @@ import {
 } from '@reflexion-os-studio/agent-core'
 import type { Store } from '../store/index.js'
 import { streamChatCompletion } from '../provider.js'
-import { buildMemoryBlock } from './memory/recall.js'
+import { buildInstructionBlock } from './instructions/render.js'
 import { HISTORY_COMPACTOR_SYSTEM_PROMPT } from './prompts/index.js'
 import {
   framesToValidatedMessages,
@@ -191,7 +191,7 @@ export class ContextBuilder {
   constructor(private readonly store: Store) {}
 
   /**
-   * 从 canonical 存储重建 Frame 历史（system + 记忆块 → Checkpoint → 最近
+   * 从 canonical 存储重建 Frame 历史（system + 指令/记忆块 → Checkpoint → 最近
    * Frame）。超预算时走增量 Checkpoint（相同来源 hash 只摘要一次）；Checkpoint
    * 失败退化为全文摘要压缩，再失败走确定性 Frame 裁剪，不阻塞对话。
    * 本地数据损坏（FrameError）直接失败为 internal，不降级。
@@ -203,12 +203,15 @@ export class ContextBuilder {
     signal: AbortSignal,
   ): Promise<ModelMessage[]> {
     const buildStartedAt = Date.now()
-    // A2 Memory 召回：失败/为空都不影响对话，只是没有记忆块。
-    const memoryBlock = await buildMemoryBlock(this.store, sessionId).catch(
-      () => '',
-    )
+    // 指令/记忆文件注入（文件即记忆 V2）：失败/为空都不影响对话。
+    const instructionBlock = await buildInstructionBlock(
+      this.store,
+      sessionId,
+    ).catch(() => '')
     const effectiveSystem =
-      memoryBlock === '' ? systemPrompt : `${systemPrompt}\n\n${memoryBlock}`
+      instructionBlock === ''
+        ? systemPrompt
+        : `${systemPrompt}\n\n${instructionBlock}`
     const { frames, messageIds } = reconstructSessionFramesWithIds(
       this.store,
       sessionId,

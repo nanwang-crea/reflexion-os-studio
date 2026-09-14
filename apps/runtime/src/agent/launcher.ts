@@ -16,7 +16,6 @@ import type { Store } from '../store/index.js'
 import type { SystemRuntimeClient } from '../system.js'
 import type { McpManager } from '../mcp/manager.js'
 import { ContextBuilder, type ProviderRuntimeConfig } from './context.js'
-import type { MemoryService } from './memory/service.js'
 import { PermissionGate, type PermissionMode } from './permissions.js'
 import type { ApprovalGateway } from './permissions.js'
 import { PRIMARY_AGENT_SYSTEM_PROMPT } from './prompts/index.js'
@@ -50,8 +49,6 @@ export interface LaunchOptions {
   childTokenBudget?: number
   /** 工具白名单：设置后仅注册这些内置/MCP 工具；缺省不限制。 */
   allowedTools?: ReadonlySet<string> | null
-  /** Run 完成后的 Memory Job 通知（ChatAgent 注入 worker.schedule）。 */
-  onMemoryJob?: () => void
 }
 
 /** launch 依赖：跨 Run 共享的服务集合（由 ChatAgent 注入）。 */
@@ -61,15 +58,12 @@ export interface LaunchDeps {
   mcp: McpManager | null
   runner: RunRunner
   contextBuilder: ContextBuilder
-  memory: MemoryService
   approvals: ApprovalGateway
 }
 
 export interface LaunchHooks {
   /** Run 结束(完成/失败/取消)后回调：门面用它自动出队发送排队中的下一条。 */
   onRunSettled: (sessionId: string) => void
-  /** 成功 Run 的 Memory Job 入队后回调：触发 worker 空闲消费。 */
-  onMemoryJob?: () => void
 }
 
 /**
@@ -180,7 +174,6 @@ export class RunLauncher {
         workspaceRoot,
         gate,
         approvals: this.deps.approvals,
-        onMemoryJob: input.onMemoryJob,
         controller,
         emitter,
         firstAssistantMessage: assistantMessage,

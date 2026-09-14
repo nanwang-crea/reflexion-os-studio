@@ -132,7 +132,6 @@ async function runOneTurn(
       gate: new PermissionGate('workspace', true, true),
       approvals: new ApprovalGateway(),
       settings,
-      memory: null,
       controller: new AbortController(),
       emitter: new RunEventEmitter(run.id, () => {}),
       firstAssistantMessage: store.messages.create({

@@ -10,6 +10,7 @@ import {
   type RuntimeStatus,
 } from '@reflexion-os-studio/contracts'
 import { ChatAgent, CommandError } from './agent/index.js'
+import { sweepOrphanMemoryDirs } from './agent/instructions/service.js'
 import { ResourceEventEmitter } from './events.js'
 import { dispatchCommand, testProviderConnection } from './handlers.js'
 import { resolveDataDir, Store } from './store/index.js'
@@ -159,6 +160,12 @@ void userShellEnvReady
 // Asset Store 启动巡检/补偿清理：清理孤儿内容文件、标记缺内容的资产。
 void assetService.recover().catch((error: unknown) => {
   process.stderr.write(`[runtime] asset recovery failed: ${String(error)}\n`)
+})
+// 记忆目录启动清扫：删除无项目行对应的孤儿项目记忆目录（与 Asset 巡检同期）。
+void sweepOrphanMemoryDirs(store).catch((error: unknown) => {
+  process.stderr.write(
+    `[runtime] memory dir recovery failed: ${String(error)}\n`,
+  )
 })
 // 初始状态上报：让 Host/前端立即拿到 systemAvailable 基线（后续变化走回调）。
 statusEmitter.next({ type: 'runtime.status', status: getStatus() })

@@ -41,7 +41,6 @@ function baseInput(store, run, overrides = {}) {
     gate: new PermissionGate('workspace', false),
     approvals: new ApprovalGateway(),
     settings: { maxTurns: 4 },
-    memory: null,
     controller: overrides.controller ?? new AbortController(),
     emitter: overrides.emitter ?? new RunEventEmitter(run.id, () => {}),
     firstAssistantMessage: store.messages.create({
@@ -369,7 +368,6 @@ test('finalizer settles callbacks exactly once even when notifier throws', async
         lastAssistantMessageId: firstAssistant.id,
       },
       emitter: throwingEmitter,
-      memory: null,
       provider: { baseUrl: 'http://localhost:1', apiKey: 'k', model: 'm' },
       onResult: () => {
         results += 1
@@ -380,7 +378,6 @@ test('finalizer settles callbacks exactly once even when notifier throws', async
       errorCode: null,
       errorMessage: null,
       pendingMessage: null,
-      enqueueMemoryJob: false,
       resultContent: 'ok',
     },
   )
@@ -446,7 +443,6 @@ test('failed run persists terminal state and emits run.failed', () => {
         lastAssistantMessageId: null,
       },
       emitter: new RunEventEmitter(run.id, (e) => events.push(e)),
-      memory: null,
       provider: { baseUrl: 'http://localhost:1', apiKey: 'k', model: 'm' },
       onFailure: () => {},
     },
@@ -455,7 +451,6 @@ test('failed run persists terminal state and emits run.failed', () => {
       errorCode: 'max_turns',
       errorMessage: '任务在 4 轮内未完成，已停止执行',
       pendingMessage: null,
-      enqueueMemoryJob: false,
     },
   )
   assert.equal(store.runs.get(run.id).status, 'failed')
@@ -494,7 +489,6 @@ test('cancelled run keeps plan untouched and draft to interrupted', () => {
         lastAssistantMessageId: draft.id,
       },
       emitter: new RunEventEmitter(run.id, () => {}),
-      memory: null,
       provider: { baseUrl: 'http://localhost:1', apiKey: 'k', model: 'm' },
       onCancel: () => {
         cancels += 1
@@ -505,7 +499,6 @@ test('cancelled run keeps plan untouched and draft to interrupted', () => {
       errorCode: null,
       errorMessage: null,
       pendingMessage: null,
-      enqueueMemoryJob: false,
     },
   )
   // 计划不随 Run 终态收敛（ea4f1a4）：Finalizer 不触碰任何计划行。

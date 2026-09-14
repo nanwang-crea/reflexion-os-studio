@@ -1,8 +1,5 @@
 import { z } from 'zod'
 import {
-  MemoryScopeSchema,
-  MemorySchema,
-  MemoryStatusSchema,
   MessageSchema,
   RunEventSchema,
   ProviderCapabilitySchema,
@@ -398,31 +395,29 @@ export const CommandSchemaRegistry = {
       error: z.string().nullable(),
     }),
   },
-  'memory.list': {
-    // scopeId 语义与 Memory.scopeId 一致：省略 → 全部；null → user 级。
+  'instructions.get': {
+    // 指令页读取单个文件；path 为 null 表示当前条件下没有该文件位置。
     params: z.object({
       requestId: RequestIdSchema,
-      scope: MemoryScopeSchema.optional(),
-      scopeId: z.union([z.string().min(1), z.null()]).optional(),
+      scope: z.enum(['global', 'project']),
+      projectId: z.string().min(1).optional(),
+      kind: z.enum(['agents', 'memory']),
     }),
-    result: z.object({ memories: z.array(MemorySchema) }),
+    result: z.object({
+      path: z.string().nullable(),
+      content: z.string(),
+    }),
   },
-  'memory.update': {
-    // 记忆管理页的编辑/固定/归档；content 编辑会作废原 embedding（召回侧重建）。
+  'instructions.save': {
+    // 指令页保存（原子替换）；项目级 AGENTS.md 会写入用户仓库根。
     params: z.object({
       requestId: RequestIdSchema,
-      id: z.string().min(1),
-      content: z.string().min(1).optional(),
-      status: MemoryStatusSchema.optional(),
+      scope: z.enum(['global', 'project']),
+      projectId: z.string().min(1).optional(),
+      kind: z.enum(['agents', 'memory']),
+      content: z.string(),
     }),
-    result: z.object({ memory: MemorySchema.nullable() }),
-  },
-  'memory.delete': {
-    params: z.object({
-      requestId: RequestIdSchema,
-      id: z.string().min(1),
-    }),
-    result: z.object({ removed: z.boolean() }),
+    result: z.object({ ok: z.boolean(), message: z.string() }),
   },
   'skill.list': {
     // 内置 Skill 清单（Phase 1A 无安装/启停，列表即全部可用项）。

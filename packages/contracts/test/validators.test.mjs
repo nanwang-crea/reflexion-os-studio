@@ -4,7 +4,6 @@ import {
   CommandSchemaRegistry,
   FinishReasonSchema,
   JsonRpcMessageSchema,
-  MemorySchema,
   MessageSendParamsSchema,
   MessageStatusSchema,
   MessageSchema,
@@ -638,121 +637,6 @@ test('approval.resolved 以 grantScope 承载授权范围，信封 scope 不被�
 test('FinishReason includes tool_calls', () => {
   assert.equal(FinishReasonSchema.safeParse('tool_calls').success, true)
   assert.equal(FinishReasonSchema.safeParse('function_call').success, false)
-})
-
-test('MemorySchema validates scope/kind/status and nullable scopeId', () => {
-  const memory = {
-    id: 'mem1',
-    scope: 'project',
-    scopeId: 'p1',
-    kind: 'fact',
-    content: '项目使用 pnpm workspace 管理。',
-    sourceRunId: 'r1',
-    confidence: 0.9,
-    status: 'active',
-    createdAt: NOW,
-    updatedAt: NOW,
-    expiresAt: null,
-  }
-  assert.equal(MemorySchema.safeParse(memory).success, true)
-  // user 级 scopeId 为 null；session/project 必须可回溯。
-  assert.equal(
-    MemorySchema.safeParse({ ...memory, scope: 'user', scopeId: null }).success,
-    true,
-  )
-  assert.equal(
-    MemorySchema.safeParse({ ...memory, scope: 'session', scopeId: null })
-      .success,
-    false,
-  )
-  assert.equal(
-    MemorySchema.safeParse({ ...memory, kind: 'secret' }).success,
-    false,
-  )
-  assert.equal(
-    MemorySchema.safeParse({ ...memory, status: 'deleted' }).success,
-    false,
-  )
-  assert.equal(
-    MemorySchema.safeParse({ ...memory, confidence: 1.5 }).success,
-    false,
-  )
-  assert.equal(
-    MemorySchema.safeParse({ ...memory, content: '' }).success,
-    false,
-  )
-})
-
-test('memory commands validate params and results', () => {
-  const list = CommandSchemaRegistry['memory.list'].params
-  assert.equal(list.safeParse({ requestId: 'r1' }).success, true)
-  assert.equal(
-    list.safeParse({ requestId: 'r1', scope: 'project' }).success,
-    true,
-  )
-  assert.equal(
-    list.safeParse({ requestId: 'r1', scope: 'user', scopeId: null }).success,
-    true,
-  )
-  assert.equal(
-    list.safeParse({ requestId: 'r1', scope: 'galaxy' }).success,
-    false,
-  )
-
-  const update = CommandSchemaRegistry['memory.update'].params
-  assert.equal(
-    update.safeParse({ requestId: 'r1', id: 'm1', status: 'pinned' }).success,
-    true,
-  )
-  assert.equal(
-    update.safeParse({ requestId: 'r1', id: 'm1', content: '新内容' }).success,
-    true,
-  )
-  assert.equal(update.safeParse({ requestId: 'r1' }).success, false)
-
-  const del = CommandSchemaRegistry['memory.delete'].params
-  assert.equal(del.safeParse({ requestId: 'r1', id: 'm1' }).success, true)
-  assert.equal(del.safeParse({ requestId: 'r1' }).success, false)
-})
-
-test('memory.written event validates memory payloads', () => {
-  const envelope = {
-    protocolVersion: PROTOCOL_VERSION,
-    eventId: 'e1',
-    scope: 'run',
-    runId: 'r1',
-    seq: 0,
-    occurredAt: NOW,
-  }
-  assert.equal(
-    RuntimeEventSchema.safeParse({
-      ...envelope,
-      type: 'memory.written',
-      memories: [
-        {
-          id: 'mem1',
-          scope: 'session',
-          scopeId: 's1',
-          kind: 'preference',
-          content: '用户偏好中文回复。',
-          sourceRunId: 'r1',
-          confidence: 0.8,
-          status: 'active',
-          createdAt: NOW,
-          updatedAt: NOW,
-          expiresAt: null,
-        },
-      ],
-    }).success,
-    true,
-  )
-  assert.equal(
-    RuntimeEventSchema.safeParse({
-      ...envelope,
-      type: 'memory.written',
-    }).success,
-    false,
-  )
 })
 
 test('workspace.list_dir carries pagination params and truncation result metadata', () => {

@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import { CommandSchemaRegistry } from './commands.js'
 import {
-  MemorySchema,
   MessageSchema,
   ProjectSchema,
   ProviderProfileSchema,
@@ -46,7 +45,6 @@ export const jsonSchemas: Readonly<Record<string, unknown>> = Object.freeze(
     toJSONSchema('ToolCall', ToolCallSchema),
     toJSONSchema('ToolSpec', ToolSpecSchema),
     toJSONSchema('SkillManifest', SkillManifestSchema),
-    toJSONSchema('Memory', MemorySchema),
     toJSONSchema('ProviderProfile', ProviderProfileSchema),
     toJSONSchema('WorkspaceEntry', WorkspaceEntrySchema),
     toJSONSchema('WorkspaceIndexSnapshot', WorkspaceIndexSnapshotSchema),

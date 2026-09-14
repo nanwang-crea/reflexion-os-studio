@@ -18,8 +18,6 @@ export interface RunTerminalDecision {
   errorMessage: string | null
   /** 失败/取消时可选地把模型可见内容随草稿收尾；completed 无待收尾草稿。 */
   pendingMessage: PendingMessageFinalization | null
-  /** 仅 completed Run 触发 Memory 提取。 */
-  enqueueMemoryJob: boolean
   /** completed 时回传给 onResult 的最终结果文本。 */
   resultContent?: string
 }
@@ -68,10 +66,6 @@ export class RunFinalizer {
     // 提交成功：清理内存态。
     state.turn = null
     state.toolCallRowIds.clear()
-    // 成功 Run 幂等创建持久化 Memory Job（事务内，保证 Run completed ⇒ job 存在）。
-    if (decision.status === 'completed' && decision.enqueueMemoryJob) {
-      this.store.memoryJobs.enqueue(run.id)
-    }
 
     // 事务已提交：按序发出终态事件（通知器抛错只记 stderr，不阻断回调）。
     try {

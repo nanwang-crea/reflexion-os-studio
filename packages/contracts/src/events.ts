@@ -2,7 +2,6 @@ import { z } from 'zod'
 import {
   JsonValueSchema,
   ApprovalOperationSchema,
-  MemorySchema,
   MessageSchema,
   RunSchema,
   UsageSchema,
@@ -165,11 +164,6 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     // 原 payload 字段名 scope（once/session）改名 grantScope：
     // 避免与信封 scope 在 .extend() 合并时静默互相覆盖。
     grantScope: z.enum(['once', 'session']),
-  }),
-  // A2 Memory：Run 结束后异步提取落库的记忆；UI 据此做非打断式提示。
-  RunEnvelopeSchema.extend({
-    type: z.literal('memory.written'),
-    memories: z.array(MemorySchema),
   }),
   // Phase 1B Workspace 索引事件：project 作用域，projectId 为真实身份。
   RuntimeEventEnvelopeSchema.extend({

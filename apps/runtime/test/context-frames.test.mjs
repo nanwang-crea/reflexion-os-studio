@@ -193,7 +193,6 @@ test('corrupted canonical data fails the run as internal before any provider req
       gate: new PermissionGate('workspace', false),
       approvals: new ApprovalGateway(),
       settings: { maxTurns: 2 },
-      memory: null,
       controller: new AbortController(),
       emitter: new RunEventEmitter(run.id, () => {}),
       firstAssistantMessage: firstAssistant,

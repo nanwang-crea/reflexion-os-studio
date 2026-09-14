@@ -1,23 +1,7 @@
 /**
- * 记忆管线共享工具：宽松 JSON 解析与机密形态过滤。
- * 提取器产出的候选必须过机密过滤才能落库（secret 纪律：机密只存在于 secrets.json）。
+ * 机密形态过滤：机密永远不得进入记忆文件（MEMORY.md 会被注入上下文并落盘，
+ * secret 纪律：机密只存在于 secrets.json）。
  */
-
-/** 从 LLM 输出中提取首个 JSON 数组/对象；容忍代码块围栏与前后杂文字。 */
-export function parseJsonLoose(text: string): unknown {
-  const trimmed = text.trim()
-  const start = trimmed.search(/[[{]/)
-  if (start === -1) return null
-  const opener = trimmed[start]
-  const closer = opener === '[' ? ']' : '}'
-  const end = trimmed.lastIndexOf(closer)
-  if (end <= start) return null
-  try {
-    return JSON.parse(trimmed.slice(start, end + 1))
-  } catch {
-    return null
-  }
-}
 
 const SECRET_PATTERNS: RegExp[] = [
   // 常见密钥前缀形态：OpenAI/AWS/GitHub/私有部署 Key 等。

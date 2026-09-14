@@ -15,7 +15,7 @@ import {
 } from '../ui/icons'
 
 export type AppView =
-  'chat' | 'settings' | 'memories' | 'skills' | 'automations'
+  'chat' | 'settings' | 'skills' | 'automations' | 'instructions'
 
 /** 底部导航可打开的页面（chat 由会话行/新建入口进入，不进底部导航）。 */
 type OtherView = Exclude<AppView, 'chat'>
@@ -188,10 +188,10 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
           onClick={() => props.onSelectView('automations')}
         />
         <NavItem
-          label="记忆"
+          label="指令"
           icon={<ArchiveIcon size={15} />}
-          active={props.view === 'memories'}
-          onClick={() => props.onSelectView('memories')}
+          active={props.view === 'instructions'}
+          onClick={() => props.onSelectView('instructions')}
         />
       </nav>
 

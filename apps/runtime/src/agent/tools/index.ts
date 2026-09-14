@@ -24,6 +24,7 @@ import {
 } from './files-query.js'
 import { createShellExecuteTool } from './shell.js'
 import { createSkillUseTool } from './skills.js'
+import { createMemoryRememberTool } from './instructions.js'
 import type { ToolContext } from './shared.js'
 import { createCurrentTimeTool } from './time.js'
 import { createWebFetchTool } from './web.js'
@@ -78,6 +79,7 @@ const BUILTIN_POLICIES: Record<string, ToolDefinition['execution']> = {
   get_current_time: { effect: 'pure' },
   'web.fetch': WEB_READ_POLICY,
   'skill.use': { effect: 'read', resourceKeys: () => [] },
+  'memory.remember': STATE_POLICY,
   manage_plan: STATE_POLICY,
   update_plan: STATE_POLICY,
   task: STATE_POLICY,
@@ -98,6 +100,7 @@ function alwaysAvailableTools(ctx: ToolContext): ToolDefinition[] {
     createCurrentTimeTool(),
     createWebFetchTool(),
     createSkillUseTool(ctx.skills),
+    createMemoryRememberTool(ctx),
     createManagePlanTool(ctx),
     createLegacyUpdatePlanTool(ctx),
   ]

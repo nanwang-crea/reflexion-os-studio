@@ -177,6 +177,9 @@ export function instructionPath(
   }
   if (scope === 'global') return join(dataDir, 'MEMORY.md')
   if (projectId === null) return null
+  // 记忆文件与 folderPath 无关，但 projectId 必须是真实存在的项目：
+  // 否则任意字符串直接 join 进路径，可携 ../ 逃出数据目录隔离。
+  if (!store.projects.get(projectId)) return null
   return join(dataDir, 'memories', projectId, 'MEMORY.md')
 }
 ```
@@ -309,6 +312,7 @@ test('buildInstructionBlock: 独立会话只有全局两层', async () => {
 `apps/runtime/src/agent/instructions/render.ts`：
 
 ```ts
+import { estimateTokens } from '@reflexion-os-studio/agent-core'
 import type { Store } from '../../store/index.js'
 import { readOptionalFile } from './loader.js'
 import {
@@ -317,26 +321,23 @@ import {
   type InstructionScope,
 } from './paths.js'
 
-/** 单个指令文件的注入预算（token）；超限保头截断并显式标注。 */
-export const INSTRUCTION_FILE_TOKEN_BUDGET = 4000
+/** 复用 agent-core 的 token 估算口径（单一真源，不再本地复刻）：CJK/假名按字、其余按码点每 4 字符向上取整。 */
+export { estimateTokens as estimateTextTokens }
 
-/** 召回 token 估算：CJK≈1 token/字，其余约 4 字符 1 token（与 agent-core 口径一致）。 */
-export function estimateTextTokens(text: string): number {
-  const cjk = (text.match(/[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/g) ?? [])
-    .length
-  return cjk + Math.ceil((text.length - cjk) / 4)
-}
+/** 单个指令文件的注入预算（token）；超限保头截断并显式标注。仅模块内使用。 */
+const INSTRUCTION_FILE_TOKEN_BUDGET = 4000
 
 /** 按 token 预算保头截断；先按比例收缩再逐步收敛。 */
 export function clipToTokenBudget(
   text: string,
   budget: number,
 ): { text: string; truncated: boolean } {
-  if (estimateTextTokens(text) <= budget) return { text, truncated: false }
-  const ratio = budget / estimateTextTokens(text)
+  const total = estimateTokens(text)
+  if (total <= budget) return { text, truncated: false }
+  const ratio = budget / total
   let end = Math.max(0, Math.floor(text.length * ratio))
   let piece = text.slice(0, end)
-  while (end > 0 && estimateTextTokens(piece) > budget) {
+  while (end > 0 && estimateTokens(piece) > budget) {
     end = Math.max(0, end - 64)
     piece = text.slice(0, end)
   }
@@ -424,6 +425,7 @@ import {
 test('remember: 全局首建带表头，追加带日期条目', async () => {
   const store = freshStore()
   const outcome = await remember({
+    store,
     scope: 'global',
     content: '以后新建项目一律用 pnpm。',
     projectId: null,
@@ -437,6 +439,7 @@ test('remember: 全局首建带表头，追加带日期条目', async () => {
   assert.ok(text.includes('## 记忆条目'))
   assert.match(text, /- \d{4}-\d{2}-\d{2} 以后新建项目一律用 pnpm。/)
   await remember({
+    store,
     scope: 'global',
     content: '回复保持简短。',
     projectId: null,
@@ -455,6 +458,7 @@ test('remember: 项目记忆落在数据目录 memories/<id> 下', async () => {
   const store = freshStore()
   const { project, session } = sessionInProject(store)
   const outcome = await remember({
+    store,
     scope: 'project',
     content: '本项目迁移只增不改。',
     projectId: project.id,
@@ -473,6 +477,7 @@ test('remember: 拒绝机密形态/超长/空白，项目 scope 无项目报错'
   assert.equal(
     (
       await remember({
+        store,
         scope: 'global',
         content: 'token: abcdefghijklmnop1234',
         projectId: null,
@@ -483,6 +488,7 @@ test('remember: 拒绝机密形态/超长/空白，项目 scope 无项目报错'
   assert.equal(
     (
       await remember({
+        store,
         scope: 'global',
         content: '字'.repeat(201),
         projectId: null,
@@ -491,10 +497,18 @@ test('remember: 拒绝机密形态/超长/空白，项目 scope 无项目报错'
     'too_long',
   )
   assert.equal(
-    (await remember({ scope: 'global', content: '   ', projectId: null })).code,
+    (
+      await remember({
+        store,
+        scope: 'global',
+        content: '   ',
+        projectId: null,
+      })
+    ).code,
     'too_long',
   )
   const noProject = await remember({
+    store,
     scope: 'project',
     content: '无项目',
     projectId: null,
@@ -513,6 +527,7 @@ test('remember: 文件超 64KB 上限时拒绝并提示整理', async () => {
     content: 'x'.repeat(64 * 1024 + 10),
   })
   const outcome = await remember({
+    store,
     scope: 'global',
     content: '再记一条',
     projectId: null,
@@ -563,6 +578,7 @@ import {
   mkdir,
   readFile,
   rename,
+  rm,
   writeFile,
 } from 'node:fs/promises'
 import { dirname } from 'node:path'
@@ -579,16 +595,20 @@ const MEMORY_FILE_HEADER =
   '# 记忆\n\n本文件由 ReflexionOS Studio 的 remember 工具与用户共同维护。\n\n## 记忆条目\n'
 const MAX_ENTRY_CHARS = 200
 /** MEMORY.md 体积上限：超限拒绝追加，提示到指令页整理（本轮不做自动治理）。 */
-export const MAX_MEMORY_FILE_BYTES = 64 * 1024
+const MAX_MEMORY_FILE_BYTES = 64 * 1024
 /** 指令页保存的内容上限（AGENTS.md 允许更大，用户在编辑器里写长文）。 */
 const MAX_SAVE_BYTES = 256 * 1024
 
-/** remember 工具与手动写入共用一条进程内串行链，避免并发 Run 交错。 */
+/**
+ * remember 与 saveInstruction 共用一条进程内串行链：两者都对同一 MEMORY.md
+ * 做「读-改-写」，并发 Run 的工具写入与用户在指令页的整文件保存必须互斥，
+ * 否则 rename 会冲掉交错写入的条目。链本身对错误免疫（见各 .catch）。
+ */
 let writeChain: Promise<unknown> = Promise.resolve()
 
 export interface RememberOutcome {
   ok: boolean
-  code?: 'no_project' | 'too_long' | 'secret_like' | 'too_large'
+  code?: 'no_project' | 'too_long' | 'secret_like' | 'too_large' | 'io_error'
   message: string
   path?: string
   entry?: string
@@ -596,17 +616,19 @@ export interface RememberOutcome {
 
 /** 模型主动记忆入口：追加一条 `- YYYY-MM-DD content` 到对应 MEMORY.md。 */
 export function remember(input: {
+  store: Store
   scope: InstructionScope
   content: string
   projectId: string | null
 }): Promise<RememberOutcome> {
   const task = writeChain.then(() => rememberNow(input))
-  // rememberNow 内部不抛错（全部折叠为 outcome）；catch 仅保链不断。
+  // rememberNow 把一切（含 IO 错误）折叠为 outcome，不会抛错；catch 仅兜底保链。
   writeChain = task.catch(() => undefined)
   return task
 }
 
 async function rememberNow(input: {
+  store: Store
   scope: InstructionScope
   content: string
   projectId: string | null
@@ -618,6 +640,14 @@ async function rememberNow(input: {
       ok: false,
       code: 'too_long',
       message: `记忆内容必须非空且不超过 ${MAX_ENTRY_CHARS} 字，当前 ${content.length} 字。`,
+    }
+  }
+  // 单行不变量：条目独占一行才能安全聚合/截断，内嵌换行会伪造多条目注入。
+  if (/[\r\n\u2028\u2029]/.test(content)) {
+    return {
+      ok: false,
+      code: 'too_long',
+      message: '记忆内容必须是单行，不能包含换行。',
     }
   }
   if (containsSecretLike(content)) {
@@ -634,37 +664,70 @@ async function rememberNow(input: {
       message: '当前会话未关联项目，无法写项目级记忆；请改用 global 范围。',
     }
   }
-  const path = memoryPath(scope, projectId)
-  const existing = await readIfAbsent(path)
-  if (Buffer.byteLength(existing, 'utf8') > MAX_MEMORY_FILE_BYTES) {
+  const path = memoryPath(input.store, scope, projectId)
+  if (path === null) {
+    // projectId 过了 store 校验才拼路径；不存在即拒，防目录逃逸。
     return {
       ok: false,
-      code: 'too_large',
-      message: `记忆文件已超 ${MAX_MEMORY_FILE_BYTES / 1024}KB 上限，请到指令页整理既有条目。`,
+      code: 'no_project',
+      message: '项目不存在，无法写项目级记忆；请改用 global 范围。',
     }
   }
-  const entry = `- ${new Date().toISOString().slice(0, 10)} ${content}`
-  await mkdir(dirname(path), { recursive: true })
-  const body =
-    existing === '' ? `${MEMORY_FILE_HEADER}\n${entry}\n` : `${entry}\n`
-  await appendFile(path, body, 'utf8')
-  return {
-    ok: true,
-    message: `已记住（${path}）：${content}`,
-    path,
-    entry,
+  // 读-判-写整段都是磁盘操作，任一环节抛错（EISDIR/EACCES/ENOSPC…）折叠成
+  // io_error：remember 是模型侧工具，绝不能因磁盘异常把异常抛回 Run 循环。
+  try {
+    const existing = await readIfAbsent(path)
+    if (Buffer.byteLength(existing, 'utf8') > MAX_MEMORY_FILE_BYTES) {
+      return {
+        ok: false,
+        code: 'too_large',
+        message: `记忆文件已超 ${MAX_MEMORY_FILE_BYTES / 1024}KB 上限，请到指令页整理既有条目。`,
+      }
+    }
+    const entry = `- ${new Date().toLocaleDateString('en-CA')} ${content}`
+    await mkdir(dirname(path), { recursive: true })
+    const prefix = existing === '' ? `${MEMORY_FILE_HEADER}\n` : ''
+    // 旧文件缺尾换行时先补 \n，避免新条目粘在旧行行尾。
+    const glue = existing === '' || existing.endsWith('\n') ? '' : '\n'
+    await appendFile(path, `${prefix}${glue}${entry}\n`, 'utf8')
+    return {
+      ok: true,
+      message: `已记住（${path}）：${content}`,
+      path,
+      entry,
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      code: 'io_error',
+      message: `记忆文件写入失败：${ioReason(error)}`,
+    }
   }
 }
 
+/** 只在「确实不存在」时视作空内容；权限/目录等真实故障上抛给调用方判定。 */
 async function readIfAbsent(path: string): Promise<string> {
   try {
     return await readFile(path, 'utf8')
-  } catch {
-    return ''
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException | null)?.code
+    // 有意与 loader.readOptionalFile 分道：注入路径对缺失容错、吞掉一切；
+    // 这里编辑器/写入路径不得把「不可读」伪装成「空」，非缺失错误一律上抛。
+    if (code === 'ENOENT' || code === 'ENOTDIR') return ''
+    throw error
   }
 }
 
-/** 定位（可能不存在的）指令文件并返回内容；无路径位置 → path null + 空内容。 */
+function ioReason(error: unknown): string {
+  const code = (error as NodeJS.ErrnoException | null)?.code
+  if (code) return code
+  return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * 定位（可能不存在的）指令文件并返回内容；无路径位置 → path null + 空内容。
+ * 文件存在但不可读时向上抛错——由命令 handler 按内部错误映射，编辑器不得静默显示为空。
+ */
 export async function getInstruction(input: {
   store: Store
   scope: InstructionScope
@@ -681,8 +744,24 @@ export async function getInstruction(input: {
   return { path, content: await readIfAbsent(path) }
 }
 
-/** 指令页保存：临时文件 + rename 原子替换；UTF-8 无 BOM、\n 换行。 */
-export async function saveInstruction(input: {
+/**
+ * 指令页保存：与 remember 共用串行链（读-改-写互斥）。守卫失败返回 ok:false；
+ * 真实磁盘故障沿链上抛（与 getInstruction 一致），由 handler 按内部错误处理。
+ */
+export function saveInstruction(input: {
+  store: Store
+  scope: InstructionScope
+  projectId: string | null
+  kind: InstructionKind
+  content: string
+}): Promise<{ ok: boolean; message: string }> {
+  const task = writeChain.then(() => saveInstructionNow(input))
+  // save 可能因磁盘故障 reject：catch 只保链不断，reject 仍原样交给本次调用方。
+  writeChain = task.catch(() => undefined)
+  return task
+}
+
+async function saveInstructionNow(input: {
   store: Store
   scope: InstructionScope
   projectId: string | null
@@ -713,27 +792,39 @@ export async function saveInstruction(input: {
   }
 }
 
+/** 临时文件 + rename 原子替换；失败清理半成品 tmp，随机后缀防同毫秒同名冲突。 */
 async function writeFileWithRename(
   path: string,
   content: string,
 ): Promise<void> {
-  const tmp = `${path}.tmp-${process.pid}-${Date.now()}`
-  await writeFile(tmp, content, 'utf8')
-  await rename(tmp, path)
+  const suffix = Math.random().toString(36).slice(2, 8)
+  const tmp = `${path}.tmp-${process.pid}-${Date.now()}-${suffix}`
+  try {
+    await writeFile(tmp, content, 'utf8')
+    await rename(tmp, path)
+  } catch (error) {
+    await rm(tmp, { force: true })
+    throw error
+  }
 }
 ```
 
-**paths.ts 同步改动**：memory 分支抽成独立导出（`instructionPath` 的 memory 路径委托它，Task 1 测试断言不变）：
+**paths.ts 同步改动**：memory 分支抽成独立导出（`instructionPath` 的 memory 分支改为 `return memoryPath(store, scope, projectId)` 委托它，store 校验保留在 `memoryPath` 内，Task 1 测试断言不变）：
 
 ```ts
-/** MEMORY.md 路径：恒在应用数据目录（项目级隔离到 memories/<projectId>/），不依赖 store。 */
+/**
+ * MEMORY.md 路径：恒在应用数据目录（项目级隔离到 memories/<projectId>/）。
+ * 项目不存在返回 null——projectId 必须过 store 校验，防任意字符串携 ../ 逃出数据目录。
+ */
 export function memoryPath(
+  store: Store,
   scope: InstructionScope,
   projectId: string | null,
-): string {
+): string | null {
   const dataDir = resolveDataDir()
   if (scope === 'global') return join(dataDir, 'MEMORY.md')
-  if (projectId === null) throw new Error('project scope requires projectId')
+  if (projectId === null) return null
+  if (!store.projects.get(projectId)) return null
   return join(dataDir, 'memories', projectId, 'MEMORY.md')
 }
 ```
@@ -835,6 +926,8 @@ function projectIdOf(p: Record<string, unknown>): string | null {
 export const instructionsCommandHandlers: Record<string, CommandHandler> = {
   'instructions.get': async (p, { store }) => {
     requireString(p, 'scope')
+    // getInstruction 对「存在但不可读」的文件抛错：此处不吞，交由 dispatch 统一映射
+    // （CommandError → 业务码；其余 → internal），编辑器不得把不可读当成空。
     return getInstruction({
       store,
       scope: scopeOf(p.scope),
@@ -856,6 +949,8 @@ export const instructionsCommandHandlers: Record<string, CommandHandler> = {
   },
 }
 ```
+
+错误传播沿用 `agent/memory/handlers.ts` 的同一套映射：业务非法（scope/kind 不合法、`requireString` 缺参、save 的 `!ok` 守卫）抛 `CommandError`，dispatch 以自带 code 落 `-32000`；`getInstruction`/`saveInstruction` 对磁盘故障（不可读/写失败）抛的普通 `Error` 不在 handler 吞掉，原样上抛 → dispatch 归为 `internal`（见 `src/index.ts` 的 `catch`）。即 handler 只负责"业务判定"，读写服务的抛错语义由传输层兜底，二者共同保证编辑器不会把"读失败"误当"空文件"。
 
 `apps/runtime/src/handlers.ts`：import 区加 `import { instructionsCommandHandlers } from './agent/instructions/handlers.js'`（与 memory 那行并列），合并表 `...memoryCommandHandlers,`（:200）后加 `...instructionsCommandHandlers,`。
 
@@ -888,10 +983,18 @@ export function createMemoryRememberTool(ctx: ToolContext): ToolDefinition {
     },
     execute: async ({ args }) => {
       const scope = requireString(args, 'scope')
+      if (scope !== 'global' && scope !== 'project') {
+        return {
+          content: 'scope 必须是 global 或 project。',
+          isError: true,
+          code: 'invalid_request',
+        }
+      }
       const content = requireString(args, 'content')
       const session = ctx.store.sessions.get(ctx.sessionId)
       const outcome = await remember({
-        scope: scope === 'project' ? 'project' : 'global',
+        store: ctx.store,
+        scope,
         content,
         projectId: session?.projectId ?? null,
       })
@@ -972,6 +1075,8 @@ test('instructions.get/save 经 handler 往返', async () => {
 ```
 
 （`requireString` 的 requestId 由 dispatch 层剥离，handler 直调测试不传。）
+
+> Task 4 审查项落地（与 shipped 同步）：execute 层非法 scope 显式拒绝（不回落 global），并追加 5 个 execute/装配用例（valid global、无项目 project → no_project、'Project' 笔误 → invalid_request 且全局 MEMORY.md 不落盘、项目会话 project → memories/<id>、`createToolRegistry` 含 memory.remember）与 1 个"注入与命令面读同一真相源"集成钉（`instructions.test.mjs`）。
 
 Run（workdir `apps/runtime`）: `npx tsc -p tsconfig.json && node --disable-warning=ExperimentalWarning --import ./test/set-test-data-dir.mjs --test test/instructions.test.mjs test/command-coverage.test.mjs test/permissions.test.mjs test/runner.test.mjs`
 Expected: 全 PASS（memory.test.mjs 仍独立绿——旧管线未拆）。
@@ -1110,187 +1215,31 @@ export function saveInstruction(input: {
 
 - [ ] **Step 2: 视图组件**
 
-`apps/desktop/frontend/features/instructions/InstructionsView.tsx`：
+`apps/desktop/frontend/features/instructions/InstructionsView.tsx`：实现已合入（以代码为准，见 66e2695 与其后的守卫修复提交），此处只记录审查后定稿的关键设计：
 
-```tsx
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { Project } from '@reflexion-os-studio/runtime-client'
-import { listProjects } from '../../api/projects'
-import { getInstruction, saveInstruction } from '../../api/instructions'
+- 所有 `getInstruction / saveInstruction / listProjects` 链都带 `.catch`：错误上各 pane 状态行（红色），读失败清空并禁用编辑区，绝不静默留白或留旧内容；
+- 脏草稿守卫（三键守卫同款仓库模式）：`InstructionPane` 经 `onDirtyChange(kind, dirty)` 把脏态上抛，父级 `Record<Kind, boolean>` 聚合；pane 卸载 cleanup 报 `false`（key 含 scope/project，重挂载不残留脏计数）。凡会丢弃草稿的动作（重新读取、scope 切换、项目选择）统一走守卫：
 
-type Scope = 'global' | 'project'
-type Kind = 'agents' | 'memory'
-
-const FILES: { kind: Kind; title: string; hint: string }[] = [
-  {
-    kind: 'agents',
-    title: 'AGENTS.md · 纪律与规范',
-    hint: '写给所有工具的长期指令。项目级会写入项目文件夹根目录。',
-  },
-  {
-    kind: 'memory',
-    title: 'MEMORY.md · 沉淀的记忆',
-    hint: '模型经 memory.remember 追加的条目与本区的手写内容，全部自动注入对话。',
-  },
-]
-
-function InstructionPane(props: {
-  scope: Scope
-  projectId: string | null
-  kind: Kind
-  title: string
-  hint: string
-  refreshToken: number
-}): React.JSX.Element {
-  const [path, setPath] = useState<string | null>(null)
-  const [content, setContent] = useState('')
-  const [draft, setDraft] = useState<string | null>(null)
-  const [status, setStatus] = useState<string | null>(null)
-  useEffect(() => {
-    let alive = true
-    void getInstruction({
-      scope: props.scope,
-      projectId: props.projectId ?? undefined,
-      kind: props.kind,
-    }).then((file) => {
-      if (!alive) return
-      setPath(file.path)
-      setContent(file.content)
-      setDraft(null)
-      setStatus(null)
-    })
-    return () => {
-      alive = false
+  ```tsx
+  const guarded = (action: () => void, onCancel?: () => void): void => {
+    if (!anyDirty) {
+      action()
+      return
     }
-  }, [props.scope, props.projectId, props.kind, props.refreshToken])
-  const dirty = draft !== null && draft !== content
-  return (
-    <section className="instruction-pane">
-      <h3>{props.title}</h3>
-      <p className="instruction-path">
-        {path ?? '当前不可用（未关联项目或文件夹未设置）'}
-      </p>
-      <p className="instruction-hint">{props.hint}</p>
-      <textarea
-        value={draft ?? content}
-        onChange={(event) => setDraft(event.target.value)}
-        rows={12}
-        spellCheck={false}
-        disabled={path === null}
-      />
-      <div className="instruction-actions">
-        <button
-          type="button"
-          className="primary"
-          disabled={!dirty || path === null}
-          onClick={() => {
-            if (draft === null) return
-            void saveInstruction({
-              scope: props.scope,
-              projectId: props.projectId ?? undefined,
-              kind: props.kind,
-              content: draft,
-            }).then((result) => {
-              setStatus(result.message)
-              if (result.ok) {
-                setContent(draft)
-                setDraft(null)
-              }
-            })
-          }}
-        >
-          保存
-        </button>
-        {dirty && <span className="instruction-dirty">未保存的修改</span>}
-        {status && <span className="instruction-status">{status}</span>}
-      </div>
-    </section>
-  )
-}
+    void (async () => {
+      const ok = await props.confirm({
+        title: '有未保存的修改',
+        message:
+          '继续将重新读取文件并丢弃未保存的修改，建议先点「保存」。确定丢弃并继续？',
+        confirmLabel: '丢弃并继续',
+      })
+      if (ok) action()
+      else onCancel?.()
+    })()
+  }
+  ```
 
-export function InstructionsView(): React.JSX.Element {
-  const [projects, setProjects] = useState<Project[]>([])
-  const [scope, setScope] = useState<Scope>('global')
-  const [projectId, setProjectId] = useState<string | null>(null)
-  const [refreshToken, setRefreshToken] = useState(0)
-  useEffect(() => {
-    void listProjects().then((result) => {
-      setProjects(result.projects)
-      const first = result.projects.find((item) => item.folderPath !== '')
-      if (first) setProjectId(first.id)
-    })
-  }, [])
-  const activeProjectId = useMemo(
-    () => (scope === 'project' ? projectId : null),
-    [scope, projectId],
-  )
-  const reload = useCallback(() => setRefreshToken((token) => token + 1), [])
-  return (
-    <div className="instructions-view">
-      <header>
-        <h2>指令</h2>
-        <p>
-          全局 + 项目的 AGENTS.md（纪律）与
-          MEMORY.md（记忆），每次对话自动注入。
-        </p>
-      </header>
-      <div className="instructions-toolbar">
-        <button
-          type="button"
-          className={scope === 'global' ? 'primary' : 'ghost'}
-          onClick={() => setScope('global')}
-        >
-          全局
-        </button>
-        <button
-          type="button"
-          className={scope === 'project' ? 'primary' : 'ghost'}
-          onClick={() => setScope('project')}
-        >
-          项目
-        </button>
-        <select
-          value={projectId ?? ''}
-          onChange={(event) => setProjectId(event.target.value || null)}
-          disabled={scope !== 'project'}
-        >
-          <option value="">选择项目…</option>
-          {projects.map((project) => (
-            <option key={project.id} value={project.id}>
-              {project.name}
-            </option>
-          ))}
-        </select>
-        <button type="button" className="ghost" onClick={reload}>
-          重新读取
-        </button>
-      </div>
-      {scope === 'project' && activeProjectId === null && (
-        <p className="notice">请先选择一个项目。</p>
-      )}
-      <div
-        className={
-          scope === 'project' && activeProjectId === null
-            ? 'instructions-disabled'
-            : undefined
-        }
-      >
-        {FILES.map((file) => (
-          <InstructionPane
-            key={`${scope}-${file.kind}`}
-            scope={scope}
-            projectId={activeProjectId}
-            kind={file.kind}
-            title={file.title}
-            hint={file.hint}
-            refreshToken={refreshToken}
-          />
-        ))}
-      </div>
-    </div>
-  )
-}
-```
+- 保存按钮 `!dirty || path === null || saving || loading` 任一即禁用；任一 pane 保存中禁用「重新读取」（`onSavingChange` 上抛，防 get 与在途写盘竞态）；select 取消时经 ref 回弹 DOM value（受控值未变 React 不写回）；scope 按钮 `aria-pressed`、select/textarea `aria-label`。
 
 - [ ] **Step 3: 样式 + 接线**
 
@@ -1366,9 +1315,9 @@ export function InstructionsView(): React.JSX.Element {
 接线（对称于 Task 5 删除处）：
 
 - `useSessionNavigation.ts` / `Sidebar.tsx` view union 加 `'instructions'`；Sidebar 原"记忆"位置加 NavItem：`label="指令"`、`active={props.view === 'instructions'}`、`onClick={() => props.onSelectView('instructions')}`（图标沿用 `ArchiveIcon`）。
-- `AppMain.tsx`：import `InstructionsView`；contextTitle 分支 `view === 'instructions' ? '指令'`；渲染分支 `view === 'instructions' ? <InstructionsView /> : …`；`AppMainProps` 无新增 prop（组件自包含）。
+- `AppMain.tsx`：import `InstructionsView`；contextTitle 分支 `view === 'instructions' ? '指令'`；渲染分支 `<InstructionsView {...props.instructions} />`；`AppMainProps` 新增最小分组 `instructions: ComponentProps<typeof InstructionsView>`（脏草稿守卫需要 confirm 弹窗句柄）。
 - `main.tsx`：加 `import './features/instructions/instructions.css'`（原 memories.css 位置）。
-- `App.tsx`：`memories={{ confirm }}` 处已删，无新增。
+- `App.tsx`：`memories={{ confirm }}` 处已删；新增 `instructions={{ confirm }}`（复用 useConfirmDialog 的 `confirm`）。
 
 - [ ] **Step 4: 验证**
 

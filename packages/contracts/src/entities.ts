@@ -351,55 +351,6 @@ export const ProviderProfileSchema = z.object({
 })
 export type ProviderProfile = z.infer<typeof ProviderProfileSchema>
 
-/** 记忆归属范围：session/project 绑定 scopeId，user 为跨项目长期记忆（null）。 */
-export const MemoryScopeSchema = z.enum(['session', 'project', 'user'])
-export type MemoryScope = z.infer<typeof MemoryScopeSchema>
-
-export const MemoryKindSchema = z.enum(['fact', 'preference', 'procedure'])
-export type MemoryKind = z.infer<typeof MemoryKindSchema>
-
-export const MemoryStatusSchema = z.enum(['active', 'pinned', 'archived'])
-export type MemoryStatus = z.infer<typeof MemoryStatusSchema>
-
-/**
- * 记忆条目（A2 mem0 式管线）。embedding 向量不进协议：
- * 召回在 Runtime 内完成，协议只携带可读内容。
- */
-export const MemorySchema = z
-  .object({
-    id: z.string().min(1),
-    scope: MemoryScopeSchema,
-    // scope=session 时为会话 id，scope=project 时为项目 id，scope=user 时为 null。
-    scopeId: z.string().min(1).nullable(),
-    kind: MemoryKindSchema,
-    content: z.string().min(1),
-    sourceRunId: z.string().min(1).nullable(),
-    confidence: z.number().min(0).max(1),
-    status: MemoryStatusSchema,
-    createdAt: IsoDateTimeSchema,
-    updatedAt: IsoDateTimeSchema,
-    // null 表示不过期；到期条目召回时跳过并可被清理。
-    expiresAt: IsoDateTimeSchema.nullable(),
-  })
-  .superRefine((memory, ctx) => {
-    // 交叉校验：session/project 必须可回溯到具体范围，user 必须全局。
-    if (memory.scope === 'user' && memory.scopeId !== null) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['scopeId'],
-        message: 'user 级记忆的 scopeId 必须为 null',
-      })
-    }
-    if (memory.scope !== 'user' && memory.scopeId === null) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['scopeId'],
-        message: 'session/project 级记忆必须携带 scopeId',
-      })
-    }
-  })
-export type Memory = z.infer<typeof MemorySchema>
-
 // ---------------- Workspace Surface (Phase 1B) ----------------
 
 /** 文件树条目（Rust file.list 透传）：路径为 workspace 相对形状。 */

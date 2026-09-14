@@ -112,41 +112,6 @@ CREATE TABLE IF NOT EXISTS provider_profiles (
   context_budget INTEGER,
   updated_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS memories (
-  id TEXT PRIMARY KEY,
-  scope TEXT NOT NULL,
-  scope_id TEXT,
-  kind TEXT NOT NULL,
-  content TEXT NOT NULL,
-  source_run_id TEXT,
-  confidence REAL NOT NULL DEFAULT 0.8,
-  embedding BLOB,
-  embedding_model TEXT,
-  status TEXT NOT NULL DEFAULT 'active',
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  expires_at TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope, scope_id);
--- A2 Memory 全文索引：trigram 分词对中文子串检索有效（unicode61 无法切分 CJK）。
-CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
-  content,
-  tokenize='trigram',
-  content='memories',
-  content_rowid='rowid'
-);
-CREATE TRIGGER IF NOT EXISTS memories_fts_ai AFTER INSERT ON memories BEGIN
-  INSERT INTO memories_fts(rowid, content) VALUES (new.rowid, new.content);
-END;
-CREATE TRIGGER IF NOT EXISTS memories_fts_ad AFTER DELETE ON memories BEGIN
-  INSERT INTO memories_fts(memories_fts, rowid, content)
-  VALUES ('delete', old.rowid, old.content);
-END;
-CREATE TRIGGER IF NOT EXISTS memories_fts_au AFTER UPDATE OF content ON memories BEGIN
-  INSERT INTO memories_fts(memories_fts, rowid, content)
-  VALUES ('delete', old.rowid, old.content);
-  INSERT INTO memories_fts(rowid, content) VALUES (new.rowid, new.content);
-END;
 -- MCP server 配置与最后运行状态(工具清单在运行时内存)。
 CREATE TABLE IF NOT EXISTS mcp_servers (
   id TEXT PRIMARY KEY,
@@ -236,19 +201,7 @@ CREATE TABLE IF NOT EXISTS context_checkpoints (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS memory_jobs (
-  run_id TEXT PRIMARY KEY
-    REFERENCES runs(id) ON DELETE CASCADE,
-  status TEXT NOT NULL,
-  attempts INTEGER NOT NULL DEFAULT 0,
-  next_attempt_at TEXT,
-  last_error TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_memory_jobs_status
-  ON memory_jobs(status, next_attempt_at, created_at);
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 22
+export const LATEST_SCHEMA_VERSION = 23
