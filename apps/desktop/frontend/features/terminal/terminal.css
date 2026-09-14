@@ -192,6 +192,29 @@
   cursor: not-allowed;
 }
 
+/* 标签区与右端工具之间撑开，把收起按钮推到面板右上角。 */
+.terminal-strip-spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 收起面板（不终止 shell）。尺寸/配色与 .terminal-new-tab 同族。 */
+.terminal-collapse {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 7px;
+}
+
+.terminal-collapse:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
 .terminal-body {
   flex: 1;
   min-height: 0;

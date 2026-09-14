@@ -8,7 +8,7 @@ import {
 import { PANEL_MAX_VH, PANEL_MIN_HEIGHT, terminalManager } from './manager'
 import type { TerminalTabView } from './manager'
 import type { ConfirmDialogState } from '../../components/ConfirmDialog'
-import { PlusIcon, RefreshIcon } from '../../ui/icons'
+import { ChevronIcon, PlusIcon, RefreshIcon } from '../../ui/icons'
 
 interface TerminalPanelProps {
   activeProjectId: string | null
@@ -192,6 +192,18 @@ export function TerminalPanel(props: TerminalPanelProps): React.JSX.Element {
           onClick={handleCreate}
         >
           <PlusIcon size={15} />
+        </button>
+        <span className="terminal-strip-spacer" />
+        {/* 收起面板：只隐藏容器，shell 与 xterm 实例在 manager 里保活。
+            与标签上的 ×（终止 shell，需确认）语义不同，故用向下箭头而非 ×。 */}
+        <button
+          type="button"
+          className="terminal-collapse"
+          title="收起终端面板"
+          aria-label="收起终端面板"
+          onClick={() => terminalManager.setPanelOpen(false)}
+        >
+          <ChevronIcon />
         </button>
       </div>
       {firstRunPending && (
