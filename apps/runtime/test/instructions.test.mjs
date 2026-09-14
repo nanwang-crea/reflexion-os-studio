@@ -650,6 +650,7 @@ test('project.delete handler: 行删除成功后项目记忆目录随清', async
     store,
     agent: { clearQueue: () => {} },
     assets: { deleteProjectDir: async () => {} },
+    terminal: { closeProject: async () => {} },
   }
   const result = await commandHandlers['project.delete'](
     { projectId: project.id },
