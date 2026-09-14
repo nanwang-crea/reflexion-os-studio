@@ -4,6 +4,11 @@ import {
   listTerminals,
 } from '../../api/terminal'
 import type { TerminalStatus } from '@reflexion-os-studio/runtime-client'
+import { showToast } from '../../components/Toast'
+import {
+  isTerminalEntryDisabled,
+  TERMINAL_DISABLED_NOTICE,
+} from './entry-switch'
 import { TerminalRuntime } from './runtime'
 import { DEAD_STATUSES } from './types'
 import type { TerminalInstance, TerminalMeta } from './types'
@@ -50,7 +55,10 @@ class TerminalManager {
   private readonly rehydrateSeq = new Map<string, number>()
   private initialized = false
   private activeProjectId: string | null = null
-  private panelOpen: boolean = localStorage.getItem(PREF_OPEN) !== '0'
+  // 入口被禁用（发布开关/逃生舱）时面板不得以"开"态启动：顶栏按钮已
+  // 隐藏，开着的无标签空面板将无法收起。
+  private panelOpen: boolean =
+    !isTerminalEntryDisabled() && localStorage.getItem(PREF_OPEN) !== '0'
   private heightPx: number = clampHeight(
     Number(localStorage.getItem(PREF_HEIGHT)) || DEFAULT_HEIGHT,
   )
@@ -169,6 +177,12 @@ class TerminalManager {
   }
 
   async createTab(projectId: string): Promise<void> {
+    // 入口开关（spec §10）：禁用即拒绝新建；已打开的终端不动——
+    // 静默杀 shell 会丢用户数据，统一关闭是发布回滚流程的事。
+    if (isTerminalEntryDisabled()) {
+      showToast(TERMINAL_DISABLED_NOTICE, 'error')
+      return
+    }
     const geometry = this.preferredGeometry(projectId)
     let meta: TerminalMeta
     try {
@@ -231,6 +245,11 @@ class TerminalManager {
 
   /** exited/failed/disconnected 标签的「重新创建」：新终端原位替换，旧 id 幂等关闭。 */
   async recreateTab(projectId: string, deadTerminalId: string): Promise<void> {
+    // recreate 同样 spawn 新终端，属"新建"入口，禁用时一并拒绝。
+    if (isTerminalEntryDisabled()) {
+      showToast(TERMINAL_DISABLED_NOTICE, 'error')
+      return
+    }
     const geometry = this.preferredGeometry(projectId)
     let meta: TerminalMeta
     try {

@@ -203,20 +203,20 @@ node scripts/terminal-perf.mjs --p2-only    # P2 长稳 600s（正式测量；--
 
 **结果表（门槛数字与 spec §10 一致，未做任何放宽）：**
 
-| 门槛                                  | 阈值          | P0（10s 空闲）                  | P1（120s 正式）           | P1（240s 延长复测）        | 结果                         |
-| ------------------------------------- | ------------- | ------------------------------- | ------------------------- | -------------------------- | ---------------------------- |
-| 聊天 delta p95                        | ≤100ms        | p95_base=**1ms** (n=1200)       | **1ms** (n=9600)          | 1ms (n=19200)              | PASS                         |
-| 相对基线增量                          | ≤50ms         | —                               | **+0ms**                  | +0ms                       | PASS                         |
-| 控制命令响应 p95                      | ≤300ms        | —                               | **35ms** (n=59，注3)      | 34ms (n=119)               | PASS                         |
-| 控制命令丢失                          | 0             | —                               | **0/59**                  | 0/119                      | PASS                         |
-| 饿死（每 10s 全终端流增长）           | 0 窗口        | —                               | **0**（修复后）           | 0                          | PASS（修复前 8/15 终端 +0B） |
-| terminal.output JSON 吞吐             | ≤1.1 MiB/s    | —                               | **0.606**（max10s 0.618） | 0.595                      | PASS（原始值照报）           |
-| runtime RSS 斜率（末 45s 拟合）       | <1 MiB/min    | —                               | **2.501**（注5）          | **0.362**，平台期≈140.6MiB | 120s 窗 FAIL / 240s PASS     |
-| sidecar RSS 斜率                      | <1 MiB/min    | —                               | **0.022**                 | 0                          | PASS                         |
-| 队列有界（metrics queued 峰）         | ≤256+16KiB    | —                               | **256.3KiB**              | 256.3KiB                   | PASS（串联合载窗口钉死）     |
-| 空闲 CPU（累计 CPU 秒窗差分）         | <5%（§11 ≈0） | **rt 1.6% / sc 0%**             | —                         | —                          | PASS                         |
-| 空闲 RSS 峰值                         | 报告值        | rt **77.9–79.0MiB** / sc 3.1MiB | —                         | —                          | 报告                         |
-| P2（600s、末 120s 拟合、有界+无卡死） | 见 harness    | —                               | —                         | —                          | **待跑（`--p2-only`）**      |
+| 门槛                                  | 阈值          | P0（10s 空闲）                  | P1（120s 正式）           | P1（240s 延长复测）        | 结果                          |
+| ------------------------------------- | ------------- | ------------------------------- | ------------------------- | -------------------------- | ----------------------------- |
+| 聊天 delta p95                        | ≤100ms        | p95_base=**1ms** (n=1200)       | **1ms** (n=9600)          | 1ms (n=19200)              | PASS                          |
+| 相对基线增量                          | ≤50ms         | —                               | **+0ms**                  | +0ms                       | PASS                          |
+| 控制命令响应 p95                      | ≤300ms        | —                               | **35ms** (n=59，注3)      | 34ms (n=119)               | PASS                          |
+| 控制命令丢失                          | 0             | —                               | **0/59**                  | 0/119                      | PASS                          |
+| 饿死（每 10s 全终端流增长）           | 0 窗口        | —                               | **0**（修复后）           | 0                          | PASS（修复前 8/15 终端 +0B）  |
+| terminal.output JSON 吞吐             | ≤1.1 MiB/s    | —                               | **0.606**（max10s 0.618） | 0.595                      | PASS（原始值照报）            |
+| runtime RSS 斜率（末 45s 拟合）       | <1 MiB/min    | —                               | **2.501**（注5）          | **0.362**，平台期≈140.6MiB | 120s 窗 FAIL / 240s PASS      |
+| sidecar RSS 斜率                      | <1 MiB/min    | —                               | **0.022**                 | 0                          | PASS                          |
+| 队列有界（metrics queued 峰）         | ≤256+16KiB    | —                               | **256.3KiB**              | 256.3KiB                   | PASS（串联合载窗口钉死）      |
+| 空闲 CPU（累计 CPU 秒窗差分）         | <5%（§11 ≈0） | **rt 1.6% / sc 0%**             | —                         | —                          | PASS                          |
+| 空闲 RSS 峰值                         | 报告值        | rt **77.9–79.0MiB** / sc 3.1MiB | —                         | —                          | 报告                          |
+| P2（600s、末 120s 拟合、有界+无卡死） | 见 harness    | —                               | —                         | —                          | **PASS（§9.2，601.7s 实测）** |
 
 P1 洪泛构成：两临时项目 8+8=16 终端（=全局活动额度上限），15×`yes` 洪泛 + 1 控制终端，
 100ms 全局 ack 循环（累计最大 seq），每 5s 流式聊天 / 每 2s 控制 PING / 每 10s 存活+吞吐 /
@@ -247,14 +247,15 @@ P1 洪泛构成：两临时项目 8+8=16 终端（=全局活动额度上限）�
 5. **120s 窗 RSS 斜率 FAIL = V8 堆预热台阶，非泄漏**：曲线台阶式收敛（0s:92 → 25s:117 →
    60s:134 → 100s:136 → 240s:140.6MiB），台阶全部落在前 ~100s；120s 正式窗的"末 45s"拟合
    罩住 60–65s 的 +13MiB 台阶 → 2.501 MiB/min。240s 延长同门槛复测 **0.362 PASS**。门槛
-   数字未动；正式有界性判据是门槛 3 原文"持续 10 分钟"→ 由 P2 末 120s 拟合裁决，待跑。
+   数字未动；正式有界性判据是门槛 3 原文"持续 10 分钟"→ 由 P2 末 120s 拟合裁决，
+   **已跑，PASS（§9.2）**。
 6. **顺带发现的鲁棒性问题（W4-2b 已修复）**：注 2 同因——sidecar 在协议读循环内
    同步 `write_all` 到 master fd（`main.rs` 单循环 → `session.rs write_input`），一个终端
    的内核输入队列满即可卡死**整个 sidecar 请求环**（探针实测一次 `terminal.close` 超时）。
    真实用户等价物是"对忙碌 shell 大量粘贴"。修复涉及输入溢出策略设计（每终端写线程/
    有界队列/非阻塞拒绝码），超出 W4-2a 性能 harness 范围，**登记为 W4 后续项**；
    本 harness 方法（控制终端保持提示符）不触发该路径。
-   **W4-2b 修复落地**：`write_input` 变为纯入队（每终端有界 mpsc，16 槽 ×≤8 KiB，
+   **W4-2b 修复落地（`96f8b1a`）**：`write_input` 变为纯入队（每终端有界 mpsc，16 槽 ×≤8 KiB，
    吸收前端 4×8 KiB 在飞突发），阻塞式 master write 移入每终端专用写线程（FIFO 保序）；
    溢出确定性返回 `input_backpressure`（TS 映射前端码 `terminal_input_backpressure`，
    definite 臂退避重试一次），输入路径死亡报 `terminal_closed`。复现关键：macOS
@@ -270,13 +271,16 @@ P1 洪泛构成：两临时项目 8+8=16 终端（=全局活动额度上限）�
    cleanup 均 `clean:true`（无孤儿）。
 9. **Windows/Linux：未验证**（POSIX 主路径，同 §4/§11 口径；`yes` 与 `ps` 格式均 POSIX）。
 
-**后端修复（本次唯一）——egress 泵轮询公平**：修复前 `EgressPacer.pump()` 每 tick 从
+**压力测试发现的两个后端修复（W4-2a/b，均已入库）**：
+① **EgressPacer 轮询公平（`536d6cd`）**——修复前 `EgressPacer.pump()` 每 tick 从
 records **插入序**头部开扫、全局令牌桶（一个 16KiB 满事件成本 > 单 tick 补充量）→ 16
 终端饱和时首个积压通道吞掉全部额度、其后通道整段窗口 **0 字节**（实测 8/15 终端饿死，
 总吞吐 0.56 MiB/s ≈ 单通道独吞速率）。修复：环形游标——每轮从上一轮最后发出者之后开扫
 （`egress.ts` 约 +20 行）。新增单测 `egress 饱和轮询：4 积压通道环形分发，无一饿死
 （W4 修复）`，变异验证：不带修复时以"前 4 事件未覆盖全部通道"失败，带修复通过。
 修复后 P1 全窗口 starve=0、吞吐按预算均匀分布、控制面 p95 34–35ms。
+② **终端输入有界写队列（`96f8b1a`）**——见注 6（W4-2b），与 ① 同为压测逼出的
+鲁棒性修复，非门槛项本身。
 
 **test-all 决策**：`--quick` 实测 75s wall < 90s，但**不入库**——其 60s 窗的"末 45s RSS
 斜率"必然罩住注 5 的堆预热台阶（实测 18.1 MiB/min，结构性必红），且逼近预算线；
@@ -285,7 +289,38 @@ test-all 保持现状，正式测量按上方用法手工执行。
 **验证**：`pnpm format:check` / `pnpm lint` / 根与前端 `typecheck` /
 `pnpm --filter @reflexion-os-studio/runtime test`（229 项，含新单测）/ `cargo fmt --check` +
 `cargo test`（crates，本次未改 Rust）全绿；P1 120s 与 240s、P2 20s 机制冒烟结果如上。
-P2 正式 600s **未跑**（由控制方执行 `--p2-only`）。
+P2 正式 600s 已跑，见 §9.2。
+
+### 9.2 P2 长稳正式实测（2026-09-14，`--p2-only` 600s，macOS 26.6.2 / Apple Silicon）
+
+负载构成：两临时项目共 8 终端（7×`yes` 洪泛 + 1 控制终端）、10s PING、30s 流式聊天，
+末 120s RSS 线性拟合。原始 summary 行（`/tmp/perf-p2.log`，逐字）：
+
+```text
+PERF-SUMMARY {"phase":"P2","pass":true,"seconds":601.7,"pingIssued":59,"pingRttStatsMs":{"n":59,"min":4,"p50":16,"p95":35,"max":1175},"pingWriteRpcStatsMs":{"n":59,"min":0,"p50":1,"p95":7,"max":38},"pingLosses":[],"chatRuns":{"completed":20,"failed":0},"p95ChatMs":1,"rssSlopeMiBPerMin":{"runtime":0.111,"sidecar":0},"egressMaxQueuedKib":256.3,"egressMetricsGap":false,"wedges":[]}
+```
+
+**门槛裁决表（spec §10 数字，未放宽）：**
+
+| 门槛               | 阈值            | P2 实测                                                                   | 判定 |
+| ------------------ | --------------- | ------------------------------------------------------------------------- | ---- |
+| 聊天 delta p95     | ≤100ms          | **1ms**（P2 窗 20/20 completed；P1 1ms n=9600/19200 同口径互证）          | PASS |
+| 相对无压力基线增量 | ≤50ms           | **+0ms**（基线 p95_base=1ms，P0 §9.1）                                    | PASS |
+| 控制命令响应 p95   | ≤300ms          | **35ms**（n=59；max=1175ms 为注 3 已登记的洪泛起点 ping#1 瞬态单点）      | PASS |
+| 控制命令丢失       | 0               | `pingLosses=[]`（59/59 回显）                                             | PASS |
+| 持续 10 分钟有界   | 队列/内存不突破 | 601.7s 全程 `egressMaxQueuedKib=256.3`（=256 KiB 窗口封顶，注 5 判据）    | PASS |
+| RSS 无持续线性增长 | <1 MiB/min      | 末 120s 拟合 runtime **0.111** / sidecar **0**（注 5 预热台阶已落平台期） | PASS |
+| 无卡死（wedge）    | 0               | `wedges=[]`、`egressMetricsGap=false`                                     | PASS |
+| 进程清理           | 无孤儿          | `[P2 cleanup] {"clean":true,"notes":[]}`（仅本脚本跟踪 PID，注 8 纪律）   | PASS |
+
+结论：**三项正式门槛全部 PASS**（发射→协议消费口径，注 1）。P1 的 120s 窗
+runtime 斜率 FAIL 由本窗（平台期之后）推翻为测量窗口问题，非泄漏——与注 5
+240s 复测 0.362 一致。
+
+| 残留项                             | 状态                                                                |
+| ---------------------------------- | ------------------------------------------------------------------- |
+| GUI 跳（supervisor→WebView→xterm） | **未测**（注 1 口径；人工清单见 `docs/TERMINAL-GUI-ACCEPTANCE.md`） |
+| Windows / Linux                    | **未验证**（同 §4/§9.1 注 9 红线，不宣称三平台完成）                |
 
 ## 10. W1 出口清单（Task 15）
 
@@ -306,6 +341,7 @@ P2 正式 600s **未跑**（由控制方执行 `--p2-only`）。
 | WebView rAF 节流/CPU 量化（§5 #3/#5）                       | deferred | W4 真实面板压力验收补测（§5 人工结论）                                                                                                                                                                                                                                                                                                            |
 | 三项延迟/有界性门槛量化测量                                 | deferred | W4（§9 证据范围声明）                                                                                                                                                                                                                                                                                                                             |
 | 终端故障矩阵端到端（W4-1）                                  | done     | §11（`scripts/terminal-faults.mjs`，已入 `scripts/test-all.sh`）                                                                                                                                                                                                                                                                                  |
+| W4-3 全链门 + 打包冒烟复跑（含 prepare-package 陈旧性修复） | done     | §12（2026-09-14；本表 W1 行由此轮复验覆盖）                                                                                                                                                                                                                                                                                                       |
 
 出口结论：**W1（macOS）达成**。W2 前置项以 §6 清单为准。
 
@@ -332,3 +368,55 @@ P2 正式 600s **未跑**（由控制方执行 `--p2-only`）。
     留 W4 性能验收一并复核是否需要统一代际口径，**未据此改后端**。
 - 验证：连跑 2 次 26/26 PASS（无 flake）；Windows/Linux 路径分支（`taskkill`/PowerShell
   子进程枚举）与本报告 §4 同口径——**未真机验证**。
+
+## 12. W4-3 全链门 + 打包冒烟（2026-09-14，macOS 26.6.2 / Apple Silicon，HEAD `96f8b1a`）
+
+### 12.1 发布入口开关
+
+`apps/desktop/frontend/features/terminal/entry-switch.ts`：构建期
+`VITE_TERMINAL_DISABLED='1'` 或运行期 localStorage `terminal.forceDisabled='1'`
+（逃生舱，重启后完整生效；会话中途翻转按调用点即时拒绝新建）任一命中即禁用
+**入口（新建）**：顶栏终端按钮隐藏（AppMain）、`createTab`/`recreateTab` 拒绝并
+toast「终端功能已被禁用」、禁用启动时面板强制收起。**已打开的终端不静默杀**
+（spec §10 回滚流程负责统一关闭；见 entry-switch WHY 注释）。前端无测试
+runner，以 `pnpm build` 全绿 + 源码 grep 断言佐证。
+
+### 12.2 全链门记录
+
+| 门                                                                                       | 结果                                     |
+| ---------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `pnpm format:check` / `pnpm lint` / 根 `typecheck` / 前端 `typecheck`                    | PASS                                     |
+| `pnpm build:packages`                                                                    | PASS（chunk >500kB 警告为既有）          |
+| `cargo fmt --check`（crates）/ `cargo test`（crates）                                    | PASS / 173 passed; 0 failed              |
+| `cargo check`（Tauri 宿主）                                                              | PASS                                     |
+| `bash scripts/test-all.sh`（runtime 测试 + terminal-faults 26/26 + check-whitelist 7/7） | PASS（退出码 0）                         |
+| `node scripts/terminal-spike.mjs`                                                        | 14/14 PASS                               |
+| `node scripts/terminal-faults.mjs`                                                       | 26/26 PASS（13.1s）                      |
+| `pnpm build:desktop`                                                                     | 见 12.3（首轮红→修复→复跑 EXIT=0）       |
+| Windows / Linux 全部真机项                                                               | **未验证**（红线不变，不宣称三平台完成） |
+
+### 12.3 打包冒烟（AGENTS §7 第 3 条）与一次真实的打包缺陷修复
+
+- **首轮 FAIL（证据链）**：`fetch-node-dist.mjs` 对 nodejs.org 的 SHASUMS 拉取
+  遇瞬时 TLS ECONNRESET（重试即过，未改脚本）；重跑后构建 EXIT=0，但包内
+  二进制启动实测 `[runtime] system.ready rejected: expected protocol 1.1, got
+1.0` → sidecar 被握手拒绝、重启预算耗尽后**永久 degraded**。根因：
+  `prepare-package.sh` 对 release sidecar「**仅缺失才构建**」，把 09-13 的陈旧
+  `crates/target/release` 二进制（早于 W0 协议 1.1 的本地构建）原样打进包。
+- **修复（本轮唯一代码外变更）**：`prepare-package.sh` 改为**每次
+  `cargo build --release`**（cargo 增量，新鲜时秒级 no-op），杜绝陈旧产物入包。
+- **复跑冒烟（修复后，包内二进制直接启动）**：
+  - 三 sidecar 全部从 `.app/Contents/Resources/pkg/` 解析，无仓库路径泄漏：
+    `pkg/node/bin/node` → `pkg/runtime/runtime.mjs`（PPID=宿主），
+    `pkg/bin/reflexion-system-runtime`（PPID=node）；
+  - 状态机：`starting → runtime-ready → system-ready`（`system runtime ready:
+0.3.0`，无 degraded/error）；
+  - 功能探针（release 二进制，PID 树内）：包内 `runtime.mjs` 含
+    `terminal.output`×5；包内 sidecar `terminal.spawn` 进入参数校验
+    （返回 `terminalId is required`，非 method-not-found）；
+  - `TERM` 宿主后按跟踪 PID（31683/31700/31930）与 `.app` 路径双重 pgrep：
+    **无孤儿**。
+- 产物：`bundle/macos/ReflexionOS Studio.app`（126M）、
+  `bundle/dmg/ReflexionOS Studio_0.1.0_aarch64.dmg`（46M，未签名）。
+- 清理纪律：仅操作本会话启动并记录的 PID；用户 dev 栈（PID 73586/95537 等）
+  全程未触碰。

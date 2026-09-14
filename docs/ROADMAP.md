@@ -27,13 +27,13 @@ Rust File/Shell Service、Workspace 边界、read-only/workspace Profile、Chat 
 
 - **已完成第一阶段（2026-08-31）**：异步 Workspace Indexer（纯 TS worker、progress/cancel/stale/failed 状态、忽略目录与符号链接、快照落库+版本号）、文件树（按需懒加载，经 Rust 侧 workspace 边界）、文件/文档查看器（行号、复制、跳转行、分段加载、Markdown/JSON 预览）、Git 变更面（`git.status`/`git.diff`：文件状态列表 + 单文件 diff 预览，只读查看与定位）、`workspace.*` 命令与白名单、工作区页面 UI。
 - **已完成第二阶段（2026-08-31）**：Asset Store（数据目录隔离、sha256 元数据、导入/列表/预览/删除/复制引用，`asset.*` 命令）、ResourceLink（消息内 `workspace://`/`asset://`/https 引用渲染与点击分发——查看器定位行列、资产预览、系统浏览器安全打开）、Artifact 卡（Run 回复引用聚合展示）；导出/下载/系统应用打开留后续阶段（需权限）。
-- **待完成**：安全 URL 系统浏览器打开（已就位，剩余只读内嵌 Browser 评估）。Git 写操作已交付方案 A 子集（编辑器保存 + stage/unstage/commit/fetch/push/pull(--ff-only)/分支创建与切换，UI 直接动作免审批、内存脏 buffer 三键守卫），提交历史浏览（分页 log/commit 文件/diff/基于 commit 建分支与分离切换）与远程管理（remote 增删列表、远程分支检出为本地跟踪、发布=推送）已随增补批交付；剩余 discard/amend/stash/force-push/删远程分支/revert-reset 与集成终端逃生舱仍待后续,须经明确命令与权限策略。
+- **待完成**：安全 URL 系统浏览器打开（已就位，剩余只读内嵌 Browser 评估）。Git 写操作已交付方案 A 子集（编辑器保存 + stage/unstage/commit/fetch/push/pull(--ff-only)/分支创建与切换，UI 直接动作免审批、内存脏 buffer 三键守卫），提交历史浏览（分页 log/commit 文件/diff/基于 commit 建分支与分离切换）与远程管理（remote 增删列表、远程分支检出为本地跟踪、发布=推送）已随增补批交付；剩余 discard/amend/stash/force-push/删远程分支/revert-reset 仍待后续,须经明确命令与权限策略（集成终端已作为 Phase 2 Terminal Surface 交付，见下）。
 
 ## Phase 2：Agent Platform（进行中）
 
 - **已完成子集**：Skills（内置技能注册表、斜杠激活、skill.use）、Memory（持久化 memory_jobs 管线：终态入队 → 空闲 worker → 提取/合并 → 落库 → 复合召回注入；提取 transcript 脱敏）、MCP（stdio 协议 client、管理服务、工具桥默认 ask 审批、设置页面板）。
 - **已完成（2026-09，Agent Loop Hardening 与 Context Engine V2）**：完成状态机（只有 stop 且无工具才算完成；length 限次续写；provider_protocol 如实失败）、Atomic Run Finalizer（单事务终态收敛）、Atomic Frames 与请求前校验、副作用感知调度（read 并行/mutation 串行/ToolCall 批量预建）、Loop Guard（重复/无进展拦截）、Run 预算（时长/token/工具数/续写）、增量 Context Checkpoint（source hash/single-flight）、AgentSettings 新预算字段与设置页循环分组。
-- **Terminal Surface（集成终端，进行中）**：设计与范围见 `docs/superpowers/specs/2026-09-12-integrated-terminal-design.md`，架构定位见 `ARCHITECTURE.md` §13。W0 已完成（事件信封泛化为显式 scope 判别联合、协议升 1.1、terminal 契约冻结）；W1（三平台 PTY 纵向切片）进行中；W2（后端多会话服务）、W3（前端多标签保活面板）、W4（故障/性能/打包验收）计划中。未合入前用户入口不存在，不设占位 UI；`terminal.*` 不注册为 Agent 工具。
+- **Terminal Surface（集成终端）**：设计与范围见 `docs/superpowers/specs/2026-09-12-integrated-terminal-design.md`，架构定位见 `ARCHITECTURE.md` §13。**W0–W4 macOS 已验证**（事件信封 1.1 与 terminal 契约冻结；portable-pty 纵向切片；后端多会话服务 + attach/ack/窗口背压/公平调度；前端多标签保活面板 xterm v6；故障矩阵 26/26、性能门槛 P0/P1/P2 实测全 PASS——见 `docs/TERMINAL-SPIKE-REPORT.md` §9/§11；打包冒烟见 §12）。**GUI 人工清单待执行**（`docs/TERMINAL-GUI-ACCEPTANCE.md`）；**Windows/Linux 待对应环境真机验收，不得宣称三平台完成**。发布入口开关：构建期 `VITE_TERMINAL_DISABLED=1`，或运行期 localStorage `terminal.forceDisabled='1'`（逃生舱，重启后生效）——禁用新建终端入口（顶栏按钮隐藏、create/recreate 拒绝），已打开的终端不受影响。`terminal.*` 不注册为 Agent 工具。
 - **待完成**：Provider/Tool Plugins、Browser Tool、user 级记忆写入确认流程、更完整的资产检索。
 
 ## Phase 3：Multi-Agent Orchestration（未开始）

@@ -113,7 +113,7 @@ Agent、Memory、Skill、Context 和 Delegation/Policy 是一等领域，分别�
 
 `packages/agent-core` 是纯 TypeScript 循环内核（不依赖 SQLite/Provider/Tauri）：完成状态机（finish reason × toolCalls 判定，protocol_error 不得假成功）、length 限次续写、Atomic Context Frames（工具轮不可拆）、请求前序列校验与 Loop Guard 指纹属于内核；持久化、副作用调度、资源冲突、预算执行和事件通知由 Runtime 承担。全部 Run 终态经唯一入口 `run-finalizer.ts` 在单事务内收敛（pending 消息、未终态 ToolCall、活动 Plan、Run 终态、失败事件、memory job 幂等入队），回调最多执行一次。Context 压缩走增量 Checkpoint（`context_checkpoints`，source hash 失效）+ 最近 Frame 保留；Memory 写入走持久化 `memory_jobs`（空闲 worker、可抢占、可恢复）。详见 `docs/CONTEXT-MANAGEMENT.md` 与 `docs/RELIABILITY-AND-RECOVERY.md`。
 
-## 13. Terminal Surface（集成终端，Phase 2 建设中）
+## 13. Terminal Surface（集成终端，Phase 2 · macOS 已验证，Windows/Linux 待真机）
 
 项目级、多标签、跨页面保活的用户终端（xterm + portable-pty），设计规格见 `docs/superpowers/specs/2026-09-12-integrated-terminal-design.md`。与 Workspace/Asset 同属产品 Surface，但终端会话不落 SQLite、无历史回放承诺。
 
@@ -126,4 +126,4 @@ Agent、Memory、Skill、Context 和 Delegation/Policy 是一等领域，分别�
 
 权限边界：用户终端与 Agent `shell.execute` 完全隔离——`terminal.*` 不注册为 Agent 工具，终端输入输出不进上下文、记忆或工具轨迹。
 
-当前状态：W0 事件信封与契约已落地，W1 纵向切片进行中，功能入口未开放。
+当前状态：**W0–W4 macOS 已验证**（切片/服务/面板/故障矩阵/性能门槛/打包冒烟，证据见 `docs/TERMINAL-SPIKE-REPORT.md`）；GUI 人工清单待执行（`docs/TERMINAL-GUI-ACCEPTANCE.md`）；Windows/Linux 待对应环境真机验收，不得宣称三平台完成。发布入口开关：构建期 `VITE_TERMINAL_DISABLED=1` 或运行期 localStorage `terminal.forceDisabled='1'`（重启生效）禁用新建终端入口，已打开的终端不受影响。

@@ -9,6 +9,7 @@ import { AutomationsView } from './features/automations/AutomationsView'
 import { SettingsView } from './features/settings/SettingsView'
 import { FileViewerPanel } from './features/workspace/FileViewerPanel'
 import { TerminalPanel } from './features/terminal/TerminalPanel'
+import { isTerminalEntryDisabled } from './features/terminal/entry-switch'
 import { ResizeHandle } from './components/ResizeHandle'
 
 export interface AppMainProps {
@@ -77,7 +78,7 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
         showWorkspaceToggle={view === 'chat'}
         workspaceOpen={workspace.open}
         onToggleWorkspace={() => workspace.setOpen((open) => !open)}
-        showTerminalToggle={view === 'chat'}
+        showTerminalToggle={view === 'chat' && !isTerminalEntryDisabled()}
         terminalOpen={terminal.open}
         onToggleTerminal={terminal.onToggle}
       />
