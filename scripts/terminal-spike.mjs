@@ -275,7 +275,115 @@ check(
 )
 lastSeq.delete('ord')
 
-// 9. shutdown 优雅退出（含活跃终端 b 与已退出 ord 的回收）
+// 9. busy-shell 输入快速失败不冻主循环（W4-2b）：前台 yes 洪泛时猛灌
+// 40×8 KiB 短行输入（macOS cooked canq 只在**完整短行**积压 ~1 KiB 后阻塞
+// master write，无换行碎输入被静默丢弃、测不到该路径——见 §9.1 注 2）。
+// 硬断言 = 每个请求都有响应且 <2 s（旧实现：同步 write_all 冻结 dispatch
+// 主循环，全部超时）；溢出策略二选一都合法：确定性 input_backpressure
+// 拒绝，或突发全被有界队列吸收（跨机时序不可承诺必然溢出）。
+function timedRequest(method, params, budgetMs = 2000) {
+  const started = Date.now()
+  let timer
+  return Promise.race([
+    request(method, params).then((message) => ({ message })),
+    new Promise((resolve) => {
+      timer = setTimeout(() => resolve({ timeout: true }), budgetMs)
+    }),
+  ]).then((outcome) => {
+    clearTimeout(timer)
+    return { ...outcome, ms: Date.now() - started }
+  })
+}
+
+await request('terminal.spawn', {
+  terminalId: 'busy',
+  cwd: tmpdir(),
+  rows: 24,
+  cols: 80,
+})
+await request('terminal.attach', { terminalId: 'busy', consumerId: 'spike' })
+await delay(300)
+await request('terminal.write', {
+  terminalId: 'busy',
+  data: Buffer.from('yes\r', 'utf8').toString('base64'),
+})
+await delay(500) // 让 yes 真跑进前台并铺满输出
+const busyLine = `${'x'.repeat(250)}\r\n`.repeat(32) // ≈8 KiB 完整短行
+const busyPayload = Buffer.from(busyLine, 'utf8').toString('base64')
+const hammerOutcomes = []
+for (let i = 0; i < 40; i++) {
+  hammerOutcomes.push(
+    await timedRequest('terminal.write', {
+      terminalId: 'busy',
+      data: busyPayload,
+    }),
+  )
+}
+const hammerTimeouts = hammerOutcomes.filter((o) => o.timeout).length
+const hammerCodes = hammerOutcomes.map((o) =>
+  o.timeout ? 'timeout' : (o.message.error?.data?.code ?? 'ok'),
+)
+const hammerSlowest = Math.max(...hammerOutcomes.map((o) => o.ms))
+console.log(
+  `hammer: timeouts=${hammerTimeouts}/40 slowest=${hammerSlowest}ms codes=${[...new Set(hammerCodes)].join(',')}`,
+)
+const controlOutcomes = []
+controlOutcomes.push(
+  await timedRequest('terminal.write', {
+    terminalId: 'busy',
+    data: Buffer.from('echo OK\r', 'utf8').toString('base64'),
+  }),
+)
+controlOutcomes.push(
+  await timedRequest('terminal.close', { terminalId: 'busy' }),
+)
+lastSeq.delete('busy')
+controlOutcomes.push(
+  await timedRequest('terminal.spawn', {
+    terminalId: 'busy2',
+    cwd: tmpdir(),
+    rows: 24,
+    cols: 80,
+  }),
+)
+controlOutcomes.push(
+  await timedRequest('terminal.attach', {
+    terminalId: 'busy2',
+    consumerId: 'spike',
+  }),
+)
+controlOutcomes.push(
+  await timedRequest('terminal.write', {
+    terminalId: 'busy2',
+    data: Buffer.from('echo BUSY2_OK\r', 'utf8').toString('base64'),
+  }),
+)
+controlOutcomes.push(await timedRequest('system.ping', {}))
+const controlTimeouts = controlOutcomes.filter((o) => o.timeout).length
+const controlSlowest = Math.max(...controlOutcomes.map((o) => o.ms))
+const overflowed = hammerCodes.includes('input_backpressure')
+// busy2 端到端可用：洪泛压力过后，新终端的 echo 必须能走完整链路回来。
+const busy2Started = Date.now()
+while (
+  Date.now() - busy2Started < 3000 &&
+  !decode('busy2').includes('BUSY2_OK')
+) {
+  await delay(50)
+}
+const busy2Usable = decode('busy2').includes('BUSY2_OK')
+check(
+  'busy-shell 输入快速失败不冻主循环（W4-2b）',
+  hammerTimeouts === 0 &&
+    controlTimeouts === 0 &&
+    (overflowed || hammerCodes.every((code) => code === 'ok')) &&
+    hammerSlowest < 2000 &&
+    controlSlowest < 2000 &&
+    busy2Usable,
+  `hammerT=${hammerTimeouts} ctrlT=${controlTimeouts} slowest=${controlSlowest}ms overflow=${overflowed} busy2=${busy2Usable}`,
+)
+await delay(200)
+
+// 10. shutdown 优雅退出（含活跃终端 b 与已退出 ord 的回收）
 await request('terminal.write', {
   terminalId: 'b',
   data: Buffer.from('sleep 300 &\r', 'utf8').toString('base64'),

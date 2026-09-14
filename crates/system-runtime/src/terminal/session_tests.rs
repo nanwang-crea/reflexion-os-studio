@@ -85,12 +85,6 @@ fn pre_attach_buffer_then_replay() {
 /// pgrep 断言（首轮失败即为此教训）。
 #[test]
 fn trapped_hup_shell_is_killed_within_deadline() {
-    struct CloseGuard<'a>(&'a TerminalSession);
-    impl Drop for CloseGuard<'_> {
-        fn drop(&mut self) {
-            self.0.close();
-        }
-    }
     let session = spawn("itest5".to_string(), 7, "/tmp", 24, 80).expect("spawn");
     let guard = CloseGuard(&session);
     session
@@ -117,4 +111,129 @@ fn trapped_hup_shell_is_killed_within_deadline() {
     }
     drop(guard);
     assert!(!pgrep_hits("sleep 421"), "close 后 sleep 421 不得残留");
+}
+
+/// W4-2b：close 之后 write_input 必须以 terminal_closed **快速**失败——
+/// 输入走有界队列 + 专用写线程，enqueue 不再触碰 master fd，也就不会
+/// 继承阻塞写的不确定性（旧实现在此处是同步 write_all，行为随内核队列状态漂移）。
+#[test]
+fn write_after_close_is_terminal_closed_fast() {
+    let session = spawn("itest6".to_string(), 7, "/tmp", 24, 80).expect("spawn");
+    session.write_input(b"echo INPUT_Q_OK\r").expect("write");
+    session.close();
+    let started = Instant::now();
+    let error = session.write_input(b"x").expect_err("close 后输入必须被拒");
+    assert!(
+        error.contains("terminal_closed"),
+        "close 后错误须含 terminal_closed，实得 {error}"
+    );
+    assert!(
+        started.elapsed() < Duration::from_millis(100),
+        "enqueue 拒绝不得阻塞：{:?}",
+        started.elapsed()
+    );
+}
+
+/// W4-2b：shell 退出（slave 关闭 → master write EIO）后，写线程把错误
+/// 落进 closed 标志；之后的 write_input 以 terminal_closed 失败。错误只在
+/// 写线程真正撞上时可见（enqueue 本身即时返回），因此用轮询而非单次断言。
+#[test]
+fn input_to_dead_shell_surfaces_terminal_closed() {
+    let session = spawn("itest7".to_string(), 7, "/tmp", 24, 80).expect("spawn");
+    session.write_input(b"exit\r\n").expect("write");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        match session.write_input(b"x") {
+            Err(error) => {
+                assert!(
+                    error.contains("terminal_closed"),
+                    "死壳输入须报 terminal_closed，实得 {error}"
+                );
+                break;
+            }
+            Ok(()) => {
+                assert!(
+                    Instant::now() < deadline,
+                    "exit 后 5s 内写线程必须撞上 EIO 并置 terminal_closed"
+                );
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+    }
+    session.close();
+}
+
+/// W4-2b（真实 PTY，spike §9.1 注 2/注 6 场景）：前台 `yes` 洪泛期间灌
+/// 40×8 KiB 输入——**每次调用必须即时返回**（Ok 入队或 Err(input_backpressure)，
+/// 主循环语义），绝不允许阻塞在 master write 上；close 必须能在写线程
+/// 卡死于 ldisc 时仍收敛（kill → slave 关闭 → 阻塞写 EIO 解卡）。
+/// 「洪泛时必然溢出」依赖 macOS 内核输入队列在 ~1 KiB 未读输入后阻塞
+/// master write 的实测行为，但为避免跨机时序抖动，接受度判据与 spike #14
+/// 一致：溢出（≥1 次拒绝）或全部入队都算通过，唯一硬门槛是不阻塞 + close 不卡。
+#[test]
+fn busy_shell_input_enqueue_never_blocks_and_close_unwinds() {
+    let session = spawn("itest8".to_string(), 7, "/tmp", 24, 80).expect("spawn");
+    let guard = CloseGuard(&session);
+    // attach + 持续 ack：打开窗口让洪泛真的流起来（否则 256 KiB 窗口满后
+    // producer 停读，seq 卡在 ~17 帧，无法与提示符重绘区分）。
+    session.attach("itest8-test");
+    session.write_input(b"yes\r").expect("start flood");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        session.ack(u64::MAX);
+        let seq = session.output_seq.load(Ordering::SeqCst);
+        if seq >= 200 {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "yes 洪泛输出未起（疑似假阳性），seq={seq}"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    // 内核输入队列只累积极短完整行（cooked canq：>255B 单行被静默丢弃、
+    // 不产生背压；~1 KiB 未读行积压后 master write 阻塞——spike §9.1 注 2
+    // 实测即 60+ 行 ≈900B 的碎行输入）。8 KiB 有效载荷必须由短行构成，
+    // 否则测不到阻塞条件。
+    let mut payload = Vec::with_capacity(8 * 1024);
+    while payload.len() < 8 * 1024 - 4 {
+        payload.extend_from_slice(&[b'x'; 250]);
+        payload.push(b'\r');
+        payload.push(b'\n');
+    }
+    let started = Instant::now();
+    let mut rejected = 0;
+    for _ in 0..40 {
+        match session.write_input(&payload) {
+            Ok(()) => {}
+            Err(error) => {
+                assert!(
+                    error.contains("input_backpressure"),
+                    "队列溢出须报 input_backpressure，实得 {error}"
+                );
+                rejected += 1;
+            }
+        }
+    }
+    let elapsed = started.elapsed();
+    assert!(
+        elapsed < Duration::from_secs(2),
+        "40 次 enqueue 出现阻塞（写线程未与主循环解耦）：{elapsed:?}"
+    );
+    eprintln!("itest8: busy-shell 40x8KiB enqueue {elapsed:?}, rejected={rejected}/40");
+    let close_started = Instant::now();
+    drop(guard); // close：SIGKILL 杀 yes+shell → 卡死的 master write 以 EIO 解卡
+    assert!(
+        close_started.elapsed() < Duration::from_secs(2),
+        "close 被卡死的输入写线程拖累：{:?}",
+        close_started.elapsed()
+    );
+}
+
+/// 跨测试复用的回收守卫（断言失败也不留孤儿 shell）。
+struct CloseGuard<'a>(&'a TerminalSession);
+impl Drop for CloseGuard<'_> {
+    fn drop(&mut self) {
+        self.0.close();
+    }
 }

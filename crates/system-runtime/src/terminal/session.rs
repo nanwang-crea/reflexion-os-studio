@@ -1,6 +1,8 @@
 //! 单个 PTY 会话（W2 硬化）：生产者线程 → 有界输出队列（output_queue）→
 //! 唯一 sender 线程 → ≤16 KiB 帧 + 终端内 outputSeq + base64 通知输出；
 //! attach 门控 + ack 窗口（W2-2）；SIGHUP→SIGKILL 时限升级回收（W2-3）。
+//! 输入侧（W4-2b）：dispatch 主循环只做**有界队列 enqueue**（即时返回），
+//! 阻塞式 master write 由每终端唯一的写线程执行——一个忙壳冻结不了主循环。
 //! 消费者代际与 16ms 合帧在 TS 侧，不在此文件。
 //!
 //! portable-pty 0.8.1 实测校准（预飞行核查，W1 沉淀）：
@@ -15,7 +17,8 @@
 //!   wait 同一对象不会 ECHILD 竞态。
 
 use std::io::{Read, Write};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::mpsc::TrySendError;
 use std::sync::{mpsc, Arc, Mutex};
 #[cfg(unix)]
 use std::time::{Duration, Instant};
@@ -32,6 +35,13 @@ use crate::terminal::shell_command::default_shell_argv;
 #[cfg(unix)]
 const HUP_DEADLINE: Duration = Duration::from_millis(500);
 
+/// 输入队列槽位数（W4-2b）。WHY 16：前端 input-channel.ts 把每终端在飞输入
+/// 限制为 ≤4 批 × 8 KiB = 32 KiB，16 个 ≤8 KiB 槽位（128 KiB）足以吸收突发
+/// （含前端对 definite 拒绝的一次 250ms 重试窗口）；溢出走**确定性拒绝**
+/// （input_backpressure，前端可安全重试），绝不为排队而阻塞调用方——
+/// 阻塞 dispatch 主循环正是本项修复的事故本体（spike §9.1 注 6）。
+const INPUT_QUEUE_CAPACITY: usize = 16;
+
 pub struct TerminalSession {
     pub id: String,
     pub generation: u64,
@@ -42,7 +52,12 @@ pub struct TerminalSession {
     /// 「已编号」与「已发出」，service 的 json_meta 与消费端缺口检测都读它。
     pub output_seq: Arc<AtomicU64>,
     queue: Arc<OutputQueue>,
-    writer: Mutex<Box<dyn Write + Send>>,
+    /// 输入侧有界队列的发送端（W4-2b）。dispatch 主循环只 try_send（即时返回）；
+    /// Option 让 close() 能显式 drop sender 唤醒写线程。中毒锁按已关闭处理。
+    in_tx: Mutex<Option<mpsc::SyncSender<Vec<u8>>>>,
+    /// 输入写路径已死（写线程报错 / 通道断开 / close）：之后的 write_input
+    /// 一律即时报 terminal_closed；写线程把队列残余 drain-drop 后自行退出。
+    input_closed: Arc<AtomicBool>,
     master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
     child: Arc<Mutex<Box<dyn portable_pty::Child + Send + Sync>>>,
     killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
@@ -124,13 +139,16 @@ pub fn spawn(
     // spec §5「Rust 先建立有界输出缓冲，再启动 shell」：running 先于
     // 线程与任何输出（Task 10 评审修复：exited 永不在 running 之前送达）。
     let queue = Arc::new(OutputQueue::new());
+    let (in_tx, in_rx) = mpsc::sync_channel::<Vec<u8>>(INPUT_QUEUE_CAPACITY);
+    let input_closed = Arc::new(AtomicBool::new(false));
     let session = Arc::new(TerminalSession {
         id: terminal_id.clone(),
         generation,
         shell_argv: argv,
         output_seq: Arc::new(AtomicU64::new(0)),
         queue: queue.clone(),
-        writer: Mutex::new(writer),
+        in_tx: Mutex::new(Some(in_tx)),
+        input_closed: input_closed.clone(),
         master: Arc::new(Mutex::new(pair.master)),
         child: Arc::new(Mutex::new(child)),
         killer: Mutex::new(killer),
@@ -138,6 +156,37 @@ pub fn spawn(
         child_pid,
     });
     emit_state(&terminal_id, generation, "running", None);
+
+    // 输入写线程（W4-2b，spike §9.1 注 6 的修复本体）：master fd 的阻塞写
+    // 只发生在这里，绝不在 dispatch 主循环——实测前台 job 积压 ~1 KiB 未读
+    // 行输入时 macOS master write 会阻塞，旧实现因此可被单个忙壳冻结整个
+    // sidecar（所有终端 + file/git 工具同一条主循环）。单线程按序消费 =
+    // FIFO 字节序不变（inputSeq 的跨请求顺序语义在 TS 上层维持，本线程
+    // 不重排）；一次 write_all+flush 完成一个入队批次，批次间不交织。
+    // 写失败（shell 退出 → slave 关闭 → EIO）即置 input_closed：之后的
+    // enqueue 全部即时报 terminal_closed，本线程只负责把队列残余
+    // drain-drop（不让仍持 Arc 的调用方卡在全队列上）；错误只记状态行、
+    // 不含输入内容（spec §9）。
+    let input_writer_id = terminal_id.clone();
+    std::thread::spawn(move || {
+        let mut writer = writer;
+        let mut failed = false;
+        for chunk in in_rx {
+            if failed {
+                continue;
+            }
+            if let Err(error) = writer
+                .write_all(&chunk)
+                .and_then(|_| writer.flush().map_err(Into::into))
+            {
+                eprintln!(
+                    "terminal {input_writer_id} input write failed ({error}); input path closed"
+                );
+                input_closed.store(true, Ordering::SeqCst);
+                failed = true;
+            }
+        }
+    });
 
     // 生产者线程（W1 读线程的职责演进）：只分帧、编号、入队；
     // 是否可交付/窗口是否有额度由队列裁决。EOF 后经 tail 通知退出线程。
@@ -217,17 +266,31 @@ pub fn spawn(
 }
 
 impl TerminalSession {
+    /// 仅入队、不触碰 fd（W4-2b）：即时返回，绝不阻塞 dispatch 主循环。
+    /// 错误串即稳定码子串（input_backpressure / terminal_closed），service
+    /// 据此映射 OpError code；TS 侧 `rustErrorCode` 按 message 子串匹配。
     pub fn write_input(&self, bytes: &[u8]) -> Result<(), String> {
-        let mut writer = self
-            .writer
+        if self.input_closed.load(Ordering::SeqCst) {
+            return Err("terminal_closed".to_string());
+        }
+        let guard = self
+            .in_tx
             .lock()
-            .map_err(|_| "writer lock poisoned".to_string())?;
-        writer
-            .write_all(bytes)
-            .map_err(|error| format!("write failed: {error}"))?;
-        writer
-            .flush()
-            .map_err(|error| format!("flush failed: {error}"))
+            .map_err(|_| "terminal_closed".to_string())?;
+        let Some(tx) = guard.as_ref() else {
+            return Err("terminal_closed".to_string());
+        };
+        match tx.try_send(bytes.to_vec()) {
+            Ok(()) => Ok(()),
+            // 队列满 = 确定性拒绝（前端退避重试），不排队等待、不阻塞调用方。
+            Err(TrySendError::Full(_)) => Err("input_backpressure".to_string()),
+            // 写线程已退出（残局）：固化 closed 标志，之后走快路径。
+            Err(TrySendError::Disconnected(_)) => {
+                drop(guard);
+                self.input_closed.store(true, Ordering::SeqCst);
+                Err("terminal_closed".to_string())
+            }
+        }
     }
 
     pub fn resize(&self, rows: u16, cols: u16) -> Result<(), String> {
@@ -274,6 +337,17 @@ impl TerminalSession {
     /// 升级阶梯），见 spec §8 平台表。master/writer 随 Arc 引用清零释放，
     /// 内核向会话前台进程组补发 SIGHUP 兜住作业控制后代。
     pub fn close(&self) {
+        // 输入侧先断（W4-2b）：置死 + drop sender 让写线程退出。写线程可能
+        // 正阻塞在 master write 上——下面 kill 杀死 shell → slave 关闭 →
+        // 阻塞中的 write 以 EIO 返回、线程随通道断开收敛；本方法无 join
+        // 义务，close 不会被它拖死（spike #14/Rust itest8 钉死该不变量）。
+        // 平台口径（红线 8）：unix 下 kill = SIGHUP→SIGKILL 升级（下方），
+        // Windows 下 ChildKiller::kill = TerminateProcess，ConPTY 随之失效、
+        // 阻塞写同样报错解卡——解卡机制不依赖 POSIX 信号语义。
+        self.input_closed.store(true, Ordering::SeqCst);
+        if let Ok(mut tx) = self.in_tx.lock() {
+            *tx = None;
+        }
         self.queue.close();
         if let Ok(mut killer) = self.killer.lock() {
             let _ = killer.kill();

@@ -87,6 +87,12 @@ export interface IdempotencyEntry {
 /** 从 Rust JSON-RPC error 文本中还原稳定 code（passthrough），未知归 internal。 */
 export function rustErrorCode(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
+  // W4-2b：Rust 有界输入队列满快拒（码子串 input_backpressure）→ 前端契约码
+  // terminal_input_backpressure（input-channel.ts 的 definite 退避重试臂）。
+  // 必须先于通用 passthrough：这是唯一 Rust 码 ≠ 前端码的映射。
+  if (message.includes('input_backpressure')) {
+    return 'terminal_input_backpressure'
+  }
   for (const code of [
     'terminal_closed',
     'io_error',

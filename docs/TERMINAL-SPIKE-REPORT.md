@@ -248,12 +248,21 @@ P1 洪泛构成：两临时项目 8+8=16 终端（=全局活动额度上限）�
    60s:134 → 100s:136 → 240s:140.6MiB），台阶全部落在前 ~100s；120s 正式窗的"末 45s"拟合
    罩住 60–65s 的 +13MiB 台阶 → 2.501 MiB/min。240s 延长同门槛复测 **0.362 PASS**。门槛
    数字未动；正式有界性判据是门槛 3 原文"持续 10 分钟"→ 由 P2 末 120s 拟合裁决，待跑。
-6. **顺带发现的鲁棒性问题（未修复，登记后续）**：注 2 同因——sidecar 在协议读循环内
+6. **顺带发现的鲁棒性问题（W4-2b 已修复）**：注 2 同因——sidecar 在协议读循环内
    同步 `write_all` 到 master fd（`main.rs` 单循环 → `session.rs write_input`），一个终端
    的内核输入队列满即可卡死**整个 sidecar 请求环**（探针实测一次 `terminal.close` 超时）。
    真实用户等价物是"对忙碌 shell 大量粘贴"。修复涉及输入溢出策略设计（每终端写线程/
    有界队列/非阻塞拒绝码），超出 W4-2a 性能 harness 范围，**登记为 W4 后续项**；
    本 harness 方法（控制终端保持提示符）不触发该路径。
+   **W4-2b 修复落地**：`write_input` 变为纯入队（每终端有界 mpsc，16 槽 ×≤8 KiB，
+   吸收前端 4×8 KiB 在飞突发），阻塞式 master write 移入每终端专用写线程（FIFO 保序）；
+   溢出确定性返回 `input_backpressure`（TS 映射前端码 `terminal_input_backpressure`，
+   definite 臂退避重试一次），输入路径死亡报 `terminal_closed`。复现关键：macOS
+   cooked 模式只有**完整短行**积压 ~1 KiB 才阻塞 master write（>255B 单行/无换行碎输入
+   被静默丢弃、不产生背压——首轮探针用 8 KiB 无行输入因此"未复现"）。钉死：Rust
+   itest6-8、TS passthrough 单测 ×2、`terminal-spike.mjs` check #14
+   "busy-shell 输入快速失败不冻主循环"（yes 洪泛下 40×8 KiB 短行猛灌全部即时应答，
+   实测最慢 22–25 ms，且期间其他终端/shutdown 不受影响）。
 7. **`ps %cpu` 在 macOS 是寿命均值**：空闲门禁用两次采样间 `time=`（累计 CPU 秒）差分的
    窗口占用率，`%cpu` 原值照报；`yes` 洪泛源与 harness 自身的 CPU 不计入门槛（负载发生器）。
 8. **清理纪律**：只 TERM/核验本脚本跟踪的 runtime pid、发现到的 sidecar pid 与登记的

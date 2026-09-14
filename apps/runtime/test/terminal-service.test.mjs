@@ -42,8 +42,14 @@ function fakeSystem(behavior = {}) {
         }
         return { closed: true }
       }
-      if (method === 'terminal.write')
+      if (method === 'terminal.write') {
+        if (behavior.writeFail) {
+          throw new Error(
+            behavior.writeFailMessage ?? 'input_backpressure: queue full',
+          )
+        }
         return { acceptedBytes: params.data.length }
+      }
       if (method === 'terminal.resize')
         return { rows: params.rows, cols: params.cols }
       if (method === 'terminal.ack') return { ok: true }
@@ -293,6 +299,29 @@ test('write 缓冲超 inputPendingMax → terminal_input_backpressure', async ()
   })
   await h.service.write('p1', id, 2, 'Mg==') // 补齐缺口 → 3、4 依序刷出
   await Promise.all([held3, held4])
+})
+
+/// W4-2b：Rust 有界输入队列溢出快拒（稳定码 input_backpressure）必须经
+/// passthrough 转成前端契约码 terminal_input_backpressure——前者的 definite
+/// 错误回执触发 input-channel.ts 的一次退避重试；不映射会落 internal → halt。
+test('Rust input_backpressure → terminal_input_backpressure passthrough', async () => {
+  const h = harness({ systemBehavior: { writeFail: true } })
+  const { terminal } = await running(h)
+  await assert.rejects(
+    () => h.service.write('p1', terminal.terminalId, 1, 'MQ=='),
+    { code: 'terminal_input_backpressure' },
+  )
+})
+
+test('Rust terminal_closed 在 write 路径仍透传为 terminal_closed', async () => {
+  const h = harness({
+    systemBehavior: { writeFail: true, writeFailMessage: 'terminal_closed' },
+  })
+  const { terminal } = await running(h)
+  await assert.rejects(
+    () => h.service.write('p1', terminal.terminalId, 1, 'MQ=='),
+    { code: 'terminal_closed' },
+  )
 })
 
 test('输入间隙超时：缓冲的 seq=5 拒绝 terminal_input_out_of_order；seq=3 自愈', async () => {

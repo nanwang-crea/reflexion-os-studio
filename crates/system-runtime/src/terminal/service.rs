@@ -135,15 +135,32 @@ pub fn handle_ack(params: Value) -> Result<Value, OpError> {
     Ok(json!({ "ok": true }))
 }
 
+/// W4-2b：write_input 的入队错误 → 稳定 code。错误串本身即稳定码子串
+/// （input_backpressure=队列满快拒 / terminal_closed=输入路径已死），
+/// 未知错误归 io_error。message 保留码子串：TS 侧 `rustErrorCode` 按
+/// Error message 子串匹配（SystemRuntimeClient 不透传 data.code）。
+fn write_enqueue_error(message: String) -> OpError {
+    let code = if message.contains("input_backpressure") {
+        "input_backpressure"
+    } else if message.contains("terminal_closed") {
+        "terminal_closed"
+    } else {
+        "io_error"
+    };
+    OpError::new(code, message)
+}
+
 pub fn handle_write(params: Value) -> Result<Value, OpError> {
     let id = required_str(&params, "terminalId")?;
     let data = required_str(&params, "data")?;
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(data.as_bytes())
         .map_err(|error| OpError::new("invalid_request", format!("bad base64: {error}")))?;
+    // 只入队（bounded mpsc try_send），master write 在每终端专用写线程——
+    // 忙壳输入永不阻塞 dispatch 主循环（spike §9.1 注 6 / W4-2b）。
     session_by_id(&id)?
         .write_input(&bytes)
-        .map_err(|message| OpError::new("io_error", message))?;
+        .map_err(write_enqueue_error)?;
     Ok(json!({ "acceptedBytes": bytes.len() }))
 }
 
@@ -339,6 +356,25 @@ mod tests {
             true
         );
         handle_close(json!({ "terminalId": "svc-attach" })).expect("close");
+    }
+
+    /// W4-2b：入队错误三分映射钉死——新稳定码 input_backpressure（队列满，
+    /// TS 转 terminal_input_backpressure 给前端 definite 重试臂）、
+    /// terminal_closed（输入路径已死）、io_error 兜底。
+    #[test]
+    fn write_enqueue_errors_map_to_stable_codes() {
+        assert_eq!(
+            write_enqueue_error("input_backpressure".to_string()).code,
+            "input_backpressure"
+        );
+        assert_eq!(
+            write_enqueue_error("terminal_closed".to_string()).code,
+            "terminal_closed"
+        );
+        assert_eq!(
+            write_enqueue_error("write failed: EIO".to_string()).code,
+            "io_error"
+        );
     }
 
     #[test]
