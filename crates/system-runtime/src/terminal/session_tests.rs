@@ -194,9 +194,10 @@ fn busy_shell_input_enqueue_never_blocks_and_close_unwinds() {
     // 内核输入队列只累积极短完整行（cooked canq：>255B 单行被静默丢弃、
     // 不产生背压；~1 KiB 未读行积压后 master write 阻塞——spike §9.1 注 2
     // 实测即 60+ 行 ≈900B 的碎行输入）。8 KiB 有效载荷必须由短行构成，
-    // 否则测不到阻塞条件。
-    let mut payload = Vec::with_capacity(8 * 1024);
-    while payload.len() < 8 * 1024 - 4 {
+    // 否则测不到阻塞条件；且**恒 ≤MAX_INPUT_BATCH**（终审 #3 入队前硬校验，
+    // 旧构造末尾可越过 8192 被拒——那不是本测试要测的路径）。
+    let mut payload = Vec::with_capacity(MAX_INPUT_BATCH);
+    while payload.len() + 252 <= MAX_INPUT_BATCH {
         payload.extend_from_slice(&[b'x'; 250]);
         payload.push(b'\r');
         payload.push(b'\n');
@@ -236,4 +237,30 @@ impl Drop for CloseGuard<'_> {
     fn drop(&mut self) {
         self.0.close();
     }
+}
+
+/// 终审 #3（spec §6）：>8 KiB 输入批次在**入队前**即时拒绝（invalid_request
+/// 语义串），不触队列、不触 master fd；恰 8 KiB 是合法边界必须放行。
+/// 拒绝路径同步返回，无时序抖动；8 KiB 合法批为无换行单行，cooked 模式
+/// 静默丢弃（spike §9.1 注 2），不会给 shell 制造积压。
+#[test]
+fn oversized_input_batch_is_rejected_before_enqueue() {
+    let session = spawn("itest9".to_string(), 7, "/tmp", 24, 80).expect("spawn");
+    let _guard = CloseGuard(&session);
+    session
+        .write_input(&vec![b'a'; MAX_INPUT_BATCH])
+        .expect("恰好 8 KiB 必须合法");
+    let started = Instant::now();
+    let error = session
+        .write_input(&vec![b'a'; MAX_INPUT_BATCH + 1])
+        .expect_err("超限必须拒绝");
+    assert!(
+        error.contains("input batch too large"),
+        "超限错误须含 input batch too large，实得 {error}"
+    );
+    assert!(
+        started.elapsed() < Duration::from_millis(100),
+        "入队前拒绝必须即时：{:?}",
+        started.elapsed()
+    );
 }

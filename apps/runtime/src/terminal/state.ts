@@ -38,6 +38,8 @@ export function transitionStatus(
   if (current === next) return false
   if (TERMINAL.has(current) && !extra?.force) return false
   record.meta.status = next
+  // closed 落地即记 TTL 清扫起点（终审 #1；静默收敛路径在 service.ts 同步赋值）。
+  if (next === 'closed') record.closedAtMs = Date.now()
   if (extra?.exitCode !== undefined) record.meta.exitCode = extra.exitCode
   if (extra?.errorMessage) {
     // 失败原因存记录（前 200 字符，spec §9：只记诊断，绝不携带内容/密钥），

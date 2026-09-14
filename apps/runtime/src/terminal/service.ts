@@ -15,6 +15,7 @@ import {
   type TerminalRecord,
   type TerminalServiceConfig,
 } from './records.js'
+import { enforceQuota, sweepClosedRecords } from './quota.js'
 import { emitState, transitionStatus } from './state.js'
 
 export type { TerminalServiceConfig } from './records.js'
@@ -30,9 +31,9 @@ export interface TerminalServiceDeps {
 /**
  * 终端多会话服务：幂等创建 / 配额 / 输入序号串行化 / 输出公平调度回传 /
  * Rust 通知接线 / 回收与降级。状态机见 spec §5，跨进程顺序契约见 §5.5。
- * 索引/配额/幂等在 RecordIndex，回传限速/合并在 EgressPacer，通知在
- * InboundProcessor，输入序号与间隙在 InputOrder，状态迁移在 state.ts，
- * 本类只做编排。
+ * 索引/幂等在 RecordIndex，额度裁决与 closed TTL 清扫在 quota.ts，
+ * 回传限速/合并在 EgressPacer，通知在 InboundProcessor，输入序号与间隙在
+ * InputOrder，状态迁移在 state.ts，本类只做编排。
  */
 export class TerminalService {
   private readonly config: TerminalServiceConfig
@@ -77,7 +78,9 @@ export class TerminalService {
     rows: number,
     cols: number,
   ): Promise<{ terminal: Terminal }> {
-    this.index.sweepIdempotency(Date.now())
+    const now = Date.now()
+    this.index.sweepIdempotency(now)
+    sweepClosedRecords(this.index, this.config, now)
     const existing = this.index.createKeys.get(requestId)
     if (existing) {
       // 同 requestId：in-flight → 共享同一 spawn promise（并发只起一个 shell）；
@@ -94,7 +97,7 @@ export class TerminalService {
         `project not found: ${projectId}`,
       )
     }
-    this.enforceQuota(projectId)
+    enforceQuota(this.index, this.config, projectId)
     const terminalId = randomUUID()
     const meta: Terminal = {
       terminalId,
@@ -181,7 +184,15 @@ export class TerminalService {
       transitionStatus(record, 'failed', {
         errorMessage: error instanceof Error ? error.message : String(error),
       })
-      throw error
+      // 终审 #2：Rust 稳定码（pty_error/too_many_terminals/…）经 SystemRuntimeError
+      // 结构化透传后映射为同码 CommandError——不包装则 create 落 index.ts 的
+      // internal 兜底，前端 notices 映射（pty_error 等）永远不可达。
+      // Rust 侧 create-time 额度满（too_many_terminals）在 TS 配额下正常不发生，
+      // 发生时同样如实上报。
+      throw new CommandError(
+        rustErrorCode(error),
+        error instanceof Error ? error.message : String(error),
+      )
     }
   }
 
@@ -264,6 +275,17 @@ export class TerminalService {
         `terminal ${terminalId} 非 running`,
       )
     }
+    // spec §6「单输入批次 ≤8 KiB」的 Runtime 层（终审 #3，三层之一）：前端
+    // input-channel flush 时已切 ≤8 KiB，正常流量不会命中；此为防御性硬校验，
+    // 超限批次绝不入队/转发 Rust（Rust 入队前还有同值终检）。
+    if (
+      Buffer.from(data, 'base64').byteLength > this.config.inputBatchMaxBytes
+    ) {
+      throw new CommandError(
+        'terminal_input_batch_too_large',
+        `input batch exceeds ${this.config.inputBatchMaxBytes} bytes`,
+      )
+    }
     return this.inputOrder.write(record, inputSeq, data)
   }
 
@@ -318,10 +340,14 @@ export class TerminalService {
         throughOutputSeq,
       })
     } catch (error) {
-      // 终端已消失：ack 无意义，吞掉 terminal_closed。
-      const message = error instanceof Error ? error.message : String(error)
-      if (!message.includes('terminal_closed')) {
-        throw new CommandError(rustErrorCode(error), message)
+      // 终端已消失：ack 无意义，吞掉 terminal_closed（终审 #2：稳定码经
+      // SystemRuntimeError.data.code 存活，rustErrorCode 优先读结构化码）。
+      const code = rustErrorCode(error)
+      if (code !== 'terminal_closed') {
+        throw new CommandError(
+          code,
+          error instanceof Error ? error.message : String(error),
+        )
       }
     }
     return { ok: true }
@@ -348,6 +374,7 @@ export class TerminalService {
       // 是回收路径的展示契约（spec §2），发 closed 只会造成状态闪烁。
       // 本地静默收敛为 closed，仅清计时器与回传/缓冲残留。
       record.meta.status = 'closed'
+      record.closedAtMs = Date.now() // transitionStatus 未参与本路径，TTL 起点就地记（终审 #1）
       this.pacer.flushChannel(record.channel)
       this.clearAttachTimer(record)
       this.inputOrder.failPendingInputs(
@@ -451,35 +478,12 @@ export class TerminalService {
     }
   }
 
-  // ---------------- 配额与工具 ----------------
+  // ---------------- 工具 ----------------
 
   private clearAttachTimer(record: TerminalRecord): void {
     if (record.attachTimer) {
       clearTimeout(record.attachTimer)
       record.attachTimer = undefined
-    }
-  }
-
-  private enforceQuota(projectId: string): void {
-    const { projectActive, globalActive, retained } =
-      this.index.quotaCounts(projectId)
-    if (projectActive >= this.config.maxActivePerProject) {
-      throw new CommandError(
-        'terminal_quota_project',
-        `项目活动终端数已达上限 ${this.config.maxActivePerProject}`,
-      )
-    }
-    if (globalActive >= this.config.maxActiveGlobal) {
-      throw new CommandError(
-        'terminal_quota_global',
-        `全局活动终端数已达上限 ${this.config.maxActiveGlobal}`,
-      )
-    }
-    if (retained >= this.config.maxRetained) {
-      throw new CommandError(
-        'terminal_quota_retained',
-        `留存终端数已达上限 ${this.config.maxRetained}，请清理已退出终端`,
-      )
     }
   }
 }

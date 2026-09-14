@@ -685,7 +685,10 @@ export type TerminalStatus = z.infer<typeof TerminalStatusSchema>
 
 /**
  * 用户终端实体：项目级、多会话。initialCwd 是启动目录（workspace 路径），
- * 不是 shell 当前目录（首版无法可靠观测）；generation 为 Rust sidecar 进程代际。
+ * 不是 shell 当前目录（首版无法可靠观测）。generation 记录事件来源的
+ * sidecar 进程标识（Rust 侧实现为进程内常数）：用于同代内迟到帧过滤与
+ * 旧代际事件甄别；**跨重启识别由 TS 侧进程监管完成**（sidecar 重拉即
+ * markAllDisconnected，不承诺此数值随重启递增），终审 #7 口径收敛。
  */
 export const TerminalSchema = z.object({
   terminalId: z.string().min(1),
@@ -699,7 +702,7 @@ export const TerminalSchema = z.object({
   status: TerminalStatusSchema,
   /** 退出信息：仅 exited/closed 后有值。 */
   exitCode: z.number().int().nullable().optional(),
-  /** Rust sidecar 进程代际（跨重启识别）。 */
+  /** sidecar 进程代际标识（进程内常数；跨重启识别见上方实体注释）。 */
   generation: z.number().int().nonnegative(),
   createdAt: IsoDateTimeSchema,
 })

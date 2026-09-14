@@ -10,6 +10,21 @@ import {
 export type SystemAvailability =
   'starting' | 'ready' | 'degraded' | 'unavailable' | 'stopped'
 
+/**
+ * Rust JSON-RPC error 回包：message 之外保留 `error.data.code` 稳定码
+ * （终审 #2：Rust 侧一直发 data.code，旧解析路径把它降级成纯文本，
+ * 稳定码在 JSON-RPC 跳上丢失，terminal 层只剩 message 子串猜测）。
+ */
+export class SystemRuntimeError extends Error {
+  readonly code?: string
+
+  constructor(message: string, code?: string) {
+    super(message)
+    this.name = 'SystemRuntimeError'
+    if (code !== undefined) this.code = code
+  }
+}
+
 const HANDSHAKE_TIMEOUT_MS = 5_000
 const REQUEST_TIMEOUT_MS = 10_000
 const SHUTDOWN_GRACE_MS = 2_000
@@ -230,7 +245,7 @@ export class SystemRuntimeClient {
       method?: unknown
       params?: unknown
       result?: unknown
-      error?: { message?: string }
+      error?: { message?: string; data?: { code?: unknown } }
     }
     try {
       message = JSON.parse(line)
@@ -279,7 +294,18 @@ export class SystemRuntimeClient {
       this.pending.delete(message.id)
       clearTimeout(entry.timer)
       if (message.error) {
-        entry.reject(new Error(message.error.message ?? 'system request error'))
+        // 稳定码存活：Rust error.data.code 经 SystemRuntimeError 透传给调用方
+        // （终审 #2）；结构畸形（data 非对象 / code 非字符串）退化为纯文本错误。
+        const dataCode =
+          typeof message.error.data?.code === 'string'
+            ? message.error.data.code
+            : undefined
+        entry.reject(
+          new SystemRuntimeError(
+            message.error.message ?? 'system request error',
+            dataCode,
+          ),
+        )
       } else {
         entry.resolve(message.result)
       }

@@ -278,6 +278,21 @@ class TerminalManager {
     }
   }
 
+  /**
+   * 项目删除成功后的本地清算（终审 #6）：dispose xterm 实例并摘除标签。
+   * **不发**后端 close——project.delete 的服务端已在删行前 closeProject 回收
+   * 该项目全部终端（任一失败则项目保留、请求报错，走不到本路径），二次 close
+   * 是对已消失记录的噪音。保持静默：删除成功不应再弹终端错误。
+   */
+  dropProject(projectId: string): void {
+    for (const terminalId of this.tabsByProject.get(projectId) ?? []) {
+      this.runtime.disposeInstance(terminalId)
+    }
+    this.tabsByProject.delete(projectId)
+    this.activeByProject.delete(projectId)
+    this.notify()
+  }
+
   // ---------------- 面板槽位（TerminalPanel 挂载/卸载接线） ----------------
 
   attachSlot(el: HTMLElement | null): void {
@@ -377,7 +392,7 @@ class TerminalManager {
     }
   }
 
-  /** 同名 shell 加序号消歧：shell / shell 2（后端暂未回传 shellArgv）。 */
+  /** 同名 shell 加序号消歧：zsh / zsh 2（标签名取自 meta.shellArgv 的 basename）。 */
   private disambiguateLabels(tabs: TerminalTabView[]): string[] {
     const seen = new Map<string, number>()
     return tabs.map((tab) => {
@@ -401,7 +416,11 @@ function clampHeight(px: number): number {
   return Math.max(PANEL_MIN_HEIGHT, Math.min(max, Math.round(px)))
 }
 
-/** shell 展示名：优先后端 argv 的 basename（去 .exe）；当前后端回传为空则 "shell"。 */
+/**
+ * shell 展示名：后端 shellArgv 已贯通（spec §4，Rust 裁决 default_shell_argv），
+ * 取 argv[0] 的 basename（去 .exe）；仅当元数据缺失（旧 sidecar 未回传该字段，
+ * meta.shellArgv 为空数组）时回退 "shell"。
+ */
 function shellNameOf(meta: TerminalMeta): string {
   const argv0 = meta.shellArgv[0]
   if (!argv0) return 'shell'

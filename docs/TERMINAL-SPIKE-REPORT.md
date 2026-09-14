@@ -270,6 +270,7 @@ P1 洪泛构成：两临时项目 8+8=16 终端（=全局活动额度上限）�
    `yes` 孙进程 pid（洪泛开始时快照），绝不按名字宽泛 pkill；120s/240s/P2 冒烟运行
    cleanup 均 `clean:true`（无孤儿）。
 9. **Windows/Linux：未验证**（POSIX 主路径，同 §4/§11 口径；`yes` 与 `ps` 格式均 POSIX）。
+10. **重试语义口径澄清（终审 #4）**：幂等重放（同 requestId 重试）为程序化路径；UI 重试语义=显式新建（recreateTab/新标签一律新 requestId），无双开风险由 close-ghost 保障（spawn 超时兜底 close 回收幽灵 shell）。
 
 **压力测试发现的两个后端修复（W4-2a/b，均已入库）**：
 ① **EgressPacer 轮询公平（`536d6cd`）**——修复前 `EgressPacer.pump()` 每 tick 从

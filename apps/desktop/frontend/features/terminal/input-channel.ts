@@ -1,10 +1,13 @@
 /**
  * 终端输入通道（W3）：按键/粘贴合并 → 带序号批次 → 有界在飞窗口发送。
- * 语义（spec §4）：
+ * 语义（spec §4、§6）：
  * - 16ms 定时器或 ≥8 KiB 原始字节触发批量 flush；粘贴无特殊处理（PTY 行规程）。
- * - 输入永不丢弃：窗口（≤4 批且 ≤32 KiB 原始字节）满时只 hold 缓冲区，
- *   用户至多在病态背压下看到输入停顿；窗口为空时限额豁免——单个超限
- *   批次（如接近 1 MiB 的粘贴）必须能发出，否则永久死锁。
+ * - flush 时把载荷按 spec §6「单输入批次 ≤8 KiB」切分为多个批次，各自占一个
+ *   inputSeq（终审 #3：1 MiB 粘贴 = 128 个批次，逐批过同一窗口/在飞规则，
+ *   节奏由窗口天然受限——Runtime 与 Rust 入队前还各有一道同值硬校验）。
+ * - 输入永不丢弃：窗口（≤4 批且 ≤32 KiB 原始字节）满时只 hold 待发送批次与
+ *   缓冲区，用户至多在病态背压下看到输入停顿；切批后单批恒 ≤8 KiB，
+ *   空窗口豁免只是"首批必可发出"的显然性质，不再承载防死锁语义。
  * - 序号 1-based、乐观分配：仅成功响应确认送达。确定性 backpressure
  *   错误 → 同一批次 250ms 后重试一次（后端对 seq≤已应用值幂等确认不重写，
  *   重试不会双写）；确定性 out_of_order 错误 → **不重试**立即挂起——它
@@ -48,6 +51,24 @@ interface InflightBatch {
   retryTimer: ReturnType<typeof setTimeout> | null
 }
 
+/**
+ * 纯函数（终审 #3）：把原始字节切成 ≤limit 的批次序列。按字节偏移切、
+ * 不解析 UTF-8 码点——PTY 输入按字节流消费，多字节字符跨批次无损，
+ * 行规程也只关心字节内容而非批次边界。limit 非正返回空。
+ */
+export function splitInputChunks(
+  bytes: Uint8Array,
+  limit: number,
+): Uint8Array[] {
+  if (bytes.length === 0 || limit <= 0) return []
+  if (bytes.length <= limit) return [bytes]
+  const chunks: Uint8Array[] = []
+  for (let offset = 0; offset < bytes.length; offset += limit) {
+    chunks.push(bytes.subarray(offset, Math.min(offset + limit, bytes.length)))
+  }
+  return chunks
+}
+
 export interface TerminalInputChannelOptions {
   /** 发送一个带序号批次；失败抛 InputSendError。 */
   send: (seq: number, bytes: Uint8Array) => Promise<void>
@@ -60,6 +81,8 @@ export interface TerminalInputChannelOptions {
 export class TerminalInputChannel {
   private buffer = ''
   private bufferBytes = 0
+  /** 已编码、已按 ≤8 KiB 切批、等待窗口放行的原始字节（FIFO，序号按出队分配）。 */
+  private outbound: Uint8Array[] = []
   private inflight: InflightBatch[] = []
   /** 已乐观分配的最大序号（下一个批次 = lastSeq + 1）。 */
   private lastSeq: number
@@ -98,11 +121,17 @@ export class TerminalInputChannel {
     this.flushTimer = null
     this.buffer = ''
     this.bufferBytes = 0
+    this.outbound = []
     this.clearInflight()
   }
 
   private scheduleFlush(ms: number): void {
-    if (this.flushTimer !== null || this.buffer.length === 0) return
+    if (
+      this.flushTimer !== null ||
+      (this.buffer.length === 0 && this.outbound.length === 0)
+    ) {
+      return
+    }
     this.flushTimer = setTimeout(() => {
       this.flushTimer = null
       this.flushBuffer()
@@ -120,23 +149,33 @@ export class TerminalInputChannel {
   }
 
   private flushBuffer(): void {
-    if (this.buffer.length === 0) return
-    if (this.windowFull()) {
-      this.scheduleFlush(FLUSH_INTERVAL_MS) // hold，不丢弃
-      return
+    if (this.halted) return
+    for (;;) {
+      if (this.buffer.length === 0 && this.outbound.length === 0) return
+      if (this.windowFull()) {
+        this.scheduleFlush(FLUSH_INTERVAL_MS) // hold，不丢弃
+        return
+      }
+      if (this.outbound.length === 0) {
+        // 整段编码后按 ≤8 KiB 切批（spec §6 / 终审 #3）：1 MiB 粘贴从这里
+        // 变成 128 个各占 inputSeq 的批次，逐批过窗口规则，不再单批超限。
+        const raw = new TextEncoder().encode(this.buffer)
+        this.buffer = ''
+        this.bufferBytes = 0
+        this.outbound = splitInputChunks(raw, FLUSH_BATCH_BYTES)
+      }
+      const bytes = this.outbound[0] as Uint8Array
+      this.outbound.shift()
+      this.lastSeq += 1
+      const batch: InflightBatch = {
+        seq: this.lastSeq,
+        bytes,
+        retried: false,
+        retryTimer: null,
+      }
+      this.inflight.push(batch)
+      void this.dispatch(batch)
     }
-    const raw = new TextEncoder().encode(this.buffer)
-    this.buffer = ''
-    this.bufferBytes = 0
-    this.lastSeq += 1
-    const batch: InflightBatch = {
-      seq: this.lastSeq,
-      bytes: raw,
-      retried: false,
-      retryTimer: null,
-    }
-    this.inflight.push(batch)
-    void this.dispatch(batch)
   }
 
   private async dispatch(batch: InflightBatch): Promise<void> {

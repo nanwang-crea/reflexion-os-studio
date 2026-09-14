@@ -136,14 +136,17 @@ pub fn handle_ack(params: Value) -> Result<Value, OpError> {
 }
 
 /// W4-2b：write_input 的入队错误 → 稳定 code。错误串本身即稳定码子串
-/// （input_backpressure=队列满快拒 / terminal_closed=输入路径已死），
-/// 未知错误归 io_error。message 保留码子串：TS 侧 `rustErrorCode` 按
-/// Error message 子串匹配（SystemRuntimeClient 不透传 data.code）。
+/// （input_backpressure=队列满快拒 / terminal_closed=输入路径已死 /
+/// input batch too large=超 spec §6 单批上限），未知错误归 io_error。
+/// message 保留码子串仅作 legacy 兜底：SystemRuntimeClient 已把 OpError
+/// code 经 error.data.code 结构化透传（终审 #2），TS 侧优先读 data.code。
 fn write_enqueue_error(message: String) -> OpError {
     let code = if message.contains("input_backpressure") {
         "input_backpressure"
     } else if message.contains("terminal_closed") {
         "terminal_closed"
+    } else if message.contains("input batch too large") {
+        "invalid_request"
     } else {
         "io_error"
     };
@@ -358,9 +361,10 @@ mod tests {
         handle_close(json!({ "terminalId": "svc-attach" })).expect("close");
     }
 
-    /// W4-2b：入队错误三分映射钉死——新稳定码 input_backpressure（队列满，
-    /// TS 转 terminal_input_backpressure 给前端 definite 重试臂）、
-    /// terminal_closed（输入路径已死）、io_error 兜底。
+    /// W4-2b + 终审 #3：入队错误四分映射钉死——新稳定码 input_backpressure
+    /// （队列满，TS 转 terminal_input_backpressure 给前端 definite 重试臂）、
+    /// terminal_closed（输入路径已死）、invalid_request（>8 KiB 批次，入队前
+    /// 拒绝）、io_error 兜底。
     #[test]
     fn write_enqueue_errors_map_to_stable_codes() {
         assert_eq!(
@@ -370,6 +374,10 @@ mod tests {
         assert_eq!(
             write_enqueue_error("terminal_closed".to_string()).code,
             "terminal_closed"
+        );
+        assert_eq!(
+            write_enqueue_error("input batch too large: 8193 > 8192 bytes".to_string()).code,
+            "invalid_request"
         );
         assert_eq!(
             write_enqueue_error("write failed: EIO".to_string()).code,

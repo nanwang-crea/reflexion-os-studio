@@ -17,6 +17,10 @@ const TERMINAL_ERROR_NOTICES: Record<string, string> = {
   terminal_not_running: '终端已退出，无法执行该操作',
   terminal_closed: '终端已关闭',
   terminal_input_out_of_order: INPUT_OUT_OF_ORDER_MESSAGE,
+  // 防御性兜底（终审 #3）：前端 flush 已按 ≤8 KiB 切批，正常不可能触发；
+  // 出现即为缺陷信号（第三方调用方/回归），如实报而不静默截断。
+  terminal_input_batch_too_large:
+    '输入批次超限，请联系开发者（正常不会发生）。',
   too_many_terminals:
     '系统终端会话已满（含未清理的退出会话），请关闭一些终端标签后重试。',
   pty_error: '终端创建失败：无法启动 shell。',

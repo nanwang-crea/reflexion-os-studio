@@ -79,3 +79,24 @@ pub fn ok_response(id: Value, result: Value) -> Value {
 pub fn finish(id: Value, result: Result<Value, OpError>) -> Result<(Value, bool), OpError> {
     result.map(|value| (ok_response(id, value), false))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 终审 #2 的前提：OpError 稳定码必须落在 error.data.code——TS 侧
+    /// SystemRuntimeClient 解析该字段构造 SystemRuntimeError.code，跨进程
+    /// 不再只剩 message 子串猜测。
+    #[test]
+    fn error_response_carries_stable_code_in_data() {
+        let response = error_response(
+            json!(7),
+            -32000,
+            "openpty failed",
+            Some(json!({ "code": "pty_error" })),
+        );
+        assert_eq!(response["error"]["data"]["code"], "pty_error");
+        assert_eq!(response["error"]["message"], "openpty failed");
+        assert_eq!(response["error"]["code"], -32000);
+    }
+}

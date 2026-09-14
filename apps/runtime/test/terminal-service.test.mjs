@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { TerminalService } from '../dist/terminal/service.js'
+import { SystemRuntimeError } from '../dist/system.js'
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -8,7 +9,12 @@ function b64(buf) {
   return buf.toString('base64')
 }
 
-/** 可控假 SystemRuntimeClient：记录调用，按 behavior 决定 spawn 结果。 */
+/**
+ * 可控假 SystemRuntimeClient：记录调用，按 behavior 决定 spawn 结果。
+ * 错误两种形态（终审 #2 双路径覆盖）：*Code 给出 = 结构化 SystemRuntimeError
+ * （真实 Rust 经 error.data.code 透传的形态）；不给 = 纯 message 文本
+ * （legacy 子串兜底路径，W4-2b 前的唯一通路）。
+ */
 function fakeSystem(behavior = {}) {
   const calls = []
   const gen = { value: behavior.generation ?? 1 }
@@ -21,8 +27,15 @@ function fakeSystem(behavior = {}) {
     async request(method, params) {
       calls.push([method, params])
       if (method === 'terminal.spawn') {
-        if (behavior.spawn === 'error')
+        if (behavior.spawn === 'error') {
+          if (behavior.spawnCode) {
+            throw new SystemRuntimeError(
+              behavior.spawnMessage ?? 'openpty failed: No such file',
+              behavior.spawnCode,
+            )
+          }
           throw new Error(behavior.spawnMessage ?? 'pty_error: spawn failed')
+        }
         if (behavior.spawn === 'timeout')
           throw new Error('system request timeout: terminal.spawn')
         const result = {
@@ -44,6 +57,12 @@ function fakeSystem(behavior = {}) {
       }
       if (method === 'terminal.write') {
         if (behavior.writeFail) {
+          if (behavior.writeFailCode) {
+            throw new SystemRuntimeError(
+              behavior.writeFailMessage ?? 'rejected',
+              behavior.writeFailCode,
+            )
+          }
           throw new Error(
             behavior.writeFailMessage ?? 'input_backpressure: queue full',
           )
@@ -52,7 +71,15 @@ function fakeSystem(behavior = {}) {
       }
       if (method === 'terminal.resize')
         return { rows: params.rows, cols: params.cols }
-      if (method === 'terminal.ack') return { ok: true }
+      if (method === 'terminal.ack') {
+        if (behavior.ackFailCode) {
+          throw new SystemRuntimeError(
+            behavior.ackFailMessage ?? 'rejected',
+            behavior.ackFailCode,
+          )
+        }
+        return { ok: true }
+      }
       throw new Error(`unexpected method ${method}`)
     },
   }
@@ -76,6 +103,8 @@ function harness(opts = {}) {
       maxActivePerProject: 8,
       maxActiveGlobal: 16,
       maxRetained: 32,
+      closedRetentionMs: 60_000,
+      inputBatchMaxBytes: 8 * 1024,
       inputPendingMax: 4,
       inputGapWaitMs: 200,
       ...config,
@@ -188,6 +217,33 @@ test('spawn 超时 → 幂等 close 兜底 + failed', async () => {
   assert.ok(h.sys.calls.some(([m]) => m === 'terminal.close'))
 })
 
+/// 终审 #2：Rust error.data.code 经 SystemRuntimeError 结构化透传后，
+/// create 失败必须带**同一**前端契约码（pty_error / too_many_terminals），
+/// 不再是 index.ts 的 internal 兜底——上方 "spawn error → failed" 用例走
+/// 的是 legacy message 子串路径，本用例走结构化路径，两条各钉一次。
+test('create：结构化 pty_error 码贯通 → CommandError pty_error（非 internal）', async () => {
+  const h = harness({
+    systemBehavior: { spawn: 'error', spawnCode: 'pty_error' },
+  })
+  await assert.rejects(() => h.service.create('rEC', 'p1', 24, 80), {
+    name: 'CommandError',
+    code: 'pty_error',
+  })
+})
+
+test('create：结构化 too_many_terminals 码贯通（Rust 侧额度满如实上报）', async () => {
+  const h = harness({
+    systemBehavior: {
+      spawn: 'error',
+      spawnCode: 'too_many_terminals',
+      spawnMessage: 'active terminal limit reached',
+    },
+  })
+  await assert.rejects(() => h.service.create('rET', 'p1', 24, 80), {
+    code: 'too_many_terminals',
+  })
+})
+
 // ---------------- 3. 配额 ----------------
 
 test('配额：per-project / global / retained', async () => {
@@ -218,15 +274,66 @@ test('配额：global 上限跨项目生效', async () => {
   })
 })
 
-test('配额：retained 满时拒绝新建', async () => {
+/// 终审 #1 重写（spec §5「closed 不长期保留」+ 留存额度口径）：
+/// retained 只计 exited/failed/disconnected 等**可见**留存标签；closed
+/// 记录短暂驻留（可列、幂等窗口内可见）后由 create 时 TTL 清扫，不占额度。
+test('配额：retained 满（exited）拒绝新建；close 收敛后额度即释放', async () => {
   const h = harness({ config: { maxRetained: 2, maxActiveGlobal: 16 } })
-  const t1 = await h.service.create('r1', 'p1', 24, 80)
-  const t2 = await h.service.create('r2', 'p1', 24, 80)
-  await h.service.close('p1', t1.terminal.terminalId)
-  await h.service.close('p1', t2.terminal.terminalId)
+  const a = await running(h, 'r1')
+  const b = await running(h, 'r2')
+  h.service.handleRustNotification('terminal.state', {
+    terminalId: a.terminal.terminalId,
+    generation: a.terminal.generation,
+    status: 'exited',
+    exitCode: 0,
+  })
+  h.service.handleRustNotification('terminal.state', {
+    terminalId: b.terminal.terminalId,
+    generation: b.terminal.generation,
+    status: 'exited',
+    exitCode: 0,
+  })
+  await sleep(10) // 回收 close fire-and-forget 落 calls，不改状态
   await assert.rejects(() => h.service.create('r3', 'p1', 24, 80), {
     code: 'terminal_quota_retained',
   })
+  // close 静默收敛 closed：退出可见集合 → 不再计 retained。
+  await h.service.close('p1', a.terminal.terminalId)
+  await h.service.close('p1', b.terminal.terminalId)
+  const c = await h.service.create('r4', 'p1', 24, 80)
+  assert.equal(c.terminal.status, 'running')
+})
+
+test('配额：closed 一律不占 retained——33× create+close 持续成功', async () => {
+  // 旧口径（closed 计 retained）在第 3 轮即 terminal_quota_retained；
+  // 新口径 + create 时 TTL 清扫双保险：maxRetained=1 也不该挡住 closed 循环。
+  const h = harness({ config: { maxRetained: 1, closedRetentionMs: 5_000 } })
+  for (let i = 0; i < 33; i += 1) {
+    const { terminal } = await h.service.create(`loop${i}`, 'p1', 24, 80)
+    await h.service.close('p1', terminal.terminalId)
+  }
+  assert.ok(true)
+})
+
+test('closed 记录：TTL 内仍可列，TTL 后被下一次 create 清扫出索引', async () => {
+  const h = harness({ config: { closedRetentionMs: 20 } })
+  const { terminal } = await running(h, 'r1')
+  await h.service.close('p1', terminal.terminalId)
+  assert.ok(
+    h.service.list('p1').some((t) => t.terminalId === terminal.terminalId),
+    'closed 短暂驻留期内应可列（幂等/竞态窗口）',
+  )
+  await sleep(30)
+  const fresh = await running(h, 'r2')
+  const listed = h.service.list('p1')
+  assert.ok(
+    !listed.some((t) => t.terminalId === terminal.terminalId),
+    '过期 closed 必须已被 create 时清扫',
+  )
+  assert.deepEqual(
+    listed.map((t) => t.terminalId),
+    [fresh.terminal.terminalId],
+  )
 })
 
 // ---------------- 4. 作用域 / 状态守卫 ----------------
@@ -301,10 +408,11 @@ test('write 缓冲超 inputPendingMax → terminal_input_backpressure', async ()
   await Promise.all([held3, held4])
 })
 
-/// W4-2b：Rust 有界输入队列溢出快拒（稳定码 input_backpressure）必须经
-/// passthrough 转成前端契约码 terminal_input_backpressure——前者的 definite
-/// 错误回执触发 input-channel.ts 的一次退避重试；不映射会落 internal → halt。
-test('Rust input_backpressure → terminal_input_backpressure passthrough', async () => {
+/// W4-2b + 终审 #2（legacy 路径）：错误**不带**结构化码时，message 子串
+/// input_backpressure 仍须还原为前端契约码 terminal_input_backpressure——
+/// definite 错误回执触发 input-channel.ts 的一次退避重试；不映射会落
+/// internal → halt。结构化主路径见下一条。
+test('Rust input_backpressure（legacy message 子串）→ terminal_input_backpressure', async () => {
   const h = harness({ systemBehavior: { writeFail: true } })
   const { terminal } = await running(h)
   await assert.rejects(
@@ -313,7 +421,24 @@ test('Rust input_backpressure → terminal_input_backpressure passthrough', asyn
   )
 })
 
-test('Rust terminal_closed 在 write 路径仍透传为 terminal_closed', async () => {
+/// 终审 #2（结构化主路径）：Rust data.code=input_backpressure（真实形态：
+/// message 不含码子串）必须映射为 terminal_input_backpressure。
+test('Rust input_backpressure（结构化 data.code）→ terminal_input_backpressure', async () => {
+  const h = harness({
+    systemBehavior: {
+      writeFail: true,
+      writeFailCode: 'input_backpressure',
+      writeFailMessage: 'queue full',
+    },
+  })
+  const { terminal } = await running(h)
+  await assert.rejects(
+    () => h.service.write('p1', terminal.terminalId, 1, 'MQ=='),
+    { code: 'terminal_input_backpressure' },
+  )
+})
+
+test('Rust terminal_closed 在 write 路径仍透传为 terminal_closed（legacy）', async () => {
   const h = harness({
     systemBehavior: { writeFail: true, writeFailMessage: 'terminal_closed' },
   })
@@ -322,6 +447,49 @@ test('Rust terminal_closed 在 write 路径仍透传为 terminal_closed', async 
     () => h.service.write('p1', terminal.terminalId, 1, 'MQ=='),
     { code: 'terminal_closed' },
   )
+})
+
+test('Rust terminal_closed（结构化 data.code）→ write 拒绝；ack 吞掉、其余码上抛', async () => {
+  const h = harness({
+    systemBehavior: {
+      writeFail: true,
+      writeFailCode: 'terminal_closed',
+      ackFailCode: 'terminal_closed',
+    },
+  })
+  const { terminal } = await running(h)
+  await assert.rejects(
+    () => h.service.write('p1', terminal.terminalId, 1, 'MQ=='),
+    { code: 'terminal_closed' },
+  )
+  // ack 守卫改按结构化码匹配（终审 #2）：terminal_closed 吞掉=幂等成功。
+  await h.service.ack('p1', terminal.terminalId, 9)
+  // 其他结构化码（io_error）不得被 ack 吞掉。
+  const h2 = harness({
+    systemBehavior: { ackFailCode: 'io_error', ackFailMessage: 'kill failed' },
+  })
+  const t2 = await running(h2)
+  await assert.rejects(() => h2.service.ack('p1', t2.terminal.terminalId, 1), {
+    code: 'io_error',
+  })
+})
+
+/// 终审 #3（spec §6）：单输入批次解码后 >8 KiB → Runtime 层快拒
+/// terminal_input_batch_too_large（前端已切批，正常不触发，防御性硬校验）。
+test('write 批次 >8 KiB → terminal_input_batch_too_large；恰 8 KiB 合法', async () => {
+  const h = harness()
+  const { terminal } = await running(h)
+  const over = b64(Buffer.alloc(8 * 1024 + 1, 0x61))
+  await assert.rejects(
+    () => h.service.write('p1', terminal.terminalId, 1, over),
+    { code: 'terminal_input_batch_too_large' },
+  )
+  const exact = b64(Buffer.alloc(8 * 1024, 0x61))
+  const ok = await h.service.write('p1', terminal.terminalId, 1, exact)
+  assert.deepEqual(ok, { accepted: true, inputSeq: 1 })
+  // 超限批次绝不转发 Rust：只有一笔恰好 8 KiB 的 write 到达。
+  const writes = h.sys.calls.filter(([m]) => m === 'terminal.write')
+  assert.equal(writes.length, 1)
 })
 
 test('输入间隙超时：缓冲的 seq=5 拒绝 terminal_input_out_of_order；seq=3 自愈', async () => {

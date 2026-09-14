@@ -737,8 +737,10 @@ export const CommandSchemaRegistry = {
     }),
     result: z.object({ removed: z.boolean() }),
   },
-  // 集成终端（W2）：用户本机 shell，不经 Agent 通道；字节上限在 runtime
-  // 服务层（W2-5），契约保持宽松（write.data 不在 schema 层限长）。
+  // 集成终端：用户本机 shell，不经 Agent 通道。单输入批次 ≤8 KiB（spec §6）
+  // 已在 runtime 服务层（terminal_input_batch_too_large 快拒）与 Rust 入队前
+  // （invalid_request）双层强制（终审 #3），契约保持宽松（write.data 不在
+  // schema 层限长）。
   'terminal.create': {
     params: z.object({
       requestId: RequestIdSchema,

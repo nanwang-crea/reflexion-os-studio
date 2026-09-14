@@ -128,6 +128,9 @@ export function useSessionActions(deps: SessionActionsDeps): {
     deps.setNotice(null)
     try {
       await deleteProjectApi(projectId)
+      // 服务端已回收该项目全部终端（closeProject 先于删行、失败即不删）：
+      // 这里只做本地标签/xterm 清算，不再二次 close（终审 #6）。
+      terminalManager.dropProject(projectId)
       if (deps.activeProjectRef.current === projectId) {
         // 守卫已在前：此处直接清空，不再二次确认。
         deps.setActiveProjectId(null)

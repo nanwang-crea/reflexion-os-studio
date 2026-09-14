@@ -35,12 +35,18 @@ use crate::terminal::shell_command::default_shell_argv;
 #[cfg(unix)]
 const HUP_DEADLINE: Duration = Duration::from_millis(500);
 
-/// 输入队列槽位数（W4-2b）。WHY 16：前端 input-channel.ts 把每终端在飞输入
-/// 限制为 ≤4 批 × 8 KiB = 32 KiB，16 个 ≤8 KiB 槽位（128 KiB）足以吸收突发
+/// 输入队列槽位数（W4-2b）与单批次字节上限（spec §6，终审 #3 三层之一）。
+/// WHY 16：前端 input-channel.ts flush 时把输入切成 ≤`MAX_INPUT_BATCH` 的批次
+/// （Runtime 服务层同值快拒 `terminal_input_batch_too_large`），在飞窗口
+/// ≤4 批 = 32 KiB；16 个 ≤8 KiB 槽位（128 KiB/终端）足以吸收突发
 /// （含前端对 definite 拒绝的一次 250ms 重试窗口）；溢出走**确定性拒绝**
 /// （input_backpressure，前端可安全重试），绝不为排队而阻塞调用方——
 /// 阻塞 dispatch 主循环正是本项修复的事故本体（spike §9.1 注 6）。
 const INPUT_QUEUE_CAPACITY: usize = 16;
+
+/// 单输入批次解码后的字节上限（spec §6）。超限在**入队前**即时拒绝，
+/// 不触队列、不触 master fd；前端正常流量已按同值切批，此为 Rust 层终检。
+const MAX_INPUT_BATCH: usize = 8 * 1024;
 
 pub struct TerminalSession {
     pub id: String,
@@ -81,16 +87,21 @@ fn emit_frame(terminal_id: &str, generation: u64, seq: u64, bytes: &[u8]) {
 }
 
 fn emit_state(terminal_id: &str, generation: u64, status: &str, exit_code: Option<i64>) {
+    let mut params = json!({
+        "terminalId": terminal_id,
+        "generation": generation,
+        "status": status,
+    });
+    // 契约三态（events.ts terminal.state.exitCode；终审 #7）：键**缺失**=尚未
+    // 退出/未知（running 不发此键，收割失败的 exited 也如实缺省），
+    // 数字=退出码。显式 null 仅由 close 路径构造（service.rs），二者不混用。
+    if let Some(code) = exit_code {
+        params["exitCode"] = json!(code);
+    }
     emit(json!({
         "jsonrpc": "2.0",
         "method": "terminal.state",
-        "params": {
-            "terminalId": terminal_id,
-            "generation": generation,
-            "status": status,
-            // Option 直出：None → null（尚未退出/未知），Some(n) → 数字。
-            "exitCode": exit_code,
-        }
+        "params": params
     }));
 }
 
@@ -267,9 +278,18 @@ pub fn spawn(
 
 impl TerminalSession {
     /// 仅入队、不触碰 fd（W4-2b）：即时返回，绝不阻塞 dispatch 主循环。
-    /// 错误串即稳定码子串（input_backpressure / terminal_closed），service
-    /// 据此映射 OpError code；TS 侧 `rustErrorCode` 按 message 子串匹配。
+    /// 入队前硬校验 `MAX_INPUT_BATCH`（spec §6 / 终审 #3）：超限报
+    /// "input batch too large"（service.rs 映射 invalid_request）。
+    /// 错误串本身即稳定码子串（input_backpressure / terminal_closed），
+    /// service 据此映射 OpError code；TS 侧优先读结构化 data.code
+    /// （终审 #2），message 子串仅作 legacy 兜底。
     pub fn write_input(&self, bytes: &[u8]) -> Result<(), String> {
+        if bytes.len() > MAX_INPUT_BATCH {
+            return Err(format!(
+                "input batch too large: {} > {MAX_INPUT_BATCH} bytes",
+                bytes.len()
+            ));
+        }
         if self.input_closed.load(Ordering::SeqCst) {
             return Err("terminal_closed".to_string());
         }
