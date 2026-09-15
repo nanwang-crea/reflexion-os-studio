@@ -141,6 +141,6 @@ export type AgentLoopOutcome =
       messages: ModelMessage[]
     }
 
-export const DEFAULT_MAX_TURNS = 16
+export const DEFAULT_MAX_TURNS = 100
 /** length 续写的最大连续轮次：超过即 output_truncated。 */
 export const DEFAULT_MAX_CONTINUATION_TURNS = 2

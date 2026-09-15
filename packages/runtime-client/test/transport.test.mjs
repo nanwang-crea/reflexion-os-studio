@@ -65,3 +65,62 @@ test('response arriving before invoke ack is validated and resolved', async () =
   const value = await transport.request('project.list', {})
   assert.deepEqual(value, { projects: [] })
 })
+
+test('-32602 data 数组被并入 TransportError.message（不再吞原因）', async () => {
+  const { transport, deliver } = makeTransport()
+  await transport.attach()
+  const pending = transport.request('provider.configure', {})
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  deliver({
+    id: 1,
+    error: {
+      code: -32602,
+      message: 'Invalid params',
+      data: [
+        'baseUrl: Base URL需是带协议的完整 URL，如 https://api.example.com/v1',
+      ],
+    },
+  })
+  await assert.rejects(pending, (error) => {
+    // message 保留协议枚举，同时把 data 拼上，供只 catch Error.message 的调用点使用。
+    assert.match(error.message, /^Invalid params：baseUrl: Base URL/)
+    // 结构化明细仍在 runtimeError.data 上，供需要按字段渲染的 UI 使用。
+    assert.deepEqual(error.runtimeError?.data, [
+      'baseUrl: Base URL需是带协议的完整 URL，如 https://api.example.com/v1',
+    ])
+    return true
+  })
+})
+
+test('invoke 前到达的 -32602 也走同一 enrich（早到响应不吞原因）', async () => {
+  const { transport, deliver } = makeTransport()
+  await transport.attach()
+  // 响应先入 earlyResponses；request() 走的是"早到分支"，同样要 enrich。
+  deliver({
+    id: 1,
+    error: {
+      code: -32602,
+      message: 'Invalid params',
+      data: ['temperature: Temperature过大（应 ≤2）'],
+    },
+  })
+  await assert.rejects(transport.request('provider.configure', {}), (error) => {
+    assert.match(error.message, /^Invalid params：temperature: Temperature/)
+    return true
+  })
+})
+
+test('data 非数组/为空时保留原 message（不误伤其他错误码）', async () => {
+  const { transport, deliver } = makeTransport()
+  await transport.attach()
+  const pending = transport.request('run.cancel', {})
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  deliver({
+    id: 1,
+    error: { code: -32000, message: 'run not active', data: undefined },
+  })
+  await assert.rejects(pending, (error) => {
+    assert.equal(error.message, 'run not active')
+    return true
+  })
+})

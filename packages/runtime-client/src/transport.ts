@@ -22,10 +22,30 @@ export class TransportError extends Error {
   readonly runtimeError?: JsonRpcErrorDetail
 
   constructor(message: string, runtimeError?: JsonRpcErrorDetail) {
-    super(message)
+    super(enrichMessage(message, runtimeError))
     this.name = 'TransportError'
     this.runtimeError = runtimeError
   }
+}
+
+/**
+ * JSON-RPC 标准错误里，`message` 是固定英文枚举（"Invalid params"、
+ * "Method not found"），真实原因在 `error.data`。Runtime 侧 -32602 的 data
+ * 是 `path: 中文说明` 字符串数组（不含入参值）。这里把明细并入 message，
+ * 让所有只 catch `Error.message` 的调用点都能显示原因，不再吞掉细节。
+ */
+function enrichMessage(
+  message: string,
+  runtimeError?: JsonRpcErrorDetail,
+): string {
+  const data = runtimeError?.data
+  if (Array.isArray(data) && data.length > 0) {
+    const detail = data
+      .filter((item): item is string => typeof item === 'string')
+      .join('；')
+    if (detail) return `${message}：${detail}`
+  }
+  return message
 }
 
 interface PendingRequest {

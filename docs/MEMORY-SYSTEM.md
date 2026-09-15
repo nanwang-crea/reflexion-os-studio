@@ -62,7 +62,7 @@ base system prompt → 全局 AGENTS → 项目 AGENTS → 全局 MEMORY → 项
 ```
 
 - **项目覆盖语义**：项目 AGENTS 段头部标注"与全局指令冲突时以本段为准"。
-- **每文件预算 4000 token**：复用 agent-core 的 `estimateTokens` 估算口径
+- **每文件预算 20000 token**：复用 agent-core 的 `estimateTokens` 估算口径
   （`render.ts` 以别名 `estimateTextTokens` 再导出，单一真源，不本地复刻）；
   超限保头截断并在段尾标注 `⚠️ 内容过长，已截断`。
 - **缺失静默**：每次 Run 装配时实时读文件（新鲜度优先，不缓存、无 watcher）；

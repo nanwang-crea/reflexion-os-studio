@@ -6,6 +6,15 @@ import {
   testProvider,
 } from '../../api/providers'
 import { EyeIcon, PlusIcon, TrashIcon } from '../../ui/icons'
+import {
+  draftFromProfile,
+  EMPTY_DRAFT,
+  preflightProviderSave,
+  preflightProviderTest,
+  preflightProviderToggle,
+  samplingHint,
+  type Draft,
+} from './provider-form'
 
 interface ProviderEditorProps {
   /** 当前选中供应商；isNew 时必为 null。 */
@@ -17,60 +26,10 @@ interface ProviderEditorProps {
   onDeleted: () => void
 }
 
-interface Draft {
-  /** null 表示尚未保存的新供应商。 */
-  id: string | null
-  name: string
-  baseUrl: string
-  models: string[]
-  /** 新输入的明文 Key；为空表示沿用已保存的密钥。 */
-  secret: string
-  secretRef: string | null
-  enabled: boolean
-  /** 采样参数；空串表示未配置（服务端默认）。 */
-  temperature: string
-  maxTokens: string
-  /** 模型上下文窗口（token 数）；空串表示未知（Runtime 用保守默认）。 */
-  contextWindow: string
-  /** 上下文预算上限（token 数）；空串表示默认 64k。 */
-  contextBudget: string
-}
-
-const EMPTY_DRAFT: Draft = {
-  id: null,
-  name: '',
-  baseUrl: '',
-  models: [''],
-  secret: '',
-  secretRef: null,
-  enabled: true,
-  temperature: '',
-  maxTokens: '',
-  contextWindow: '',
-  contextBudget: '',
-}
-
-function draftFromProfile(profile: ProviderProfile): Draft {
-  return {
-    id: profile.id,
-    name: profile.name,
-    baseUrl: profile.baseUrl,
-    models: [...profile.models],
-    secret: '',
-    secretRef: profile.secretRef,
-    enabled: profile.enabled,
-    temperature: profile.temperature == null ? '' : String(profile.temperature),
-    maxTokens: profile.maxTokens == null ? '' : String(profile.maxTokens),
-    contextWindow:
-      profile.contextWindow == null ? '' : String(profile.contextWindow),
-    contextBudget:
-      profile.contextBudget == null ? '' : String(profile.contextBudget),
-  }
-}
-
 /**
  * 供应商表单与操作（保存/切换启用/删除/连接测试）。
  * 选择变化时重置表单；dirty 基于选中 profile 与草稿对比。
+ * 校验规则与预检逻辑在 `provider-form.ts`，此处只负责视图与状态编排。
  */
 export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
   const [draft, setDraft] = useState<Draft | null>(
@@ -88,7 +47,7 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
 
   const { profile, isNew } = props
 
-  // 草稿模板只跟随"选中哪个"变化：profile 对象引用变化(保存后外部刷新)
+  // 草稿模板只跟随"选中哪个"变化:profile 对象引用变化(保存后外部刷新)
   // 不重建,避免把用户的未保存编辑冲掉。
   const snapshot = useMemo(() => {
     return profile ? draftFromProfile(profile) : null
@@ -135,42 +94,15 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
 
   const saveDraft = async (): Promise<void> => {
     if (!draft || busy) return
-    const models = [
-      ...new Set(
-        draft.models.map((model) => model.trim()).filter((model) => model),
-      ),
-    ]
-    if (!draft.name.trim() || !draft.baseUrl.trim() || models.length === 0) {
-      setError('名称、Base URL 和至少一个模型为必填项')
-      return
-    }
-    if (!draft.id && !draft.secret.trim()) {
-      setError('新供应商需要填写 API Key')
+    const preflight = preflightProviderSave(draft)
+    if (!preflight.ok) {
+      setError(preflight.error)
       return
     }
     setBusy(true)
     setError(null)
     try {
-      const temperature = parseNumber(draft.temperature, false)
-      const maxTokens = parseNumber(draft.maxTokens, true)
-      const contextWindow = parseNumber(draft.contextWindow, true)
-      const contextBudget = parseNumber(draft.contextBudget, true)
-      const result = await configureProvider({
-        id: draft.id ?? undefined,
-        name: draft.name.trim(),
-        baseUrl: draft.baseUrl.trim(),
-        models,
-        secret: draft.secret.trim() || undefined,
-        secretRef: draft.secret.trim()
-          ? undefined
-          : (draft.secretRef ?? undefined),
-        enabled: draft.enabled,
-        // 空输入 = 清空回未配置；整数字段取整。
-        temperature,
-        maxTokens,
-        contextWindow,
-        contextBudget,
-      })
+      const result = await configureProvider(preflight.payload)
       // 新建后外层选中创建出的供应商，避免停留在空白的新建表单。
       if (!draft.id) props.onCreated(result.profile.id)
       setDraft((current) => (current ? { ...current, secret: '' } : current))
@@ -186,17 +118,15 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
 
   const toggleEnabled = async (): Promise<void> => {
     if (!profile || busy) return
+    const preflight = preflightProviderToggle(profile, !profile.enabled)
+    if (!preflight.ok) {
+      setError(preflight.error)
+      return
+    }
     setBusy(true)
     setError(null)
     try {
-      await configureProvider({
-        id: profile.id,
-        name: profile.name,
-        baseUrl: profile.baseUrl,
-        models: profile.models,
-        secretRef: profile.secretRef,
-        enabled: !profile.enabled,
-      })
+      await configureProvider(preflight.payload)
       await props.onSaved()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
@@ -224,26 +154,15 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
   /** 连接测试：Provider 的鉴权/网络/模型错误直接回显到界面。 */
   const testConnection = async (): Promise<void> => {
     if (!draft || testing) return
-    const model = draft.models.map((item) => item.trim()).find(Boolean)
-    if (!draft.baseUrl.trim() || !model) {
-      setTestState({ ok: false, text: '先填写 Base URL 和至少一个模型' })
-      return
-    }
-    if (!draft.id && !draft.secret.trim()) {
-      setTestState({ ok: false, text: '请先填写 API Key' })
+    const preflight = preflightProviderTest(draft)
+    if (!preflight.ok) {
+      setTestState({ ok: false, text: preflight.error })
       return
     }
     setTesting(true)
     setTestState(null)
     try {
-      const result = await testProvider({
-        baseUrl: draft.baseUrl.trim(),
-        model,
-        secret: draft.secret.trim() || undefined,
-        secretRef: draft.secret.trim()
-          ? undefined
-          : (draft.secretRef ?? undefined),
-      })
+      const result = await testProvider(preflight.payload)
       setTestState(
         result.ok
           ? {
@@ -398,6 +317,9 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
               updateDraft({ temperature: event.target.value })
             }
           />
+          <span className="field-hint">
+            {samplingHint('temperature', '超过上限会被保存拦截')}
+          </span>
         </label>
         <label className="field">
           最大输出 tokens（留空默认）
@@ -409,6 +331,9 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
             placeholder="服务端默认"
             onChange={(event) => updateDraft({ maxTokens: event.target.value })}
           />
+          <span className="field-hint">
+            {samplingHint('maxTokens', '输入 0 或非法值会被保存拦截')}
+          </span>
         </label>
         <label className="field sampling-wide">
           模型上下文窗口 tokens（留空用保守默认预算）
@@ -422,6 +347,9 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
               updateDraft({ contextWindow: event.target.value })
             }
           />
+          <span className="field-hint">
+            {samplingHint('contextWindow', '按模型标称窗口填写')}
+          </span>
         </label>
         <label className="field sampling-wide">
           上下文预算上限 tokens（留空默认 64000）
@@ -435,6 +363,12 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
               updateDraft({ contextBudget: event.target.value })
             }
           />
+          <span className="field-hint">
+            {samplingHint(
+              'contextBudget',
+              '实际使用取本值与上下文窗口的较小者',
+            )}
+          </span>
         </label>
       </div>
 
@@ -459,12 +393,4 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
       </div>
     </div>
   )
-}
-
-/** 表单数字解析：空串/非法输入返回 null（= 清空回未配置）；integer 时取整。 */
-function parseNumber(text: string, integer: boolean): number | null {
-  const value = Number.parseFloat(text)
-  if (text.trim() === '') return null
-  if (!Number.isFinite(value)) return null
-  return integer ? Math.trunc(value) : value
 }

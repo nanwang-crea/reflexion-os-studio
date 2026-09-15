@@ -175,15 +175,15 @@ test('buildInstructionBlock: 超长文件截断并标注、同块短文件段不
   const store = freshStore()
   const session = store.sessions.create(null)
   const dataDir = process.env.REFLEXION_DATA_DIR
-  writeFileSync(join(dataDir, 'AGENTS.md'), '字'.repeat(6000))
+  writeFileSync(join(dataDir, 'AGENTS.md'), '字'.repeat(25000))
   writeFileSync(join(dataDir, 'MEMORY.md'), '记忆短条目')
   const block = await buildInstructionBlock(store, session.id)
   const sections = block.split('\n\n')
   const truncated = sections.find((s) => s.includes('=== 全局指令'))
   const short = sections.find((s) => s.includes('=== 全局记忆'))
-  // 超长段：标注截断，且注入正文严格短于 6000 字输入
+  // 超长段：标注截断，且注入正文严格短于 25000 字输入
   assert.ok(truncated.includes('已截断'))
-  assert.ok((truncated.match(/字/g) ?? []).length < 6000)
+  assert.ok((truncated.match(/字/g) ?? []).length < 25000)
   // 同块短文件段：内容原样注入，不得被误标为截断
   assert.ok(short.includes('记忆短条目'))
   assert.ok(!short.includes('已截断'))

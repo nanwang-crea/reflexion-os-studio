@@ -3,6 +3,7 @@ import {
   JsonRpcMessageSchema,
   PROTOCOL_VERSION,
   lookupCommandSchema,
+  summarizeZodIssuesForLog,
   type JsonRpcMessage,
   type JsonRpcRequest,
   type JsonRpcResponse,
@@ -109,15 +110,6 @@ function getStatus(): RuntimeStatus {
   }
 }
 
-function summarizeZodIssues(error: {
-  issues: { path: PropertyKey[]; message: string }[]
-}): string[] {
-  return error.issues.map((issue) => {
-    const path = issue.path.map(String).join('.') || '(root)'
-    return `${path}: ${issue.message}`
-  })
-}
-
 const store = new Store(resolveDataDir())
 const mcpManager = new McpManager(store, notify)
 const agent = new ChatAgent(store, notify, systemRuntime, mcpManager)
@@ -217,12 +209,14 @@ async function handleRequestAsync(request: JsonRpcRequest): Promise<void> {
 
   const params = entry.params.safeParse(request.params ?? {})
   if (!params.success) {
-    sendError(
-      request.id,
-      -32602,
-      'Invalid params',
-      summarizeZodIssues(params.error),
+    // -32602 也要落 stderr：只有响应体带 data 时，从终端看日志会误判成"没原因"。
+    // 这里只写字段路径与契约边界，绝不写 params 值——里面合法地含 API Key。
+    const reasons = summarizeZodIssuesForLog(params.error.issues)
+    process.stderr.write(
+      `[runtime] ${request.method} rejected (-32602 invalid_params): ` +
+        `${reasons.join('; ')}\n`,
     )
+    sendError(request.id, -32602, 'Invalid params', reasons)
     return
   }
 

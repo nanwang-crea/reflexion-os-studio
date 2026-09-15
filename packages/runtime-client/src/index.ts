@@ -54,6 +54,17 @@ export {
 } from '@reflexion-os-studio/contracts'
 
 export {
+  checkAbsoluteUrl,
+  contractRangeHint,
+  contractRangeHints,
+  describeZodIssue,
+  FIELD_LABELS,
+  formatFieldFeedbacks,
+  validateCommandParams,
+  type FieldFeedback,
+} from '@reflexion-os-studio/contracts'
+
+export {
   RuntimeTransport,
   TransportError,
   type RuntimeTransportOptions,

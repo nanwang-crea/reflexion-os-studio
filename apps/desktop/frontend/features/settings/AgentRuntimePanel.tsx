@@ -1,60 +1,81 @@
 import { useEffect, useRef, useState } from 'react'
 import type { AgentSettings } from '@reflexion-os-studio/runtime-client'
+import {
+  contractRangeHint,
+  formatFieldFeedbacks,
+  validateCommandParams,
+} from '@reflexion-os-studio/runtime-client'
 import { getAgentSettings, updateAgentSettings } from '../../api/settings'
 
-const FIELDS: {
+interface FieldMeta {
   key: keyof AgentSettings
+  /** 该字段在 agent_settings.update params 里的路径（settings.xxx），供契约派生。 */
+  path: string
   label: string
   placeholder: string
-  hint: string
-}[] = [
+  /** 语义说明；契约范围 hint 会自动追加到末尾。 */
+  description: string
+}
+
+const FIELDS: FieldMeta[] = [
   {
     key: 'maxTurns',
+    path: 'settings.maxTurns',
     label: '最大轮次（模型调用上限）',
-    placeholder: '16（默认）',
-    hint: '一次回复最多经历多少轮模型调用；超限如实失败，不假装完成。',
+    placeholder: '100（默认）',
+    description: '一次回复最多经历多少轮模型调用；超限如实失败，不假装完成。',
   },
   {
     key: 'reflectionThreshold',
+    path: 'settings.reflectionThreshold',
     label: '反思阈值（失败次数）',
     placeholder: '2（默认）',
-    hint: '工具失败累计达到该次数后自动注入反思消息；0 表示禁用反思。',
+    description: '工具失败累计达到该次数后自动注入反思消息；0 表示禁用反思。',
   },
   {
     key: 'requestRetries',
+    path: 'settings.requestRetries',
     label: '请求重试次数',
     placeholder: '5（默认）',
-    hint: 'Provider 请求建立阶段失败(可恢复 400/429/5xx/网络)自动重试次数；范围 0–15，0 表示不重试；退避 1s 起步逐次翻倍，封顶 60s。',
+    description:
+      'Provider 请求建立阶段失败(可恢复 400/429/5xx/网络)自动重试次数；0 表示不重试；退避 1s 起步逐次翻倍，封顶 60s。',
   },
   {
     key: 'requestTimeoutSec',
+    path: 'settings.requestTimeoutSec',
     label: '请求超时（秒）',
     placeholder: '120（默认）',
-    hint: '单次 Provider 请求超时；流式输出期间也受此约束。',
+    description: '单次 Provider 请求超时；流式输出期间也受此约束。',
   },
   {
     key: 'maxRunTimeoutSec',
+    path: 'settings.maxRunTimeoutSec',
     label: 'Run 总时长上限（秒）',
-    placeholder: '900（默认）',
-    hint: '一次回复的总时长上限；到点如实失败（run_timeout），不假装完成。',
+    placeholder: '7200（默认，2 小时）',
+    description:
+      '一次回复的总时长上限；到点如实失败（run_timeout），不假装完成。',
   },
   {
     key: 'maxRunTotalTokens',
+    path: 'settings.maxRunTotalTokens',
     label: 'Run token 总预算',
-    placeholder: '120000（默认）',
-    hint: '各模型轮累计（输入+输出）token 上限；按 Provider 返回的 usage 计。',
+    placeholder: '200000000（默认，2 亿）',
+    description:
+      '各模型轮累计（输入+输出）token 上限；按 Provider 返回的 usage 计。',
   },
   {
     key: 'maxToolCalls',
+    path: 'settings.maxToolCalls',
     label: '工具调用次数上限',
-    placeholder: '64（默认）',
-    hint: '一次回复最多执行多少次工具调用；超限以稳定错误码失败。',
+    placeholder: '1000（默认）',
+    description: '一次回复最多执行多少次工具调用；超限以稳定错误码失败。',
   },
   {
     key: 'maxContinuationTurns',
+    path: 'settings.maxContinuationTurns',
     label: '续写轮次上限',
     placeholder: '2（默认）',
-    hint: '输出被截断（length）时自动续写的最大连续轮次；耗尽如实失败。',
+    description: '输出被截断（length）时自动续写的最大连续轮次；耗尽如实失败。',
   },
 ]
 
@@ -96,6 +117,15 @@ function toDraft(settings: AgentSettings): Record<string, string> {
 }
 
 /**
+ * 字段 hint = 契约范围（派生自 agent_settings.update zod）+ 语义描述。
+ * 契约是范围数字的唯一真源；改上限时 UI 自动同步，不再手写常量。
+ */
+function buildFieldHint(field: FieldMeta): string {
+  const range = contractRangeHint('agent_settings.update', field.path)
+  return range ? `范围：${range}。${field.description}` : field.description
+}
+
+/**
  * Agent 运行时全局设置(设置页分组):留空=内置默认;与 Provider 参数相互独立。
  */
 export function AgentRuntimePanel(): React.JSX.Element {
@@ -126,26 +156,36 @@ export function AgentRuntimePanel(): React.JSX.Element {
 
   const save = async (): Promise<void> => {
     if (draft === null || busy) return
+    const settings: AgentSettings = {
+      maxTurns: parseNumber(draft.maxTurns),
+      reflectionThreshold: parseNumber(draft.reflectionThreshold),
+      requestRetries: parseNumber(draft.requestRetries),
+      requestTimeoutSec: parseNumber(draft.requestTimeoutSec),
+      maxRunTimeoutSec: parseNumber(draft.maxRunTimeoutSec),
+      maxRunTotalTokens: parseNumber(draft.maxRunTotalTokens),
+      maxToolCalls: parseNumber(draft.maxToolCalls),
+      maxContinuationTurns: parseNumber(draft.maxContinuationTurns),
+      maxDepth: parseNumber(draft.maxDepth),
+      maxChildRuns: parseNumber(draft.maxChildRuns),
+      maxParallelChildren: parseNumber(draft.maxParallelChildren),
+      maxChildTimeoutSec: parseNumber(draft.maxChildTimeoutSec),
+      maxChildTotalTokens: parseNumber(draft.maxChildTotalTokens),
+      // Phase 3 未启动：委派设置不可编辑，保存时强制回 false。
+      enableChildRuns: false,
+    }
+    // 保存前契约预检：把"必然被后端拒"的边界值就地报出中文字段名与范围，
+    // 不再吐 "Invalid params" 一句话吞掉原因。
+    const feedbacks = validateCommandParams('agent_settings.update', {
+      requestId: 'preflight',
+      settings,
+    })
+    if (feedbacks) {
+      setError(formatFieldFeedbacks(feedbacks))
+      return
+    }
     setBusy(true)
     setError(null)
     try {
-      const settings: AgentSettings = {
-        maxTurns: parseNumber(draft.maxTurns),
-        reflectionThreshold: parseNumber(draft.reflectionThreshold),
-        requestRetries: parseNumber(draft.requestRetries),
-        requestTimeoutSec: parseNumber(draft.requestTimeoutSec),
-        maxRunTimeoutSec: parseNumber(draft.maxRunTimeoutSec),
-        maxRunTotalTokens: parseNumber(draft.maxRunTotalTokens),
-        maxToolCalls: parseNumber(draft.maxToolCalls),
-        maxContinuationTurns: parseNumber(draft.maxContinuationTurns),
-        maxDepth: parseNumber(draft.maxDepth),
-        maxChildRuns: parseNumber(draft.maxChildRuns),
-        maxParallelChildren: parseNumber(draft.maxParallelChildren),
-        maxChildTimeoutSec: parseNumber(draft.maxChildTimeoutSec),
-        maxChildTotalTokens: parseNumber(draft.maxChildTotalTokens),
-        // Phase 3 未启动：委派设置不可编辑，保存时强制回 false。
-        enableChildRuns: false,
-      }
       await updateAgentSettings(settings)
       setSavedAt(new Date().toLocaleTimeString())
     } catch (caught) {
@@ -181,6 +221,7 @@ export function AgentRuntimePanel(): React.JSX.Element {
               <div className="agent-runtime-grid">
                 {group.keys.map((key) => {
                   const field = FIELD_BY_KEY.get(key)!
+                  const hint = buildFieldHint(field)
                   return (
                     <label className="field" key={field.key}>
                       {field.label}
@@ -190,7 +231,7 @@ export function AgentRuntimePanel(): React.JSX.Element {
                         step={1}
                         value={draft[field.key]}
                         placeholder={field.placeholder}
-                        title={field.hint}
+                        title={hint}
                         onChange={(event) => {
                           setDraft((current) => ({
                             ...(current ?? {}),
@@ -198,7 +239,7 @@ export function AgentRuntimePanel(): React.JSX.Element {
                           }))
                         }}
                       />
-                      <span className="field-hint">{field.hint}</span>
+                      <span className="field-hint">{hint}</span>
                     </label>
                   )
                 })}
@@ -216,7 +257,11 @@ export function AgentRuntimePanel(): React.JSX.Element {
           {busy ? '保存中…' : '保存设置'}
         </button>
         {savedAt && <span className="saved">已保存 {savedAt}</span>}
-        {error && <span className="error">{error}</span>}
+        {error && (
+          <span className="error" role="alert">
+            {error}
+          </span>
+        )}
       </div>
     </div>
   )

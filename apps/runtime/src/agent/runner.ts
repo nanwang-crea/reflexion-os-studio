@@ -88,9 +88,9 @@ export class RunRunner {
     const finalizer = new RunFinalizer(this.store)
     const guard = new LoopGuard()
     const budgets = {
-      maxRunTimeoutSec: input.settings.maxRunTimeoutSec ?? 900,
-      maxRunTotalTokens: input.settings.maxRunTotalTokens ?? 120_000,
-      maxToolCalls: input.settings.maxToolCalls ?? 64,
+      maxRunTimeoutSec: input.settings.maxRunTimeoutSec ?? 7200,
+      maxRunTotalTokens: input.settings.maxRunTotalTokens ?? 200_000_000,
+      maxToolCalls: input.settings.maxToolCalls ?? 1000,
       maxContinuationTurns: input.settings.maxContinuationTurns ?? 2,
     }
     const runStartedAt = Date.now()

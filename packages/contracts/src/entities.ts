@@ -555,7 +555,7 @@ export type QueueEntry = z.infer<typeof QueueEntrySchema>
 /** Agent 运行时全局设置：null 表示使用内置默认值。 */
 export const AgentSettingsSchema = z.object({
   // 单次 Run 的最大模型调用轮次；超限如实失败。
-  maxTurns: z.number().int().positive().max(64).nullable(),
+  maxTurns: z.number().int().positive().max(256).nullable(),
   // 工具失败累计次数达到该值注入反思消息；0=禁用反思。
   reflectionThreshold: z.number().int().min(0).max(10).nullable(),
   // Provider 请求建立阶段失败(可恢复 400/429/5xx/网络)自动重试次数。
@@ -566,7 +566,7 @@ export const AgentSettingsSchema = z.object({
   // Run 总时长上限（秒）。
   maxRunTimeoutSec: z.number().int().min(10).max(7200).nullable(),
   // Run 累计 token 总量上限（prompt+completion，来自 Provider usage）。
-  maxRunTotalTokens: z.number().int().min(1000).max(10_000_000).nullable(),
+  maxRunTotalTokens: z.number().int().min(1000).max(1_000_000_000).nullable(),
   // Run 全程工具调用次数上限。
   maxToolCalls: z.number().int().min(1).max(4096).nullable(),
   // length 续写最大连续轮次。

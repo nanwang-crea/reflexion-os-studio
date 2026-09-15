@@ -11,7 +11,7 @@ import {
 export { estimateTokens as estimateTextTokens }
 
 /** 单个指令文件的注入预算（token）；超限保头截断并显式标注。仅模块内使用。 */
-const INSTRUCTION_FILE_TOKEN_BUDGET = 4000
+const INSTRUCTION_FILE_TOKEN_BUDGET = 20000
 
 /** 按 token 预算保头截断；先按比例收缩再逐步收敛。 */
 export function clipToTokenBudget(

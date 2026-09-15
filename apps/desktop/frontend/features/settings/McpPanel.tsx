@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { McpServer, McpTool } from '@reflexion-os-studio/runtime-client'
+import {
+  formatFieldFeedbacks,
+  validateCommandParams,
+} from '@reflexion-os-studio/runtime-client'
 import { addMcp, listMcp, removeMcp, reloadMcp, toggleMcp } from '../../api/mcp'
 import type { ConfirmDialogState } from '../../components/ConfirmDialog'
 import { TrashIcon } from '../../ui/icons'
@@ -68,15 +72,26 @@ export function McpPanel(props: McpPanelProps): React.JSX.Element {
       setError('名称与启动命令为必填项')
       return
     }
+    const payload = {
+      name: name.trim(),
+      command: command.trim(),
+      args: args.trim() === '' ? [] : args.trim().split(/\s+/),
+      env: [],
+    }
+    // 契约预检：任何未预料到的字段级偏差（空 args 项、未知 key）都就地报出，
+    // 而不是把用户丢回一句 "Invalid params"。
+    const feedbacks = validateCommandParams('mcp.add', {
+      requestId: 'preflight',
+      ...payload,
+    })
+    if (feedbacks) {
+      setError(formatFieldFeedbacks(feedbacks))
+      return
+    }
     setBusy(true)
     setError(null)
     try {
-      await addMcp({
-        name: name.trim(),
-        command: command.trim(),
-        args: args.trim() === '' ? [] : args.trim().split(/\s+/),
-        env: [],
-      })
+      await addMcp(payload)
       setName('')
       setCommand('')
       setArgs('')

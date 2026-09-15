@@ -18,7 +18,7 @@ React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
     强制，真机验收过；Linux bwrap：userns+netns 禁网，渲染器验证过、运行时待真机）+ 按命令
     网络审批（requires_network → sandbox_network 卡 → grant.sandboxNetwork）；
   - **Skills**：内置 code-review / web-research / workspace-report；斜杠命令激活 + skill.use 工具加载全文；
-  - **Memory（V2 文件即记忆）**：全局/项目 AGENTS.md + 全局/项目 MEMORY.md 四层文件注入（缺失静默、每文件 4000 token 截断）、`memory.remember` 免审批工具（仅 global/project 两档显式写入，无 user 档；单条≤200 字单行、机密拒绝、64KB 闸门）、指令页查看编辑；**不再有自动提取**（SQLite 自动记忆链路已删，v23 迁移不搬迁数据），未来检索式记忆直引 mem0 不自研；
+  - **Memory（V2 文件即记忆）**：全局/项目 AGENTS.md + 全局/项目 MEMORY.md 四层文件注入（缺失静默、每文件 20000 token 截断）、`memory.remember` 免审批工具（仅 global/project 两档显式写入，无 user 档；单条≤200 字单行、机密拒绝、64KB 闸门）、指令页查看编辑；**不再有自动提取**（SQLite 自动记忆链路已删，v23 迁移不搬迁数据），未来检索式记忆直引 mem0 不自研；
   - **MCP**：stdio 协议 client（握手/tools/list/call、严格超时）+ 管理服务（配置/启停/重连/工具清单）、工具桥注册为 `serverId/toolName`、默认 ask 审批、设置页 MCP 面板、mcp_servers 表；
   - **Workspace（Phase 1B 第一部分）**：异步 Indexer（progress/cancel/stale/failed、忽略目录与符号链接、快照落库）、文件树按需加载、代码/文档查看器与编辑器保存（行号/复制/跳转行/分段加载/Markdown·JSON 预览）、**Git 变更（状态列表 + 单文件 diff 预览）与写操作（stage/unstage/commit/fetch/push/pull(--ff-only)/分支创建与切换：UI 直接动作免审批、磁盘未提交改动交给 git 原生、内存脏 buffer 在切分支/pull 前三键守卫并成功后强制重载）**、**提交历史浏览（分页 log / commit 文件 / 单文件 diff / 基于 commit 建分支 / 切换（detached））与远程管理（remote 列表/添加/移除、远程分支检出为本地跟踪、发布=推送）**，全部经 Rust 侧 workspace 边界；
   - **Asset / ResourceLink（Phase 1B 第二部分）**：Asset Store（数据目录按项目隔离、sha256 元数据、导入/列表/预览/删除/复制引用）；消息内资源引用渲染（`workspace://<projectId>/<path>#L<行号>` 进查看器定位、`asset://<assetId>` 进资产预览、https 链接经 Tauri 白名单命令转系统浏览器，仅 https 放行）；Run 回复的引用聚合为 Artifact 卡片；导出/下载/系统应用打开留后续阶段；
