@@ -202,3 +202,19 @@ test('checkAbsoluteUrl：常见错误各有独立中文分支', () => {
 test('未知 method 直接返回 null，不做假校验', () => {
   assert.equal(validateCommandParams('not.a.command', { any: 'thing' }), null)
 })
+
+// schemaFor 现在按 method 缓存（含"未知/转换失败"缓存为 null），
+// 保证渲染路径反复调用不会重算 toJSONSchema，且降级行为不变。
+test('contractRangeHint：缓存后结果稳定，未知命令与未知字段都返回 undefined', () => {
+  const once = contractRangeHint('provider.configure', 'temperature')
+  const twice = contractRangeHint('provider.configure', 'temperature')
+  assert.equal(twice, once)
+  assert.ok(once)
+  // 未知 method：不抛错、无提示。
+  assert.equal(contractRangeHint('not.a.command', 'temperature'), undefined)
+  // 已知 method + 未知字段：不抛错、无提示。
+  assert.equal(
+    contractRangeHint('provider.configure', 'notAField.nested'),
+    undefined,
+  )
+})

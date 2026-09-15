@@ -33,13 +33,33 @@ export function contractRangeHint(
   return boundsHintFromJsonSchema(node)
 }
 
+/**
+ * method → params 的 JSON Schema（null = 该命令不存在或无法转换）。
+ *
+ * `z.toJSONSchema` 是整棵 schema 的同步转换，代价不低，而 hint 查询发生在渲染
+ * 路径上（如 AgentRuntimePanel 每次 render 对 GROUPS 逐字段调用），逐次重算即
+ * "渲染期重复昂贵计算"。契约是模块级静态 zod 定义、运行期不会变，因此按 method
+ * 惰性编译并缓存一次即可；转换失败也缓存为 null，避免每次渲染重试并让 hint
+ * 安静降级为"无提示"（与本文件"取不到就返回 undefined"的约定一致）。
+ */
+const schemaCache = new Map<string, unknown | null>()
+
 function schemaFor(method: string): unknown {
+  if (!schemaCache.has(method)) schemaCache.set(method, compileSchema(method))
+  return schemaCache.get(method) ?? undefined
+}
+
+function compileSchema(method: string): unknown | null {
   const entry = lookupCommandSchema(method)
-  if (!entry) return undefined
+  if (!entry) return null
   try {
     return z.toJSONSchema(entry.params, { io: 'input' })
   } catch {
-    return z.toJSONSchema(entry.params)
+    try {
+      return z.toJSONSchema(entry.params)
+    } catch {
+      return null
+    }
   }
 }
 
