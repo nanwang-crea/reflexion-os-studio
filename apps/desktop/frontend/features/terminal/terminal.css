@@ -244,17 +244,3 @@
   text-align: center;
   padding: 0 24px;
 }
-
-.terminal-notice {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 8px;
-  padding: 8px 12px;
-  font-size: 12px;
-  color: var(--warning-text);
-  background: var(--warning-bg);
-  border: 1px solid rgba(251, 191, 36, 0.25);
-  border-radius: 8px;
-}

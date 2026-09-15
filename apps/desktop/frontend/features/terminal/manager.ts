@@ -41,7 +41,6 @@ export interface TerminalSnapshot {
 
 const PREF_OPEN = 'terminal.panel.open'
 const PREF_HEIGHT = 'terminal.panel.height'
-const PREF_FIRST_RUN = 'terminal.firstRunNoticed'
 export const PANEL_MIN_HEIGHT = 120
 export const PANEL_MAX_VH = 0.6
 const DEFAULT_HEIGHT = 300
@@ -324,15 +323,6 @@ class TerminalManager {
     if (this.heightPx === next) return
     this.heightPx = next
     localStorage.setItem(PREF_HEIGHT, String(next))
-    this.notify()
-  }
-
-  needsFirstRunNotice(): boolean {
-    return localStorage.getItem(PREF_FIRST_RUN) !== '1'
-  }
-
-  dismissFirstRunNotice(): void {
-    localStorage.setItem(PREF_FIRST_RUN, '1')
     this.notify()
   }
 

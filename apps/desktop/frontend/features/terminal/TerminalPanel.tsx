@@ -38,21 +38,9 @@ export function TerminalPanel(props: TerminalPanelProps): React.JSX.Element {
     return () => terminalManager.detachSlot(el)
   }, [snapshot.activeId])
 
-  const [firstRunPending, setFirstRunPending] = useState(false)
   const handleCreate = useCallback((): void => {
     if (activeProjectId === null) return
-    if (terminalManager.needsFirstRunNotice()) {
-      setFirstRunPending(true)
-      return
-    }
     void terminalManager.createTab(activeProjectId)
-  }, [activeProjectId])
-
-  const handleFirstRunContinue = useCallback((): void => {
-    setFirstRunPending(false)
-    terminalManager.dismissFirstRunNotice()
-    if (activeProjectId !== null)
-      void terminalManager.createTab(activeProjectId)
   }, [activeProjectId])
 
   const handleCloseTab = useCallback(
@@ -188,7 +176,7 @@ export function TerminalPanel(props: TerminalPanelProps): React.JSX.Element {
           className="terminal-new-tab"
           title={activeProjectId === null ? '请先打开项目' : '新建终端标签'}
           aria-label="新建终端标签"
-          disabled={activeProjectId === null || firstRunPending}
+          disabled={activeProjectId === null}
           onClick={handleCreate}
         >
           <PlusIcon size={15} />
@@ -206,23 +194,6 @@ export function TerminalPanel(props: TerminalPanelProps): React.JSX.Element {
           <ChevronIcon />
         </button>
       </div>
-      {firstRunPending && (
-        <div className="terminal-notice" role="alert">
-          <span>
-            终端使用当前用户权限运行。项目目录只是起始目录，不限制访问其他文件。
-          </span>
-          <button type="button" onClick={handleFirstRunContinue}>
-            继续
-          </button>
-          <button
-            type="button"
-            className="ghost"
-            onClick={() => setFirstRunPending(false)}
-          >
-            取消
-          </button>
-        </div>
-      )}
       <div className="terminal-body">
         <div className="terminal-slot" ref={slotRef} />
         {snapshot.tabs.length === 0 && (
