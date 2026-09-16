@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { QueueEntry } from '@reflexion-os-studio/contracts'
 import type { ChatCommand } from '@reflexion-os-studio/contracts'
 import { EmitterRegistry, type EventNotifier } from '../events.js'
+import { resolveInputPreset } from './permissions/index.js'
 
 /** 队列等待项:发送参数(不含 requestId/sessionId,由出队时补全)。 */
 export interface QueuedItem {
@@ -131,8 +132,8 @@ export class QueueService {
       content: entry.params.content,
       providerId: entry.params.providerId ?? null,
       model: entry.params.model ?? null,
-      permissionMode: entry.params.permissionMode ?? null,
-      trusted: entry.params.trusted ?? false,
+      // 发送时固化的档位快照（入队即解析；badge 与实际执行一致）。
+      permissionPreset: resolveInputPreset(entry.params),
       skillId: entry.params.skillId ?? null,
       position,
     }

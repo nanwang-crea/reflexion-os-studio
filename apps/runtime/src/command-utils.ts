@@ -1,6 +1,9 @@
 import type { ChatAgent } from './agent/index.js'
 import { CommandError } from './agent/index.js'
-import type { ApprovalGateway } from './agent/permissions.js'
+import type {
+  ApprovalGateway,
+  DangerLeaseService,
+} from './agent/permissions/index.js'
 import type { Store } from './store/index.js'
 import type { SystemRuntimeClient } from './system.js'
 import type { McpManager } from './mcp/manager.js'
@@ -14,6 +17,8 @@ export interface CommandContext {
   store: Store
   agent: ChatAgent
   approvals: ApprovalGateway
+  /** Danger 高级能力租约（danger.* 命令；Runtime 是唯一真源）。 */
+  danger: DangerLeaseService
   /** Phase 1B Workspace 索引器（仅 workspace.* 命令使用）。 */
   workspace: WorkspaceIndexer
   /** Rust System Runtime 通道（文件树/查看器的执行后端）。 */

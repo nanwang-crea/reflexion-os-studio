@@ -14,7 +14,7 @@ import type { Store } from '../store/index.js'
 import type { ProviderRuntimeConfig } from './context.js'
 import { ChildLimitError } from './errors.js'
 import { executeModelTurn } from './model-turn.js'
-import type { ApprovalGateway, PermissionGate } from './permissions.js'
+import type { ApprovalGateway, PermissionGate } from './permissions/index.js'
 import { createRunExecutionState } from './run-state.js'
 import { RunFinalizer, type RunTerminalDecision } from './run-finalizer.js'
 import { executeToolCall } from './tool-executor.js'
@@ -27,9 +27,11 @@ export interface RunStreamInput {
   buildHistory: (signal: AbortSignal) => Promise<ModelMessage[]>
   registry: ToolRegistry
   workspaceRoot: string | null
-  /** 权限闸门：automatic / ask / denied（workspace 或 read-only Profile）。 */
+  /** 权限闸门：automatic / ask / denied（三档预设 + 覆盖项 + Danger 旁路）。 */
   gate: PermissionGate
   approvals: ApprovalGateway
+  /** Rust 沙箱 provider 标识（审批上下文展示用）；缺省 null。 */
+  sandboxProvider?: string | null
   /** 本轮运行使用的 Agent 全局设置快照。 */
   settings: AgentSettings
   controller: AbortController
@@ -113,6 +115,7 @@ export class RunRunner {
           workspaceRoot: input.workspaceRoot,
           registry,
           emitter,
+          sandboxProvider: input.sandboxProvider ?? null,
         },
         request,
         signal,

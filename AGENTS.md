@@ -12,7 +12,7 @@ React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
 - 桌面宿主是 **Tauri 2**（已从 Electron 迁移），不是 Electron。任何文档或代码里残留的 Electron 假设都应视为待清理项。
 - 当前已完成 **Phase 1A**（M0 启动骨架 → 1A-1 Chat Core → 1A-2 System Tools）、**Phase 1B 第一部分（Workspace Surface）** 与 **Phase 2 的 Skills / Memory / MCP 子集与 Terminal Surface（macOS）**：
   - **Chat**：Provider 配置与密钥存储、Project/Session/Message/Run、SSE 流式（正文+思考）、Stop/Retry/错误恢复、发送队列（回复中自动排队，可修改/删除/立即发送）、重启后历史仍在；
-  - **Tools**：纯 TS 工具（时间 / web.fetch / skill.use）+ Rust 工具（file.read/list/glob/grep/write/edit/delete/move/mkdir、shell.execute），workspace / read-only 权限 Profile、审批卡（once / session）、会话级授权、工具轨迹聚合展示；
+  - **Tools**：纯 TS 工具（时间 / web.fetch / skill.use）+ Rust 工具（file.read/list/glob/grep/write/edit/delete/move/mkdir、shell.execute）；**权限模型 V2**（见 `docs/PERMISSION-MODEL.md`）：三档 PermissionPreset（workspace-read 默认 / workspace-write / workspace-full）+ 会话级 ask-everything 覆盖项 + 两段确认 Danger 租约（macOS 可用，Linux/Windows fail-closed 待真机/spike）；审批为 choice 驱动单焦点队列（Runtime 下发 subject/risk/context/choices，前端只回传 choiceId），文件授权绑定"操作+精确路径"、Shell 绑定 token 前缀（复合命令只允许一次）、工作区外走显式提权（Rust 按实际请求重算 subjectDigest 复核）、网络授权绑定 shell 规则维度；会话规则只存 Runtime 内存（重启/删会话失效，不落盘）；工具轨迹聚合展示；
   - **Shell 沙箱**：SandboxProvider 工厂 + 三平台 provider（Windows 受限令牌：低完整性写边界 +
     Job Object，网络不 OS 强制；macOS Seatbelt：deny-default profile，写边界/敏感拒读/网络 OS
     强制，真机验收过；Linux bwrap：userns+netns 禁网，渲染器验证过、运行时待真机）+ 按命令
@@ -198,7 +198,7 @@ pnpm build:desktop         # 打包安装包（beforeBuildCommand 自动准备 s
 
 **实现侧要求（写代码时同步落实，不只停留在文档）：**
 
-- 权限 Profile（workspace / read-only）与沙箱敏感拒读规则是这套清单的执行边界，新增文件类工具必须走 Rust 侧 workspace 边界，不得绕到 Node 侧 `fs` 直读；发现某条路径能读到清单内文件即视为漏洞，先修边界再谈功能。
+- 权限预设（V2 三档 + Danger）与沙箱敏感拒读规则是这套清单的执行边界，新增文件类工具必须走 Rust 侧 workspace 边界，不得绕到 Node 侧 `fs` 直读；发现某条路径能读到清单内文件即视为漏洞，先修边界再谈功能。
 - `file.read` / `file_grep` / `shell_execute` 的 deny 名单必须覆盖上面 no-read 清单的常见形态（含 `~` 展开与符号链接指向）；新增 deny 时补对应测试。
 - MCP 与 `web.fetch` 的返回内容一律按**不可信数据**处理，绝不解释为指令；工具结果里的"指令样式文本"不得改变 Agent 的行为目标。
 - 审批不得被绕过：任何工具链路上都不允许出现"自动批准机密读取/网络外传"的捷径；会话级授权的授予对象是正常开发操作，不覆盖 no-read 清单。

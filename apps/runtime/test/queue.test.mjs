@@ -97,19 +97,31 @@ test('queue update keeps explicit skillId and re-resolves slash skill', async ()
   assert.equal(service.list('s1')[0].skillId, 'web-research')
 })
 
-test('queue entry carries trusted flag and defaults to false', () => {
+test('queue entry snapshots permission preset (resolved at enqueue)', () => {
   const { service } = freshQueue()
-  // 未传 trusted（旧客户端/落地页路径）→ false。
+  // 未传档位 → 保守回落 workspace-read（UI badge 与执行档位一致）。
   const plain = service.enqueue('s1', params('普通消息'))
-  assert.equal(service.list('s1').find((e) => e.id === plain.id).trusted, false)
-  // 显式 trusted: true → 快照可见（QueueBar 信任徽标依据）。
-  const trusted = service.enqueue('s1', {
-    ...params('信任消息'),
+  assert.equal(
+    service.list('s1').find((e) => e.id === plain.id).permissionPreset,
+    'workspace-read',
+  )
+  // 显式档位 → 快照可见（QueueBar 档位徽标依据）。
+  const full = service.enqueue('s1', {
+    ...params('完全允许消息'),
+    permissionPreset: 'workspace-full',
+  })
+  assert.equal(
+    service.list('s1').find((e) => e.id === full.id).permissionPreset,
+    'workspace-full',
+  )
+  // legacy trusted=true → workspace-full（一版本兼容映射在入队时固化）。
+  const legacy = service.enqueue('s1', {
+    ...params('旧客户端消息'),
     trusted: true,
   })
   assert.equal(
-    service.list('s1').find((e) => e.id === trusted.id).trusted,
-    true,
+    service.list('s1').find((e) => e.id === legacy.id).permissionPreset,
+    'workspace-full',
   )
 })
 

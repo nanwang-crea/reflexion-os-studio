@@ -1,6 +1,7 @@
 import type {
-  ChatCommand,
+  ApprovalOverride,
   Message,
+  PermissionPreset,
   ProviderProfile,
   Run,
   Session,
@@ -16,8 +17,13 @@ import type { Store } from '../store/index.js'
 import type { SystemRuntimeClient } from '../system.js'
 import type { McpManager } from '../mcp/manager.js'
 import { ContextBuilder, type ProviderRuntimeConfig } from './context.js'
-import { PermissionGate, type PermissionMode } from './permissions.js'
-import type { ApprovalGateway } from './permissions.js'
+import {
+  ApprovalGateway,
+  DangerLeaseService,
+  DEFAULT_PRESET,
+  PermissionGate,
+  resolveInputPreset,
+} from './permissions/index.js'
 import { PRIMARY_AGENT_SYSTEM_PROMPT } from './prompts/index.js'
 import type { RunRunner } from './runner.js'
 import { createToolRegistry } from './tools/index.js'
@@ -31,9 +37,10 @@ export interface LaunchOptions {
   apiKey: string
   model: string
   sampling: { temperature?: number; maxTokens?: number }
-  permissionMode: ChatCommand['permissionMode']
-  /** 会话信任开关：workspace Profile 下写/Shell 自动放行（不弹审批）。 */
-  trusted: ChatCommand['trusted']
+  /** 本次 Run 的权限预设快照（message.send 解析结果；缺省 workspace-read）。 */
+  permissionPreset?: PermissionPreset
+  /** 本次 Run 的高级审批覆盖项（会话级；Runtime 启动 Run 时读取）。 */
+  approvalOverride?: ApprovalOverride
   skill: SkillDefinition | null
   systemPrompt?: string
   assistantMessage: Message
@@ -59,6 +66,7 @@ export interface LaunchDeps {
   runner: RunRunner
   contextBuilder: ContextBuilder
   approvals: ApprovalGateway
+  danger: DangerLeaseService
 }
 
 export interface LaunchHooks {
@@ -67,13 +75,13 @@ export interface LaunchHooks {
 }
 
 /**
- * Run 装配与生命周期登记：持有 Run 级取消句柄/委派深度/权限模式，
+ * Run 装配与生命周期登记：持有 Run 级取消句柄/委派深度/权限预设，
  * 按 Run 组装工具注册表与权限闸门后交 RunRunner 后台执行。
  */
 export class RunLauncher {
   private readonly streams = new Map<string, { controller: AbortController }>()
   private readonly runDepth = new Map<string, number>()
-  private readonly runPermissionModes = new Map<string, PermissionMode>()
+  private readonly runPermissionPresets = new Map<string, PermissionPreset>()
 
   constructor(
     private readonly deps: LaunchDeps,
@@ -85,9 +93,9 @@ export class RunLauncher {
     return this.runDepth.get(runId) ?? 0
   }
 
-  /** 委派边界读取：父 Run 的权限模式（缺省 workspace）。 */
-  permissionModeOf(runId: string): PermissionMode {
-    return this.runPermissionModes.get(runId) ?? 'workspace'
+  /** 委派边界读取：父 Run 的权限预设（缺省最窄日常档）。 */
+  permissionPresetOf(runId: string): PermissionPreset {
+    return this.runPermissionPresets.get(runId) ?? DEFAULT_PRESET
   }
 
   /** 只有确实在运行中（含等待审批）的 Run 才受理；终态或不存在返回 false。 */
@@ -119,7 +127,10 @@ export class RunLauncher {
     }
     this.streams.set(run.id, { controller })
     this.runDepth.set(run.id, input.depth ?? 0)
-    this.runPermissionModes.set(run.id, input.permissionMode ?? 'workspace')
+    const preset = resolveInputPreset({
+      permissionPreset: input.permissionPreset,
+    })
+    this.runPermissionPresets.set(run.id, preset)
     const settings = this.deps.store.agentSettings.get()
     const provider: ProviderRuntimeConfig = {
       baseUrl: profile.baseUrl,
@@ -154,11 +165,14 @@ export class RunLauncher {
       childRunStarter: input.childRunStarter,
       allowedTools: input.allowedTools,
     })
-    const gate = new PermissionGate(
-      input.permissionMode ?? 'workspace',
-      workspaceRoot !== null,
-      input.trusted ?? false,
-    )
+    const gate = new PermissionGate({
+      preset,
+      hasWorkspace: workspaceRoot !== null,
+      approvalOverride:
+        input.approvalOverride ??
+        this.deps.approvals.approvalOverrideFor(sessionId),
+      dangerActive: () => this.deps.danger.isActive(sessionId),
+    })
     void this.deps.runner
       .execute({
         run,
@@ -174,6 +188,7 @@ export class RunLauncher {
         workspaceRoot,
         gate,
         approvals: this.deps.approvals,
+        sandboxProvider: this.deps.system?.sandboxName ?? null,
         controller,
         emitter,
         firstAssistantMessage: assistantMessage,
@@ -189,7 +204,7 @@ export class RunLauncher {
         parentSignal?.removeEventListener('abort', abortChild)
         this.streams.delete(run.id)
         this.runDepth.delete(run.id)
-        this.runPermissionModes.delete(run.id)
+        this.runPermissionPresets.delete(run.id)
         // Run 结束(完成/失败/取消):自动出队发送排队中的下一条。
         this.hooks.onRunSettled(run.sessionId)
       })

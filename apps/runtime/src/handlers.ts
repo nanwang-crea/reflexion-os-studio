@@ -112,7 +112,7 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
     store.sessions.rename(sessionId, title)
     return { session: store.sessions.get(sessionId) }
   },
-  'session.delete': (p, { store, agent }) => {
+  'session.delete': (p, { store, agent, approvals, danger }) => {
     const sessionId = requireString(p, 'sessionId')
     // 有进行中的 Run 时拒绝删除，避免流式写入悬空会话。
     if (store.runs.activeForSession(sessionId)) {
@@ -121,17 +121,19 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
         '会话正在回复中，请先停止再删除',
       )
     }
-    return {
-      removed: store.transaction(() => {
-        const removed = store.sessions.delete(sessionId)
-        if (removed) {
-          agent.clearQueue(sessionId)
-        }
-        return removed
-      }),
+    const removed = store.transaction(() => store.sessions.delete(sessionId))
+    if (removed) {
+      // 会话授权痕迹全部清除：队列 / 会话规则与覆盖项 / Danger 租约。
+      agent.clearQueue(sessionId)
+      approvals.clearSession(sessionId)
+      danger.revoke(sessionId, 'session-deleted')
     }
+    return { removed }
   },
-  'project.delete': async (p, { store, agent, assets, terminal }) => {
+  'project.delete': async (
+    p,
+    { store, agent, assets, terminal, approvals, danger },
+  ) => {
     const projectId = requireString(p, 'projectId')
     // 终端回收先于删除：任一 close 失败即抛 terminal_cleanup_failed 且**保留项目**
     // （spec §2，不留无主 shell）。项目无终端时 closeProject 快速 no-op。
@@ -155,6 +157,11 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
       return removed
     })
     if (removed) {
+      // 会话规则/Danger 随会话同清（内存态，不留孤儿）。
+      for (const session of sessions) {
+        approvals.clearSession(session.id)
+        danger.revoke(session.id, 'session-deleted')
+      }
       // Asset 内容目录同步清掉（DB 行已随项目级联删除，事务已提交）；
       // 失败不回滚项目删除，孤立文件由启动巡检补偿清理。
       await assets.deleteProjectDir(projectId)
@@ -188,11 +195,32 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
       runId: requireString(p, 'runId'),
     }),
   'approval.resolve': (p, { approvals }) => ({
-    accepted: approvals.resolve(
+    // choiceId 必须属于当前 pending；不在等待/choice 未知都返回 accepted=false
+    // （前端按失败恢复整条 PendingApproval）。
+    accepted: approvals.resolveChoice(
       requireString(p, 'toolCallId'),
-      p.decision === 'denied' ? 'denied' : 'approved',
-      p.scope === 'session' ? 'session' : 'once',
+      requireString(p, 'choiceId'),
     ),
+  }),
+  'permission.approval_override.set': (p, { approvals }) => ({
+    override: approvals.setApprovalOverride(
+      requireString(p, 'sessionId'),
+      p.override === 'ask-everything' ? 'ask-everything' : 'default',
+    ),
+  }),
+  'permission.approval_override.get': (p, { approvals }) => ({
+    override: approvals.approvalOverrideFor(requireString(p, 'sessionId')),
+  }),
+  // ---------- Danger 高级能力（两段式确认；Runtime 是唯一真源） ----------
+  'danger.prepare': (p, { danger }) => ({
+    ...danger.prepare(requireString(p, 'sessionId')),
+  }),
+  'danger.enable': (p, { danger }) =>
+    danger.enable(requireString(p, 'challengeId')),
+  'danger.disable': (p, { danger }) =>
+    danger.disable(requireString(p, 'sessionId')),
+  'danger.status': (p, { danger }) => ({
+    lease: danger.leaseFor(requireString(p, 'sessionId')),
   }),
   'skill.list': () => ({ skills: builtinSkills.list() }),
 }

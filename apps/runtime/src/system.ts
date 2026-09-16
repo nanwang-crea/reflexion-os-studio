@@ -52,6 +52,8 @@ export class SystemRuntimeClient {
   private stopping = false
   private restarts = 0
   private status: SystemAvailability = 'starting'
+  /** 握手上报的沙箱 provider 标识（"none"/"seatbelt"/"bwrap"/"windows-token"）。 */
+  private sandboxProviderName: string | null = null
   /** 当前子进程代际：error/exit 事件可能重复触发，用代际防止双重重启调度。 */
   private generation = 0
 
@@ -71,6 +73,11 @@ export class SystemRuntimeClient {
 
   get currentStatus(): SystemAvailability {
     return this.status
+  }
+
+  /** 就绪时握手上报的 provider 名；未就绪/降级为 null（审批上下文与 Danger 探测用）。 */
+  get sandboxName(): string | null {
+    return this.status === 'ready' ? this.sandboxProviderName : null
   }
 
   /** 当前子进程代际（spec §4）：终端记录在 spawn 时落此 epoch，跨重启识别旧代际事件。 */
@@ -273,6 +280,7 @@ export class SystemRuntimeClient {
       }
       // 重新协商成功：重置重启预算，避免历史崩溃累计导致后续无谓降级。
       this.restarts = 0
+      this.sandboxProviderName = parsed.data.sandbox ?? null
       this.setStatus('ready', parsed.data.runtimeVersion)
       return
     }
@@ -339,6 +347,8 @@ export class SystemRuntimeClient {
   private setStatus(status: SystemAvailability, detail?: string): void {
     if (this.status === status) return
     this.status = status
+    // 离开 ready：沙箱 provider 标识失效（不得让审批上下文/Danger 探测读到旧值）。
+    if (status !== 'ready') this.sandboxProviderName = null
     this.onStatusChange(status, detail)
   }
 

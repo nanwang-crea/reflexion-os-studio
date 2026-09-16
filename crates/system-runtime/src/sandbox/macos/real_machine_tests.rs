@@ -1,4 +1,5 @@
 use super::*;
+use crate::sandbox::SandboxAccess;
 use crate::shell;
 use std::process::Command;
 
@@ -60,7 +61,39 @@ fn run(
         cwd: fx.workspace.clone(),
         timeout_ms,
         allow_network,
+        access: SandboxAccess::WorkspaceWrite,
         writable_roots,
+    };
+    let sandbox = SeatbeltSandbox {
+        home: Some(fx.fake_home.clone()),
+        data_dir: fx.fake_data.clone(),
+    };
+    let argv = sandbox.build_argv(&request);
+    shell::execute_argv(
+        &argv,
+        &[("TMPDIR", fx.sandbox_temp.display().to_string())],
+        &fx.workspace,
+        timeout_ms,
+        &|_| {},
+    )
+    .expect("sandbox-exec must spawn")
+}
+
+/// 档位维度真机执行：调用方给出 access 与完整可写根集合（模拟 handler 装配）。
+fn run_access(
+    fx: &Fixture,
+    command: &str,
+    access: SandboxAccess,
+    writable_roots: &[PathBuf],
+    timeout_ms: u64,
+) -> shell::ShellOutcome {
+    let request = SandboxRequest {
+        command: command.to_string(),
+        cwd: fx.workspace.clone(),
+        timeout_ms,
+        allow_network: false,
+        access,
+        writable_roots: writable_roots.to_vec(),
     };
     let sandbox = SeatbeltSandbox {
         home: Some(fx.fake_home.clone()),
@@ -325,4 +358,209 @@ fn git_repo_status_and_local_config_succeed() {
     );
     let config = std::fs::read_to_string(repo.join(".git/config")).unwrap();
     assert!(config.contains("x@y"), "local config not written: {config}");
+}
+
+#[test]
+fn read_only_tier_denies_workspace_write_allows_temp() {
+    // read-only 档：handler 只装配 [sandbox_temp] 可写根（无 workspace）。
+    let fx = fixture("tier-readonly");
+    let outcome = run_access(
+        &fx,
+        "touch inside.txt",
+        SandboxAccess::ReadOnly,
+        &[fx.sandbox_temp.clone()],
+        20_000,
+    );
+    assert_ne!(
+        outcome.exit_code,
+        Some(0),
+        "read-only tier must deny workspace write: {}",
+        outcome.stderr
+    );
+    assert!(!fx.workspace.join("inside.txt").exists());
+    // 沙盒临时目录仍可写（工具正常落地中间文件）。
+    let outcome = run_access(
+        &fx,
+        "touch \"$TMPDIR/ok.txt\"",
+        SandboxAccess::ReadOnly,
+        &[fx.sandbox_temp.clone()],
+        20_000,
+    );
+    assert_eq!(
+        outcome.exit_code,
+        Some(0),
+        "read-only tier must allow sandbox temp: {}",
+        outcome.stderr
+    );
+}
+
+#[test]
+fn escalated_tier_opens_only_approved_root() {
+    // escalated 档：仅额外批准的目录可写，其它工作区外路径仍拒。
+    let fx = fixture("tier-escalated");
+    let approved = fx.root.join("approved");
+    std::fs::create_dir_all(&approved).unwrap();
+    let denied_dir = fx.root.join("not-approved");
+    std::fs::create_dir_all(&denied_dir).unwrap();
+    let outcome = run_access(
+        &fx,
+        &format!("touch {}", quoted(&approved.join("ok.txt"))),
+        SandboxAccess::Escalated,
+        &[
+            fx.workspace.clone(),
+            fx.sandbox_temp.clone(),
+            approved.clone(),
+        ],
+        20_000,
+    );
+    assert_eq!(
+        outcome.exit_code,
+        Some(0),
+        "approved root must be writable: {}",
+        outcome.stderr
+    );
+    let outcome = run_access(
+        &fx,
+        &format!("touch {}", quoted(&denied_dir.join("no.txt"))),
+        SandboxAccess::Escalated,
+        &[fx.workspace.clone(), fx.sandbox_temp.clone(), approved],
+        20_000,
+    );
+    assert_ne!(
+        outcome.exit_code,
+        Some(0),
+        "non-approved outside path must stay denied even when escalated: {}",
+        outcome.stderr
+    );
+}
+
+#[test]
+fn escalated_still_denies_sensitive_read() {
+    // 提权不关闭敏感拒读：secrets.json 与 .ssh 私钥即使在 escalated 档仍读不到。
+    let fx = fixture("tier-esc-sensitive");
+    let approved = fx.root.join("approved");
+    std::fs::create_dir_all(&approved).unwrap();
+    let outcome = run_access(
+        &fx,
+        &format!("cat {}", quoted(&fx.fake_data.join("secrets.json"))),
+        SandboxAccess::Escalated,
+        &[
+            fx.workspace.clone(),
+            fx.sandbox_temp.clone(),
+            approved.clone(),
+        ],
+        20_000,
+    );
+    assert_ne!(
+        outcome.exit_code,
+        Some(0),
+        "escalated must not open data_dir reads: {}",
+        outcome.stderr
+    );
+    assert!(
+        !outcome.stdout.contains(SENTINEL),
+        "secret leaked under escalated tier"
+    );
+    let outcome = run_access(
+        &fx,
+        &format!("cat {}", quoted(&fx.fake_home.join(".ssh/id_marker"))),
+        SandboxAccess::Escalated,
+        &[fx.workspace.clone(), fx.sandbox_temp.clone(), approved],
+        20_000,
+    );
+    assert_ne!(
+        outcome.exit_code,
+        Some(0),
+        "escalated must not open .ssh reads: {}",
+        outcome.stderr
+    );
+}
+
+#[test]
+fn escalated_broad_root_still_denies_sensitive_write() {
+    // 提权根粗粒度覆盖凭据目录祖先时，profile 尾部的敏感写 deny 仍压住。
+    let fx = fixture("tier-esc-broad");
+    let outcome = run_access(
+        &fx,
+        &format!("touch {}", quoted(&fx.fake_home.join(".ssh/pwned"))),
+        SandboxAccess::Escalated,
+        &[fx.root.clone()],
+        20_000,
+    );
+    assert_ne!(
+        outcome.exit_code,
+        Some(0),
+        "broad escalated root must not permit credential-dir writes: {}",
+        outcome.stderr
+    );
+    assert!(!fx.fake_home.join(".ssh/pwned").exists());
+}
+
+#[test]
+fn danger_tier_opens_system_scope_but_keeps_credential_guard() {
+    // W5 完成定义：danger = 最大非敏感系统访问 + credential guard，不是裸执行。
+    let fx = fixture("tier-danger");
+    let outside = fx.root.join("outside-danger");
+    std::fs::create_dir_all(&outside).unwrap();
+    let outcome = run_access(
+        &fx,
+        &format!("touch {}", quoted(&outside.join("ok.txt"))),
+        SandboxAccess::Danger,
+        &[],
+        20_000,
+    );
+    assert_eq!(
+        outcome.exit_code,
+        Some(0),
+        "danger tier must permit non-sensitive system writes: {}",
+        outcome.stderr
+    );
+    assert!(outside.join("ok.txt").exists());
+    // 机密读：即使在 danger 档仍被 OS 拒绝（尾部 deny 压过全局 allow）。
+    let outcome = run_access(
+        &fx,
+        &format!("cat {}", quoted(&fx.fake_data.join("secrets.json"))),
+        SandboxAccess::Danger,
+        &[],
+        20_000,
+    );
+    assert_ne!(
+        outcome.exit_code,
+        Some(0),
+        "danger must not open credential reads: {}",
+        outcome.stderr
+    );
+    assert!(
+        !outcome.stdout.contains(SENTINEL),
+        "secret sentinel leaked under danger tier"
+    );
+    // 机密写：同样被尾部 deny 压住。
+    let outcome = run_access(
+        &fx,
+        &format!("touch {}", quoted(&fx.fake_home.join(".ssh/pwned"))),
+        SandboxAccess::Danger,
+        &[],
+        20_000,
+    );
+    assert_ne!(
+        outcome.exit_code,
+        Some(0),
+        "danger must not open credential writes: {}",
+        outcome.stderr
+    );
+    assert!(!fx.fake_home.join(".ssh/pwned").exists());
+    // 非敏感 sibling 读在 danger 档保持可用（对照 deny 的精准性）。
+    let outcome = run_access(
+        &fx,
+        &format!("cat {}", quoted(&fx.fake_home.join("plain.txt"))),
+        SandboxAccess::Danger,
+        &[],
+        20_000,
+    );
+    assert_eq!(
+        outcome.exit_code,
+        Some(0),
+        "non-sensitive read must work under danger: {}",
+        outcome.stderr
+    );
 }

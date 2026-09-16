@@ -16,6 +16,14 @@ import {
 } from './entities.js'
 import { RuntimeErrorSchema } from './errors.js'
 import { RuntimeStatusSchema } from './handshake.js'
+import {
+  ApprovalChoiceSchema,
+  ApprovalContextSchema,
+  ApprovalRiskSchema,
+  ApprovalSubjectSchema,
+  DangerAccessLeaseSchema,
+  DangerRevokeReasonSchema,
+} from './permissions.js'
 
 export type { Usage } from './entities.js'
 
@@ -156,6 +164,14 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     // 审批所属会话：侧栏会话行据此显示待审批标记。可选：旧版 runtime
     // 事件与持久化的 run_events 历史记录不含该字段（对齐 waitMs 先例）。
     sessionId: z.string().min(1).optional(),
+    // ---- 权限模型 V2：主题/风险/上下文/可选动作。----
+    // 可选原因有二：持久化 run_events 历史回放不含新字段（对齐 sessionId
+    // 先例）；降级渲染时前端回退 summary-only 展示。live 审批由 Runtime
+    // 保证全量下发，前端只渲染 Runtime 下发的 choices。
+    subject: ApprovalSubjectSchema.optional(),
+    risk: ApprovalRiskSchema.optional(),
+    context: ApprovalContextSchema.optional(),
+    choices: z.array(ApprovalChoiceSchema).optional(),
   }),
   RunEnvelopeSchema.extend({
     type: z.literal('approval.resolved'),
@@ -164,6 +180,8 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     // 原 payload 字段名 scope（once/session）改名 grantScope：
     // 避免与信封 scope 在 .extend() 合并时静默互相覆盖。
     grantScope: z.enum(['once', 'session']),
+    // 实际消费的 choice（审计对账用）。可选：历史事件不含该字段。
+    choiceId: z.string().min(1).optional(),
   }),
   // Phase 1B Workspace 索引事件：project 作用域，projectId 为真实身份。
   RuntimeEventEnvelopeSchema.extend({
@@ -194,6 +212,15 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     sessionId: z.string().min(1),
     paused: z.boolean().optional(),
     items: z.array(QueueEntrySchema),
+  }),
+  // Danger lease 生命周期（签发/撤销/到期/降级）：session 作用域广播，
+  // 前端 DangerLeaseBanner 与 UI 门禁据此同步；lease=null 表示当前无租约。
+  RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('danger.changed'),
+    scope: z.literal('session'),
+    sessionId: z.string().min(1),
+    lease: DangerAccessLeaseSchema.nullable(),
+    reason: DangerRevokeReasonSchema.nullable(),
   }),
   RunEnvelopeSchema.extend({
     type: z.literal('delegation.created'),

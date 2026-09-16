@@ -83,6 +83,7 @@ const statusEmitter = new ResourceEventEmitter({ scope: 'runtime' }, notify)
 
 // 方案 A：TS Runtime 拥有 Rust System Runtime 的通道与生命周期；
 // 系统可用性第一手在此产生，经 runtime.status 事件上报（Host/前端据此投影）。
+const agentBox: { current: ChatAgent | null } = { current: null }
 const systemRuntime = new SystemRuntimeClient(
   resolveSystemRuntimeBinary(),
   [],
@@ -93,6 +94,9 @@ const systemRuntime = new SystemRuntimeClient(
     // sidecar 离开 ready：其上的 PTY 已死，把活动终端标记 disconnected（不自动重跑）。
     if (status !== 'ready') {
       terminalServiceBox.current?.markAllDisconnected(String(status))
+      // Danger 硬边界随 provider 失效：租约必须立即撤销（fail-closed），
+      // 绝不在无沙箱兜底时维持系统范围访问。
+      agentBox.current?.danger.onProviderDegraded()
     }
     statusEmitter.next({ type: 'runtime.status', status: getStatus() })
   },
@@ -113,6 +117,7 @@ function getStatus(): RuntimeStatus {
 const store = new Store(resolveDataDir())
 const mcpManager = new McpManager(store, notify)
 const agent = new ChatAgent(store, notify, systemRuntime, mcpManager)
+agentBox.current = agent
 const workspaceIndexer = new WorkspaceIndexer(store, notify)
 const assetService = new AssetService(store, resolveDataDir())
 const terminalService = new TerminalService({
@@ -128,6 +133,7 @@ const commandContext = {
   store,
   agent,
   approvals: agent.approvals,
+  danger: agent.danger,
   workspace: workspaceIndexer,
   system: systemRuntime,
   mcp: mcpManager,

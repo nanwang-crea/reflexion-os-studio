@@ -6,7 +6,7 @@
 
 use std::path::{Path, PathBuf};
 
-use super::{SandboxProvider, SandboxRequest};
+use super::{SandboxAccess, SandboxProvider, SandboxRequest};
 
 const SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
 
@@ -66,6 +66,12 @@ impl SandboxProvider for SeatbeltSandbox {
 
     fn is_available(&self) -> bool {
         Self::probe()
+    }
+
+    /// danger 档：敏感读/写 deny 渲染在全部 allow 之后（SBPL 后匹配优先），
+    // 真机回归（real_machine_tests）证明敏感边界成立后才在此开通。
+    fn supports_access(&self, _access: SandboxAccess) -> bool {
+        true
     }
 
     fn wrap(&self, request: &SandboxRequest) -> Option<Vec<String>> {
@@ -137,11 +143,20 @@ pub(crate) fn render_profile(
         profile.push_str(&format!(" (subpath {})", sbpl_string(path)));
     }
     profile.push_str(")\n");
-    for root in &request.writable_roots {
-        profile.push_str(&format!(
-            "(allow file-write* (subpath {}))\n",
-            sbpl_string(&profile_path(root))
-        ));
+    match request.access {
+        // Danger（W5）：非敏感系统范围读写全放开；敏感 deny 在下方统一兜底。
+        SandboxAccess::Danger => {
+            profile.push_str("(allow file-write*)\n");
+        }
+        // 其余档位：可写边界 = handler 按档装配的 roots（read-only 只剩沙盒临时目录）。
+        _ => {
+            for root in &request.writable_roots {
+                profile.push_str(&format!(
+                    "(allow file-write* (subpath {}))\n",
+                    sbpl_string(&profile_path(root))
+                ));
+            }
+        }
     }
     profile.push_str(
         "(allow file-write-data\n\
@@ -155,6 +170,13 @@ pub(crate) fn render_profile(
     if request.allow_network {
         profile.push_str("(allow network*)\n");
     }
+    // 敏感路径写侧 deny 放在所有 allow 之后（SBPL 后匹配优先）：即使 escalated
+    // 根粗粒度覆盖凭据目录的祖先、或 danger 全放，机密目录依旧不可读写。
+    profile.push_str("(deny file-write*");
+    for path in &denied {
+        profile.push_str(&format!(" (subpath {})", sbpl_string(path)));
+    }
+    profile.push_str(")\n");
     profile
 }
 
@@ -180,6 +202,7 @@ fn sbpl_string(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sandbox::SandboxAccess;
 
     fn request(roots: &[&str], allow_network: bool) -> SandboxRequest {
         SandboxRequest {
@@ -187,6 +210,7 @@ mod tests {
             cwd: PathBuf::from("/w"),
             timeout_ms: 1000,
             allow_network,
+            access: SandboxAccess::WorkspaceWrite,
             writable_roots: roots.iter().map(PathBuf::from).collect(),
         }
     }
@@ -249,6 +273,47 @@ mod tests {
     fn profile_opens_network_only_when_approved() {
         let profile = render_profile(&request(&["/w"], true), None, Path::new("/d"));
         assert!(profile.contains("(allow network*)"));
+    }
+
+    #[test]
+    fn read_only_renders_no_workspace_write_allowance() {
+        let mut req = request(&["/w/reflexion-sandbox"], false);
+        req.access = SandboxAccess::ReadOnly;
+        let profile = render_profile(&req, None, Path::new("/d"));
+        // 档位语义由 handler 装配 roots 表达：这里只钉"不出现 /w 的可写 allow、
+        // 沙盒临时目录保留"。
+        assert!(profile.contains("(allow file-write* (subpath \"/w/reflexion-sandbox\"))"));
+        assert!(!profile.contains("(allow file-write* (subpath \"/w\"))"));
+    }
+
+    #[test]
+    fn danger_renders_global_write_with_trailing_sensitive_deny() {
+        let mut req = request(&[], false);
+        req.access = SandboxAccess::Danger;
+        let profile = render_profile(&req, Some(Path::new("/Users/t")), Path::new("/d"));
+        assert!(profile.contains("(allow file-write*)\n"));
+        // 全放之后仍必须有敏感写 deny，且排序在所有 allow 之后（SBPL 后匹配优先）。
+        let deny_write = profile.find("(deny file-write*").unwrap();
+        let allow_all = profile.find("(allow file-write*)").unwrap();
+        assert!(deny_write > allow_all);
+        assert!(profile[deny_write..].contains("/Users/t/.ssh"));
+    }
+
+    #[test]
+    fn sensitive_write_denied_last_even_under_broad_roots() {
+        // escalated 粗根覆盖凭据目录时，尾部 deny 仍压住写 allow 的 subpath 命中。
+        let req = request(&["/Users/t"], false);
+        let profile = render_profile(
+            &req,
+            Some(Path::new("/Users/t")),
+            Path::new("/Users/t/.reflexion-os-studio"),
+        );
+        let last_allow = profile.rfind("(allow file-write*").unwrap();
+        let deny_write = profile.find("(deny file-write*").unwrap();
+        assert!(
+            deny_write > last_allow,
+            "write deny must render after every allow: {profile}"
+        );
     }
 
     #[test]

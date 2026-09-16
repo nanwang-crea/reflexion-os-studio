@@ -11,7 +11,9 @@ import type {
 import { Composer, type ComposerModelOption } from '../../components/Composer'
 import { CopyButton } from '../../components/CopyButton'
 import { ArrowDownIcon, SparkIcon } from '../../ui/icons'
-import { ApprovalCard } from './ApprovalCard'
+import './approvals/approvals.css'
+import { ApprovalQueue } from './approvals/ApprovalQueue'
+import { DangerLeaseBanner } from './approvals/DangerLeaseBanner'
 import { AssistantMessage } from './AssistantMessage'
 import { RunBlock } from './RunBlock'
 import type { ProcessItem } from './RunProcess'
@@ -21,7 +23,11 @@ import { RunEventCard } from './RunEventCard'
 import type { SessionData } from '../../api/sessions'
 import type { PendingApproval } from '../../hooks/useAppBootstrap'
 import type { RunActivity } from '../../hooks/useRunActivity'
-import type { PermissionModeValue } from '../../hooks/usePermissionMode'
+import type {
+  PermissionPreset,
+  DangerAccessLease,
+} from '@reflexion-os-studio/runtime-client'
+import type { ComposerAdvancedState } from '../../components/Composer'
 
 interface ChatViewProps {
   sessionData: SessionData | null
@@ -33,8 +39,12 @@ interface ChatViewProps {
   /** 重试倒计时心跳：有活重试时按节拍自增，驱动 RunBlock 重算剩余秒数。 */
   retryTick: number
   hasEnabledProvider: boolean
-  permissionValue: PermissionModeValue
-  onPermissionChange: (value: PermissionModeValue) => void
+  permissionValue: PermissionPreset
+  onPermissionChange: (value: PermissionPreset) => void
+  advanced: ComposerAdvancedState
+  /** Danger 租约（Runtime 真源投影）：激活时 Composer 上方常驻红色状态条。 */
+  dangerLease: DangerAccessLease | null
+  onDisableDanger: () => void
   modelOptions: ComposerModelOption[]
   selectedModelKey: string | null
   onModelChange: (key: string) => void
@@ -46,11 +56,7 @@ interface ChatViewProps {
   onRetry: () => Promise<void>
   onGoSettings: () => void
   pendingApprovals: PendingApproval[]
-  onResolveApproval: (
-    toolCallId: string,
-    decision: 'approved' | 'denied',
-    scope: 'once' | 'session',
-  ) => void
+  onResolveApproval: (toolCallId: string, choiceId: string) => void
   /** 资源引用（工作区文件/资产/外链）点击后按类型分发。 */
   onResourceClick?: (link: ResourceLink) => void
   /** 点击已变更文件：有编辑前后快照时展示本次编辑 Diff。 */
@@ -402,13 +408,16 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
 
       {sessionId !== null && <QueueBar sessionId={sessionId} />}
       <div className="composer-wrap">
-        {sessionApprovals.map((approval) => (
-          <ApprovalCard
-            key={approval.toolCallId}
-            approval={approval}
-            onResolve={props.onResolveApproval}
+        {props.dangerLease !== null && (
+          <DangerLeaseBanner
+            lease={props.dangerLease}
+            onDisable={props.onDisableDanger}
           />
-        ))}
+        )}
+        <ApprovalQueue
+          approvals={sessionApprovals}
+          onChoose={props.onResolveApproval}
+        />
         {!pinned && messages.length > 0 && (
           <button
             className="scroll-bottom"
@@ -431,6 +440,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
           busy={runActive}
           permissionValue={props.permissionValue}
           onPermissionChange={props.onPermissionChange}
+          advanced={props.advanced}
           modelOptions={props.modelOptions}
           selectedModelKey={props.selectedModelKey}
           onModelChange={props.onModelChange}

@@ -44,7 +44,6 @@ export function createChildRunStarter(
   const settings = deps.store.agentSettings.get()
   return async ({ task, agentId, parentRunId, signal }) => {
     const parentDepth = deps.launcher.depthOf(parentRun.id)
-    const parentMode = deps.launcher.permissionModeOf(parentRun.id)
     const { profile, apiKey } = deps
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
     const agent = deps.store.agents.get(agentId)
@@ -137,10 +136,9 @@ export function createChildRunStarter(
           apiKey,
           model: profile.models[0]!,
           sampling: resolveSampling(profile, {}),
-          // 继承父权限模式，只降不升：read-only 父的子 Run 仍 read-only；
-          // 信任开关不继承（子 Run 白名单本就无写/Shell，不能放大）。
-          permissionMode: parentMode,
-          trusted: false,
+          // 子 Run 权限只降不升：预设固定为最窄日常档（白名单本就无写/Shell，
+          // Danger/高权限一律不继承；子会话独立，父覆盖项不外溢）。
+          permissionPreset: 'workspace-read',
           depth: childDepth,
           skill: null,
           systemPrompt: agent.systemPrompt,

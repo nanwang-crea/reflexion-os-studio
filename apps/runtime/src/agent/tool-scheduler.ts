@@ -11,7 +11,7 @@ import type { Store } from '../store/index.js'
 import type { RunEventEmitter } from '../events.js'
 import { parseToolArgs } from './tool-executor.js'
 import { ChildLimitError } from './errors.js'
-import type { ApprovalGateway, PermissionGate } from './permissions.js'
+import type { ApprovalGateway, PermissionGate } from './permissions/index.js'
 
 /**
  * 副作用感知工具调度器（W3）：

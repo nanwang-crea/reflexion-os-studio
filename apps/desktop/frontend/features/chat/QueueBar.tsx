@@ -145,14 +145,24 @@ export function QueueBar(props: QueueBarProps): React.JSX.Element {
                   : entry.content}
               </span>
             )}
-            {entry.trusted && editingId !== entry.id && (
-              <span
-                className="queue-trusted-badge"
-                title="该条消息发送时开启了信任开关：文件写入与命令执行将自动放行"
-              >
-                信任放行
-              </span>
-            )}
+            {entry.permissionPreset === 'workspace-full' &&
+              editingId !== entry.id && (
+                <span
+                  className="queue-trusted-badge"
+                  title="该条消息发送时为「工作区完全允许」档：工作区内写入、删除与命令执行将自动放行"
+                >
+                  完全允许
+                </span>
+              )}
+            {entry.permissionPreset === 'workspace-write' &&
+              editingId !== entry.id && (
+                <span
+                  className="queue-trusted-badge"
+                  title="该条消息发送时为「工作区读写」档：写入自动放行，删除与命令仍询问"
+                >
+                  读写
+                </span>
+              )}
             <span className="queue-actions">
               {editingId === entry.id ? (
                 <>

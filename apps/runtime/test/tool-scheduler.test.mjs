@@ -7,7 +7,10 @@ import { Store } from '../dist/store/index.js'
 import { RunEventEmitter } from '../dist/events.js'
 import { RunRunner } from '../dist/agent/runner.js'
 import { ToolRegistry } from '@reflexion-os-studio/agent-core'
-import { ApprovalGateway, PermissionGate } from '../dist/agent/permissions.js'
+import {
+  ApprovalGateway,
+  PermissionGate,
+} from '../dist/agent/permissions/index.js'
 import { createServer } from 'node:http'
 
 function freshStore() {
@@ -129,7 +132,12 @@ async function runOneTurn(
       registry,
       workspaceRoot: '/w',
       // trusted：file.write 免审批（本测试只验证调度，不测审批流程）。
-      gate: new PermissionGate('workspace', true, true),
+      gate: new PermissionGate({
+        preset: 'workspace-full',
+        hasWorkspace: true,
+        approvalOverride: 'default',
+        dangerActive: () => false,
+      }),
       approvals: new ApprovalGateway(),
       settings,
       controller: new AbortController(),

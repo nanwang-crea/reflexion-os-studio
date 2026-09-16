@@ -296,6 +296,36 @@ export const ApprovalOperationSchema = z.union([
 ])
 export type ApprovalOperation = z.infer<typeof ApprovalOperationSchema>
 
+/**
+ * 三档日常权限预设（替代 permissionMode + trusted 双轨）。
+ * 全部只作用于工作区内；工作区外访问必须走显式提权审批。
+ */
+export const PermissionPresetSchema = z.enum([
+  'workspace-read',
+  'workspace-write',
+  'workspace-full',
+])
+export type PermissionPreset = z.infer<typeof PermissionPresetSchema>
+
+/**
+ * 高级审批覆盖项：ask-everything 时读取/写入/删除/Shell 全部进入 ask
+ * （硬拒绝仍为 denied）。仅当前会话生效、不持久化，不占日常下拉档位。
+ */
+export const ApprovalOverrideSchema = z.enum(['default', 'ask-everything'])
+export type ApprovalOverride = z.infer<typeof ApprovalOverrideSchema>
+
+/**
+ * 沙箱能力档位：与权限决策正交——审批只决定"是否要问"，
+ * SandboxPolicy 决定"获批后实际能访问什么"。任何档位下 no-read 机密规则不变。
+ */
+export const SandboxPolicySchema = z.enum([
+  'read-only',
+  'workspace-write',
+  'escalated',
+  'danger',
+])
+export type SandboxPolicy = z.infer<typeof SandboxPolicySchema>
+
 /** Agent 侧工具声明的 canonical 形式；provider 适配层投影为方言格式。 */
 export const ToolSpecSchema = z.object({
   name: z.string().min(1),
@@ -543,9 +573,8 @@ export const QueueEntrySchema = z.object({
   content: z.string().min(1),
   providerId: z.string().min(1).nullable(),
   model: z.string().min(1).nullable(),
-  permissionMode: z.enum(['workspace', 'read-only']).nullable(),
-  // 发送时是否启用会话信任开关（文件写入与 Shell 自动放行）。
-  trusted: z.boolean(),
+  // 发送时捕获的权限预设快照；UI badge 与实际执行档位一致。
+  permissionPreset: PermissionPresetSchema.nullable(),
   skillId: z.string().min(1).nullable(),
   /** 0 起位置；出队发送时该项即消失。 */
   position: z.number().int().nonnegative(),

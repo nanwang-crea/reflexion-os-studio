@@ -19,6 +19,16 @@ import {
   ToolSpecSchema,
   jsonSchemas,
   parseResourceUri,
+  PermissionPresetSchema,
+  ApprovalOverrideSchema,
+  SandboxPolicySchema,
+  ApprovalSubjectSchema,
+  ApprovalChoiceSchema,
+  ApprovalContextSchema,
+  ApprovalGrantV2Schema,
+  ShellExecuteParamsSchema,
+  DangerAccessLeaseSchema,
+  QueueEntrySchema,
 } from '../dist/index.js'
 
 const NOW = '2026-08-29T00:00:00.000Z'
@@ -826,4 +836,532 @@ test('every terminal.* command is registered with params and result', () => {
     // 命令 params 一律要求 requestId。
     assert.equal(entry.params.safeParse({}).success, false, method)
   }
+})
+
+// ---------------- 权限模型 V2 ----------------
+
+test('PermissionPreset 三档严格枚举：旧值必须走兼容映射而非直入', () => {
+  for (const value of ['workspace-read', 'workspace-write', 'workspace-full']) {
+    assert.equal(PermissionPresetSchema.safeParse(value).success, true, value)
+  }
+  // legacy 档位名与 trusted 布尔都不是 preset。
+  for (const value of ['workspace', 'read-only', 'trusted', 'danger']) {
+    assert.equal(PermissionPresetSchema.safeParse(value).success, false, value)
+  }
+})
+
+test('ApprovalOverride 只接受 default/ask-everything；SandboxPolicy 四档', () => {
+  assert.equal(ApprovalOverrideSchema.safeParse('ask-everything').success, true)
+  assert.equal(ApprovalOverrideSchema.safeParse('default').success, true)
+  assert.equal(ApprovalOverrideSchema.safeParse('ask-all').success, false)
+  for (const value of ['read-only', 'workspace-write', 'escalated', 'danger']) {
+    assert.equal(SandboxPolicySchema.safeParse(value).success, true, value)
+  }
+  assert.equal(SandboxPolicySchema.safeParse('no-sandbox').success, false)
+})
+
+test('ApprovalSubject 判别联合：三种主题各自校验，模型不可伪造 shell 主题', () => {
+  assert.equal(
+    ApprovalSubjectSchema.safeParse({
+      kind: 'operation',
+      operation: 'web.fetch',
+    }).success,
+    true,
+  )
+  assert.equal(
+    ApprovalSubjectSchema.safeParse({
+      kind: 'workspace-path',
+      operation: 'file.edit',
+      path: 'apps/runtime/src/agent/permissions.ts',
+    }).success,
+    true,
+  )
+  assert.equal(
+    ApprovalSubjectSchema.safeParse({
+      kind: 'shell-command',
+      operation: 'shell.execute',
+      commandDigest: 'sha256:abc',
+      displayCommand: 'pnpm test --filter runtime',
+      prefixCandidate: ['pnpm', 'test'],
+      escalation: false,
+      network: false,
+    }).success,
+    true,
+  )
+  // workspace-path 的 path 不得为空。
+  assert.equal(
+    ApprovalSubjectSchema.safeParse({
+      kind: 'workspace-path',
+      operation: 'file.read',
+      path: '',
+    }).success,
+    false,
+  )
+  // shell-command 授权身份用 digest，缺 digest 非法。
+  assert.equal(
+    ApprovalSubjectSchema.safeParse({
+      kind: 'shell-command',
+      operation: 'shell.execute',
+      displayCommand: 'ls',
+      prefixCandidate: null,
+      escalation: false,
+      network: false,
+    }).success,
+    false,
+  )
+  // 未知 kind 拒绝。
+  assert.equal(
+    ApprovalSubjectSchema.safeParse({ kind: 'url', operation: 'x' }).success,
+    false,
+  )
+})
+
+test('ApprovalChoice/Runtime 下发协议：presentation 不携带授权语义', () => {
+  assert.equal(
+    ApprovalChoiceSchema.safeParse({
+      id: 'session:file.edit',
+      decision: 'approved',
+      presentation: 'session-menu',
+      label: '本会话允许读取并编辑此文件',
+      description: '仅当前工作区内此路径',
+    }).success,
+    true,
+  )
+  // 没有 effect 字段可塞：choice 只有展示语义。
+  assert.equal(
+    ApprovalChoiceSchema.safeParse({
+      id: 'x',
+      decision: 'approved',
+      presentation: 'primary',
+      label: 'L',
+      effect: { grantAll: true },
+    }).success,
+    true, // zod 默认剥离未知键，effect 不可能透传。
+  )
+  assert.equal(
+    ApprovalChoiceSchema.safeParse({
+      id: 'x',
+      decision: 'maybe',
+      presentation: 'primary',
+      label: 'L',
+    }).success,
+    false,
+  )
+  assert.equal(
+    ApprovalContextSchema.safeParse({
+      displayCwd: '…/repo',
+      workspaceScope: 'outside',
+      sandbox: 'escalated',
+      sandboxProvider: 'seatbelt',
+      network: false,
+      escalation: true,
+      justification: 'read git config',
+    }).success,
+    true,
+  )
+  assert.equal(
+    ApprovalContextSchema.safeParse({
+      displayCwd: null,
+      workspaceScope: 'everywhere',
+      sandbox: 'read-only',
+      sandboxProvider: null,
+      network: false,
+      escalation: false,
+      justification: null,
+    }).success,
+    false,
+  )
+})
+
+test('approval.required 携带 V2 字段；历史事件（无新字段）仍可回放', () => {
+  const v2 = RuntimeEventSchema.safeParse({
+    ...RUN_ENV,
+    type: 'approval.required',
+    toolCallId: 't1',
+    sessionId: 's1',
+    operation: 'shell.execute',
+    summary: 'shell.execute: pnpm test',
+    subject: {
+      kind: 'shell-command',
+      operation: 'shell.execute',
+      commandDigest: 'sha256:abc',
+      displayCommand: 'pnpm test',
+      prefixCandidate: ['pnpm', 'test'],
+      escalation: false,
+      network: false,
+    },
+    risk: 'normal',
+    context: {
+      displayCwd: '…/repo',
+      workspaceScope: 'inside',
+      sandbox: 'workspace-write',
+      sandboxProvider: 'seatbelt',
+      network: false,
+      escalation: false,
+      justification: null,
+    },
+    choices: [
+      {
+        id: 'allow-once',
+        decision: 'approved',
+        presentation: 'primary',
+        label: '允许一次',
+      },
+      {
+        id: 'deny',
+        decision: 'denied',
+        presentation: 'secondary',
+        label: '拒绝',
+      },
+    ],
+  })
+  assert.equal(v2.success, true, JSON.stringify(v2.error?.issues ?? null))
+  // 旧 payload 保持可解析（run_events 历史回放）。
+  assert.equal(
+    RuntimeEventSchema.safeParse({
+      ...RUN_ENV,
+      type: 'approval.required',
+      toolCallId: 't1',
+      operation: 'file.write',
+      summary: 'x',
+    }).success,
+    true,
+  )
+  // choices 存在但成员畸形必须拒绝：前端渲染以协议为准。
+  assert.equal(
+    RuntimeEventSchema.safeParse({
+      ...RUN_ENV,
+      type: 'approval.required',
+      toolCallId: 't1',
+      operation: 'file.write',
+      summary: 'x',
+      choices: [
+        { id: '', decision: 'approved', presentation: 'primary', label: '' },
+      ],
+    }).success,
+    false,
+  )
+  // approval.resolved 新增可选 choiceId；grantScope 依旧必填。
+  assert.equal(
+    RuntimeEventSchema.safeParse({
+      ...RUN_ENV,
+      type: 'approval.resolved',
+      toolCallId: 't1',
+      decision: 'approved',
+      grantScope: 'session',
+      choiceId: 'session:file.edit',
+    }).success,
+    true,
+  )
+})
+
+test('approval.resolve 只接受 toolCallId + choiceId，旧 decision/scope 失效', () => {
+  const params = CommandSchemaRegistry['approval.resolve'].params
+  assert.equal(
+    params.safeParse({
+      requestId: 'r1',
+      toolCallId: 't1',
+      choiceId: 'allow-once',
+    }).success,
+    true,
+  )
+  assert.equal(
+    params.safeParse({
+      requestId: 'r1',
+      toolCallId: 't1',
+      decision: 'approved',
+      scope: 'session',
+    }).success,
+    false,
+  )
+})
+
+test('MessageSend permissionPreset 可选；legacy permissionMode/trusted 一版本兼容', () => {
+  const base = { requestId: 'r1', sessionId: 's1', content: 'hi' }
+  assert.equal(
+    MessageSendParamsSchema.safeParse({
+      ...base,
+      permissionPreset: 'workspace-write',
+    }).success,
+    true,
+  )
+  assert.equal(
+    MessageSendParamsSchema.safeParse({
+      ...base,
+      permissionPreset: 'danger',
+    }).success,
+    false,
+  )
+  // legacy 字段仍可解析（兼容读取一个版本）。
+  assert.equal(
+    MessageSendParamsSchema.safeParse({
+      ...base,
+      permissionMode: 'read-only',
+      trusted: true,
+    }).success,
+    true,
+  )
+})
+
+test('QueueEntry 快照 permissionPreset', () => {
+  const entry = {
+    id: 'q1',
+    sessionId: 's1',
+    content: 'next',
+    providerId: null,
+    model: null,
+    permissionPreset: 'workspace-full',
+    skillId: null,
+    position: 0,
+  }
+  const parsed = QueueEntrySchema.safeParse(entry)
+  assert.equal(parsed.success, true)
+  assert.equal(parsed.data.permissionPreset, 'workspace-full')
+  assert.equal(
+    QueueEntrySchema.safeParse({ ...entry, permissionPreset: undefined })
+      .success,
+    false,
+  )
+})
+
+test('ApprovalGrantV2：版本、来源与 subjectDigest 硬校验', () => {
+  const grant = {
+    version: 2,
+    grantId: 'g1',
+    requestId: 'r1',
+    sessionId: 's1',
+    workspaceId: '/w',
+    operation: 'file.write',
+    source: 'session-rule',
+    subjectDigest: 'sha256:def',
+    sandbox: 'workspace-write',
+    sandboxNetwork: false,
+    expiresAt: 1789603200000,
+  }
+  assert.equal(ApprovalGrantV2Schema.safeParse(grant).success, true)
+  assert.equal(
+    ApprovalGrantV2Schema.safeParse({ ...grant, version: 1 }).success,
+    false,
+  )
+  assert.equal(
+    ApprovalGrantV2Schema.safeParse({ ...grant, source: 'permanent' }).success,
+    false,
+  )
+  assert.equal(
+    ApprovalGrantV2Schema.safeParse({ ...grant, subjectDigest: '' }).success,
+    false,
+  )
+  // escalated 提权根：形状受控（非空、上限 8 条）。
+  assert.equal(
+    ApprovalGrantV2Schema.safeParse({
+      ...grant,
+      sandbox: 'escalated',
+      escalationRoots: ['/Users/dev/notes'],
+    }).success,
+    true,
+  )
+  assert.equal(
+    ApprovalGrantV2Schema.safeParse({
+      ...grant,
+      escalationRoots: [''],
+    }).success,
+    false,
+  )
+})
+
+test('shell.execute 参数：require_escalated 必须携带非空 justification', () => {
+  assert.equal(
+    ShellExecuteParamsSchema.safeParse({ command: 'ls' }).success,
+    true,
+  )
+  assert.equal(
+    ShellExecuteParamsSchema.safeParse({
+      command: 'git fetch',
+      requires_network: true,
+    }).success,
+    true,
+  )
+  assert.equal(
+    ShellExecuteParamsSchema.safeParse({
+      command: 'git config --global user.name',
+      sandbox_permissions: 'require_escalated',
+    }).success,
+    false,
+  )
+  assert.equal(
+    ShellExecuteParamsSchema.safeParse({
+      command: 'git config --global user.name',
+      sandbox_permissions: 'require_escalated',
+      justification: '   ',
+    }).success,
+    false,
+  )
+  assert.equal(
+    ShellExecuteParamsSchema.safeParse({
+      command: 'git config --global user.name',
+      sandbox_permissions: 'require_escalated',
+      justification: '需要读取全局 git 配置回答用户问题',
+    }).success,
+    true,
+  )
+  // prefix_rule 是候选而非授权：长度受控。
+  assert.equal(
+    ShellExecuteParamsSchema.safeParse({
+      command: 'pnpm test',
+      prefix_rule: ['pnpm', 'test'],
+    }).success,
+    true,
+  )
+  assert.equal(
+    ShellExecuteParamsSchema.safeParse({
+      command: 'x',
+      prefix_rule: new Array(20).fill('a'),
+    }).success,
+    false,
+  )
+})
+
+test('danger 命令注册：两段式确认与状态查询', () => {
+  const prepare = CommandSchemaRegistry['danger.prepare']
+  assert.equal(
+    prepare.params.safeParse({ requestId: 'r1', sessionId: 's1' }).success,
+    true,
+  )
+  const capability = {
+    supported: true,
+    provider: 'seatbelt',
+    detail: null,
+  }
+  assert.equal(
+    prepare.result.safeParse({
+      challengeId: 'c1',
+      expiresAt: 1789603200000,
+      warning: '将跳过工作区内外审批 30 分钟',
+      capability,
+    }).success,
+    true,
+  )
+  const enable = CommandSchemaRegistry['danger.enable']
+  assert.equal(
+    enable.params.safeParse({
+      requestId: 'r1',
+      challengeId: 'c1',
+      acceptedRisk: true,
+    }).success,
+    true,
+  )
+  // acceptedRisk 必须是字面量 true：缺省或 false 都不构成明确确认。
+  assert.equal(
+    enable.params.safeParse({ requestId: 'r1', challengeId: 'c1' }).success,
+    false,
+  )
+  assert.equal(
+    enable.params.safeParse({
+      requestId: 'r1',
+      challengeId: 'c1',
+      acceptedRisk: false,
+    }).success,
+    false,
+  )
+  assert.equal(
+    enable.result.safeParse({
+      lease: {
+        sessionId: 's1',
+        issuedAt: 1789600000000,
+        expiresAt: 1789601800000,
+        enforcement: 'credential-guard',
+        provider: 'seatbelt',
+      },
+    }).success,
+    true,
+  )
+  // enforcement 只有 credential-guard 一种：裸 NoopSandbox 不是合法租约。
+  assert.equal(
+    DangerAccessLeaseSchema.safeParse({
+      sessionId: 's1',
+      issuedAt: 1,
+      expiresAt: 2,
+      enforcement: 'none',
+      provider: 'seatbelt',
+    }).success,
+    false,
+  )
+  assert.equal(
+    CommandSchemaRegistry['danger.disable'].result.safeParse({
+      disabled: true,
+    }).success,
+    true,
+  )
+  assert.equal(
+    CommandSchemaRegistry['danger.status'].result.safeParse({
+      lease: null,
+    }).success,
+    true,
+  )
+})
+
+test('danger.changed 事件：会话作用域的租约生命周期', () => {
+  const env = {
+    protocolVersion: PROTOCOL_VERSION,
+    eventId: 'e1',
+    scope: 'session',
+    sessionId: 's1',
+    seq: 0,
+    occurredAt: NOW,
+  }
+  assert.equal(
+    RuntimeEventSchema.safeParse({
+      ...env,
+      type: 'danger.changed',
+      lease: {
+        sessionId: 's1',
+        issuedAt: 1,
+        expiresAt: 2,
+        enforcement: 'credential-guard',
+        provider: 'bwrap',
+      },
+      reason: null,
+    }).success,
+    true,
+  )
+  assert.equal(
+    RuntimeEventSchema.safeParse({
+      ...env,
+      type: 'danger.changed',
+      lease: null,
+      reason: 'provider-degraded',
+    }).success,
+    true,
+  )
+  assert.equal(
+    RuntimeEventSchema.safeParse({
+      ...env,
+      type: 'danger.changed',
+      lease: null,
+      reason: 'unbounded-generosity',
+    }).success,
+    false,
+  )
+})
+
+test('permission.approval_override set/get 命令注册', () => {
+  const set = CommandSchemaRegistry['permission.approval_override.set']
+  assert.equal(
+    set.params.safeParse({
+      requestId: 'r1',
+      sessionId: 's1',
+      override: 'ask-everything',
+    }).success,
+    true,
+  )
+  assert.equal(
+    set.params.safeParse({ requestId: 'r1', sessionId: 's1' }).success,
+    false,
+  )
+  const get = CommandSchemaRegistry['permission.approval_override.get']
+  assert.equal(get.result.safeParse({ override: 'default' }).success, true)
+})
+
+test('协议版本升级到 1.2', () => {
+  assert.equal(PROTOCOL_VERSION, '1.2')
 })

@@ -3,14 +3,26 @@
 //! 避免阻塞协议主循环。git 全部方法见 handlers_git。
 
 use serde_json::{json, Value};
+use std::path::PathBuf;
 
-use crate::grant::{require_grant, require_network_approval};
+use crate::grant::{normalize_relative, require_grant, require_network_approval};
 use crate::params::{
     EditParams, GlobParams, GrantPathParams, GrepParams, ListParams, MoveParams, OperationSource,
     ReadParams, ShellParams, WriteParams,
 };
 use crate::protocol::{emit, error_response, ok_response, running_shells, workspace_root, OpError};
 use crate::{files, mutate, paths, sandbox, search, shell};
+
+/// digest 资源部分：与 TS Runtime 审批前同一规范化算法；非法路径（绝对/`..`）
+/// 不可能有匹配 digest——按工作区边界违规拒绝。
+fn digest_path(raw: &str) -> Result<String, OpError> {
+    normalize_relative(raw).ok_or_else(|| {
+        OpError::new(
+            "path_outside_workspace",
+            format!("grant-bound path is not workspace-relative: {raw}"),
+        )
+    })
+}
 
 pub fn handle_file_read(params: Value) -> Result<Value, OpError> {
     let params: ReadParams = serde_json::from_value(params)
@@ -102,7 +114,12 @@ pub fn handle_file_write(params: Value) -> Result<Value, OpError> {
                 "file.write requires an approval grant for agent operations".to_string(),
             )
         })?;
-        require_grant(grant, &params.workspace_root, "file.write")?;
+        require_grant(
+            grant,
+            &params.workspace_root,
+            "file.write",
+            &[digest_path(&params.path)?],
+        )?;
     }
     let root = workspace_root(&params.workspace_root)?;
     let outcome = files::write(&root, &params.path, &params.content, params.revision)
@@ -122,7 +139,12 @@ pub fn handle_file_write(params: Value) -> Result<Value, OpError> {
 pub fn handle_file_edit(params: Value) -> Result<Value, OpError> {
     let params: EditParams = serde_json::from_value(params)
         .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    require_grant(&params.grant, &params.workspace_root, "file.edit")?;
+    require_grant(
+        &params.grant,
+        &params.workspace_root,
+        "file.edit",
+        &[digest_path(&params.path)?],
+    )?;
     let root = workspace_root(&params.workspace_root)?;
     let outcome = mutate::edit(
         &root,
@@ -149,7 +171,12 @@ pub fn handle_file_edit(params: Value) -> Result<Value, OpError> {
 pub fn handle_file_delete(params: Value) -> Result<Value, OpError> {
     let params: GrantPathParams = serde_json::from_value(params)
         .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    require_grant(&params.grant, &params.workspace_root, "file.delete")?;
+    require_grant(
+        &params.grant,
+        &params.workspace_root,
+        "file.delete",
+        &[digest_path(&params.path)?],
+    )?;
     let root = workspace_root(&params.workspace_root)?;
     let outcome = mutate::delete(&root, &params.path)
         .map_err(|message| OpError::new("file_error", message))?;
@@ -159,7 +186,12 @@ pub fn handle_file_delete(params: Value) -> Result<Value, OpError> {
 pub fn handle_file_move(params: Value) -> Result<Value, OpError> {
     let params: MoveParams = serde_json::from_value(params)
         .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    require_grant(&params.grant, &params.workspace_root, "file.move")?;
+    require_grant(
+        &params.grant,
+        &params.workspace_root,
+        "file.move",
+        &[digest_path(&params.from)?, digest_path(&params.to)?],
+    )?;
     let root = workspace_root(&params.workspace_root)?;
     let outcome = mutate::move_path(&root, &params.from, &params.to)
         .map_err(|message| OpError::new("file_error", message))?;
@@ -169,7 +201,12 @@ pub fn handle_file_move(params: Value) -> Result<Value, OpError> {
 pub fn handle_file_mkdir(params: Value) -> Result<Value, OpError> {
     let params: GrantPathParams = serde_json::from_value(params)
         .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    require_grant(&params.grant, &params.workspace_root, "file.mkdir")?;
+    require_grant(
+        &params.grant,
+        &params.workspace_root,
+        "file.mkdir",
+        &[digest_path(&params.path)?],
+    )?;
     let root = workspace_root(&params.workspace_root)?;
     let outcome = mutate::mkdir(&root, &params.path)
         .map_err(|message| OpError::new("file_error", message))?;
@@ -187,36 +224,112 @@ fn shell_request_id(id: &Value) -> Result<String, OpError> {
     }
 }
 
+/// 提权根复核（handler 权威，不信任请求声明）：绝对路径、深度 ≥2、
+/// 与敏感根双向不重叠；违规一律 permission_denied（no-read 红线不可旁路）。
+fn resolve_escalation_roots(raw: &[String]) -> Result<Vec<PathBuf>, OpError> {
+    let sensitive = sandbox::sensitive_roots();
+    let mut out = Vec::new();
+    for value in raw {
+        let declared = PathBuf::from(value);
+        if !declared.is_absolute() {
+            return Err(OpError::new(
+                "invalid_request",
+                "escalation root must be an absolute path".to_string(),
+            ));
+        }
+        // 末段可能尚未创建（命令将要 mkdir 的目标）：解析最长现存祖先后拼回尾。
+        let canonical = crate::sandbox::deepest_resolved(&declared);
+        let components = canonical.components().count();
+        if components < 3 {
+            // 拒绝 / 与一级系统目录（/etc、/usr、/var…）作为提权根。
+            return Err(OpError::new(
+                "permission_denied",
+                format!("escalation root too shallow (refusing broad system path): {value}"),
+            ));
+        }
+        let overlaps_sensitive = sensitive.iter().any(|guard| {
+            let guard_resolved = crate::sandbox::deepest_resolved(guard);
+            canonical.starts_with(&guard_resolved) || guard_resolved.starts_with(&canonical)
+        });
+        if overlaps_sensitive {
+            return Err(OpError::new(
+                "permission_denied",
+                format!("escalation root touches a protected credential path: {value}"),
+            ));
+        }
+        out.push(canonical);
+    }
+    Ok(out)
+}
+
 pub fn handle_shell_execute(id: Value, params: Value) -> Result<(Value, bool), OpError> {
     let params: ShellParams = serde_json::from_value(params)
         .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
-    require_grant(&params.grant, &params.workspace_root, "shell.execute")?;
+    let cwd_relative = params.cwd.as_deref().unwrap_or(".").to_string();
+    // grant 与当前实际命令逐字段绑定：command + 规范化 cwd
+    // （sandbox/network 两段由 require_grant 从 grant 自身补齐）。
+    let facts = require_grant(
+        &params.grant,
+        &params.workspace_root,
+        "shell.execute",
+        &[params.command.clone(), digest_path(&cwd_relative)?],
+    )?;
     let allow_network = params.allow_network.unwrap_or(false);
     if allow_network {
         require_network_approval(&params.grant)?;
     }
+    // 沙箱档位来自已复核 grant 的 sandbox 字段（请求侧无法自行声明更宽档位）。
+    let access = sandbox::SandboxAccess::from_grant(&facts.sandbox);
+    // Danger 租约语义包含网络（启用时已向用户声明"联网不再单独审批"）；
+    // grant 仍显式携带 sandboxNetwork 审计字段。
+    let allow_network = allow_network || access == sandbox::SandboxAccess::Danger;
     let root = workspace_root(&params.workspace_root)?;
-    let cwd_relative = params.cwd.as_deref().unwrap_or(".");
-    let cwd = paths::resolve_in_workspace(&root, cwd_relative)
+    let cwd = paths::resolve_in_workspace(&root, &cwd_relative)
         .map_err(|message| OpError::new("path_outside_workspace", message))?;
     let timeout_ms = params
         .timeout_ms
         .unwrap_or(shell::DEFAULT_TIMEOUT_MS)
         .min(shell::MAX_TIMEOUT_MS);
     let request_id = shell_request_id(&id)?;
+    // 按档位装配可写根：read-only 仅沙盒临时目录；workspace-write +工作区根；
+    // escalated 再并入已复核的提权根（根集合本身由 grant 携带并经 digest 绑定）。
+    let temp = sandbox::sandbox_temp_dir();
+    let mut writable_roots: Vec<PathBuf> = match access {
+        sandbox::SandboxAccess::ReadOnly => vec![temp],
+        _ => vec![root.clone(), temp],
+    };
+    if access == sandbox::SandboxAccess::Escalated {
+        let extra = resolve_escalation_roots(&facts.escalation_roots)?;
+        writable_roots.extend(extra);
+    }
+    // 能力门禁：provider 无法可靠应用所选档位时 fail-closed，绝不无沙箱执行。
+    let provider = sandbox::provider();
+    if !provider.supports_access(access) {
+        return Err(OpError::new(
+            "sandbox_policy_unavailable",
+            format!(
+                "sandbox provider {} cannot enforce requested access {}",
+                provider.id(),
+                access.as_str()
+            ),
+        ));
+    }
+    let sandbox_meta = json!({
+        "active": provider.id() != "none",
+        "provider": provider.id(),
+        "access": access.as_str(),
+        "grantSource": facts.source,
+    });
     let request = sandbox::SandboxRequest {
         command: params.command,
         cwd,
         timeout_ms,
         allow_network,
-        writable_roots: vec![root, sandbox::sandbox_temp_dir()],
+        access,
+        writable_roots,
     };
     std::thread::spawn(move || {
         let provider = sandbox::provider();
-        let sandbox_meta = json!({
-            "active": provider.id() != "none",
-            "provider": provider.id(),
-        });
         // 沙盒临时目录必须在 provider 渲染前落盘：macOS profile_path 规范化要求
         // 命中真实祖先链，Linux bwrap 的 FIXED_TMP alias 挂载看 host 可见性
         // （缺失 dest 在 ro 父挂载下 mkdir 会 EROFS）。Windows exec_direct 的

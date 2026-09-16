@@ -16,7 +16,9 @@ import type {
 import { AppMain } from './AppMain'
 import { useAppBootstrap } from './hooks/useAppBootstrap'
 import { useModelSelection } from './hooks/useModelSelection'
-import { usePermissionMode } from './hooks/usePermissionMode'
+import { usePermissionPreset } from './hooks/usePermissionPreset'
+import { useAdvancedPermissions } from './hooks/useAdvancedPermissions'
+import { DangerConfirmationDialog } from './features/chat/approvals/DangerConfirmationDialog'
 import { useSidebarPanel } from './hooks/useSidebarPanel'
 import { useWorkspacePanel } from './hooks/useWorkspacePanel'
 import { useConfirmDialog } from './hooks/useConfirmDialog'
@@ -25,7 +27,7 @@ import {
   useSessionNavigation,
   type ViewName,
 } from './hooks/useSessionNavigation'
-import { resolveApproval } from './api/chat'
+import { useApprovalResolution } from './hooks/useApprovalResolution'
 import { listSkills } from './api/skills'
 import type { SessionData } from './api/sessions'
 import { ConfirmDialog } from './components/ConfirmDialog'
@@ -113,7 +115,16 @@ export default function App() {
     [],
   )
 
-  const { permissionMode, changePermissionMode } = usePermissionMode()
+  const { permissionPreset, changePermissionPreset } = usePermissionPreset()
+  const {
+    approvalOverride,
+    changeApprovalOverride,
+    dangerLease,
+    onDangerChanged,
+    disableDanger,
+    dangerDialogOpen,
+    setDangerDialogOpen,
+  } = useAdvancedPermissions(activeSessionId, setNotice)
   const { modelOptions, selectedModelKey, setSelectedModelKey } =
     useModelSelection(profiles, sessionData, activeSessionId)
 
@@ -147,6 +158,7 @@ export default function App() {
       refreshProjectSessions,
       refreshDelegations,
       setNotice,
+      onDangerChanged,
     }),
     [
       activeProjectRef,
@@ -158,6 +170,7 @@ export default function App() {
       refreshStandaloneSessions,
       refreshDelegations,
       setNotice,
+      onDangerChanged,
     ],
   )
 
@@ -229,31 +242,12 @@ export default function App() {
     resetWorkspaceFiles: guardedResetWorkspaceFiles,
   })
 
-  /**
-   * 审批决策：approval.resolve 命令；卡片本地乐观摘除，点击即消失，
-   * 不等 approval.resolved 事件走完 runtime→宿主→webview 往返（同一
-   * 事件管道积压时卡片会滞留）。命令失败则恢复等待卡重试；
-   * 事件回执到达时按 toolCallId 幂等，摘除已不存在的卡无副作用。
-   */
-  const handleResolveApproval = useCallback(
-    async (
-      toolCallId: string,
-      decision: 'approved' | 'denied',
-      scope: 'once' | 'session',
-    ): Promise<void> => {
-      const entry = pendingApprovals.find(
-        (item) => item.toolCallId === toolCallId,
-      )
-      if (entry !== undefined) clearPendingApproval(toolCallId)
-      try {
-        await resolveApproval({ toolCallId, decision, scope })
-      } catch (error) {
-        if (entry !== undefined) restorePendingApproval(entry)
-        setNotice(error instanceof Error ? error.message : String(error))
-      }
-    },
-    [pendingApprovals, clearPendingApproval, restorePendingApproval],
-  )
+  const handleResolveApproval = useApprovalResolution({
+    pendingApprovals,
+    clearPendingApproval,
+    restorePendingApproval,
+    setNotice,
+  })
 
   useEffect(() => {
     activeSessionRef.current = activeSessionId
@@ -286,7 +280,7 @@ export default function App() {
     activeProjectId,
     selectedModelKey,
     sessionData,
-    permissionMode,
+    permissionPreset,
     activeSessionRef,
     activeProjectRef,
     refreshSessionData,
@@ -439,8 +433,20 @@ export default function App() {
           runActivities,
           retryTick,
           hasEnabledProvider,
-          permissionValue: permissionMode,
-          onPermissionChange: changePermissionMode,
+          permissionValue: permissionPreset,
+          onPermissionChange: changePermissionPreset,
+          advanced: {
+            approvalOverride,
+            onApprovalOverrideChange: (value) => {
+              void changeApprovalOverride(value)
+            },
+            dangerActive: dangerLease !== null,
+            onOpenDanger: () => setDangerDialogOpen(true),
+          },
+          dangerLease,
+          onDisableDanger: () => {
+            void disableDanger()
+          },
           modelOptions,
           selectedModelKey,
           onModelChange: setSelectedModelKey,
@@ -463,8 +469,8 @@ export default function App() {
           onProjectChange: selectLandingProject,
           sessions: activeProject ? projectSessions : [],
           hasEnabledProvider,
-          permissionValue: permissionMode,
-          onPermissionChange: changePermissionMode,
+          permissionValue: permissionPreset,
+          onPermissionChange: changePermissionPreset,
           modelOptions,
           selectedModelKey,
           onModelChange: setSelectedModelKey,
@@ -520,6 +526,12 @@ export default function App() {
           activeProjectId,
           confirm,
         }}
+      />
+      <DangerConfirmationDialog
+        open={dangerDialogOpen}
+        sessionId={activeSessionId}
+        onClose={() => setDangerDialogOpen(false)}
+        onEnabled={() => setDangerDialogOpen(false)}
       />
       <ConfirmDialog
         state={confirmState}

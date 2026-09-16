@@ -9,7 +9,8 @@
     "build:frontend": "vite build",
     "prepare:package": "bash ../../scripts/prepare-package.sh",
     "dev:frontend": "vite",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --disable-warning=ExperimentalWarning --test test/approval-presenter.test.mjs test/permission-storage.test.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

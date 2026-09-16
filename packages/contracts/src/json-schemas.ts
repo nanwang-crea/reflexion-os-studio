@@ -26,7 +26,23 @@ import {
   AgentSettingsSchema,
   McpServerSchema,
   McpToolSchema,
+  PermissionPresetSchema,
+  ApprovalOverrideSchema,
+  SandboxPolicySchema,
 } from './entities.js'
+import {
+  ApprovalRiskSchema,
+  ApprovalSubjectSchema,
+  ApprovalChoiceSchema,
+  ApprovalContextSchema,
+  ApprovalGrantV2Schema,
+  ShellInterpreterSchema,
+  ShellExecuteParamsSchema,
+  DangerProviderSchema,
+  DangerCapabilitySchema,
+  DangerAccessLeaseSchema,
+  DangerRevokeReasonSchema,
+} from './permissions.js'
 import { RuntimeErrorSchema } from './errors.js'
 import { JsonRpcMessageSchema } from './jsonrpc.js'
 import { RuntimeEventSchema } from './events.js'
@@ -63,6 +79,20 @@ export const jsonSchemas: Readonly<Record<string, unknown>> = Object.freeze(
     toJSONSchema('AgentSettings', AgentSettingsSchema),
     toJSONSchema('McpServer', McpServerSchema),
     toJSONSchema('McpTool', McpToolSchema),
+    toJSONSchema('PermissionPreset', PermissionPresetSchema),
+    toJSONSchema('ApprovalOverride', ApprovalOverrideSchema),
+    toJSONSchema('SandboxPolicy', SandboxPolicySchema),
+    toJSONSchema('ApprovalRisk', ApprovalRiskSchema),
+    toJSONSchema('ApprovalSubject', ApprovalSubjectSchema),
+    toJSONSchema('ApprovalChoice', ApprovalChoiceSchema),
+    toJSONSchema('ApprovalContext', ApprovalContextSchema),
+    toJSONSchema('ApprovalGrantV2', ApprovalGrantV2Schema),
+    toJSONSchema('ShellInterpreter', ShellInterpreterSchema),
+    toJSONSchema('ShellExecuteParams', ShellExecuteParamsSchema),
+    toJSONSchema('DangerProvider', DangerProviderSchema),
+    toJSONSchema('DangerCapability', DangerCapabilitySchema),
+    toJSONSchema('DangerAccessLease', DangerAccessLeaseSchema),
+    toJSONSchema('DangerRevokeReason', DangerRevokeReasonSchema),
     toJSONSchema('RuntimeError', RuntimeErrorSchema),
     toJSONSchema('RuntimeEvent', RuntimeEventSchema),
     ...Object.entries(CommandSchemaRegistry).flatMap(([method, entry]) => [

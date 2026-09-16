@@ -5,7 +5,7 @@ import type {
 } from '@reflexion-os-studio/runtime-client'
 import { Composer, type ComposerModelOption } from '../../components/Composer'
 import { SessionRow } from '../../components/SessionRow'
-import type { PermissionModeValue } from '../../hooks/usePermissionMode'
+import type { PermissionPreset } from '@reflexion-os-studio/runtime-client'
 
 interface LandingViewProps {
   /** 当前选中的项目；null 表示独立对话模式。 */
@@ -16,8 +16,8 @@ interface LandingViewProps {
   /** 选中项目时展示该项目下的历史会话。 */
   sessions: Session[]
   hasEnabledProvider: boolean
-  permissionValue: PermissionModeValue
-  onPermissionChange: (value: PermissionModeValue) => void
+  permissionValue: PermissionPreset
+  onPermissionChange: (value: PermissionPreset) => void
   modelOptions: ComposerModelOption[]
   selectedModelKey: string | null
   onModelChange: (key: string) => void

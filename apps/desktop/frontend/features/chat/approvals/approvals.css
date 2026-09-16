@@ -1,0 +1,441 @@
+/* 权限模型 V2 审批 UI（features/chat/approvals/）。
+   风险视觉四级：normal 中性、warning 黄、elevated 橙、danger-confirm 红（对话框）。
+   颜色只是辅助，文案与图标始终在场（无障碍红线）。 */
+
+.approval-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.approval-card {
+  --elevated-text: #fb923c;
+  position: relative;
+  margin: 0 12px 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  outline: none;
+}
+.approval-card:focus-visible {
+  box-shadow: 0 0 0 2px var(--bg-active);
+}
+.approval-card.risk-warning {
+  border-color: rgba(251, 191, 36, 0.5);
+  background:
+    linear-gradient(var(--warning-bg), var(--warning-bg)), var(--bg-elevated);
+}
+.approval-card.risk-elevated {
+  border-color: rgba(251, 146, 60, 0.55);
+}
+
+.approval-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.approval-risk-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+.approval-risk-icon.risk-warning,
+.approval-risk-icon.risk-elevated {
+  color: var(--elevated-text);
+}
+.approval-risk-icon.risk-normal {
+  color: var(--text-muted);
+}
+.approval-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+.approval-risk-label {
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.approval-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.approval-subject {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+.approval-command,
+.approval-path {
+  flex: 1;
+  min-width: 0;
+  display: block;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 120px;
+  overflow: auto;
+}
+.approval-copy {
+  flex: none;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.approval-copy:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.approval-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.approval-chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  background: var(--bg-inset);
+}
+.approval-chip.chip-elevated {
+  border-color: rgba(251, 146, 60, 0.6);
+  color: var(--elevated-text);
+}
+.approval-chip.chip-warning {
+  border-color: rgba(251, 191, 36, 0.5);
+  color: var(--warning-text);
+}
+
+.approval-rule-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  border-left: 2px solid var(--border);
+  padding-left: 8px;
+}
+
+.approval-details-toggle {
+  align-self: flex-start;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 0;
+}
+.approval-details-toggle:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+.approval-detail-list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+}
+.approval-detail-item {
+  display: flex;
+  gap: 8px;
+}
+.approval-detail-item dt {
+  color: var(--text-muted);
+  flex: none;
+}
+.approval-detail-item dd {
+  margin: 0;
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+.approval-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.approval-actions button {
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.approval-actions button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.approval-actions button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.approval-actions button.primary {
+  background: var(--bg-active);
+  border-color: var(--text-muted);
+  color: var(--text);
+  font-weight: 600;
+}
+.approval-actions button.primary:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.approval-session-menu {
+  position: relative;
+}
+.approval-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  min-width: 240px;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
+  z-index: 30;
+}
+.approval-menu-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+}
+.approval-menu-item:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.approval-menu-item:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.approval-menu-item .menu-description {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: normal;
+}
+
+.approval-queue-rest {
+  margin: 0 12px;
+}
+.approval-queue-toggle {
+  font-size: 11px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.approval-queue-toggle:hover {
+  color: var(--text);
+}
+.approval-queue-summary {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 6px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  border: 1px dashed var(--border-subtle);
+  border-radius: 8px;
+  max-height: 140px;
+  overflow: auto;
+}
+.approval-queue-summary li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.queue-risk.risk-warning,
+.queue-risk.risk-elevated {
+  color: var(--elevated-text);
+}
+.queue-subject {
+  font-family: var(--mono, ui-monospace, monospace);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Danger 常驻状态条 */
+.danger-lease-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 12px 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--danger);
+  background: rgba(248, 113, 113, 0.14);
+  color: var(--text);
+  font-size: 12px;
+}
+.danger-lease-banner .danger-icon {
+  color: var(--danger);
+  font-size: 14px;
+}
+.danger-lease-banner .danger-text {
+  flex: 1;
+  min-width: 0;
+}
+.danger-lease-banner .danger-sub {
+  display: block;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.danger-disable {
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--danger);
+  background: transparent;
+  color: var(--danger);
+  cursor: pointer;
+}
+.danger-disable:hover {
+  background: rgba(248, 113, 113, 0.18);
+}
+
+/* Danger 两段确认对话框 */
+.danger-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 55%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.danger-dialog {
+  width: min(520px, calc(100vw - 48px));
+  max-height: calc(100vh - 96px);
+  overflow: auto;
+  border: 1px solid var(--danger);
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  padding: 18px 20px;
+  box-shadow: 0 24px 64px rgb(0 0 0 / 50%);
+}
+.danger-dialog-title {
+  margin: 0 0 12px;
+  font-size: 15px;
+  color: var(--danger);
+}
+.danger-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.danger-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.danger-warning {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(248, 113, 113, 0.1);
+  color: var(--text);
+  font-size: 12px;
+}
+.danger-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+.danger-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+.danger-actions .ghost {
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.danger-continue,
+.danger-enable {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--danger);
+  background: rgba(248, 113, 113, 0.22);
+  color: var(--danger);
+  cursor: pointer;
+}
+.danger-continue:hover:not(:disabled),
+.danger-enable:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.32);
+}
+.danger-continue:disabled,
+.danger-enable:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* 窄窗口：按钮纵向堆叠，主体保持内部滚动 */
+@media (max-width: 520px) {
+  .approval-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  .approval-actions button {
+    width: 100%;
+  }
+  .approval-session-menu,
+  .approval-session-menu .ghost {
+    width: 100%;
+  }
+  .approval-menu {
+    left: 0;
+    right: auto;
+    min-width: min(240px, 90vw);
+  }
+}

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type {
   AgentSettings,
   ChatCommand,
+  DangerCapability,
   Session,
 } from '@reflexion-os-studio/contracts'
 import { RunEventEmitter, type EventNotifier } from '../events.js'
@@ -12,13 +13,56 @@ import type { McpManager } from '../mcp/manager.js'
 import { ContextBuilder } from './context.js'
 import { CommandError } from './errors.js'
 import { createPendingAssistantMessage, RunLauncher } from './launcher.js'
-import { ApprovalGateway } from './permissions.js'
+import {
+  ApprovalGateway,
+  DangerLeaseService,
+  DEFAULT_PRESET,
+  resolveInputPreset,
+} from './permissions/index.js'
 import { resolveProvider, resolveSampling } from './provider-resolver.js'
 import { QueueService } from './queue.js'
 import { RunRunner } from './runner.js'
 import { deriveSessionTitle } from './title.js'
 
 export { CommandError, ChildLimitError } from './errors.js'
+export { DEFAULT_PRESET } from './permissions/index.js'
+
+/**
+ * W5 Danger capability 探测（fail-closed）：只有"保留敏感读/写 deny 的 Danger
+ * 档位已在该平台真机证明"才支持。当前：macOS Seatbelt（real_machine_tests 已验）
+ * 支持；Linux bwrap 的 danger 渲染已实现并金样钉住，但真机验收未完成 → 保持
+ * 关闭（Rust 侧 supports_access 同步为 false，双层兜底）；Windows 无可验证的
+ * 凭据拒读机制（受限令牌只收紧写边界）→ 永久 fail-closed，直至 guard spike
+ * 通过。危险能力"三平台完成"以各平台真机证据为准，不以代码存在为准。
+ */
+function dangerCapability(
+  system: SystemRuntimeClient | null,
+): DangerCapability {
+  const provider = system?.sandboxName ?? null
+  if (provider === 'seatbelt') {
+    return {
+      supported: true,
+      provider: 'seatbelt',
+      detail:
+        'macOS Seatbelt danger profile：非敏感系统读写放开、敏感路径读写 deny 保留（真机已验证）',
+    }
+  }
+  if (provider === 'bwrap') {
+    return {
+      supported: false,
+      provider: null,
+      detail:
+        'Linux bwrap danger 档已实现并经单测钉住，待 Linux 真机验收后启用（当前构建不可启用）',
+    }
+  }
+  const suffix = provider ? `（当前沙箱 provider：${provider}）` : ''
+  return {
+    supported: false,
+    provider: null,
+    detail:
+      '当前平台缺少可验证的 credential-guard 危险档边界，拒绝启用' + suffix,
+  }
+}
 
 /**
  * Agent 门面：对外保持 message.send / run.cancel / run.retry / approval.resolve 的命令契约，
@@ -26,8 +70,10 @@ export { CommandError, ChildLimitError } from './errors.js'
  * RunRunner（工具循环编排+审批）、QueueService（发送队列）与 delegation（子 Agent 委派）。
  */
 export class ChatAgent {
-  /** 审批网关跨 Run 共享（pending 以 toolCallId 为键；会话级授权存内存）。 */
+  /** 审批网关跨 Run 共享（pending 以 toolCallId 为键；会话规则存内存）。 */
   readonly approvals = new ApprovalGateway()
+  /** Danger 高级能力租约：Runtime 是唯一真源，内存态、会话绑定。 */
+  readonly danger: DangerLeaseService
   private readonly contextBuilder: ContextBuilder
   private readonly runner: RunRunner
   private readonly queues: QueueService
@@ -39,6 +85,9 @@ export class ChatAgent {
     private readonly system: SystemRuntimeClient | null,
     private readonly mcp: McpManager | null = null,
   ) {
+    this.danger = new DangerLeaseService(notifier, () =>
+      dangerCapability(this.system),
+    )
     this.contextBuilder = new ContextBuilder(store)
     this.runner = new RunRunner(store)
     this.queues = new QueueService(notifier)
@@ -50,6 +99,7 @@ export class ChatAgent {
         runner: this.runner,
         contextBuilder: this.contextBuilder,
         approvals: this.approvals,
+        danger: this.danger,
       },
       {
         onRunSettled: (sessionId) => this.pumpQueue(sessionId),
@@ -102,8 +152,8 @@ export class ChatAgent {
       model: params.model,
       temperature: params.temperature,
       maxTokens: params.maxTokens,
-      permissionMode: params.permissionMode,
-      trusted: params.trusted,
+      // 入队即固化解析后的档位快照（legacy 字段不再入队）。
+      permissionPreset: resolveInputPreset(params),
       skillId: params.skillId,
     }
     const entry = this.queues.enqueue(params.sessionId, rest)
@@ -250,8 +300,7 @@ export class ChatAgent {
       apiKey,
       model,
       sampling,
-      permissionMode: params.permissionMode,
-      trusted: params.trusted,
+      permissionPreset: resolveInputPreset(params),
       skill,
       assistantMessage,
       emitter,
@@ -315,9 +364,9 @@ export class ChatAgent {
       apiKey,
       model,
       sampling: resolveSampling(profile, {}),
-      permissionMode: undefined,
-      // 重试不继承信任开关：与 permissionMode 同口径，按默认审批模式重跑。
-      trusted: undefined,
+      // 重试不继承高权限档：回落默认预设（workspace-read）重跑；
+      // 会话级 ask-everything 覆盖项仍生效（只会更严，不构成提权）。
+      permissionPreset: DEFAULT_PRESET,
       skill:
         original.skillId === null ? null : builtinSkills.get(original.skillId),
       assistantMessage,

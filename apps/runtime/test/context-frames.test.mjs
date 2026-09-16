@@ -11,7 +11,10 @@ import {
   ToolRegistry,
   validateModelMessages,
 } from '@reflexion-os-studio/agent-core'
-import { ApprovalGateway, PermissionGate } from '../dist/agent/permissions.js'
+import {
+  ApprovalGateway,
+  PermissionGate,
+} from '../dist/agent/permissions/index.js'
 import {
   framesToValidatedMessages,
   reconstructSessionFrames,
@@ -190,7 +193,12 @@ test('corrupted canonical data fails the run as internal before any provider req
       },
       registry: new ToolRegistry(),
       workspaceRoot: null,
-      gate: new PermissionGate('workspace', false),
+      gate: new PermissionGate({
+        preset: 'workspace-write',
+        hasWorkspace: false,
+        approvalOverride: 'default',
+        dangerActive: () => false,
+      }),
       approvals: new ApprovalGateway(),
       settings: { maxTurns: 2 },
       controller: new AbortController(),

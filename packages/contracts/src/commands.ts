@@ -23,7 +23,13 @@ import {
   AgentDefinitionSchema,
   DelegationSchema,
   TerminalSchema,
+  PermissionPresetSchema,
+  ApprovalOverrideSchema,
 } from './entities.js'
+import {
+  DangerAccessLeaseSchema,
+  DangerCapabilitySchema,
+} from './permissions.js'
 import { RuntimeStatusSchema } from './handshake.js'
 
 export const RequestIdSchema = z.string().min(1)
@@ -39,21 +45,27 @@ export const MessageSendParamsSchema = z.object({
   // 本次回复的模型采样参数；缺省用 Provider 配置的默认值。
   temperature: z.number().min(0).max(2).optional(),
   maxTokens: z.number().int().positive().optional(),
-  // 本次会话执行的工具权限 Profile；缺省 workspace。
+  // 本次发送的权限预设快照；缺省 workspace-read（保守回落，不静默扩大写权限）。
+  permissionPreset: PermissionPresetSchema.optional(),
+  // @deprecated 兼容一个协议版本：legacy `permissionMode`/`trusted` 双轨。
+  // 新前端不再发送；Runtime 按下表映射（workspace/read-only→workspace-read、
+  // trusted=true→workspace-full），冲突时新字段优先。下一协议版本删除。
   permissionMode: z.enum(['workspace', 'read-only']).optional(),
-  // 会话信任开关：true 时本次发送的 Run 对文件写入与 Shell 自动放行（不弹审批）。
-  // 仅在 workspace Profile 且有工作区时生效；read-only 优先于 trusted。
   trusted: z.boolean().optional(),
   // 显式激活的 Skill；内容以 /<skillId> 开头时也可隐式激活（显式优先）。
   skillId: z.string().min(1).optional(),
 })
 export type ChatCommand = z.infer<typeof MessageSendParamsSchema>
 
+/**
+ * 审批裁决：只接受 toolCallId + choiceId。choiceId 必须属于当前 pending
+ * approval，Runtime 据此查服务端保存的真实 effect；旧的 decision + scope
+ * 不再作为权威输入。
+ */
 export const ApprovalResolveParamsSchema = z.object({
   requestId: RequestIdSchema,
   toolCallId: z.string().min(1),
-  decision: z.enum(['approved', 'denied']),
-  scope: z.enum(['once', 'session']),
+  choiceId: z.string().min(1),
 })
 export type ApprovalResolveCommand = z.infer<typeof ApprovalResolveParamsSchema>
 
@@ -342,6 +354,60 @@ export const CommandSchemaRegistry = {
     params: ApprovalResolveParamsSchema,
     // accepted=false 表示该调用不在等待审批（已解决/已取消）。
     result: z.object({ accepted: z.boolean() }),
+  },
+  // ---------- 权限模型 V2：高级审批覆盖项与 Danger 会话租约 ----------
+  // 覆盖项仅当前会话内存生效、不持久化；Runtime 是唯一真源。
+  'permission.approval_override.set': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      sessionId: z.string().min(1),
+      override: ApprovalOverrideSchema,
+    }),
+    result: z.object({ override: ApprovalOverrideSchema }),
+  },
+  'permission.approval_override.get': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      sessionId: z.string().min(1),
+    }),
+    result: z.object({ override: ApprovalOverrideSchema }),
+  },
+  // 两段式确认：prepare 签发单次消费的 challenge（≤60s、绑定 sessionId），
+  // enable 必须携带 acceptedRisk=true 且通过平台 capability 校验。
+  'danger.prepare': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      sessionId: z.string().min(1),
+    }),
+    result: z.object({
+      challengeId: z.string().min(1),
+      expiresAt: z.number().int().nonnegative(),
+      warning: z.string(),
+      capability: DangerCapabilitySchema,
+    }),
+  },
+  'danger.enable': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      challengeId: z.string().min(1),
+      acceptedRisk: z.literal(true),
+    }),
+    result: z.object({ lease: DangerAccessLeaseSchema }),
+  },
+  'danger.disable': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      sessionId: z.string().min(1),
+    }),
+    result: z.object({ disabled: z.boolean() }),
+  },
+  // 前端重挂/重载后与 Runtime 对齐 lease 状态（Runtime 是唯一真源）。
+  'danger.status': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      sessionId: z.string().min(1),
+    }),
+    result: z.object({ lease: DangerAccessLeaseSchema.nullable() }),
   },
   'provider.list': {
     params: z.object({ requestId: RequestIdSchema }),

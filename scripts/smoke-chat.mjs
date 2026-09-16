@@ -693,10 +693,14 @@ try {
     'approval.required',
   )
   check(
-    'approval.required carries summary',
+    'approval.required carries V2 payload (subject/risk/choices)',
     approvalRequired.operation === 'file.write' &&
       typeof approvalRequired.summary === 'string' &&
-      approvalRequired.summary.includes('output.txt'),
+      approvalRequired.summary.includes('output.txt') &&
+      approvalRequired.subject?.kind === 'workspace-path' &&
+      approvalRequired.subject?.path === 'output.txt' &&
+      Array.isArray(approvalRequired.choices) &&
+      approvalRequired.choices.some((choice) => choice.id === 'allow-once'),
     JSON.stringify(approvalRequired),
   )
   // 审批等待期间 Run 应为 awaiting_approval（会话忙碌）。
@@ -713,8 +717,7 @@ try {
   const resolved = await request(46, 'approval.resolve', {
     requestId: randomUUID(),
     toolCallId: approvalRequired.toolCallId,
-    decision: 'approved',
-    scope: 'once',
+    choiceId: 'allow-once',
   })
   check('approval.resolve accepted', resolved?.accepted === true)
   await waitForEvent(
@@ -744,8 +747,7 @@ try {
   const duplicateResolve = await request(47, 'approval.resolve', {
     requestId: randomUUID(),
     toolCallId: approvalRequired.toolCallId,
-    decision: 'denied',
-    scope: 'once',
+    choiceId: 'allow-once',
   })
   check(
     'duplicate approval.resolve is a no-op',

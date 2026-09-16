@@ -18,6 +18,7 @@ pnpm --filter @reflexion-os-studio/agent-core test
 pnpm --filter @reflexion-os-studio/runtime-client test
 pnpm --filter @reflexion-os-studio/runtime test
 pnpm --filter @reflexion-os-studio/desktop typecheck
+pnpm --filter @reflexion-os-studio/desktop test
 cargo test --manifest-path crates/Cargo.toml
 # cargo test 只链测试 harness，不保证产出可执行 bin；冒烟前显式构建。
 cargo build --manifest-path crates/Cargo.toml

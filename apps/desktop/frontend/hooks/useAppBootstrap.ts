@@ -44,6 +44,10 @@ interface AppBootstrapDeps {
   refreshProjectSessions: (projectId: string) => Promise<void>
   refreshDelegations: (sessionId: string) => Promise<void>
   setNotice: (notice: string | null) => void
+  /** danger.changed 事件转发（Danger 租约 UI 投影；App 持有状态）。 */
+  onDangerChanged: (
+    event: Extract<RuntimeEvent, { type: 'danger.changed' }>,
+  ) => void
 }
 
 /**
@@ -280,11 +284,21 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
               : {}),
             operation: event.operation,
             summary: event.summary,
+            // 权限模型 V2：Runtime 下发的主题/风险/上下文/可选动作原样保存，
+            // 前端只按协议渲染与回传 choiceId，不构造授权语义。
+            ...(event.subject !== undefined ? { subject: event.subject } : {}),
+            ...(event.risk !== undefined ? { risk: event.risk } : {}),
+            ...(event.context !== undefined ? { context: event.context } : {}),
+            ...(event.choices !== undefined ? { choices: event.choices } : {}),
           })
           return
         }
         if (event.type === 'approval.resolved') {
           approvals.onApprovalResolved(event.toolCallId)
+          return
+        }
+        if (event.type === 'danger.changed') {
+          deps.onDangerChanged(event)
           return
         }
         if (
@@ -375,7 +389,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     pendingApprovals: approvals.pendingApprovals,
     clearPendingApprovals: approvals.clearForRun,
     clearPendingApproval: approvals.onApprovalResolved,
-    restorePendingApproval: approvals.onApprovalRequired,
+    restorePendingApproval: approvals.restorePending,
     runningSessionIds: sessionTracking.runningSessionIds,
     completedSessionIds: sessionTracking.completedSessionIds,
     failedSessionIds: sessionTracking.failedSessionIds,

@@ -8,7 +8,10 @@ import { Store } from '../dist/store/index.js'
 import { RunEventEmitter } from '../dist/events.js'
 import { RunRunner } from '../dist/agent/runner.js'
 import { ToolRegistry } from '@reflexion-os-studio/agent-core'
-import { ApprovalGateway, PermissionGate } from '../dist/agent/permissions.js'
+import {
+  ApprovalGateway,
+  PermissionGate,
+} from '../dist/agent/permissions/index.js'
 
 function toolCallSse(id, name, index = 0) {
   return (
@@ -93,7 +96,12 @@ test('runner resets retry draft in order and restarts chunk sequence', async () 
       buildHistory: async () => [{ role: 'user', content: 'hello' }],
       registry: new ToolRegistry(),
       workspaceRoot: null,
-      gate: new PermissionGate('workspace', false),
+      gate: new PermissionGate({
+        preset: 'workspace-write',
+        hasWorkspace: false,
+        approvalOverride: 'default',
+        dangerActive: () => false,
+      }),
       approvals: new ApprovalGateway(),
       settings: { maxTurns: 1 },
       controller: new AbortController(),
@@ -189,7 +197,12 @@ test('tool budget rejects the whole batch and fails the run immediately', async 
       buildHistory: async () => [{ role: 'user', content: 'hello' }],
       registry,
       workspaceRoot: null,
-      gate: new PermissionGate('workspace', false),
+      gate: new PermissionGate({
+        preset: 'workspace-write',
+        hasWorkspace: false,
+        approvalOverride: 'default',
+        dangerActive: () => false,
+      }),
       approvals: new ApprovalGateway(),
       settings: { maxTurns: 3, maxToolCalls: 3 },
       controller: new AbortController(),

@@ -24,7 +24,7 @@
 
 use std::path::{Path, PathBuf};
 
-use super::{SandboxProvider, SandboxRequest};
+use super::{SandboxAccess, SandboxProvider, SandboxRequest};
 
 const FIXED_TMP: &str = "/tmp/reflexion-sandbox";
 
@@ -124,9 +124,16 @@ impl SandboxProvider for BwrapSandbox {
 /// 纯函数渲染（单测金样钉住；开发机不执行 bwrap；host 存在性事实经 BindFacts 注入）。
 /// 模块私有：BindFacts 是私有事实类型，公开签名会触发 private_interfaces。
 fn build_bwrap_args(request: &SandboxRequest, facts: &BindFacts) -> Vec<String> {
+    // danger 档（W5，Linux 真机验收前 supports_access=false 不会走到）：
+    // 根文件系统整体可写 + 敏感路径仍最后 tmpfs 遮蔽（挂载序保证遮蔽盖过 bind）。
+    let root_bind = if request.access == SandboxAccess::Danger {
+        "--bind"
+    } else {
+        "--ro-bind"
+    };
     let mut args: Vec<String> = vec![
         "bwrap".into(),
-        "--ro-bind".into(),
+        root_bind.into(),
         "/".into(),
         "/".into(),
         "--dev".into(),
@@ -183,6 +190,7 @@ fn build_bwrap_args(request: &SandboxRequest, facts: &BindFacts) -> Vec<String> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sandbox::SandboxAccess;
 
     const FULL_MASKS: &[&str] = &["/home/t/.ssh", "/home/t/.aws", "/home/t/.gnupg", "/data"];
 
@@ -192,6 +200,7 @@ mod tests {
             cwd: PathBuf::from("/w"),
             timeout_ms: 1000,
             allow_network,
+            access: SandboxAccess::WorkspaceWrite,
             writable_roots: vec![
                 PathBuf::from("/w"),
                 PathBuf::from("/tmp-x/reflexion-sandbox"),
@@ -315,6 +324,24 @@ mod tests {
         assert!(
             share_net > unshare_all,
             "--share-net must follow --unshare-all: {share_net} <= {unshare_all}"
+        );
+    }
+
+    #[test]
+    fn danger_tier_binds_root_writable_but_masks_still_win() {
+        // danger：根整体 --bind（可写）；敏感遮蔽仍排在所有 bind 之后（遮蔽优先）。
+        // 注：Linux 真机验收前 supports_access=false，此金样只钉渲染结构。
+        let mut req = request(false);
+        req.access = SandboxAccess::Danger;
+        let args = build_bwrap_args(&req, &facts(FULL_MASKS, true));
+        let flat = args.join("\u{1}");
+        assert!(flat.starts_with("bwrap\u{1}--bind\u{1}/\u{1}/"));
+        assert!(!flat.contains("--ro-bind"));
+        let last_bind = args.iter().rposition(|a| a == "--bind").unwrap();
+        let first_tmpfs = args.iter().position(|a| a == "--tmpfs").unwrap();
+        assert!(
+            first_tmpfs > last_bind,
+            "masks must mount after danger's broad root bind: {first_tmpfs} <= {last_bind}"
         );
     }
 

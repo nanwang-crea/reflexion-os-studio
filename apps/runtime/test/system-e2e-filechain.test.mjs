@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -8,6 +14,7 @@ import {
   resolveSystemRuntimeBinary,
 } from '../dist/system.js'
 import { Store } from '../dist/store/index.js'
+import { canonicalDigest } from '../dist/agent/permissions/index.js'
 import { dispatchCommand } from '../dist/handlers.js'
 
 /**
@@ -26,14 +33,18 @@ import { dispatchCommand } from '../dist/handlers.js'
 
 const BINARY = resolveSystemRuntimeBinary()
 
-function makeGrant(workspaceRoot, operation) {
+function makeGrant(workspaceRoot, operation, path) {
   return JSON.stringify({
+    version: 2,
     grantId: `grant-${operation}`,
     requestId: 'req-e2e-filechain',
     sessionId: 'sess-e2e-filechain',
     workspaceId: workspaceRoot,
     operation,
-    scope: 'session',
+    source: 'session-rule',
+    subjectDigest: canonicalDigest(operation, [path]),
+    sandbox: 'workspace-write',
+    sandboxNetwork: false,
     expiresAt: Date.now() + 60_000,
   })
 }
@@ -82,7 +93,7 @@ test(
         oldText: 'world',
         newText: 'world!',
         revision: read.revision,
-        grant: makeGrant(workspace, 'file.edit'),
+        grant: makeGrant(workspace, 'file.edit', 'note.txt'),
       })
       assert.equal(edit.replacedCount, 1)
       assert.ok(edit.revision)
@@ -94,7 +105,7 @@ test(
         path: 'note.txt',
         content: 'hello\nworld!\nmore\n',
         revision: edit.revision,
-        grant: makeGrant(workspace, 'file.write'),
+        grant: makeGrant(workspace, 'file.write', 'note.txt'),
       })
       assert.ok(write.revision)
       assert.equal(readFileSync(target, 'utf8'), 'hello\nworld!\nmore\n')
@@ -106,10 +117,39 @@ test(
           path: 'note.txt',
           content: 'stale\n',
           revision: read.revision, // 首次读取的凭据，文件此后已被 edit+write 改变
-          grant: makeGrant(workspace, 'file.write'),
+          grant: makeGrant(workspace, 'file.write', 'note.txt'),
         }),
         /changed since last read/,
       )
+    } finally {
+      await client.shutdown()
+      rmSync(workspace, { recursive: true, force: true })
+    }
+  },
+)
+
+test(
+  'grant issued for another path cannot authorize this write (approval_subject_mismatch)',
+  { skip: BINARY === null },
+  async () => {
+    const workspace = mkdtempSync(join(tmpdir(), 'reflexion-digest-'))
+    const client = new SystemRuntimeClient(BINARY, [], () => {})
+    client.start()
+    try {
+      await waitReady(client)
+      await assert.rejects(
+        client.request('file.write', {
+          workspaceRoot: workspace,
+          path: 'a.txt',
+          content: 'sneak\n',
+          // 凭据绑定 b.txt：换目标文件必须被 Rust 复核拒绝。
+          grant: makeGrant(workspace, 'file.write', 'b.txt'),
+        }),
+        (error) =>
+          error.code === 'approval_subject_mismatch' ||
+          String(error.message).includes('actual resource'),
+      )
+      assert.equal(existsSync(join(workspace, 'a.txt')), false)
     } finally {
       await client.shutdown()
       rmSync(workspace, { recursive: true, force: true })
@@ -136,7 +176,7 @@ test(
           workspaceRoot: workspace,
           path: 'doc.txt',
           content: 'blind\n',
-          grant: makeGrant(workspace, 'file.write'),
+          grant: makeGrant(workspace, 'file.write', 'doc.txt'),
         }),
         /refusing to overwrite existing file/,
       )
@@ -156,17 +196,29 @@ test(
         path: 'doc.txt',
         content: 'one\ntwo!\n',
         revision: fresh.revision,
-        grant: makeGrant(workspace, 'file.write'),
+        grant: makeGrant(workspace, 'file.write', 'doc.txt'),
       })
       assert.ok(write.revision)
       assert.equal(readFileSync(target, 'utf8'), 'one\ntwo!\n')
+
+      // digest 绑定实际资源：批准 doc.txt 的凭据写 fresh.txt 必须被拒
+      // （session 授权复用换 target 的兜底硬边界）。
+      await assert.rejects(
+        client.request('file.write', {
+          workspaceRoot: workspace,
+          path: 'fresh.txt',
+          content: 'wrong target\n',
+          grant: makeGrant(workspace, 'file.write', 'doc.txt'),
+        }),
+        /approval grant does not match the actual resource/,
+      )
 
       // 新建文件豁免先读约束：无凭据直接写入成功（新建信息经 changedFiles.action 传达）。
       const created = await client.request('file.write', {
         workspaceRoot: workspace,
         path: 'fresh.txt',
         content: 'brand new\n',
-        grant: makeGrant(workspace, 'file.write'),
+        grant: makeGrant(workspace, 'file.write', 'fresh.txt'),
       })
       assert.equal(created.changedFiles[0].action, 'created')
       assert.ok(created.revision)

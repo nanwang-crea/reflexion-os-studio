@@ -1077,50 +1077,6 @@
 }
 
 /* ---------- 工具审批卡 ---------- */
-.approval-card {
-  margin-bottom: 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  padding: 12px 14px;
-  background: var(--bg-elevated);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.approval-title {
-  color: var(--text);
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-}
-
-.approval-summary {
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 600;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: var(--bg-inset);
-  color: var(--text-secondary);
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-  /* 命令/路径可能很长：限高 5 行内部上下滚动
-     (5.45em = 13px × 行高 1.4 × 5 行)。 */
-  line-height: 1.4;
-  max-height: 7em;
-  overflow-y: auto;
-}
-
-.approval-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.approval-actions .danger {
-  color: var(--danger);
-}
-
 .assistant-usage {
   margin-top: 4px;
   font-size: 12px;
@@ -1458,4 +1414,89 @@
   color: var(--danger, #f87171);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* Composer 高级权限入口（ask-everything / Danger） */
+.composer-advanced {
+  position: relative;
+  display: inline-flex;
+}
+.composer-advanced-trigger {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.composer-advanced-trigger:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.composer-advanced-trigger.danger-on {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.composer-advanced-panel {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
+  z-index: 40;
+}
+.advanced-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  padding: 4px 2px;
+}
+.advanced-row input {
+  margin-top: 2px;
+}
+.advanced-row small,
+.advanced-danger small {
+  display: block;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+.advanced-sep {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 6px 0;
+}
+.advanced-danger {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--danger);
+  padding: 8px 10px;
+  border: 1px solid rgba(248, 113, 113, 0.5);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+.advanced-danger:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.12);
+}
+.advanced-danger:disabled {
+  opacity: 0.7;
+  cursor: default;
 }

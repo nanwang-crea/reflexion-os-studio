@@ -45,6 +45,17 @@ export type {
   RunEventType,
   Terminal,
   TerminalStatus,
+  // 权限模型 V2（前端审批卡/下拉/Danger UI 的唯一类型来源）
+  ApprovalChoice,
+  ApprovalContextView,
+  ApprovalOverride,
+  ApprovalRisk,
+  ApprovalSubject,
+  DangerAccessLease,
+  DangerCapability,
+  PermissionPreset,
+  SandboxPolicy,
+  ShellInterpreter,
 } from '@reflexion-os-studio/contracts'
 
 export {

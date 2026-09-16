@@ -27,7 +27,7 @@ import {
   estimateTextTokens,
 } from '../dist/agent/instructions/render.js'
 import { commandHandlers } from '../dist/handlers.js'
-import { PermissionGate } from '../dist/agent/permissions.js'
+import { PermissionGate } from '../dist/agent/permissions/index.js'
 import { PRIMARY_AGENT_SYSTEM_PROMPT } from '../dist/agent/prompts/index.js'
 import { createMemoryRememberTool } from '../dist/agent/tools/instructions.js'
 import { createToolRegistry } from '../dist/agent/tools/index.js'
@@ -501,8 +501,20 @@ test('不可读的 MEMORY.md：getInstruction 抛错、remember 折叠 io_error'
 test('接线：instructions 命令有 handler、remember 工具免审批、prompt 有约定', () => {
   assert.ok(commandHandlers['instructions.get'])
   assert.ok(commandHandlers['instructions.save'])
-  const gate = new PermissionGate('workspace', false)
-  assert.equal(gate.decisionFor('memory.remember'), 'automatic')
+  const gate = new PermissionGate({
+    preset: 'workspace-read',
+    hasWorkspace: false,
+    approvalOverride: 'default',
+    dangerActive: () => false,
+  })
+  assert.equal(
+    gate.decisionFor({
+      toolName: 'memory.remember',
+      subject: { kind: 'operation', operation: 'memory.remember' },
+      escalation: false,
+    }),
+    'automatic',
+  )
   assert.ok(PRIMARY_AGENT_SYSTEM_PROMPT.includes('memory.remember'))
 })
 
@@ -649,6 +661,8 @@ test('project.delete handler: 行删除成功后项目记忆目录随清', async
   const ctx = {
     store,
     agent: { clearQueue: () => {} },
+    approvals: { clearSession: () => {} },
+    danger: { revoke: () => false },
     assets: { deleteProjectDir: async () => {} },
     terminal: { closeProject: async () => {} },
   }

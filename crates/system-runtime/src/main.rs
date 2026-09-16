@@ -99,16 +99,22 @@ fn handle_request(request: &Value) -> (Value, bool) {
 
 #[cfg(test)]
 mod tests {
-    use crate::grant::require_grant;
+    use crate::grant::{canonical_digest, require_grant};
     use serde_json::json;
 
     fn grant(workspace: &str, operation: &str, expires_at: u64) -> String {
         json!({
-            "grantId": "grant-1", "requestId": "request-1", "sessionId": "session-1",
-            "workspaceId": workspace, "operation": operation, "scope": "once",
+            "version": 2, "grantId": "grant-1", "requestId": "request-1", "sessionId": "session-1",
+            "workspaceId": workspace, "operation": operation, "source": "once",
+            "subjectDigest": canonical_digest(operation, &["note.txt"]),
+            "sandbox": "workspace-write", "sandboxNetwork": false,
             "expiresAt": expires_at,
         })
         .to_string()
+    }
+
+    fn parts() -> Vec<String> {
+        vec!["note.txt".to_string()]
     }
 
     #[test]
@@ -121,14 +127,16 @@ mod tests {
         assert!(require_grant(
             &grant("/workspace", "file.write", future),
             "/workspace",
-            "file.write"
+            "file.write",
+            &parts(),
         )
         .is_ok());
         assert_eq!(
             require_grant(
                 &grant("/other", "file.write", future),
                 "/workspace",
-                "file.write"
+                "file.write",
+                &parts(),
             )
             .unwrap_err()
             .code,
@@ -138,7 +146,8 @@ mod tests {
             require_grant(
                 &grant("/workspace", "shell.execute", future),
                 "/workspace",
-                "file.write"
+                "file.write",
+                &parts(),
             )
             .unwrap_err()
             .code,
@@ -148,25 +157,49 @@ mod tests {
             require_grant(
                 &grant("/workspace", "file.write", 0),
                 "/workspace",
-                "file.write"
+                "file.write",
+                &parts(),
             )
             .unwrap_err()
             .code,
             "grant_expired"
+        );
+        // digest 与实际资源不符：即使其余绑定全部正确也拒绝（approval_subject_mismatch）。
+        assert_eq!(
+            require_grant(
+                &grant("/workspace", "file.write", future),
+                "/workspace",
+                "file.write",
+                &["other.txt".to_string()],
+            )
+            .unwrap_err()
+            .code,
+            "approval_subject_mismatch"
         );
     }
 
     #[test]
     fn rejects_malformed_and_incomplete_grants() {
         assert_eq!(
-            require_grant("grant-1", "/workspace", "file.write")
+            require_grant("grant-1", "/workspace", "file.write", &parts())
                 .unwrap_err()
                 .code,
             "invalid_grant"
         );
-        let value = json!({ "grantId": "g", "requestId": "r", "sessionId": "", "workspaceId": "/workspace", "operation": "file.write", "scope": "once", "expiresAt": u64::MAX });
+        let value = json!({ "version": 2, "grantId": "g", "requestId": "r", "sessionId": "", "workspaceId": "/workspace",
+            "operation": "file.write", "source": "once", "subjectDigest": "sha256:abc", "sandbox": "workspace-write",
+            "sandboxNetwork": false, "expiresAt": u64::MAX });
         assert_eq!(
-            require_grant(&value.to_string(), "/workspace", "file.write")
+            require_grant(&value.to_string(), "/workspace", "file.write", &parts())
+                .unwrap_err()
+                .code,
+            "invalid_grant"
+        );
+        // 旧 V1 形状（scope 字段、无 version/digest）必须整体失效。
+        let legacy = json!({ "grantId": "g", "requestId": "r", "sessionId": "s", "workspaceId": "/workspace",
+            "operation": "file.write", "scope": "once", "expiresAt": u64::MAX });
+        assert_eq!(
+            require_grant(&legacy.to_string(), "/workspace", "file.write", &parts())
                 .unwrap_err()
                 .code,
             "invalid_grant"

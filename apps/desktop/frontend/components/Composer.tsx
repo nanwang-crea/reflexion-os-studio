@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { SkillManifest } from '@reflexion-os-studio/runtime-client'
-import type { PermissionModeValue } from '../hooks/usePermissionMode'
+import type {
+  ApprovalOverride,
+  PermissionPreset,
+} from '@reflexion-os-studio/runtime-client'
+import {
+  PERMISSION_PRESET_HINTS,
+  PERMISSION_PRESET_LABELS,
+} from '../hooks/usePermissionPreset'
 import { ChevronIcon, SendIcon, ShieldIcon, StopIcon } from '../ui/icons'
 
 export interface ComposerModelOption {
@@ -8,6 +15,15 @@ export interface ComposerModelOption {
   key: string
   label: string
   group: string
+}
+
+/** 高级权限入口的会话态（ask-everything 覆盖项 + Danger 租约）。 */
+export interface ComposerAdvancedState {
+  approvalOverride: ApprovalOverride
+  onApprovalOverrideChange: (value: ApprovalOverride) => void
+  /** Runtime 有活跃 Danger 租约（横幅在场时入口显示激活态）。 */
+  dangerActive: boolean
+  onOpenDanger: () => void
 }
 
 interface ComposerProps {
@@ -19,9 +35,11 @@ interface ComposerProps {
    */
   busy?: boolean
   autoFocus?: boolean
-  /** 权限模式（workspace / read-only / trusted），随发送生效。 */
-  permissionValue?: PermissionModeValue
-  onPermissionChange?: (value: PermissionModeValue) => void
+  /** 三档日常权限预设，随发送生效。 */
+  permissionValue?: PermissionPreset
+  onPermissionChange?: (value: PermissionPreset) => void
+  /** 高级入口（所有操作均询问 / Danger）；缺省不渲染。 */
+  advanced?: ComposerAdvancedState
   modelOptions?: ComposerModelOption[]
   selectedModelKey?: string | null
   onModelChange?: (key: string) => void
@@ -198,24 +216,35 @@ export function Composer(props: ComposerProps): React.JSX.Element {
         {props.permissionValue !== undefined && props.onPermissionChange && (
           <label
             className="composer-select permission"
-            title="工具权限模式：工作区读写（写/命令逐次审批）、只读、完全允许（写/命令自动放行；Shell 不受工作区限制；重启后回落工作区读写）"
+            title={
+              props.permissionValue !== undefined
+                ? PERMISSION_PRESET_HINTS[props.permissionValue]
+                : ''
+            }
           >
             <ShieldIcon />
             <select
               value={props.permissionValue}
               onChange={(event) =>
                 props.onPermissionChange?.(
-                  event.target.value as PermissionModeValue,
+                  event.target.value as PermissionPreset,
                 )
               }
             >
-              <option value="workspace">工作区读写</option>
-              <option value="read-only">只读</option>
-              <option value="trusted">完全允许</option>
+              <option value="workspace-read">
+                {PERMISSION_PRESET_LABELS['workspace-read']}
+              </option>
+              <option value="workspace-write">
+                {PERMISSION_PRESET_LABELS['workspace-write']}
+              </option>
+              <option value="workspace-full">
+                {PERMISSION_PRESET_LABELS['workspace-full']}
+              </option>
             </select>
             <ChevronIcon />
           </label>
         )}
+        {props.advanced && <AdvancedPermissionMenu advanced={props.advanced} />}
         <span className="bar-spacer" />
         {showModelSelect && (
           <label className="composer-select model" title="对话使用的模型">
@@ -261,6 +290,83 @@ export function Composer(props: ComposerProps): React.JSX.Element {
           </button>
         )}
       </div>
+    </div>
+  )
+}
+
+/** 高级入口：ask-everything 开关（仅当前会话）与 Danger 能力（两段确认在对话框内完成）。 */
+function AdvancedPermissionMenu({
+  advanced,
+}: {
+  advanced: ComposerAdvancedState
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (event: MouseEvent): void => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
+  return (
+    <div className="composer-advanced" ref={ref}>
+      <button
+        type="button"
+        className={`composer-advanced-trigger${advanced.dangerActive ? ' danger-on' : ''}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        高级
+      </button>
+      {open && (
+        <div className="composer-advanced-panel" role="menu">
+          <label className="advanced-row">
+            <input
+              type="checkbox"
+              checked={advanced.approvalOverride === 'ask-everything'}
+              onChange={(event) =>
+                advanced.onApprovalOverrideChange(
+                  event.target.checked ? 'ask-everything' : 'default',
+                )
+              }
+            />
+            <span>
+              所有操作均询问
+              <small>
+                本会话内读取/写入/删除/命令全部逐次确认（硬拒绝不变）
+              </small>
+            </span>
+          </label>
+          <div className="advanced-sep" />
+          <button
+            type="button"
+            role="menuitem"
+            className="advanced-danger"
+            disabled={advanced.dangerActive}
+            onClick={() => {
+              setOpen(false)
+              advanced.onOpenDanger()
+            }}
+          >
+            {advanced.dangerActive
+              ? '危险访问已启用（见状态条）'
+              : '危险：系统范围完全访问…'}
+            <small>
+              需两次明确确认；平台无凭据守卫时报错并拒绝启用（fail-closed）
+            </small>
+          </button>
+        </div>
+      )}
     </div>
   )
 }

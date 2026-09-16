@@ -76,7 +76,7 @@ Prompt → Text-to-Image → Review → Image-to-Video → Export
 
 ## 7. 安全边界
 
-工具/节点必须声明权限。TypeScript Policy Gateway 负责意图/风险分类、审批交互和一次/Session/Project 授权范围，但不是安全边界；它生成与 request、workspace、operation 和 TTL 绑定的授权上下文。Rust Enforcement 使用 deny-by-default 的严格 schema 校验 capability/approval token、实际路径、命令、cwd、环境和进程限制；不接受任意 `authorized: true`，任何缺失、过期、范围不符或参数改变都拒绝。商业许可（激活码）与账号登录是独立的商业边界，不属于本 enforcement 体系，见 `docs/AUTH-AND-LICENSING.md`。
+工具/节点必须声明权限。TypeScript Policy Gateway 负责意图/风险分类、审批交互和一次/Session/Project 授权范围，但不是安全边界；它生成与 request、workspace、operation、资源 subjectDigest 和 TTL 绑定的授权上下文（权限模型 V2 见 `docs/PERMISSION-MODEL.md`）。Rust Enforcement 使用 deny-by-default 的严格 schema 校验 capability/approval token、实际路径、命令、cwd、环境和进程限制，并按实际请求重算 subjectDigest 复核；不接受任意 `authorized: true`，任何缺失、过期、范围不符或参数改变都拒绝。商业许可（激活码）与账号登录是独立的商业边界，不属于本 enforcement 体系，见 `docs/AUTH-AND-LICENSING.md`。
 
 ## 8. 存储边界
 

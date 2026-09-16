@@ -15,10 +15,8 @@ export function sendMessage(input: {
   content: string
   providerId?: string
   model?: string
-  /** 工具权限 Profile；缺省 workspace（Runtime 侧默认）。 */
-  permissionMode?: 'workspace' | 'read-only'
-  /** 会话信任开关：true 时文件写入与 Shell 自动放行（不弹审批）。 */
-  trusted?: boolean
+  /** 本次发送的权限预设快照；缺省 workspace-read（Runtime 侧默认）。 */
+  permissionPreset?: 'workspace-read' | 'workspace-write' | 'workspace-full'
 }): Promise<SendMessageResult> {
   return request<SendMessageResult>('message.send', input)
 }
@@ -27,10 +25,10 @@ export function cancelRun(runId: string): Promise<{ accepted: boolean }> {
   return request<{ accepted: boolean }>('run.cancel', { runId })
 }
 
+/** 审批裁决：只回传 Runtime 下发的 choiceId（授权 effect 由服务端解析）。 */
 export function resolveApproval(input: {
   toolCallId: string
-  decision: 'approved' | 'denied'
-  scope: 'once' | 'session'
+  choiceId: string
 }): Promise<{ accepted: boolean }> {
   return request<{ accepted: boolean }>('approval.resolve', input)
 }

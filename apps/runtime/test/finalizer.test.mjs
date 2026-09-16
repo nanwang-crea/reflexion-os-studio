@@ -9,7 +9,10 @@ import { RunEventEmitter } from '../dist/events.js'
 import { RunRunner } from '../dist/agent/runner.js'
 import { RunFinalizer } from '../dist/agent/run-finalizer.js'
 import { ToolRegistry } from '@reflexion-os-studio/agent-core'
-import { ApprovalGateway, PermissionGate } from '../dist/agent/permissions.js'
+import {
+  ApprovalGateway,
+  PermissionGate,
+} from '../dist/agent/permissions/index.js'
 
 function freshStore() {
   return new Store(mkdtempSync(join(tmpdir(), 'reflexion-finalizer-')))
@@ -38,7 +41,12 @@ function baseInput(store, run, overrides = {}) {
     buildHistory: async () => [{ role: 'user', content: 'hello' }],
     registry: new ToolRegistry(),
     workspaceRoot: null,
-    gate: new PermissionGate('workspace', false),
+    gate: new PermissionGate({
+      preset: 'workspace-write',
+      hasWorkspace: false,
+      approvalOverride: 'default',
+      dangerActive: () => false,
+    }),
     approvals: new ApprovalGateway(),
     settings: { maxTurns: 4 },
     controller: overrides.controller ?? new AbortController(),

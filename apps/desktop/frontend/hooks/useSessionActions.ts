@@ -18,8 +18,8 @@ interface SessionActionsDeps {
   activeProjectId: string | null
   selectedModelKey: string | null
   sessionData: SessionData | null
-  /** 工具权限模式（workspace / read-only / trusted，随 message.send 传给 Runtime）。 */
-  permissionMode: string
+  /** 三档权限预设快照（随 message.send 传给 Runtime）。 */
+  permissionPreset: 'workspace-read' | 'workspace-write' | 'workspace-full'
   // 与渲染同步的 refs
   activeSessionRef: RefObject<string | null>
   activeProjectRef: RefObject<string | null>
@@ -173,10 +173,8 @@ export function useSessionActions(deps: SessionActionsDeps): {
       modelKey && separator > 0 ? modelKey.slice(0, separator) : undefined
     const model =
       modelKey && separator > 0 ? modelKey.slice(separator + 2) : undefined
-    const permissionMode =
-      deps.permissionMode === 'read-only' ? 'read-only' : undefined
-    // 完全允许档：workspace Profile 之上附加 trusted 标志（写/Shell 自动放行）。
-    const trusted = deps.permissionMode === 'trusted' ? true : undefined
+    // 队列/即时发送都携带档位快照（badge 与实际执行一致）。
+    const permissionPreset = deps.permissionPreset
     try {
       let sessionId = deps.activeSessionId
       if (!sessionId) {
@@ -187,8 +185,7 @@ export function useSessionActions(deps: SessionActionsDeps): {
           content,
           providerId,
           model,
-          permissionMode,
-          trusted,
+          permissionPreset,
         })
         sessionId = created.session.id
         deps.setActiveSessionId(sessionId)
@@ -198,8 +195,7 @@ export function useSessionActions(deps: SessionActionsDeps): {
           content,
           providerId,
           model,
-          permissionMode,
-          trusted,
+          permissionPreset,
         })
       }
       await deps.refreshSessionData(sessionId)
