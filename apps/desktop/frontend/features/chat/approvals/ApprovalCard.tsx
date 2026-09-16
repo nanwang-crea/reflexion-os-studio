@@ -9,6 +9,12 @@ import { ApprovalActions } from './ApprovalActions'
  * 单条普通审批卡（一个明确问题 + Runtime 认可的有限选择）。
  * 提交态由外部乐观摘卡驱动：onChoose 触发后本地禁用按钮防止重复点击，
  * 命令失败时上层恢复整条 PendingApproval（含 subject/choices）。
+ *
+ * 调用契约（见 ApprovalQueue）：必须以 approval.toolCallId 作为 React key。
+ * 换审批项即换组件实例，submitted 随旧实例卸载自然归零——这是提交态重置的
+ * 唯一机制，不得再用 effect 依赖 approval.toolCallId 补一层"双保险"：
+ * effect 在 paint 之后才跑，挡不住复用那一帧的 busy，也违反"禁止把重跑
+ * effect 当作状态同步手段"（AGENTS.md §11）。
  */
 export function ApprovalCard({
   approval,
@@ -25,12 +31,6 @@ export function ApprovalCard({
   const containerRef = useRef<HTMLDivElement | null>(null)
   const titleId = `approval-title-${approval.toolCallId}`
   const descId = `approval-desc-${approval.toolCallId}`
-
-  // 双保险：即便实例被复用（调用方未加 key），换审批项也立即清除提交态，
-  // 否则上一条的 busy 会把新队首的按钮全部禁用。
-  useEffect(() => {
-    setSubmitted(null)
-  }, [approval.toolCallId])
 
   useEffect(() => {
     if (focusable) containerRef.current?.focus()
