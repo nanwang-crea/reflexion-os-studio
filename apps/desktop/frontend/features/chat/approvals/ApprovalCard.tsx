@@ -26,6 +26,12 @@ export function ApprovalCard({
   const titleId = `approval-title-${approval.toolCallId}`
   const descId = `approval-desc-${approval.toolCallId}`
 
+  // 双保险：即便实例被复用（调用方未加 key），换审批项也立即清除提交态，
+  // 否则上一条的 busy 会把新队首的按钮全部禁用。
+  useEffect(() => {
+    setSubmitted(null)
+  }, [approval.toolCallId])
+
   useEffect(() => {
     if (focusable) containerRef.current?.focus()
   }, [focusable, approval.toolCallId])

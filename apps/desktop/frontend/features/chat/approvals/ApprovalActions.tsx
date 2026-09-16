@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
 import type { ApprovalChoice } from '@reflexion-os-studio/runtime-client'
 import type { ApprovalDisplay } from './approval-presenter'
 
 /**
  * 审批动作区：只渲染 Runtime 下发的 choices（label/description 原样展示），
- * 提交只回传 choiceId。存在会话级 choice 时收进"始终允许…"菜单——它是
- * 会话规则选择器（本会话内免问），不是跨会话永久授权。
+ * 提交只回传 choiceId。会话级 choice 直接平铺为按钮（一次点击即完成，
+ * 不再套下拉菜单）；其语义仍是"本会话内免问"，不是跨会话永久授权。
  */
 export function ApprovalActions({
   display,
@@ -17,8 +16,6 @@ export function ApprovalActions({
   busyLabel: string | null
   onChoose: (choiceId: string) => void
 }): React.JSX.Element {
-  const [menuOpen, setMenuOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement | null>(null)
   const sessionChoices = display.choices.filter(
     (choice) => choice.presentation === 'session-menu',
   )
@@ -27,25 +24,6 @@ export function ApprovalActions({
     (choice) => choice.presentation === 'primary',
   )
   const busy = busyLabel !== null
-
-  useEffect(() => {
-    if (!menuOpen) return
-    const onPointerDown = (event: MouseEvent): void => {
-      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false)
-    }
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') {
-        event.stopPropagation()
-        setMenuOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown, true)
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown, true)
-    }
-  }, [menuOpen])
 
   return (
     <div className="approval-actions">
@@ -59,35 +37,14 @@ export function ApprovalActions({
           {deny.label}
         </button>
       )}
-      {sessionChoices.length > 0 && (
-        <div className="approval-session-menu" ref={menuRef}>
-          <button
-            type="button"
-            className="ghost"
-            disabled={busy}
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((open) => !open)}
-          >
-            始终允许…
-          </button>
-          {menuOpen && (
-            <div className="approval-menu" role="menu">
-              {sessionChoices.map((choice) => (
-                <MenuChoice
-                  key={choice.id}
-                  choice={choice}
-                  disabled={busy}
-                  onChoose={(id) => {
-                    setMenuOpen(false)
-                    onChoose(id)
-                  }}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      {sessionChoices.map((choice) => (
+        <SessionChoiceButton
+          key={choice.id}
+          choice={choice}
+          disabled={busy}
+          onChoose={onChoose}
+        />
+      ))}
       {primaries.map((choice, index) => (
         <button
           key={choice.id}
@@ -108,7 +65,7 @@ export function ApprovalActions({
   )
 }
 
-function MenuChoice({
+function SessionChoiceButton({
   choice,
   disabled,
   onChoose,
@@ -120,15 +77,12 @@ function MenuChoice({
   return (
     <button
       type="button"
-      role="menuitem"
-      className="approval-menu-item"
+      className="ghost approval-session-choice"
+      title={choice.description}
       disabled={disabled}
       onClick={() => onChoose(choice.id)}
     >
-      <span className="menu-label">{choice.label}</span>
-      {choice.description && (
-        <span className="menu-description">{choice.description}</span>
-      )}
+      {choice.label}
     </button>
   )
 }

@@ -20,7 +20,13 @@ export function ApprovalQueue({
   const [head, ...rest] = approvals
   return (
     <div className="approval-queue">
-      <ApprovalCard approval={head} focusable onChoose={onChoose} />
+      <ApprovalCard
+        // 队首切换必须换组件实例：提交态（busy）残留会让下一张卡点不动。
+        key={head.toolCallId}
+        approval={head}
+        focusable
+        onChoose={onChoose}
+      />
       {rest.length > 0 && (
         <div className="approval-queue-rest">
           <button

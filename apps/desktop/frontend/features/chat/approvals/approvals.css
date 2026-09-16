@@ -199,50 +199,11 @@
   background: var(--bg-hover);
 }
 
-.approval-session-menu {
-  position: relative;
-}
-.approval-menu {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  right: 0;
-  min-width: 240px;
-  max-width: 320px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-elevated);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
-  z-index: 30;
-}
-.approval-menu-item {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  text-align: left;
-  padding: 8px 10px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-  font-size: 12px;
-}
-.approval-menu-item:hover:not(:disabled) {
-  background: var(--bg-hover);
-}
-.approval-menu-item:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-.approval-menu-item .menu-description {
-  font-size: 11px;
-  color: var(--text-muted);
-  white-space: normal;
+.approval-session-choice {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .approval-queue-rest {
@@ -429,13 +390,8 @@
   .approval-actions button {
     width: 100%;
   }
-  .approval-session-menu,
-  .approval-session-menu .ghost {
+  .approval-session-choice {
     width: 100%;
-  }
-  .approval-menu {
-    left: 0;
-    right: auto;
-    min-width: min(240px, 90vw);
+    max-width: none;
   }
 }
