@@ -163,6 +163,11 @@ export class PermissionGate {
       return 'denied'
     }
     let decision = POLICY[this.opts.preset][request.toolName]
+    // 工作区外访问必须显式提权审批（§6.1"工作区外=ask escalation"列）：
+    // 任何日常档位都不因 automatic 静默扩大沙箱（Danger 在前面已旁路）。
+    if (request.toolName === 'shell.execute' && request.escalation) {
+      if (decision === 'automatic') decision = 'ask'
+    }
     // ask-everything：automatic 升为 ask；denied（硬边界）不变。
     if (
       decision === 'automatic' &&

@@ -403,3 +403,47 @@ test('W6 网络收敛：批准 git fetch 联网不放行无关 curl；同前缀�
   approvals.resolveChoice(pending[4].toolCallId, 'deny')
   await again
 })
+
+test('workspace-full：工作区内的复合 Shell 免审批直跑（grant source=preset）', async () => {
+  const ctx = freshContext('workspace-full')
+  const { input, emitter } = ctx
+  const result = await executeToolCall(
+    { ...input, emitter },
+    shellRequest('call-f1', 'git status && echo done'),
+    new AbortController().signal,
+  )
+  assert.equal(result.isError, false)
+  assert.equal(
+    ctx.events.some((e) => e.type === 'approval.required'),
+    false,
+    '完全允许档工作区内命令（含组合形态）不弹卡',
+  )
+  const grant = JSON.parse(ctx.executed[0].grant)
+  assert.equal(grant.source, 'preset')
+  assert.equal(grant.sandbox, 'workspace-write')
+})
+
+test('workspace-full：require_escalated 仍需提权审批（不因完全允许静默出工作区）', async () => {
+  const ctx = freshContext('workspace-full')
+  const { approvals, input, emitter } = ctx
+  const command = 'cp out.log /Users/dev/notes/archive/run.log'
+  const pending = executeToolCall(
+    { ...input, emitter },
+    shellRequest('call-f2', command, {
+      sandbox_permissions: 'require_escalated',
+      justification: '归档运行日志到用户笔记目录',
+    }),
+    new AbortController().signal,
+  )
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  const required = ctx.events.find((e) => e.type === 'approval.required')
+  assert.ok(required, '提权命令在完全允许档也必须弹卡')
+  assert.equal(required.risk, 'elevated')
+  assert.equal(required.context.escalation, true)
+  approvals.resolveChoice(required.toolCallId, 'allow-once')
+  const result = await pending
+  assert.equal(result.isError, false)
+  const grant = JSON.parse(ctx.executed[0].grant)
+  assert.equal(grant.sandbox, 'escalated')
+  assert.deepEqual(grant.escalationRoots, ['/Users/dev/notes/archive/run.log'])
+})

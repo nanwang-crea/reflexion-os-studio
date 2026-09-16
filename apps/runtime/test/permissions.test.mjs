@@ -285,3 +285,35 @@ test('legacy 双轨兼容映射：新字段优先、trusted→full、缺省 work
   )
   assert.equal(resolveInputPreset({}), 'workspace-read')
 })
+
+test('工作区外提权不因 workspace-full / workspace-write 自动放行（§6.1 工作区外=ask escalation）', () => {
+  const full = makeGate('workspace-full').gate
+  assert.equal(
+    full.decisionFor({
+      toolName: 'shell.execute',
+      subject: shellSubject({ escalation: true }),
+      escalation: true,
+    }),
+    'ask',
+  )
+  const write = makeGate('workspace-write').gate
+  assert.equal(
+    write.decisionFor({
+      toolName: 'shell.execute',
+      subject: shellSubject({ escalation: true }),
+      escalation: true,
+    }),
+    'ask',
+  )
+  // Danger 租约是唯一能旁路此审批的档位（启用时已向用户声明）。
+  const danger = makeGate('workspace-read')
+  danger.setDanger(true)
+  assert.equal(
+    danger.gate.decisionFor({
+      toolName: 'shell.execute',
+      subject: shellSubject({ escalation: true }),
+      escalation: true,
+    }),
+    'automatic',
+  )
+})
