@@ -1,4 +1,4 @@
-import type { ProviderProfile } from '@reflexion-os-studio/runtime-client'
+import type { ApiFormat, ProviderProfile } from '@reflexion-os-studio/runtime-client'
 import { request, requestList } from './client'
 
 export function listProviders(): Promise<{
@@ -15,6 +15,8 @@ export interface ConfigureProviderPayload {
   /** 新明文 Key 只在此处出现一次；留空表示沿用已保存密钥。 */
   secret?: string
   secretRef?: string
+  /** API 协议格式；省略时编辑保留原值、新建为 'openai-chat'。 */
+  apiFormat?: ApiFormat
   temperature?: number | null
   maxTokens?: number | null
   /** 模型上下文窗口（token 数）；Runtime 据此动态计算上下文预算。 */
@@ -46,6 +48,7 @@ export function testProvider(input: {
   model: string
   secret?: string
   secretRef?: string
+  apiFormat?: ApiFormat
 }): Promise<ProviderTestResult> {
   return request<ProviderTestResult>('provider.test', input)
 }

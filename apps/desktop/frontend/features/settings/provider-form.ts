@@ -1,4 +1,4 @@
-import type { ProviderProfile } from '@reflexion-os-studio/runtime-client'
+import type { ApiFormat, ProviderProfile } from '@reflexion-os-studio/runtime-client'
 import {
   checkAbsoluteUrl,
   contractRangeHint,
@@ -23,6 +23,8 @@ export interface Draft {
   secret: string
   secretRef: string | null
   enabled: boolean
+  /** API 协议格式。 */
+  apiFormat: ApiFormat
   /** 采样参数；空串表示未配置（服务端默认）。 */
   temperature: string
   maxTokens: string
@@ -40,6 +42,7 @@ export const EMPTY_DRAFT: Draft = {
   secret: '',
   secretRef: null,
   enabled: true,
+  apiFormat: 'openai-chat',
   temperature: '',
   maxTokens: '',
   contextWindow: '',
@@ -55,6 +58,7 @@ export function draftFromProfile(profile: ProviderProfile): Draft {
     secret: '',
     secretRef: profile.secretRef,
     enabled: profile.enabled,
+    apiFormat: profile.apiFormat ?? 'openai-chat',
     temperature: profile.temperature == null ? '' : String(profile.temperature),
     maxTokens: profile.maxTokens == null ? '' : String(profile.maxTokens),
     contextWindow:
@@ -138,6 +142,7 @@ export function preflightProviderSave(
     secret: hasNewSecret ? draft.secret.trim() : undefined,
     secretRef,
     enabled: draft.enabled,
+    apiFormat: draft.apiFormat,
     temperature: parseNumber(draft.temperature, false),
     maxTokens: parseNumber(draft.maxTokens, true),
     contextWindow: parseNumber(draft.contextWindow, true),
@@ -188,6 +193,7 @@ export function preflightProviderToggle(
     models: cleanedModels,
     secretRef,
     enabled: nextEnabled,
+    apiFormat: profile.apiFormat,
   }
   const feedbacks = validateCommandParams('provider.configure', {
     requestId: 'preflight',
@@ -203,6 +209,7 @@ export function preflightProviderTest(draft: Draft): Preflight<{
   model: string
   secret?: string
   secretRef?: string
+  apiFormat?: ApiFormat
 }> {
   const model = draft.models.map((item) => item.trim()).find(Boolean)
   if (!draft.baseUrl.trim() || !model) {
@@ -218,6 +225,7 @@ export function preflightProviderTest(draft: Draft): Preflight<{
     model,
     secret: hasNewSecret ? draft.secret.trim() : undefined,
     secretRef: hasNewSecret ? undefined : normalizeSecretRef(draft.secretRef),
+    apiFormat: draft.apiFormat,
   }
   const feedbacks = validateCommandParams('provider.test', {
     requestId: 'preflight',

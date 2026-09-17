@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { ProviderProfile } from '@reflexion-os-studio/runtime-client'
+import type { ApiFormat, ProviderProfile } from '@reflexion-os-studio/runtime-client'
 import {
   configureProvider,
   deleteProvider,
@@ -235,10 +235,15 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
 
       <label className="field">
         API 格式
-        <select defaultValue="chat-completions">
-          <option value="chat-completions">
-            Chat Completions (/chat/completions)
-          </option>
+        <select
+          value={draft.apiFormat}
+          onChange={(event) =>
+            updateDraft({ apiFormat: event.target.value as ApiFormat })
+          }
+        >
+          <option value="openai-chat">OpenAI Chat Completions (/chat/completions)</option>
+          <option value="openai-responses">OpenAI Responses API (/v1/responses)</option>
+          <option value="anthropic">Anthropic Messages API (/v1/messages)</option>
         </select>
       </label>
 
