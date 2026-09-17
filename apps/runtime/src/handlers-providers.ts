@@ -1,6 +1,6 @@
-import type { ProviderCapability } from '@reflexion-os-studio/contracts'
+import type { ApiFormat, ProviderCapability } from '@reflexion-os-studio/contracts'
 import { CommandError } from './agent/errors.js'
-import { streamChatCompletion } from './provider.js'
+import { streamChat } from './provider.js'
 import { deleteSecret, loadSecret, saveSecret } from './secrets.js'
 import { requireString, type CommandHandler } from './command-utils.js'
 
@@ -46,6 +46,10 @@ export const providerCommandHandlers: Record<string, CommandHandler> = {
         : undefined,
       secretRef,
       enabled: p.enabled === undefined ? true : p.enabled === true,
+      apiFormat:
+        typeof p.apiFormat === 'string'
+          ? (p.apiFormat as ApiFormat)
+          : undefined,
       // Keep the three-state semantics: omitted=preserve, null=clear, value=set.
       temperature: p.temperature as number | null | undefined,
       maxTokens: p.maxTokens as number | null | undefined,
@@ -94,9 +98,13 @@ export async function testProviderConnection(
       '缺少 API Key：请填写或先保存配置',
     )
   }
+  const apiFormat =
+    typeof params.apiFormat === 'string'
+      ? (params.apiFormat as ApiFormat)
+      : undefined
   const startedAt = Date.now()
   try {
-    await streamChatCompletion(
+    await streamChat(
       {
         baseUrl,
         apiKey,
@@ -108,6 +116,7 @@ export async function testProviderConnection(
         maxRetries: 0,
         signal: new AbortController().signal,
       },
+      apiFormat,
       () => {},
     )
     return { ok: true, latencyMs: Date.now() - startedAt, model, error: null }

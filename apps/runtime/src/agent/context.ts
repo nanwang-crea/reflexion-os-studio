@@ -72,6 +72,8 @@ export interface ProviderRuntimeConfig {
   baseUrl: string
   apiKey: string
   model: string
+  /** API 协议格式；缺失时向后兼容为 'openai-chat'。 */
+  apiFormat?: 'openai-chat' | 'openai-responses' | 'anthropic'
   /** 缺省由服务端决定。 */
   temperature?: number
   maxTokens?: number

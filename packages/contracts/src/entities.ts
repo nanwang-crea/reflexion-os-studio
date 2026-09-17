@@ -360,6 +360,14 @@ export const ProviderCapabilitySchema = z.enum([
 ])
 export type ProviderCapability = z.infer<typeof ProviderCapabilitySchema>
 
+/** API 协议格式：决定请求/响应的序列化与流式解析方式。 */
+export const ApiFormatSchema = z.enum([
+  'openai-chat',
+  'openai-responses',
+  'anthropic',
+])
+export type ApiFormat = z.infer<typeof ApiFormatSchema>
+
 export const ProviderProfileSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -370,6 +378,8 @@ export const ProviderProfileSchema = z.object({
   capabilities: z.array(ProviderCapabilitySchema),
   secretRef: z.string().min(1),
   enabled: z.boolean(),
+  // API 协议格式；缺失时向后兼容为 'openai-chat'。
+  apiFormat: ApiFormatSchema.optional(),
   // 对话默认采样参数；null 表示未配置（沿用服务端默认）。
   temperature: z.number().min(0).max(2).nullable(),
   maxTokens: z.number().int().positive().nullable(),

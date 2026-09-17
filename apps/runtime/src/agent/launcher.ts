@@ -136,6 +136,7 @@ export class RunLauncher {
       baseUrl: profile.baseUrl,
       apiKey,
       model,
+      apiFormat: profile.apiFormat,
       ...sampling,
       ...(profile.contextWindow !== null
         ? { contextWindow: profile.contextWindow }

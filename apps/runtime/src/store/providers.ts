@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import {
   ProviderCapabilitySchema,
+  type ApiFormat,
   type ProviderCapability,
   type ProviderProfile,
 } from '@reflexion-os-studio/contracts'
@@ -42,6 +43,7 @@ export class ProviderStore {
     capabilities?: ProviderCapability[]
     secretRef: string
     enabled: boolean
+    apiFormat?: ApiFormat
     /** 省略=保留原值，null=清空回未配置。 */
     temperature?: number | null
     maxTokens?: number | null
@@ -56,6 +58,10 @@ export class ProviderStore {
         ? (this.get(id)?.capabilities ?? ['chat'])
         : ['chat']
     }
+    // apiFormat 省略时：编辑保留原值，新建缺省 'openai-chat'。
+    const apiFormat: ApiFormat =
+      input.apiFormat ??
+      (input.id ? (this.get(id)?.apiFormat ?? 'openai-chat') : 'openai-chat')
     // 采样参数：省略保留原值，null 清空为未配置，数字直接赋值。
     const existing = input.id ? this.get(id) : null
     const temperature =
@@ -77,8 +83,8 @@ export class ProviderStore {
     const updatedAt = nowIso()
     this.db
       .prepare(
-        `INSERT INTO provider_profiles (id, name, base_url, models, capabilities, secret_ref, enabled, temperature, max_tokens, context_window, context_budget, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO provider_profiles (id, name, base_url, models, capabilities, secret_ref, enabled, api_format, temperature, max_tokens, context_window, context_budget, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            base_url = excluded.base_url,
@@ -86,6 +92,7 @@ export class ProviderStore {
            capabilities = excluded.capabilities,
            secret_ref = excluded.secret_ref,
            enabled = excluded.enabled,
+           api_format = excluded.api_format,
            temperature = excluded.temperature,
            max_tokens = excluded.max_tokens,
            context_window = excluded.context_window,
@@ -100,6 +107,7 @@ export class ProviderStore {
         JSON.stringify(capabilities),
         input.secretRef,
         input.enabled ? 1 : 0,
+        apiFormat,
         temperature,
         maxTokens,
         contextWindow,
@@ -141,6 +149,7 @@ export class ProviderStore {
       capabilities: this.parseCapabilities(row.capabilities),
       secretRef: String(row.secret_ref),
       enabled: Number(row.enabled) === 1,
+      apiFormat: this.parseApiFormat(row.api_format),
       temperature: row.temperature == null ? null : Number(row.temperature),
       maxTokens: row.max_tokens == null ? null : Number(row.max_tokens),
       contextWindow:
@@ -161,5 +170,13 @@ export class ProviderStore {
       // 落入回退分支
     }
     return ['chat']
+  }
+
+  /** api_format 解析；异常/缺失数据回退为 'openai-chat'。 */
+  private parseApiFormat(value: unknown): ApiFormat {
+    const valid: ApiFormat[] = ['openai-chat', 'openai-responses', 'anthropic']
+    const raw = String(value ?? '')
+    if (valid.includes(raw as ApiFormat)) return raw as ApiFormat
+    return 'openai-chat'
   }
 }

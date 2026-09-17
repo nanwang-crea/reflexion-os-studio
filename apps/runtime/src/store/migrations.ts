@@ -341,6 +341,19 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
       db.exec('DROP TABLE IF EXISTS memories')
       db.exec('DROP TABLE IF EXISTS memory_jobs')
     }
+    // v24：provider_profiles 增加 api_format 列（API 协议格式）。
+    // 存量记录默认为 'openai-chat'，向后兼容。
+    if (version < 24) {
+      if (
+        !tableColumns(db, 'provider_profiles').some(
+          (column) => column.name === 'api_format',
+        )
+      ) {
+        db.exec(
+          "ALTER TABLE provider_profiles ADD COLUMN api_format TEXT NOT NULL DEFAULT 'openai-chat'",
+        )
+      }
+    }
     db.exec('COMMIT')
     // 迁移全部执行完毕才推进版本号；否则下次启动会重复进入迁移分支。
     version = LATEST_SCHEMA_VERSION

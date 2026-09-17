@@ -25,6 +25,7 @@ import {
   TerminalSchema,
   PermissionPresetSchema,
   ApprovalOverrideSchema,
+  ApiFormatSchema,
 } from './entities.js'
 import {
   DangerAccessLeaseSchema,
@@ -427,6 +428,8 @@ export const CommandSchemaRegistry = {
       secretRef: z.string().min(1).optional(),
       // 供应商能力类型；省略时编辑保留原值、新建为 ['chat']。
       capabilities: z.array(ProviderCapabilitySchema).optional(),
+      // API 协议格式；省略时编辑保留原值、新建为 'openai-chat'。
+      apiFormat: ApiFormatSchema.optional(),
       // 对话默认采样参数；省略=保留原值，null=清空回未配置。
       temperature: z.number().min(0).max(2).nullable().optional(),
       maxTokens: z.number().int().positive().nullable().optional(),
@@ -453,6 +456,8 @@ export const CommandSchemaRegistry = {
       // 测试请求的明文 Key 只在内存中使用一次，不落盘。
       secret: z.string().min(1).optional(),
       secretRef: z.string().min(1).optional(),
+      // API 协议格式；省略时默认 'openai-chat'。
+      apiFormat: ApiFormatSchema.optional(),
     }),
     result: z.object({
       ok: z.boolean(),

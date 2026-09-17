@@ -8,7 +8,7 @@ import {
 import type { Message, Run } from '@reflexion-os-studio/contracts'
 import { JsonValueSchema, type JsonValue } from '@reflexion-os-studio/contracts'
 import { RunEventEmitter } from '../events.js'
-import { ProviderError, streamChatCompletion } from '../provider.js'
+import { ProviderError, streamChat } from '../provider.js'
 import type { Store } from '../store/index.js'
 import { compactInRun, type ProviderRuntimeConfig } from './context.js'
 import { ChildLimitError } from './errors.js'
@@ -77,7 +77,7 @@ export async function executeModelTurn(
   }
 
   const bounded = await compactInRun(messages, provider, signal)
-  const result = await streamChatCompletion(
+  const result = await streamChat(
     {
       baseUrl: provider.baseUrl,
       apiKey: provider.apiKey,
@@ -124,6 +124,7 @@ export async function executeModelTurn(
       },
       signal,
     },
+    provider.apiFormat,
     (delta) => {
       draft.content += delta
       markStreaming()
