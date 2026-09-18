@@ -88,16 +88,14 @@ export async function streamOpenAIResponses(
     maxRetries: number
     reason: string
   }): Promise<void> => {
-    const waitMs = retryBackoffMs(attempt)
+    const waitMs = retryBackoffMs(input.attempt)
     options.onRetry?.({ ...input, waitMs })
     await sleep(waitMs, options.signal)
   }
 
   const canonicalToolNames = (options.tools ?? []).map((tool) => tool.name)
   const messageToolNames = options.messages.flatMap((msg) =>
-    msg.role === 'assistant'
-      ? msg.toolCalls.map((c) => c.name)
-      : [],
+    msg.role === 'assistant' ? msg.toolCalls.map((c) => c.name) : [],
   )
   const { canonicalToProvider, providerToCanonical } = buildToolNameMapping(
     canonicalToolNames,
@@ -204,8 +202,8 @@ export async function streamOpenAIResponses(
 
     let content = ''
     let reasoning = ''
-    let finishReason: 'stop' | 'length' | 'content_filter' | 'tool_calls' | null =
-      null
+    let finishReason:
+      'stop' | 'length' | 'content_filter' | 'tool_calls' | null = null
     let inputTokens = 0
     let outputTokens = 0
     let cachedTokens: number | undefined
@@ -304,8 +302,7 @@ export async function streamOpenAIResponses(
           const status = String(item.status ?? '')
           if (status === 'incomplete') {
             const incomplete = item.incomplete_details as
-              | Record<string, unknown>
-              | undefined
+              Record<string, unknown> | undefined
             const reason = String(incomplete?.reason ?? '')
             if (reason === 'max_output_tokens') {
               finishReason = 'length'

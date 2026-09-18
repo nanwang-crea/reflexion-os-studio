@@ -70,16 +70,14 @@ export async function streamOpenAIChat(
     maxRetries: number
     reason: string
   }): Promise<void> => {
-    const waitMs = retryBackoffMs(attempt)
+    const waitMs = retryBackoffMs(input.attempt)
     options.onRetry?.({ ...input, waitMs })
     await sleep(waitMs, options.signal)
   }
 
   const canonicalToolNames = (options.tools ?? []).map((tool) => tool.name)
   const messageToolNames = options.messages.flatMap((msg) =>
-    msg.role === 'assistant'
-      ? msg.toolCalls.map((c) => c.name)
-      : [],
+    msg.role === 'assistant' ? msg.toolCalls.map((c) => c.name) : [],
   )
   const { canonicalToProvider, providerToCanonical } = buildToolNameMapping(
     canonicalToolNames,
@@ -193,11 +191,15 @@ export async function streamOpenAIChat(
 
     let content = ''
     let reasoning = ''
-    let finishReason: 'stop' | 'length' | 'content_filter' | 'tool_calls' | null =
-      null
+    let finishReason:
+      'stop' | 'length' | 'content_filter' | 'tool_calls' | null = null
     let rawFinishReason: string | null | undefined
     let usage:
-      | { promptTokens: number; completionTokens: number; cachedPromptTokens?: number }
+      | {
+          promptTokens: number
+          completionTokens: number
+          cachedPromptTokens?: number
+        }
       | undefined
     const toolCallByIndex = new Map<number, StreamedToolCall>()
     const reader = response.body.getReader()

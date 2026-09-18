@@ -10,6 +10,7 @@ import { AssistantMessage } from './AssistantMessage'
 import { RunProcess, type ProcessItem } from './RunProcess'
 import { ChangedFiles } from './ChangedFiles'
 import { DelegationList } from './DelegationList'
+import { formatRetryLabel, useRetryCountdown } from './useRetryCountdown'
 
 interface RunBlockProps {
   processItems: ProcessItem[]
@@ -17,8 +18,6 @@ interface RunBlockProps {
   delegations: Delegation[]
   runActive: boolean
   runActivity?: RunActivity
-  /** 重试倒计时心跳：有活重试时按节拍自增，驱动回退行与内联倒计时重算剩余秒数。 */
-  retryTick: number
   streaming: Record<string, string>
   streamingReasoning: Record<string, string>
   runDurationMs: number | null
@@ -82,27 +81,12 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
   }, [props.runActive])
 
   // 活重试的倒计时：由事件携带的退避时长与本地起始时间戳换算剩余秒数。
-  // retryTick 只用于触发重算；归零后回落为“正在重试”，等下一次事件覆盖。
   // 倒计时随流内联在 AssistantMessage 正文断点处；顶部标签只表达阶段，
-  // 仅在无 finalItem 承载内联指示时（第 2 轮请求建立即重试）由回退行展示。
-  const retry = props.runActivity?.retry
-  const retryCountdown =
-    retry !== undefined &&
-    retry.waitMs !== undefined &&
-    retry.startedAt !== undefined
-      ? Math.max(
-          0,
-          Math.ceil((retry.waitMs - (Date.now() - retry.startedAt)) / 1000),
-        )
-      : null
-  const retryLabel =
-    retry === undefined
-      ? null
-      : retryCountdown !== null && retryCountdown > 0
-        ? `正在重试（第 ${retry.attempt}/${retry.maxRetries} 次）… ${retryCountdown} 秒后自动重试`
-        : retryCountdown !== null
-          ? '正在重试…'
-          : `正在重试（第 ${retry.attempt}/${retry.maxRetries} 次）…`
+  // 仅在无 finalItem 承载内联指示时（第 2 轮请求建立即重试）由本块回退行
+  // 展示并挂心跳（有 finalItem 时把 retry 置空，避免与子组件双计时）。
+  const retry = props.finalItem ? undefined : props.runActivity?.retry
+  const retryCountdown = useRetryCountdown(retry)
+  const retryLabel = formatRetryLabel(retry, retryCountdown)
   const label = props.runActive
     ? '正在处理…'
     : props.runFailed
@@ -157,7 +141,6 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
           hideReasoning={true}
           runActive={props.runActive}
           runActivity={props.runActivity}
-          retryTick={props.retryTick}
           streamingText={props.streaming[props.finalItem.message.id]}
           streamingReasoning={
             props.streamingReasoning[props.finalItem.message.id]

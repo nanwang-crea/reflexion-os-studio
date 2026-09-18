@@ -84,6 +84,7 @@ export function useStreamingCache(): {
   const applyReset = useCallback((messageId: string): void => {
     delete streamingRef.current[messageId]
     delete streamingReasoningRef.current[messageId]
+    delete streamRunRef.current[messageId]
     setStreaming({ ...streamingRef.current })
     setStreamingReasoning({ ...streamingReasoningRef.current })
   }, [])

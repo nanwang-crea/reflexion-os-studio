@@ -16,9 +16,7 @@ function remainingSeconds(
  * 重试倒计时：心跳只挂在真正展示倒计时的组件上（AGENTS.md §11 定时器有界），
  * 归零或重试消失即停表；不再由顶层 tick 驱动整棵会话树重渲染。
  */
-export function useRetryCountdown(
-  retry: RunActivity['retry'],
-): number | null {
+export function useRetryCountdown(retry: RunActivity['retry']): number | null {
   const waitMs = retry?.waitMs
   const startedAt = retry?.startedAt
   const [remaining, setRemaining] = useState<number | null>(() =>

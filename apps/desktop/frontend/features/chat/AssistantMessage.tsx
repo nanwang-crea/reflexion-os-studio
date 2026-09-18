@@ -22,6 +22,7 @@ import { MarkdownCore } from '../../components/markdown/md-core'
 import { ReasoningBlock } from './ReasoningBlock'
 import { ToolTrace } from './ToolTrace'
 import type { RunActivity } from '../../hooks/useRunActivity'
+import { formatRetryLabel, useRetryCountdown } from './useRetryCountdown'
 
 const MESSAGE_STATUS_LABELS: Record<string, string> = {
   interrupted: '已中断',
@@ -51,8 +52,6 @@ interface AssistantMessageProps {
   /** 该消息属于最近一个可重试的失败 Run 时展示重试入口。 */
   canRetry: boolean
   onRetry: () => void
-  /** 重试倒计时心跳：有活重试时按节拍自增，驱动内联倒计时重算剩余秒数。 */
-  retryTick?: number
   /** 资源引用（工作区文件/资产/外链）点击后按类型分发。 */
   onResourceClick?: (link: ResourceLink) => void
 }
@@ -102,25 +101,11 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
   const statusLabel = MESSAGE_STATUS_LABELS[props.message.status]
 
   // 活重试的内联状态行：随流断点显示（message.reset 清空正文后落在正文位置），
-  // 恢复后 delta 事件覆盖 runActivity.retry 随之自动消失；retryTick 驱动逐秒重算。
+  // 恢复后 delta 事件覆盖 runActivity.retry 随之自动消失。
+  // 倒计时心跳只挂在本组件（AGENTS.md §11），不由顶层 tick 驱动整棵会话树。
   const retry = props.runActivity?.retry
-  const retryCountdown =
-    retry !== undefined &&
-    retry.waitMs !== undefined &&
-    retry.startedAt !== undefined
-      ? Math.max(
-          0,
-          Math.ceil((retry.waitMs - (Date.now() - retry.startedAt)) / 1000),
-        )
-      : null
-  const retryLabel =
-    retry === undefined
-      ? null
-      : retryCountdown !== null && retryCountdown > 0
-        ? `正在重试（第 ${retry.attempt}/${retry.maxRetries} 次）… ${retryCountdown} 秒后自动重试`
-        : retryCountdown !== null
-          ? '正在重试…'
-          : `正在重试（第 ${retry.attempt}/${retry.maxRetries} 次）…`
+  const retryCountdown = useRetryCountdown(retry)
+  const retryLabel = formatRetryLabel(retry, retryCountdown)
 
   return (
     <div className="msg-assistant">

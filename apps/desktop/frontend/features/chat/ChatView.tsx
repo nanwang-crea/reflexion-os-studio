@@ -36,8 +36,6 @@ interface ChatViewProps {
   streamingReasoning: Record<string, string>
   /** Run 级活动阶段（事件驱动，对齐 Codex）：决定状态行文案与折叠。 */
   runActivities: Record<string, RunActivity>
-  /** 重试倒计时心跳：有活重试时按节拍自增，驱动 RunBlock 重算剩余秒数。 */
-  retryTick: number
   hasEnabledProvider: boolean
   permissionValue: PermissionPreset
   onPermissionChange: (value: PermissionPreset) => void
@@ -74,9 +72,15 @@ interface ChatViewProps {
 /** 距底部小于该值视为“贴底”，流式期间继续跟随滚动。 */
 const PIN_THRESHOLD_PX = 80
 
+/** Map 未命中时复用同一空数组，避免每帧给子组件新身份。 */
+const EMPTY_DELEGATIONS: Delegation[] = []
+const EMPTY_FAILED_EVENTS: RunEvent[] = []
+
 /** 由 Run 的起止时间合成耗时；找不到 Run 时回退消息自身时间戳。 */
-function computeRunDurationMs(runs: Run[], message: Message): number | null {
-  const run = runs.find((entry) => entry.id === message.runId) ?? null
+function computeRunDurationMs(
+  run: Run | null,
+  message: Message,
+): number | null {
   const startedAt = run?.startedAt ?? message.createdAt
   const completedAt = run?.completedAt ?? message.completedAt
   if (startedAt === null || completedAt === null) return null
@@ -195,9 +199,34 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
     return groups
   }, [toolCalls])
   // 审批卡只展示当前会话的等待项（切会话时不串场）。
-  const sessionApprovals = props.pendingApprovals.filter((entry) =>
-    runIds.has(entry.runId),
+  const sessionApprovals = useMemo(
+    () => props.pendingApprovals.filter((entry) => runIds.has(entry.runId)),
+    [props.pendingApprovals, runIds],
   )
+  const runById = useMemo(() => {
+    const map = new Map<string, Run>()
+    for (const run of runs) map.set(run.id, run)
+    return map
+  }, [runs])
+  const delegationsByRun = useMemo(() => {
+    const map = new Map<string, Delegation[]>()
+    for (const entry of props.delegations) {
+      const group = map.get(entry.parentRunId)
+      if (group) group.push(entry)
+      else map.set(entry.parentRunId, [entry])
+    }
+    return map
+  }, [props.delegations])
+  const failedEventsByRun = useMemo(() => {
+    const map = new Map<string, RunEvent[]>()
+    for (const event of props.sessionData?.runEvents ?? []) {
+      if (event.type !== 'failed') continue
+      const group = map.get(event.runId)
+      if (group) group.push(event)
+      else map.set(event.runId, [event])
+    }
+    return map
+  }, [props.sessionData])
   const runActive =
     sessionApprovals.length > 0 ||
     visibleRuns.some(
@@ -234,14 +263,18 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
     () => buildChatBlocks(messages, toolCallsByMessage),
     [messages, toolCallsByMessage],
   )
-  const lastRetryableRun = [...visibleRuns]
-    .reverse()
-    .find(
-      (run) =>
-        run.status === 'failed' ||
-        run.status === 'interrupted' ||
-        run.status === 'cancelled',
-    )
+  const lastRetryableRun = useMemo(
+    () =>
+      [...visibleRuns]
+        .reverse()
+        .find(
+          (run) =>
+            run.status === 'failed' ||
+            run.status === 'interrupted' ||
+            run.status === 'cancelled',
+        ),
+    [visibleRuns],
+  )
 
   const handleScroll = useCallback((): void => {
     const el = scrollRef.current
@@ -292,15 +325,13 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
           )}
           {chatBlocks.map((block) => {
             if (block.kind === 'run') {
-              const run = runs.find((entry) => entry.id === block.runId) ?? null
+              const run = runById.get(block.runId) ?? null
               const finalMessage =
                 block.finalItem?.message ??
                 block.processItems[block.processItems.length - 1]?.message
               // 重试事件只作内联活状态，不进时间线；失败事件渲染为失败卡。
-              const runEvents = (props.sessionData?.runEvents ?? []).filter(
-                (event: RunEvent) =>
-                  event.runId === block.runId && event.type === 'failed',
-              )
+              const runEvents =
+                failedEventsByRun.get(block.runId) ?? EMPTY_FAILED_EVENTS
               const failureDetail = runEvents[0]
               return (
                 <div key={block.runId}>
@@ -310,18 +341,16 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
                   <RunBlock
                     processItems={block.processItems}
                     finalItem={block.finalItem}
-
-                    delegations={props.delegations.filter(
-                      (entry) => entry.parentRunId === block.runId,
-                    )}
+                    delegations={
+                      delegationsByRun.get(block.runId) ?? EMPTY_DELEGATIONS
+                    }
                     runActive={activeRunIds.has(block.runId)}
                     runActivity={props.runActivities[block.runId]}
-                    retryTick={props.retryTick}
                     streaming={props.streaming}
                     streamingReasoning={props.streamingReasoning}
                     runDurationMs={
                       finalMessage
-                        ? computeRunDurationMs(runs, finalMessage)
+                        ? computeRunDurationMs(run, finalMessage)
                         : null
                     }
                     runUsage={run?.usage ?? null}
@@ -375,7 +404,6 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
                       ? props.runActivities[message.runId]
                       : undefined
                   }
-                  retryTick={props.retryTick}
                   streamingText={props.streaming[message.id]}
                   streamingReasoning={props.streamingReasoning[message.id]}
                   runDurationMs={null}

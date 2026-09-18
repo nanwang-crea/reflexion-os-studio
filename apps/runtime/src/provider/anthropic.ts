@@ -124,16 +124,14 @@ export async function streamAnthropic(
     maxRetries: number
     reason: string
   }): Promise<void> => {
-    const waitMs = retryBackoffMs(attempt)
+    const waitMs = retryBackoffMs(input.attempt)
     options.onRetry?.({ ...input, waitMs })
     await sleep(waitMs, options.signal)
   }
 
   const canonicalToolNames = (options.tools ?? []).map((tool) => tool.name)
   const messageToolNames = options.messages.flatMap((msg) =>
-    msg.role === 'assistant'
-      ? msg.toolCalls.map((c) => c.name)
-      : [],
+    msg.role === 'assistant' ? msg.toolCalls.map((c) => c.name) : [],
   )
   const { canonicalToProvider, providerToCanonical } = buildToolNameMapping(
     canonicalToolNames,
@@ -238,13 +236,16 @@ export async function streamAnthropic(
 
     let content = ''
     let reasoning = ''
-    let finishReason: 'stop' | 'length' | 'content_filter' | 'tool_calls' | null =
-      null
+    let finishReason:
+      'stop' | 'length' | 'content_filter' | 'tool_calls' | null = null
     let inputTokens = 0
     let outputTokens = 0
     let cachedTokens: number | undefined
     const toolCalls: StreamedToolCall[] = []
-    const toolCallById = new Map<string, { id: string; name: string; arguments: string }>()
+    const toolCallById = new Map<
+      string,
+      { id: string; name: string; arguments: string }
+    >()
     let currentToolId = ''
     let currentToolName = ''
     const reader = response.body.getReader()
@@ -275,7 +276,8 @@ export async function streamAnthropic(
       }
 
       if (eventType === 'content_block_start') {
-        const block = parsed.content_block as Record<string, unknown> | undefined
+        const block = parsed.content_block as
+          Record<string, unknown> | undefined
         if (block?.type === 'tool_use') {
           currentToolId = String(block.id ?? '')
           currentToolName = String(block.name ?? '')

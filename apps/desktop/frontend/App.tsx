@@ -215,7 +215,6 @@ export default function App() {
     failedSessionIds,
     approvalSessionIds,
     clearSessionStatus,
-    retryTick,
   } = useAppBootstrap(bootstrapDeps)
 
   const {
@@ -431,7 +430,6 @@ export default function App() {
           streaming,
           streamingReasoning,
           runActivities,
-          retryTick,
           hasEnabledProvider,
           permissionValue: permissionPreset,
           onPermissionChange: changePermissionPreset,

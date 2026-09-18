@@ -92,7 +92,6 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
   approvalSessionIds: string[]
   /** 点击会话行视为确认：清除该会话的完成/失败标记。 */
   clearSessionStatus: (sessionId: string) => void
-  retryTick: number
 } {
   const { bootstrap, setBootstrap } = useBootstrapSnapshot()
   const cache = useStreamingCache()
@@ -388,7 +387,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     resetStreaming,
     pendingApprovals: approvals.pendingApprovals,
     clearPendingApprovals: approvals.clearForRun,
-    clearPendingApproval: approvals.onApprovalResolved,
+    clearPendingApproval: approvals.removePending,
     restorePendingApproval: approvals.restorePending,
     runningSessionIds: sessionTracking.runningSessionIds,
     completedSessionIds: sessionTracking.completedSessionIds,
@@ -405,7 +404,6 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
       [approvals.pendingApprovals],
     ),
     clearSessionStatus: sessionTracking.clearSessionStatus,
-    retryTick: activity.retryTick,
   }
 }
 

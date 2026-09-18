@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 
 /** Run 级活动阶段：由事件驱动，对齐 Codex——不靠“内容长什么样”猜状态。 */
 export type RunPhase = 'thinking' | 'answering' | 'tool'
@@ -27,7 +27,6 @@ export function useRunActivity(): {
   setRunActivity: (runId: string, activity: RunActivity) => void
   clearRunActivity: (runId: string) => void
   clearAllRunActivities: () => void
-  retryTick: number
 } {
   const [runActivities, setRunActivities] = useState<
     Record<string, RunActivity>
@@ -53,23 +52,10 @@ export function useRunActivity(): {
     setRunActivities({})
   }, [])
 
-  // 重试倒计时心跳：RunActivity 里有 retry 时按固定节拍触发 tick，
-  // 消费方用 Date.now() - startedAt 换算剩余秒数。
-  const [retryTick, setRetryTick] = useState(0)
-  const hasRetryActivity = Object.values(runActivities).some(
-    (activity) => activity.retry !== undefined,
-  )
-  useEffect(() => {
-    if (!hasRetryActivity) return
-    const timer = setInterval(() => setRetryTick((value) => value + 1), 250)
-    return () => clearInterval(timer)
-  }, [hasRetryActivity])
-
   return {
     runActivities,
     setRunActivity,
     clearRunActivity,
     clearAllRunActivities,
-    retryTick,
   }
 }
