@@ -68,6 +68,11 @@ React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
 - **Secret 纪律**：API Key 等机密只经 `provider.configure` 的只写 `secret` 参数出现一次，落入数据目录 `secrets.json`（0600），其余任何地方只出现 `secretRef`；secret 不得进入响应、事件、日志或错误详情。
 - **前端访问 Runtime 的唯一通道**：`runtime-client` 的 `RuntimeTransport`（Tauri 白名单 command `runtime_request` + `bootstrap:message` 事件按 id 关联）；新增业务命令需同步更新 Rust 侧白名单数组。
 - **按职责拆分（硬规则，新代码先拆再写）**：不先写大文件再事后补拆。
+  - **目录也必须保持单一职责**：禁止把一个领域下不断增长的文件长期平铺在根层。新增文件前先判断其 feature / subdomain；当同一目录已经出现两个以上稳定职责簇（例如读取与写入、消息与 Run、文件与 Git、权限与会话），必须先建立对应子目录再继续实现，不能用文件名前缀代替层次。
+  - **根层只放装配与公共边界**：`index`、门面、注册表、共享类型、生命周期装配等可以留在领域根层；具体实现必须下沉到所属子领域。文件被两个以上领域复用才允许上移，不能为了少写一层相对路径而把模块放回根层。
+  - **分层依据是职责，不是文件数**：不要为了目录整齐机械均分。API facade、协议 schema、同一工具注册目录、平台适配目录和测试集合可以保持同层，但必须确实共享一个边界；只要已经混入不同生命周期、数据所有权或调用方向，就必须拆分。
+  - **结构调整必须扫描同类问题**：修复 `store/`、`features/`、`hooks/` 等目录的平铺问题时，不能只移动眼前文件；须继续检查同一应用以及 Runtime、前端、Rust sidecar 中的同类目录，直到剩余密集目录都能说明清晰的单一职责。发现同类问题应在同次结构变更中处理，不留“以后再整理”。
+  - **移动后必须闭环验证**：更新全部生产代码与测试导入，搜索旧路径确保零残留，使用 `git diff --stat` / `git status` 确认 Git 正确识别移动且没有遗漏文件，再执行对应 typecheck、lint、单测和构建。纯目录重构不得改变运行时行为；确需抽取代码以满足文件上限时，只做等价搬移并补验证。
   - 一个文件只承载一个职责；TypeScript 单文件超过约 300 行即应拆分，**500 行是硬上限**；本次变更中发现超纲文件就在当次拆掉，不留"以后再拆"。
   - **Runtime 存储**：`store/` 根层只保留 `index.ts`（连接、事务边界、启动恢复编排）、`schema.ts`、`migrations.ts` 与 `shared.ts`；领域 Store 分入 `store/chat/`、`store/agents/`、`store/integrations/`、`store/workspace/`，每个文件一个领域类。业务代码只调 `store/index.ts` 暴露的领域门面（如 `store.sessions.list(null)`），不直接写 SQL；仅确需复用领域错误或纯函数时才允许直接导入具体 Store 文件。
   - **Runtime Agent**：`agent/` 按职责分层——`prompts/`（一个 prompt 一个文件，禁止在代码里内联长 prompt）、`context/`（历史重建、压缩、checkpoint 与资源链接）、`permissions/`（权限策略表 + ApprovalGateway + PermissionGate）、`tools/`（按 Run 装配工具，Rust 工具经 SystemRuntimeClient）、`run/`（Run 编排、轮次持久化、工具执行/调度与终态收敛）、`session/`（发送队列、标题生成与会话命名）；根层只保留 `launcher.ts`、`delegation.ts`、`provider-resolver.ts`、`errors.ts` 与命令门面 `index.ts`。循环算法本身在 `packages/agent-core`，不得把 SQLite/传输细节漏进去。
