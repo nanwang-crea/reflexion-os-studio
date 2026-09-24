@@ -29,6 +29,10 @@ import {
   ApiFormatSchema,
 } from './entities.js'
 import {
+  PluginInstallSourceSchema,
+  PluginPackageManifestSchema,
+} from './plugins.js'
+import {
   DangerAccessLeaseSchema,
   DangerCapabilitySchema,
 } from './permissions.js'
@@ -535,12 +539,22 @@ export const CommandSchemaRegistry = {
     result: z.object({ plugins: z.array(PluginRecordSchema) }),
   },
   'plugin.install': {
-    params: z.object({
-      requestId: RequestIdSchema,
-      source: z.literal('dir'),
-      projectId: z.string().min(1),
-      path: z.string().min(1),
+    params: PluginInstallSourceSchema.and(
+      z.object({ requestId: RequestIdSchema }),
+    ),
+    result: z.object({ plugin: PluginRecordSchema }),
+  },
+  'plugin.preview': {
+    params: PluginInstallSourceSchema.and(
+      z.object({ requestId: RequestIdSchema }),
+    ),
+    result: z.object({
+      manifest: PluginPackageManifestSchema,
+      installed: PluginRecordSchema.nullable(),
     }),
+  },
+  'plugin.update': {
+    params: z.object({ requestId: RequestIdSchema, id: z.string().min(1) }),
     result: z.object({ plugin: PluginRecordSchema }),
   },
   'plugin.toggle': {

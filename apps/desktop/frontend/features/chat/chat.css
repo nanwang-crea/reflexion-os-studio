@@ -800,6 +800,7 @@
 
 .composer textarea:focus-visible {
   outline: none;
+  box-shadow: none;
 }
 
 .composer textarea::placeholder {

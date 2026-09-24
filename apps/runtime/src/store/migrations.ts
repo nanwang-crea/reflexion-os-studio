@@ -87,6 +87,7 @@ function tableColumns(db: DatabaseSync, table: string): TableColumn[] {
  * v22 → v23：删除 SQLite 记忆链路——memories / memories_fts / memory_jobs
  *          整体 drop（文件即记忆 V2，真相源迁 MEMORY.md，不做数据搬迁）。
  * v24 → v25：新增 plugins 表（由 SCHEMA 创建），无历史数据回填。
+ * v25 → v26：plugins 增加 manifest_json；旧记录由启动重扫按安装目录回填。
  * 各步骤带形状检测：SCHEMA 刚建好的新库不会空跑重建。
  */
 export function runMigrations(db: DatabaseSync, dir: string): void {
@@ -356,6 +357,16 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
       }
     }
     // v25：plugins 是纯新增表，由 SCHEMA CREATE TABLE IF NOT EXISTS 覆盖。
+    if (
+      version < 26 &&
+      !tableColumns(db, 'plugins').some(
+        (column) => column.name === 'manifest_json',
+      )
+    ) {
+      db.exec(
+        "ALTER TABLE plugins ADD COLUMN manifest_json TEXT NOT NULL DEFAULT '{}'",
+      )
+    }
     db.exec('COMMIT')
     // 迁移全部执行完毕才推进版本号；否则下次启动会重复进入迁移分支。
     version = LATEST_SCHEMA_VERSION

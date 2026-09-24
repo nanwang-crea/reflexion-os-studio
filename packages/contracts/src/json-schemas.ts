@@ -47,6 +47,10 @@ import {
 import { RuntimeErrorSchema } from './errors.js'
 import { JsonRpcMessageSchema } from './jsonrpc.js'
 import { RuntimeEventSchema } from './events.js'
+import {
+  PluginPackageManifestSchema,
+  PluginRecordSchema,
+} from './plugins.js'
 
 function toJSONSchema(name: string, schema: z.ZodType): [string, unknown] {
   return [name, z.toJSONSchema(schema)]
@@ -62,6 +66,8 @@ export const jsonSchemas: Readonly<Record<string, unknown>> = Object.freeze(
     toJSONSchema('ToolCall', ToolCallSchema),
     toJSONSchema('ToolSpec', ToolSpecSchema),
     toJSONSchema('SkillManifest', SkillManifestSchema),
+    toJSONSchema('PluginPackageManifest', PluginPackageManifestSchema),
+    toJSONSchema('PluginRecord', PluginRecordSchema),
     toJSONSchema('ProviderProfile', ProviderProfileSchema),
     toJSONSchema('WorkspaceEntry', WorkspaceEntrySchema),
     toJSONSchema('WorkspaceIndexSnapshot', WorkspaceIndexSnapshotSchema),

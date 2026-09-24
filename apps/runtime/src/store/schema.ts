@@ -139,6 +139,7 @@ CREATE TABLE IF NOT EXISTS plugins (
   install_path TEXT,
   enabled INTEGER NOT NULL DEFAULT 1,
   compat_json TEXT,
+  manifest_json TEXT NOT NULL DEFAULT '{}',
   error TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -222,4 +223,4 @@ CREATE TABLE IF NOT EXISTS context_checkpoints (
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 25
+export const LATEST_SCHEMA_VERSION = 26

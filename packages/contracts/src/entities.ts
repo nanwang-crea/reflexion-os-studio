@@ -6,6 +6,31 @@ import {
   ToolOutputSchema,
   type ChangedFile,
 } from './tool-output.js'
+export {
+  PluginCapabilitySchema,
+  PluginCompatSchema,
+  PluginInstallSourceSchema,
+  PluginKindSchema,
+  PluginPackageManifestSchema,
+  PluginPermissionsSchema,
+  PluginRecordSchema,
+  PluginSourceSchema,
+  PluginStatusSchema,
+  SkillManifestSchema,
+  skillManifestFromPackage,
+} from './plugins.js'
+export type {
+  PluginCapability,
+  PluginCompat,
+  PluginInstallSource,
+  PluginKind,
+  PluginPackageManifest,
+  PluginPermissions,
+  PluginRecord,
+  PluginSource,
+  PluginStatus,
+  SkillManifest,
+} from './plugins.js'
 
 export { ResourceLinkSchema }
 export type { ResourceLink }
@@ -327,58 +352,6 @@ export type ToolSpec = z.infer<typeof ToolSpecSchema>
  * Phase 1A 只允许内置 Skill；第三方安装/启停/Registry 属 Phase 2。
  * tools 为该 Skill 约定使用的工具名（信息性；实际可用性仍由 Run 装配与权限策略决定）。
  */
-export const SkillManifestSchema = z.object({
-  // 稳定引用：斜杠命令与 skill.use 都用它；小写字母/数字/连字符。
-  id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
-  name: z.string().min(1),
-  version: z.string().min(1),
-  description: z.string().min(1),
-  tools: z.array(z.string().min(1)),
-  // 斜杠命令的参数占位提示；无参技能为 null。
-  argumentHint: z.string().min(1).nullable(),
-})
-export type SkillManifest = z.infer<typeof SkillManifestSchema>
-
-export const PluginKindSchema = z.enum(['skill', 'provider', 'tool'])
-export type PluginKind = z.infer<typeof PluginKindSchema>
-
-export const PluginStatusSchema = z.enum([
-  'installed',
-  'enabled',
-  'disabled',
-  'invalid',
-])
-export type PluginStatus = z.infer<typeof PluginStatusSchema>
-
-export const PluginSourceSchema = z.enum(['builtin', 'dir', 'git', 'local'])
-export type PluginSource = z.infer<typeof PluginSourceSchema>
-
-export const PluginCompatSchema = z
-  .object({ protocol: z.string().min(1) })
-  .strict()
-export type PluginCompat = z.infer<typeof PluginCompatSchema>
-
-/** Plugin Foundation canonical record. Only declarative skill plugins load today. */
-export const PluginRecordSchema = z
-  .object({
-    id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
-    kind: PluginKindSchema,
-    version: z.string().min(1),
-    name: z.string().min(1),
-    description: z.string().min(1),
-    source: PluginSourceSchema,
-    sourceRef: z.string().nullable(),
-    status: PluginStatusSchema,
-    installPath: z.string().nullable(),
-    enabled: z.boolean(),
-    compat: PluginCompatSchema.nullable(),
-    error: z.string().nullable(),
-    createdAt: IsoDateTimeSchema,
-    updatedAt: IsoDateTimeSchema,
-  })
-  .strict()
-export type PluginRecord = z.infer<typeof PluginRecordSchema>
-
 export const ProviderCapabilitySchema = z.enum([
   'chat',
   'embedding',
