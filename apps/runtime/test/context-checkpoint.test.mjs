@@ -9,7 +9,7 @@ import {
   ensureCheckpoint,
   sanitizeSummary,
   filterSecretLine,
-} from '../dist/agent/context-checkpoint.js'
+} from '../dist/agent/context/context-checkpoint.js'
 
 function freshStore() {
   const store = new Store(mkdtempSync(join(tmpdir(), 'reflexion-checkpoint-')))

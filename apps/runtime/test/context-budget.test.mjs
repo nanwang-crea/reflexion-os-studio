@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import {
   DEFAULT_CONTEXT_BUDGET_LIMIT,
   contextBudgetFor,
-} from '../dist/agent/context.js'
+} from '../dist/agent/context/context.js'
 
 test('contextBudgetFor falls back to default limit when window unknown', () => {
   const budget = contextBudgetFor({

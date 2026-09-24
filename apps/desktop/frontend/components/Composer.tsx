@@ -7,7 +7,7 @@ import type {
 import {
   PERMISSION_PRESET_HINTS,
   PERMISSION_PRESET_LABELS,
-} from '../hooks/usePermissionPreset'
+} from '../hooks/permissions/usePermissionPreset'
 import { ChevronIcon, SendIcon, ShieldIcon, StopIcon } from '../ui/icons'
 
 export interface ComposerModelOption {

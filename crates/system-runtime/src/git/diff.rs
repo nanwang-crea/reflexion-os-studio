@@ -7,7 +7,7 @@ use std::path::Path;
 
 use serde::Serialize;
 
-use crate::paths::resolve_in_workspace;
+use crate::filesystem::paths::resolve_in_workspace;
 
 use super::exec::{first_line, run_git};
 use super::log::commit_files;

@@ -16,13 +16,13 @@ import { terminalCommandHandlers } from './terminal/handlers.js'
 import {
   providerCommandHandlers,
   testProviderConnection,
-} from './handlers-providers.js'
-import { agentCommandHandlers } from './handlers-agents.js'
+} from './provider/handlers.js'
+import { agentCommandHandlers } from './agent/handlers.js'
 
 /**
  * Chat 核心命令：项目/会话/消息发送/队列/Run/审批/Skills 清单。
  * 各领域命令独立注册：instructions/workspace/asset/mcp 在各自域目录，
- * provider 与 agent/delegation 在 handlers-providers.ts / handlers-agents.ts。
+ * provider 与 agent/delegation handler 跟随各自领域目录。
  */
 const chatCommandHandlers: Record<string, CommandHandler> = {
   'project.list': (_params, { store }) => ({

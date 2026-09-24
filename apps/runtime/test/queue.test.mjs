@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { QueueService } from '../dist/agent/queue.js'
+import { QueueService } from '../dist/agent/session/queue.js'
 
 function freshQueue() {
   const events = []

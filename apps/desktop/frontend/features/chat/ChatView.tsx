@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
-  Message,
   ResourceLink,
   Run,
   SkillManifest,
@@ -14,20 +13,24 @@ import { ArrowDownIcon, SparkIcon, PencilIcon } from '../../ui/icons'
 import './approvals/approvals.css'
 import { ApprovalQueue } from './approvals/ApprovalQueue'
 import { DangerLeaseBanner } from './approvals/DangerLeaseBanner'
-import { AssistantMessage } from './AssistantMessage'
-import { RunBlock } from './RunBlock'
-import type { ProcessItem } from './RunProcess'
+import { AssistantMessage } from './message/AssistantMessage'
+import { RunBlock } from './run/RunBlock'
 import { QueueBar } from './QueueBar'
-import { PlanCard } from './PlanCard'
-import { RunEventCard } from './RunEventCard'
+import { PlanCard } from './run/PlanCard'
+import { RunEventCard } from './run/RunEventCard'
 import type { SessionData } from '../../api/sessions'
 import type { PendingApproval } from '../../hooks/useAppBootstrap'
-import type { RunActivity } from '../../hooks/useRunActivity'
+import type { RunActivity } from '../../hooks/session/useRunActivity'
 import type {
   PermissionPreset,
   DangerAccessLease,
 } from '@reflexion-os-studio/runtime-client'
 import type { ComposerAdvancedState } from '../../components/Composer'
+import {
+  buildChatBlocks,
+  computeRunDurationMs,
+  isLastEditableUserMessage,
+} from './chat-blocks'
 
 interface ChatViewProps {
   sessionData: SessionData | null
@@ -77,105 +80,6 @@ const PIN_THRESHOLD_PX = 80
 /** Map 未命中时复用同一空数组，避免每帧给子组件新身份。 */
 const EMPTY_DELEGATIONS: Delegation[] = []
 const EMPTY_FAILED_EVENTS: RunEvent[] = []
-
-/** 由 Run 的起止时间合成耗时；找不到 Run 时回退消息自身时间戳。 */
-function computeRunDurationMs(
-  run: Run | null,
-  message: Message,
-): number | null {
-  const startedAt = run?.startedAt ?? message.createdAt
-  const completedAt = run?.completedAt ?? message.completedAt
-  if (startedAt === null || completedAt === null) return null
-  const start = Date.parse(startedAt)
-  const end = Date.parse(completedAt)
-  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return null
-  return end - start
-}
-
-type DisplayItem = ProcessItem
-type ChatBlock =
-  | { kind: 'plain'; item: DisplayItem }
-  | {
-      kind: 'run'
-      runId: string
-      processItems: DisplayItem[]
-      finalItem: DisplayItem | null
-    }
-
-/** 判断该 user 消息是否为“最后一条可编辑 user 消息”：
- * 1. 在同会话内按 created_at/rowid 倒序、status <> 'superseded' 的 user 消息中排第一；
- * 2. 会话没有进行中的 Run（runActive 为 false）。
- */
-function isLastEditableUserMessage(
-  message: Message,
-  messages: Message[],
-  runActive: boolean,
-): boolean {
-  if (message.role !== 'user') return false
-  if (message.status === 'superseded') return false
-  if (runActive) return false
-  // 过滤出当前会话中所有非 superseded 的 user 消息
-  const userMessages = messages.filter(
-    (m) => m.role === 'user' && m.status !== 'superseded',
-  )
-  // 如果当前消息不在列表中，返回 false
-  const messageIndex = userMessages.findIndex((m) => m.id === message.id)
-  if (messageIndex === -1) return false
-  // 如果它是列表中的最后一条，则为可编辑目标
-  return messageIndex === userMessages.length - 1
-}
-
-/** 按 Run 分组：过程轮次进入一个整体折叠块，最后无工具轮作为最终回复。 */
-function buildChatBlocks(
-  messages: Message[],
-  toolCallsByMessage: Map<string, ToolCall[]>,
-): ChatBlock[] {
-  const blocks: ChatBlock[] = []
-  let runId: string | null = null
-  let runMessages: DisplayItem[] = []
-
-  const flushRun = (): void => {
-    if (runId === null || runMessages.length === 0) return
-    let finalIndex = -1
-    for (let index = runMessages.length - 1; index >= 0; index -= 1) {
-      if (runMessages[index].toolCalls.length === 0) {
-        finalIndex = index
-        break
-      }
-    }
-    const finalItem = finalIndex >= 0 ? runMessages[finalIndex] : null
-    blocks.push({
-      kind: 'run',
-      runId,
-      processItems:
-        finalIndex >= 0
-          ? runMessages.filter((_, index) => index !== finalIndex)
-          : runMessages,
-      finalItem,
-    })
-    runId = null
-    runMessages = []
-  }
-
-  for (const message of messages) {
-    if (message.role === 'assistant' && message.runId !== null) {
-      if (runId !== null && runId !== message.runId) flushRun()
-      runId = message.runId
-      runMessages.push({
-        message,
-        toolCalls: toolCallsByMessage.get(message.id) ?? [],
-      })
-      continue
-    }
-    flushRun()
-    blocks.push({
-      kind: 'plain',
-      item: { message, toolCalls: toolCallsByMessage.get(message.id) ?? [] },
-    })
-  }
-  flushRun()
-  return blocks
-}
 
 export function ChatView(props: ChatViewProps): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null)

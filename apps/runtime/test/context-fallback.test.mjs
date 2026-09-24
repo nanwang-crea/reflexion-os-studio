@@ -4,7 +4,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Store } from '../dist/store/index.js'
-import { ContextBuilder } from '../dist/agent/context.js'
+import { ContextBuilder } from '../dist/agent/context/context.js'
 
 // W5：Checkpoint → legacy → 确定性裁剪三级降级闭环。
 // Checkpoint 失败已有 context-checkpoint.test.mjs 覆盖；这里覆盖

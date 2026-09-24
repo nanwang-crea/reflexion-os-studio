@@ -4,25 +4,19 @@
 //! 体量与超时上限、进程树回收、写/执行类操作的 grant 存在性检查。
 //!
 //! 职责拆分：`protocol`（IO/回包/错误类型）、`grant`（审批凭据校验）、
-//! `handlers`（文件/搜索/Shell 工具执行）与 `handlers_git`（git 全部方法）
+//! `filesystem`（文件/搜索实现）、`handlers`（系统命令适配）与 `handlers_git`（git 全部方法）
 //! 分别独立成模块，本文件只留协议分发与主循环。
 
-mod files;
+mod filesystem;
 mod git;
-mod glob;
 mod grant;
 mod handlers;
 mod handlers_git;
-mod mutate;
 mod params;
-mod paths;
 mod protocol;
 mod sandbox;
-mod search;
-mod sha256;
 mod shell;
 mod terminal;
-mod walk;
 
 use serde_json::{json, Value};
 use std::io::{self, BufRead};

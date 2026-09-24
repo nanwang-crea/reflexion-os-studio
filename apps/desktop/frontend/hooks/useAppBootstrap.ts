@@ -5,14 +5,14 @@ import type { RefObject } from 'react'
 import type { RuntimeEvent } from '@reflexion-os-studio/runtime-client'
 import { transport } from '../lib/transport'
 import { useInitialDataLoad } from './useInitialDataLoad'
-import type { RunActivity } from './useRunActivity'
-import { useRunActivity } from './useRunActivity'
+import type { RunActivity } from './session/useRunActivity'
+import { useRunActivity } from './session/useRunActivity'
 import {
   usePendingApprovals,
   type PendingApproval,
-} from './usePendingApprovals'
-import { useRunSessionTracking } from './useRunSessionTracking'
-import { useStreamingCache } from './useStreamingCache'
+} from './permissions/usePendingApprovals'
+import { useRunSessionTracking } from './session/useRunSessionTracking'
+import { useStreamingCache } from './session/useStreamingCache'
 
 export interface BootstrapSnapshot {
   state: string

@@ -72,7 +72,7 @@ pub struct WriteParams {
     pub content: String,
     /// 覆盖已存在文件必填：一次 file.read 完整读取发放的 revision 凭据
     /// （mtime + size + sha256）；新建文件可缺省。
-    pub revision: Option<crate::files::Revision>,
+    pub revision: Option<crate::filesystem::files::Revision>,
     /// agent 来源必填且必须通过 require_grant；ui 来源忽略。
     pub grant: Option<String>,
     #[serde(default)]
@@ -90,7 +90,7 @@ pub struct EditParams {
     pub expected_count: Option<usize>,
     /// 必填：一次读取/写入发放的 revision 凭据（mtime+size+sha256），
     /// 编辑侧用于先读后写强制与陈旧检测（任一字段不一致即拒绝）。
-    pub revision: Option<crate::files::Revision>,
+    pub revision: Option<crate::filesystem::files::Revision>,
     pub grant: String,
 }
 

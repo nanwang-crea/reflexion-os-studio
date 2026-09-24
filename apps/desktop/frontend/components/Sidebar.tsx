@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { Project, Session } from '@reflexion-os-studio/runtime-client'
 import { SessionRow } from './SessionRow'
-import { ProjectFiles } from '../features/workspace/ProjectFiles'
+import { ProjectFiles } from '../features/workspace/files/ProjectFiles'
 import type { OpenDiffHandler } from '../features/workspace/types'
 import {
   ArchiveIcon,

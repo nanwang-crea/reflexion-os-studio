@@ -6,8 +6,8 @@ import { join } from 'node:path'
 import { ToolRegistry } from '@reflexion-os-studio/agent-core'
 import { Store } from '../dist/store/index.js'
 import { RunEventEmitter } from '../dist/events.js'
-import { executeToolCall } from '../dist/agent/tool-executor.js'
-import { createRunExecutionState } from '../dist/agent/run-state.js'
+import { executeToolCall } from '../dist/agent/run/tool-executor.js'
+import { createRunExecutionState } from '../dist/agent/run/run-state.js'
 import {
   ApprovalGateway,
   PermissionGate,

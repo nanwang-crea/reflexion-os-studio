@@ -5,13 +5,14 @@
 use serde_json::{json, Value};
 use std::path::PathBuf;
 
+use crate::filesystem::{files, mutate, paths, search};
 use crate::grant::{normalize_relative, require_grant, require_network_approval};
 use crate::params::{
     EditParams, GlobParams, GrantPathParams, GrepParams, ListParams, MoveParams, OperationSource,
     ReadParams, ShellParams, WriteParams,
 };
 use crate::protocol::{emit, error_response, ok_response, running_shells, workspace_root, OpError};
-use crate::{files, mutate, paths, sandbox, search, shell};
+use crate::{sandbox, shell};
 
 /// digest 资源部分：与 TS Runtime 审批前同一规范化算法；非法路径（绝对/`..`）
 /// 不可能有匹配 digest——按工作区边界违规拒绝。

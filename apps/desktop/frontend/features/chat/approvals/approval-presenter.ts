@@ -4,7 +4,7 @@ import type {
   ApprovalRisk,
   ApprovalSubject,
 } from '@reflexion-os-studio/runtime-client'
-import type { PendingApproval } from '../../../hooks/usePendingApprovals'
+import type { PendingApproval } from '../../../hooks/permissions/usePendingApprovals'
 
 /**
  * 审批协议 → 展示模型的纯函数（features/chat/approvals/ 组件只消费本模型）。

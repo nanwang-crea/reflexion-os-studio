@@ -8,7 +8,7 @@ import {
   SHELL_POLICY,
   WEB_READ_POLICY,
   WRITE_POLICY,
-} from '../tool-policies.js'
+} from '../run/tool-policies.js'
 import {
   createFileEditTool,
   createFileDeleteTool,

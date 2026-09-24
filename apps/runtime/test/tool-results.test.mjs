@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import {
   MODEL_TOOL_RESULT_MAX_CHARS,
   capToolResultForModel,
-} from '../dist/agent/toolResults.js'
+} from '../dist/agent/run/toolResults.js'
 
 test('capToolResultForModel keeps short text untouched', () => {
   const text = '简短的工具结果'

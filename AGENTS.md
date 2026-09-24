@@ -38,7 +38,7 @@ React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
 | `packages/agent-core/`     | Agent 循环内核（内部 SDK）：runAgentLoop / ToolRegistry / 上下文压缩，不碰 SQLite 与传输                                                                 |
 | `packages/runtime-client/` | 前端唯一 typed facade，不得绕过它直连任何进程                                                                                                            |
 | `packages/*`（其余）       | 仅 README 占位，不要在其中堆放实现代码                                                                                                                   |
-| `crates/system-runtime/`   | Rust System Runtime sidecar（独立 Cargo workspace，根目录 `Cargo.toml` 不存在；`git/` 子模块按 status/diff/exec/writes 拆分）                            |
+| `crates/system-runtime/`   | Rust System Runtime sidecar（独立 Cargo workspace，根目录 `Cargo.toml` 不存在；`filesystem/`、`git/`、`sandbox/`、`terminal/` 按系统领域分层）           |
 | `scripts/`                 | bash 构建编排                                                                                                                                            |
 | `docs/`                    | 设计文档；改架构先改文档                                                                                                                                 |
 
@@ -70,13 +70,13 @@ React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
 - **按职责拆分（硬规则，新代码先拆再写）**：不先写大文件再事后补拆。
   - 一个文件只承载一个职责；TypeScript 单文件超过约 300 行即应拆分，**500 行是硬上限**；本次变更中发现超纲文件就在当次拆掉，不留"以后再拆"。
   - **Runtime 存储**：`store/` 根层只保留 `index.ts`（连接、事务边界、启动恢复编排）、`schema.ts`、`migrations.ts` 与 `shared.ts`；领域 Store 分入 `store/chat/`、`store/agents/`、`store/integrations/`、`store/workspace/`，每个文件一个领域类。业务代码只调 `store/index.ts` 暴露的领域门面（如 `store.sessions.list(null)`），不直接写 SQL；仅确需复用领域错误或纯函数时才允许直接导入具体 Store 文件。
-  - **Runtime Agent**：`agent/` 按职责分文件——`prompts/`（一个 prompt 一个文件，禁止在代码里内联长 prompt）、`context.ts`（历史重建与压缩）、`permissions.ts`（权限策略表 + ApprovalGateway + PermissionGate）、`tools/`（按 Run 装配工具，Rust 工具经 SystemRuntimeClient）、`runner.ts`（Run 编排编排入口：循环调度+终态收敛；轮次持久化在 `model-turn.ts`，工具执行在 `tool-executor.ts`，共享状态在 `run-state.ts`）、`launcher.ts`（Run 装配：工具注册表+权限闸门+Provider 配置）、`delegation.ts`（子 Agent 委派）、`provider-resolver.ts`（Provider/采样解析）、`errors.ts`、`title.ts`，`agent/index.ts` 只做命令门面。循环算法本身在 `packages/agent-core`，不得把 SQLite/传输细节漏进去。
-  - **Runtime 命令与域目录**：命令 handler 跟随各自域目录——`agent/instructions/handlers.ts`、`workspace/handlers.ts`、`assets/handlers.ts`、`mcp/handlers.ts`；`handlers.ts` 只保留 chat 核心（project/session/message/queue/run/approval/skill）与 `commandHandlers` 合并注册，`handlers-providers.ts` / `handlers-agents.ts` 拆出 provider 与 agent/delegation 命令。跨域基础设施（`events.ts` / `secrets.ts` / `system.ts` / `provider.ts` / `command-utils.ts`）留根目录，不归属单一 feature。
+  - **Runtime Agent**：`agent/` 按职责分层——`prompts/`（一个 prompt 一个文件，禁止在代码里内联长 prompt）、`context/`（历史重建、压缩、checkpoint 与资源链接）、`permissions/`（权限策略表 + ApprovalGateway + PermissionGate）、`tools/`（按 Run 装配工具，Rust 工具经 SystemRuntimeClient）、`run/`（Run 编排、轮次持久化、工具执行/调度与终态收敛）、`session/`（发送队列、标题生成与会话命名）；根层只保留 `launcher.ts`、`delegation.ts`、`provider-resolver.ts`、`errors.ts` 与命令门面 `index.ts`。循环算法本身在 `packages/agent-core`，不得把 SQLite/传输细节漏进去。
+  - **Runtime 命令与域目录**：命令 handler 跟随各自域目录——`agent/instructions/handlers.ts`、`agent/handlers.ts`、`provider/handlers.ts`、`workspace/handlers.ts`、`assets/handlers.ts`、`mcp/handlers.ts`；`handlers.ts` 只保留 chat 核心（project/session/message/queue/run/approval/skill）与 `commandHandlers` 合并注册。跨域基础设施（`events.ts` / `secrets.ts` / `system.ts` / `provider.ts` / `command-utils.ts`）留根目录，不归属单一 feature。
   - **前端请求**：组件不得直接 `transport.request`。统一走 `api/` 层并按功能分文件（projects / sessions / chat / providers / client），`requestId` 由 api 层自动注入；组件调用具名函数（如 `createSession(projectId)`）。
   - **前端目录结构**：`apps/desktop/frontend/` 按功能模块分包，禁止根目录平铺组件/样式/hooks。
-    - `features/<name>/`：一个功能模块一个目录（chat / landing / instructions / skills / settings / workspace / automations），模块内放页面组件 + 仅该模块使用的子组件 + 该模块 CSS（如 `features/chat/chat.css`、`features/settings/settings.css`）。
+    - `features/<name>/`：一个功能模块一个目录（chat / landing / instructions / skills / settings / workspace / automations），模块内放页面组件 + 仅该模块使用的子组件 + 该模块 CSS；组件较多时继续按子领域分层（如 chat 的 `message/`、`run/`，workspace 的 `files/`、`git/`、`assets/`）。
     - `components/`：跨功能模块复用的共享组件（如 `Composer`、`SessionRow`、`Sidebar`、`ConfirmDialog`）。
-    - `hooks/`：应用级/跨模块 hooks（如 `useAppBootstrap`、`useModelSelection`、`useSessionActions`）。
+    - `hooks/`：应用级/跨模块 hooks；根层保留装配型 hooks，数量形成稳定领域簇时按 `permissions/`、`session/`、`workspace/` 分组。
     - `api/`：唯一请求层，按领域分文件；`lib/`：传输与基础设施（如 `transport.ts`）；`styles/`：全局 base 与布局样式（如 `style.css`、`sidebar.css`）；`ui/`：通用图标等纯展示资源。
     - 仅被单个功能模块引用的组件/样式归 `features/` 对应模块，不放进 `components/`；被两个以上模块引用才上移共享目录，避免"每个模块都有一份"或"共享目录堆积模块私货"。
   - 拆分以"职责"为界而不是"行数均摊"：领域、页面、传输层各自的内聚单元独立成文件，避免把不相关逻辑凑进同一个文件。

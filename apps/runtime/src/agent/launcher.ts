@@ -16,7 +16,10 @@ import {
 import type { Store } from '../store/index.js'
 import type { SystemRuntimeClient } from '../system.js'
 import type { McpManager } from '../mcp/manager.js'
-import { ContextBuilder, type ProviderRuntimeConfig } from './context.js'
+import {
+  ContextBuilder,
+  type ProviderRuntimeConfig,
+} from './context/context.js'
 import {
   ApprovalGateway,
   DangerLeaseService,
@@ -25,7 +28,7 @@ import {
   resolveInputPreset,
 } from './permissions/index.js'
 import { PRIMARY_AGENT_SYSTEM_PROMPT } from './prompts/index.js'
-import type { RunRunner } from './runner.js'
+import type { RunRunner } from './run/runner.js'
 import { createToolRegistry } from './tools/index.js'
 import type { ToolContext } from './tools/shared.js'
 

@@ -6,8 +6,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Store } from '../dist/store/index.js'
 import { RunEventEmitter } from '../dist/events.js'
-import { RunRunner } from '../dist/agent/runner.js'
-import { RunFinalizer } from '../dist/agent/run-finalizer.js'
+import { RunRunner } from '../dist/agent/run/runner.js'
+import { RunFinalizer } from '../dist/agent/run/run-finalizer.js'
 import { ToolRegistry } from '@reflexion-os-studio/agent-core'
 import {
   ApprovalGateway,

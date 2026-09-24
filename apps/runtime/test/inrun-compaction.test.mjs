@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createServer } from 'node:http'
-import { compactInRun } from '../dist/agent/context.js'
+import { compactInRun } from '../dist/agent/context/context.js'
 
 function startServer(handler) {
   return new Promise((resolve) => {

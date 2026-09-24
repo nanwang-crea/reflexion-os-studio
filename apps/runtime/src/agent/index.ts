@@ -2,20 +2,14 @@ import { randomUUID } from 'node:crypto'
 import type {
   AgentSettings,
   ChatCommand,
-  DangerCapability,
   MessageEditResendParams,
-  Session,
 } from '@reflexion-os-studio/contracts'
 import { RunEventEmitter, type EventNotifier } from '../events.js'
-import {
-  createSkillRegistry,
-  resolveInvocation,
-  type SkillRegistry,
-} from '../skills/index.js'
+import { createSkillRegistry, type SkillRegistry } from '../skills/index.js'
 import { DEFAULT_SESSION_TITLE, type Store } from '../store/index.js'
 import type { SystemRuntimeClient } from '../system.js'
 import type { McpManager } from '../mcp/manager.js'
-import { ContextBuilder } from './context.js'
+import { ContextBuilder } from './context/context.js'
 import { CommandError } from './errors.js'
 import { createPendingAssistantMessage, RunLauncher } from './launcher.js'
 import {
@@ -25,50 +19,19 @@ import {
   resolveInputPreset,
 } from './permissions/index.js'
 import { resolveProvider, resolveSampling } from './provider-resolver.js'
-import { QueueService } from './queue.js'
-import { RunRunner } from './runner.js'
-import { SessionTitleService } from './session-titles.js'
-import { deriveSessionTitle } from './title.js'
+import { QueueService } from './session/queue.js'
+import { RunRunner } from './run/runner.js'
+import { SessionTitleService } from './session/session-titles.js'
+import { deriveSessionTitle } from './session/title.js'
+import {
+  dangerCapability,
+  requireIdleSession,
+  requireSession,
+  resolveSkillInvocation,
+} from './guards.js'
 
 export { CommandError, ChildLimitError } from './errors.js'
 export { DEFAULT_PRESET } from './permissions/index.js'
-
-/**
- * W5 Danger capability 探测（fail-closed）：只有"保留敏感读/写 deny 的 Danger
- * 档位已在该平台真机证明"才支持。当前：macOS Seatbelt（real_machine_tests 已验）
- * 支持；Linux bwrap 的 danger 渲染已实现并金样钉住，但真机验收未完成 → 保持
- * 关闭（Rust 侧 supports_access 同步为 false，双层兜底）；Windows 无可验证的
- * 凭据拒读机制（受限令牌只收紧写边界）→ 永久 fail-closed，直至 guard spike
- * 通过。危险能力"三平台完成"以各平台真机证据为准，不以代码存在为准。
- */
-function dangerCapability(
-  system: SystemRuntimeClient | null,
-): DangerCapability {
-  const provider = system?.sandboxName ?? null
-  if (provider === 'seatbelt') {
-    return {
-      supported: true,
-      provider: 'seatbelt',
-      detail:
-        'macOS Seatbelt danger profile：非敏感系统读写放开、敏感路径读写 deny 保留（真机已验证）',
-    }
-  }
-  if (provider === 'bwrap') {
-    return {
-      supported: false,
-      provider: null,
-      detail:
-        'Linux bwrap danger 档已实现并经单测钉住，待 Linux 真机验收后启用（当前构建不可启用）',
-    }
-  }
-  const suffix = provider ? `（当前沙箱 provider：${provider}）` : ''
-  return {
-    supported: false,
-    provider: null,
-    detail:
-      '当前平台缺少可验证的 credential-guard 危险档边界，拒绝启用' + suffix,
-  }
-}
 
 /**
  * Agent 门面：对外保持 message.send / run.cancel / run.retry / approval.resolve 的命令契约，
@@ -117,26 +80,6 @@ export class ChatAgent {
     )
   }
 
-  private requireSession(sessionId: string): Session {
-    const session = this.store.sessions.get(sessionId)
-    if (!session) {
-      throw new CommandError(
-        'invalid_request',
-        `session not found: ${sessionId}`,
-      )
-    }
-    return session
-  }
-
-  private requireIdleSession(sessionId: string): void {
-    if (this.store.runs.activeForSession(sessionId)) {
-      throw new CommandError(
-        'invalid_request',
-        '该会话有正在进行的回复，请等待完成或先停止',
-      )
-    }
-  }
-
   /**
    * 发送入口：会话空闲 → 立即开始(startSend)；忙碌 → 自动入队(FIFO)，
    * 当前回复结束由 pumpQueue 自动出队发送。排队期间可修改/删除/立即发送。
@@ -148,9 +91,9 @@ export class ChatAgent {
     queueId: string | null
     position: number | null
   } {
-    this.requireSession(params.sessionId)
+    requireSession(this.store, params.sessionId)
     // 入队前先校验技能与 Provider/模型配置,参数错误当场反馈。
-    this.resolveSkillInvocation(params.content, params.skillId)
+    resolveSkillInvocation(params.content, params.skillId, this.skills)
     resolveProvider(this.store, params.providerId, params.model)
     if (this.store.runs.activeForSession(params.sessionId) === null) {
       const started = this.startSend(params)
@@ -202,8 +145,8 @@ export class ChatAgent {
     // 重解析并记录"生效的技能"：展示与出队执行口径一致
     // (显式 skillId 优先,否则按新内容识别斜杠)。
     const resolvedSkillId =
-      this.resolveSkillInvocation(content, explicitSkillId).skill?.manifest
-        .id ?? explicitSkillId
+      resolveSkillInvocation(content, explicitSkillId, this.skills).skill
+        ?.manifest.id ?? explicitSkillId
     const updated = this.queues.update(sessionId, queueId, {
       ...existing.params,
       content,
@@ -261,11 +204,12 @@ export class ChatAgent {
 
   /** 同步创建 user/assistant 消息与 Run 并返回；工具循环在后台继续。 */
   startSend(params: ChatCommand): { messageId: string; runId: string } {
-    const session = this.requireSession(params.sessionId)
+    const session = requireSession(this.store, params.sessionId)
     // Skill 激活先于 Provider 解析：参数写错立刻反馈，不与配置错误混淆。
-    const { skill } = this.resolveSkillInvocation(
+    const { skill } = resolveSkillInvocation(
       params.content,
       params.skillId,
+      this.skills,
     )
     const { profile, apiKey, model } = resolveProvider(
       this.store,
@@ -273,7 +217,7 @@ export class ChatAgent {
       params.model,
     )
     const sampling = resolveSampling(profile, params)
-    this.requireIdleSession(params.sessionId)
+    requireIdleSession(this.store, params.sessionId)
 
     const run = this.store.runs.create({
       sessionId: params.sessionId,
@@ -369,13 +313,13 @@ export class ChatAgent {
     if (original.status === 'created' || original.status === 'running') {
       throw new CommandError('invalid_request', '原 Run 仍在进行中，无法重试')
     }
-    const originalSession = this.requireSession(original.sessionId)
+    const originalSession = requireSession(this.store, original.sessionId)
     const { profile, apiKey, model } = resolveProvider(
       this.store,
       original.providerId ?? undefined,
       original.model ?? undefined,
     )
-    this.requireIdleSession(original.sessionId)
+    requireIdleSession(this.store, original.sessionId)
 
     const run = this.store.transaction(() =>
       this.store.runs.replaceWithRetry(
@@ -432,8 +376,8 @@ export class ChatAgent {
    * 排队中的消息继续只走 QueueBar，不走本命令。
    */
   startEditResend(params: MessageEditResendParams) {
-    const session = this.requireSession(params.sessionId)
-    this.requireIdleSession(params.sessionId)
+    const session = requireSession(this.store, params.sessionId)
+    requireIdleSession(this.store, params.sessionId)
     const content = params.content.trim()
     if (content === '') {
       throw new CommandError('invalid_request', '消息内容不能为空')
@@ -455,7 +399,11 @@ export class ChatAgent {
         ? this.store.runs.get(replacedRun.supersededByRunId)
         : null
     }
-    const { skill } = this.resolveSkillInvocation(content, params.skillId)
+    const { skill } = resolveSkillInvocation(
+      content,
+      params.skillId,
+      this.skills,
+    )
     const { profile, apiKey, model } = resolveProvider(
       this.store,
       params.providerId,
@@ -543,20 +491,5 @@ export class ChatAgent {
     // enableChildRuns=true 也不得给 Primary Agent 注册 task 工具。
     // 重新启用需先完成 ROADMAP Phase 3 设计评审，不得靠设置开关绕过。
     this.launcher.launch({ ...input, childRunStarter: undefined })
-  }
-
-  /** 消息发送的 Skill 激活解析；显式 skillId 未知视为 invalid_request。 */
-  private resolveSkillInvocation(
-    content: string,
-    explicitSkillId: string | undefined,
-  ): ReturnType<typeof resolveInvocation> {
-    try {
-      return resolveInvocation(content, explicitSkillId, this.skills)
-    } catch (error) {
-      throw new CommandError(
-        'invalid_request',
-        error instanceof Error ? error.message : String(error),
-      )
-    }
   }
 }

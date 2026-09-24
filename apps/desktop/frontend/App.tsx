@@ -1,52 +1,42 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ProviderProfile,
   Project,
   Session,
-  SkillManifest,
   Delegation,
 } from '@reflexion-os-studio/runtime-client'
 import { AppMain } from './AppMain'
 import { useAppBootstrap } from './hooks/useAppBootstrap'
 import { useModelSelection } from './hooks/useModelSelection'
-import { usePermissionPreset } from './hooks/usePermissionPreset'
-import { useAdvancedPermissions } from './hooks/useAdvancedPermissions'
+import { usePermissionPreset } from './hooks/permissions/usePermissionPreset'
+import { useAdvancedPermissions } from './hooks/permissions/useAdvancedPermissions'
 import { DangerConfirmationDialog } from './features/chat/approvals/DangerConfirmationDialog'
 import { useSidebarPanel } from './hooks/useSidebarPanel'
-import { useWorkspacePanel } from './hooks/useWorkspacePanel'
+import { useWorkspacePanel } from './hooks/workspace/useWorkspacePanel'
 import { useConfirmDialog } from './hooks/useConfirmDialog'
 import { useDataRefreshers } from './hooks/useDataRefreshers'
 import {
   useSessionNavigation,
   type ViewName,
-} from './hooks/useSessionNavigation'
-import { useApprovalResolution } from './hooks/useApprovalResolution'
-import { listSkills } from './api/skills'
+} from './hooks/session/useSessionNavigation'
+import { useApprovalResolution } from './hooks/permissions/useApprovalResolution'
 import type { SessionData } from './api/sessions'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { showToast, ToastHost } from './components/Toast'
 import { ResizeHandle } from './components/ResizeHandle'
 import { STATUS_LABELS } from './components/TopBar'
 import { Sidebar } from './components/Sidebar'
-import { terminalManager } from './features/terminal/manager'
-import type { FileViewerPanelHandle } from './features/workspace/FileViewerPanel'
-import { useWorkspaceTabGuard } from './hooks/useWorkspaceTabGuard'
+import type { FileViewerPanelHandle } from './features/workspace/files/FileViewerPanel'
+import { useWorkspaceTabGuard } from './hooks/workspace/useWorkspaceTabGuard'
 import { useAppHotkeys } from './hooks/useAppHotkeys'
-import { useSessionActions } from './hooks/useSessionActions'
+import { useSessionActions } from './hooks/session/useSessionActions'
 import { useResourceRouter } from './hooks/useResourceRouter'
+import { useSkillCatalog, useTerminalSurface } from './hooks/useAppSurfaces'
+import { BootstrapScreen } from './components/BootstrapScreen'
 
 export default function App() {
   const [view, setView] = useState<ViewName>('chat')
   const [profiles, setProfiles] = useState<ProviderProfile[]>([])
-  const [skills, setSkills] = useState<SkillManifest[]>([])
-  // SkillsView 点击"在对话中使用"：记一个 nonce 触发 Composer 预填 /<skillId>。
   const [composerPrefill, setComposerPrefill] = useState<{
     skillId: string
     nonce: number
@@ -63,8 +53,6 @@ export default function App() {
   const activeProjectRef = useRef<string | null>(null)
   const activeSessionRef = useRef<string | null>(null)
   const sessionRequestRef = useRef(0)
-
-  // 侧栏与右侧工作区面板状态分别由专属 hook 管理（含 localStorage 持久化）。
   const {
     sidebarOpen,
     setSidebarOpen,
@@ -103,18 +91,7 @@ export default function App() {
     handleTertiary,
     handleCancel,
   } = useConfirmDialog()
-
-  // 终端面板开合状态存在 manager 单例里（跨页面保活、键击零 React），
-  // App 只订阅 boolean 供顶栏按钮呈现激活态（AGENTS §11）。
-  const terminalOpen = useSyncExternalStore(
-    terminalManager.subscribe,
-    terminalManager.selectPanelOpen,
-  )
-  const handleToggleTerminal = useCallback(
-    () => terminalManager.togglePanel(),
-    [],
-  )
-
+  const { terminalOpen, toggleTerminal } = useTerminalSurface(activeProjectId)
   const { permissionPreset, changePermissionPreset } = usePermissionPreset()
   const {
     approvalOverride,
@@ -145,8 +122,6 @@ export default function App() {
     setDelegations,
   })
 
-  // deps 对象必须稳定：useAppBootstrap 内部的引导 effect 以它为依赖，
-  // 每次渲染重建会导致事件监听反复重挂、启动拉取反复触发。
   const bootstrapDeps = useMemo(
     () => ({
       activeSessionRef,
@@ -187,8 +162,6 @@ export default function App() {
     })
   useAppHotkeys({
     saveActive: () => {
-      // 面板对用户不可见时不动作：工作区收起或不在聊天视图时，
-      // 快捷键不应保存/关闭隐藏的标签。
       if (view !== 'chat' || !workspaceOpen) return
       if (activeFilePath === null || !dirtyPaths.has(activeFilePath)) return
       void filePanelRef.current?.saveDirty(activeFilePath).then((ok) => {
@@ -256,15 +229,6 @@ export default function App() {
     activeProjectRef.current = activeProjectId
   }, [activeProjectId])
 
-  // 终端管理器单例：接线一次事件订阅（幂等守卫），并同步当前激活项目。
-  useEffect(() => {
-    terminalManager.init()
-  }, [])
-
-  useEffect(() => {
-    terminalManager.setActiveProject(activeProjectId)
-  }, [activeProjectId])
-
   const {
     createProject,
     deleteProject,
@@ -303,19 +267,10 @@ export default function App() {
     ? (STATUS_LABELS[bootstrap.state] ?? bootstrap.state)
     : '启动中…'
   const runtimeReady = bootstrap?.runtimeReady ?? false
-
-  // 技能清单是内置静态数据，runtime 一就绪就拉一次；失败不阻塞聊天。
-  useEffect(() => {
-    if (!runtimeReady) return
-    listSkills()
-      .then((result) => setSkills(result.skills))
-      .catch(() => {})
-  }, [runtimeReady])
-
+  const skills = useSkillCatalog(runtimeReady)
   const activeProject =
     projects.find((project) => project.id === activeProjectId) ?? null
 
-  // 点击会话行进入会话即视为"已确认"：清除该会话的完成/失败侧栏标记。
   const handleSelectSession = useCallback(
     (sessionId: string): void => {
       clearSessionStatus(sessionId)
@@ -358,11 +313,10 @@ export default function App() {
 
   if (!runtimeReady) {
     return (
-      <div className="boot-screen">
-        <h1>ReflexionOS Studio</h1>
-        <p className="boot-status">{statusLabel}</p>
-        <p className="boot-detail">{bootstrap?.detail ?? 'M0 Bootstrap'}</p>
-      </div>
+      <BootstrapScreen
+        status={statusLabel}
+        detail={bootstrap?.detail ?? 'M0 Bootstrap'}
+      />
     )
   }
 
@@ -522,7 +476,7 @@ export default function App() {
         }}
         terminal={{
           open: terminalOpen,
-          onToggle: handleToggleTerminal,
+          onToggle: toggleTerminal,
           activeProjectId,
           confirm,
         }}

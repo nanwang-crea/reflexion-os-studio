@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { PendingApproval } from '../../../hooks/usePendingApprovals'
+import type { PendingApproval } from '../../../hooks/permissions/usePendingApprovals'
 import { presentApproval } from './approval-presenter'
 import { ApprovalHeader } from './ApprovalHeader'
 import { ApprovalDetails } from './ApprovalDetails'
