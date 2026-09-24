@@ -256,6 +256,27 @@ test('message.send params require requestId, sessionId and content', () => {
   assert.equal(params.safeParse({ requestId: 'r1' }).success, false)
 })
 
+test('message.edit_resend requires the replaced message id', () => {
+  const params = CommandSchemaRegistry['message.edit_resend'].params
+  assert.equal(
+    params.safeParse({
+      requestId: 'r1',
+      sessionId: 's1',
+      messageId: 'm1',
+      content: 'revised prompt',
+    }).success,
+    true,
+  )
+  assert.equal(
+    params.safeParse({
+      requestId: 'r1',
+      sessionId: 's1',
+      content: 'revised prompt',
+    }).success,
+    false,
+  )
+})
+
 test('ChatCommand alias matches MessageSendParamsSchema', () => {
   const parsed = MessageSendParamsSchema.parse({
     requestId: 'r1',

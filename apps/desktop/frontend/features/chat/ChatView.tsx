@@ -10,7 +10,7 @@ import type {
 } from '@reflexion-os-studio/runtime-client'
 import { Composer, type ComposerModelOption } from '../../components/Composer'
 import { CopyButton } from '../../components/CopyButton'
-import { ArrowDownIcon, SparkIcon } from '../../ui/icons'
+import { ArrowDownIcon, SparkIcon, PencilIcon } from '../../ui/icons'
 import './approvals/approvals.css'
 import { ApprovalQueue } from './approvals/ApprovalQueue'
 import { DangerLeaseBanner } from './approvals/DangerLeaseBanner'
@@ -55,8 +55,6 @@ interface ChatViewProps {
   onGoSettings: () => void
   pendingApprovals: PendingApproval[]
   onResolveApproval: (toolCallId: string, choiceId: string) => void
-  /** 资源引用（工作区文件/资产/外链）点击后按类型分发。 */
-  onResourceClick?: (link: ResourceLink) => void
   /** 点击已变更文件：有编辑前后快照时展示本次编辑 Diff。 */
   onOpenDiff?: (
     path: string,
@@ -67,6 +65,10 @@ interface ChatViewProps {
       oldPath?: string
     },
   ) => void
+  /** 编辑最后一条用户消息的回调：提交后由 Runtime 处理 superseded 与新 Run 创建。 */
+  onEditResend: (messageId: string, content: string) => Promise<void>
+  /** 资源引用（工作区文件/资产/外链）点击后按类型分发。 */
+  onResourceClick?: (link: ResourceLink) => void
 }
 
 /** 距底部小于该值视为“贴底”，流式期间继续跟随滚动。 */
@@ -99,6 +101,29 @@ type ChatBlock =
       processItems: DisplayItem[]
       finalItem: DisplayItem | null
     }
+
+/** 判断该 user 消息是否为“最后一条可编辑 user 消息”：
+ * 1. 在同会话内按 created_at/rowid 倒序、status <> 'superseded' 的 user 消息中排第一；
+ * 2. 会话没有进行中的 Run（runActive 为 false）。
+ */
+function isLastEditableUserMessage(
+  message: Message,
+  messages: Message[],
+  runActive: boolean,
+): boolean {
+  if (message.role !== 'user') return false
+  if (message.status === 'superseded') return false
+  if (runActive) return false
+  // 过滤出当前会话中所有非 superseded 的 user 消息
+  const userMessages = messages.filter(
+    (m) => m.role === 'user' && m.status !== 'superseded',
+  )
+  // 如果当前消息不在列表中，返回 false
+  const messageIndex = userMessages.findIndex((m) => m.id === message.id)
+  if (messageIndex === -1) return false
+  // 如果它是列表中的最后一条，则为可编辑目标
+  return messageIndex === userMessages.length - 1
+}
 
 /** 按 Run 分组：过程轮次进入一个整体折叠块，最后无工具轮作为最终回复。 */
 function buildChatBlocks(
@@ -155,6 +180,9 @@ function buildChatBlocks(
 export function ChatView(props: ChatViewProps): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [pinned, setPinned] = useState(true)
+  const [editMessageId, setEditMessageId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
   const sessionId = props.sessionData?.session?.id ?? null
 
   const messages = useMemo(
@@ -303,6 +331,32 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
     void onRetry()
   }, [onRetry])
 
+  const startEdit = (messageId: string): void => {
+    const message = messages.find((m) => m.id === messageId)
+    if (!message || message.role !== 'user') return
+    setEditMessageId(messageId)
+    setEditDraft(message.content)
+  }
+
+  const saveEdit = async (): Promise<void> => {
+    if (editMessageId === null || editDraft.trim() === '') return
+    try {
+      setEditSaving(true)
+      await props.onEditResend(editMessageId, editDraft.trim())
+      setEditMessageId(null)
+      setEditDraft('')
+    } catch {
+      // 全局 notice 由 useSessionActions 统一展示；保留草稿供用户修正或重试。
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
+  const cancelEdit = (): void => {
+    setEditMessageId(null)
+    setEditDraft('')
+  }
+
   const scrollToBottom = (): void => {
     const el = scrollRef.current
     if (!el) return
@@ -381,14 +435,72 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
               return null
             }
             if (message.role === 'user') {
+              const lastUserMsg = isLastEditableUserMessage(
+                message,
+                messages,
+                runActive,
+              )
               return (
                 <div key={message.id} className="msg-user">
-                  <div className="user-bubble">
-                    <div className="user-content">{message.content}</div>
+                  <div
+                    className={`user-bubble${editMessageId === message.id ? ' user-bubble-editing' : ''}`}
+                  >
+                    {editMessageId === message.id ? (
+                      <div className="edit-resend-inline">
+                        <textarea
+                          className="edit-resend-textarea"
+                          rows={4}
+                          value={editDraft}
+                          onChange={(event) => setEditDraft(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Escape') cancelEdit()
+                            if (event.key === 'Enter' && !event.shiftKey) {
+                              event.preventDefault()
+                              void saveEdit()
+                            }
+                          }}
+                          disabled={editSaving}
+                          autoFocus
+                        />
+                        <div className="edit-resend-actions">
+                          <button
+                            type="button"
+                            className="ghost"
+                            onClick={cancelEdit}
+                            disabled={editSaving}
+                          >
+                            取消
+                          </button>
+                          <button
+                            type="button"
+                            className="primary"
+                            onClick={() => void saveEdit()}
+                            disabled={editSaving || editDraft.trim() === ''}
+                          >
+                            {editSaving ? '发送中…' : '发送'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="user-content">{message.content}</div>
+                    )}
                   </div>
-                  <div className="user-actions">
-                    <CopyButton text={message.content} />
-                  </div>
+                  {editMessageId !== message.id && (
+                    <div className="user-actions">
+                      <CopyButton text={message.content} />
+                      {lastUserMsg && (
+                        <button
+                          type="button"
+                          className="msg-action"
+                          title="编辑并重发"
+                          aria-label="编辑并重发"
+                          onClick={() => startEdit(message.id)}
+                        >
+                          <PencilIcon />
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               )
             }
@@ -435,6 +547,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
       )}
 
       {sessionId !== null && <QueueBar sessionId={sessionId} />}
+
       <div className="composer-wrap">
         {props.dangerLease !== null && (
           <DangerLeaseBanner

@@ -43,3 +43,17 @@ export function retryRun(runId: string): Promise<{
     { runId },
   )
 }
+
+export function editResendMessage(input: {
+  sessionId: string
+  messageId: string
+  content: string
+  providerId?: string
+  model?: string
+  temperature?: number
+  maxTokens?: number
+  permissionPreset?: 'workspace-read' | 'workspace-write' | 'workspace-full'
+  skillId?: string
+}): Promise<SendMessageResult> {
+  return request<SendMessageResult>('message.edit_resend', input)
+}

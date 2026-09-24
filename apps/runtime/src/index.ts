@@ -199,6 +199,7 @@ async function handleRequestAsync(request: JsonRpcRequest): Promise<void> {
         })
         .finally(() => {
           void systemRuntime.shutdown().finally(() => {
+            agent.dispose()
             mcpManager.dispose()
             process.exit(0)
           })

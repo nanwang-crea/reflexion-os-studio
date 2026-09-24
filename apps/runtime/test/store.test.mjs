@@ -166,6 +166,48 @@ test('retry_of_run_id and agent delegation fields persist', () => {
   assert.equal(store.runs.get(plain.id).agentId, null)
 })
 
+test('retry hides only assistant while edit resend hides the whole old round', () => {
+  const store = freshStore()
+  const session = store.sessions.create(null)
+  const run = store.runs.create({
+    sessionId: session.id,
+    providerId: null,
+    model: null,
+  })
+  const user = store.messages.create({
+    sessionId: session.id,
+    runId: run.id,
+    role: 'user',
+    content: 'old prompt',
+    status: 'completed',
+  })
+  const assistant = store.messages.create({
+    sessionId: session.id,
+    runId: run.id,
+    role: 'assistant',
+    content: 'old answer',
+    status: 'completed',
+  })
+
+  store.messages.markSupersededByRun(run.id)
+  assert.deepEqual(
+    store.messages.listBySession(session.id).map((message) => message.id),
+    [user.id],
+  )
+
+  store.messages.markSupersededRound(run.id)
+  assert.deepEqual(store.messages.listBySession(session.id), [])
+  assert.deepEqual(
+    store.messages
+      .listBySession(session.id, true)
+      .map((message) => [message.id, message.status]),
+    [
+      [user.id, 'superseded'],
+      [assistant.id, 'superseded'],
+    ],
+  )
+})
+
 test('delegation store attaches child run idempotently and queries by session, parent, and child', () => {
   const store = freshStore()
   const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
@@ -750,12 +792,12 @@ test('v23 migration drops legacy memories/FTS/memory_jobs tables', () => {
     .map((row) => row.name)
   assert.deepEqual(names, [])
   const version = after.prepare('PRAGMA user_version').get()
-  assert.equal(Number(version.user_version), 23)
+  assert.equal(Number(version.user_version), 24)
   after.close()
   store.close()
 })
 
-test('fresh store schema has no legacy memory tables and version 23', () => {
+test('fresh store schema has no legacy memory tables and version 24', () => {
   const dir = mkdtempSync(join(tmpdir(), 'reflexion-v23-fresh-'))
   const store = new Store(dir)
   store.close()
@@ -768,7 +810,7 @@ test('fresh store schema has no legacy memory tables and version 23', () => {
     .map((row) => row.name)
   assert.deepEqual(names, [])
   const version = db.prepare('PRAGMA user_version').get()
-  assert.equal(Number(version.user_version), 23)
+  assert.equal(Number(version.user_version), 24)
   db.close()
 })
 

@@ -1,33 +1,39 @@
 :root {
   color-scheme: dark;
-  --bg: #212121;
-  --bg-sidebar: #171717;
-  --bg-elevated: #2f2f2f;
-  --bg-hover: #2a2a2a;
-  --bg-active: #3a3a3a;
-  --bg-inset: #1d1d1d;
+  --bg: #17191f;
+  --bg-sidebar: #111318;
+  --bg-elevated: #22252d;
+  --bg-hover: #282c35;
+  --bg-active: #303541;
+  --bg-inset: #15171d;
   /* active 标签与编辑器背景融合；必须与
      features/workspace/editor/monaco.ts 的 editor.background 保持同值 */
   --bg-editor: #1e1e1e;
-  --surface-overlay: rgba(23, 23, 23, 0.55);
-  --surface-translucent: rgba(23, 23, 23, 0.35);
-  --scrim: rgba(0, 0, 0, 0.55);
-  --border: #3f3f3f;
-  --border-subtle: #2e2e2e;
-  --text: #ececec;
-  --text-secondary: #b4b4b4;
-  --text-muted: #8f8f8f;
+  --surface-overlay: rgba(17, 19, 24, 0.72);
+  --surface-translucent: rgba(17, 19, 24, 0.45);
+  --scrim: rgba(4, 6, 10, 0.68);
+  --border: #424754;
+  --border-subtle: #2c3039;
+  --text: #f2f4f8;
+  --text-secondary: #b8beca;
+  --text-muted: #858c99;
+  --accent: #7c8cff;
+  --accent-hover: #929fff;
+  --accent-soft: rgba(124, 140, 255, 0.14);
+  --accent-border: rgba(124, 140, 255, 0.38);
+  --shadow-sm: 0 8px 24px rgba(0, 0, 0, 0.18);
+  --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.32);
   --danger: #f87171;
   --warning-bg: rgba(251, 191, 36, 0.12);
   --warning-text: #fbbf24;
-  --info: #60a5fa;
+  --info: #7c8cff;
   --ok: #34d399;
   --mono:
     ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono',
     monospace;
   /* 聊天列宽：transcript/输入区/悬浮卡对齐共用，改一处即可整体同步。
      上限加宽：窗口最大化时消息区跟随变宽，超宽屏行长封顶。 */
-  --chat-col: min(1200px, 85%);
+  --chat-col: min(920px, 88%);
   font-family:
     system-ui,
     -apple-system,
@@ -47,6 +53,7 @@ body {
   height: 100vh;
   background: var(--bg);
   color: var(--text);
+  letter-spacing: -0.006em;
 }
 
 button {
@@ -54,13 +61,22 @@ button {
   color: var(--text);
   background: var(--bg-elevated);
   border: none;
-  border-radius: 8px;
+  border-radius: 9px;
   padding: 6px 14px;
   cursor: pointer;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease,
+    transform 0.16s ease;
 }
 
 button:hover:not(:disabled) {
   background: var(--bg-active);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 button:disabled {
@@ -92,7 +108,9 @@ textarea {
 
 input:focus-visible,
 textarea:focus-visible {
-  outline: 1px solid var(--border);
+  outline: none;
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 ::-webkit-scrollbar {
@@ -173,7 +191,10 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 16px;
+  min-height: 50px;
+  padding: 9px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.035);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
 }
 
 .topbar-title {
@@ -216,7 +237,8 @@ textarea:focus-visible {
   font-size: 12px;
   padding: 2px 10px;
   border-radius: 999px;
-  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.035);
   color: var(--text-muted);
   white-space: nowrap;
   flex-shrink: 0;

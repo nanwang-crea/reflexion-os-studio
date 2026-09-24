@@ -97,7 +97,7 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
       runEvents: store.runEvents.listBySession(sessionId),
     }
   },
-  'session.rename': (p, { store }) => {
+  'session.rename': (p, { store, agent }) => {
     const sessionId = requireString(p, 'sessionId')
     const title = requireString(p, 'title').trim()
     if (title === '') {
@@ -109,7 +109,9 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
         `session not found: ${sessionId}`,
       )
     }
+    agent.markSessionTitleManuallyEdited(sessionId)
     store.sessions.rename(sessionId, title)
+    agent.emitSessionUpdated(sessionId)
     return { session: store.sessions.get(sessionId) }
   },
   'session.delete': (p, { store, agent, approvals, danger }) => {
@@ -124,7 +126,7 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
     const removed = store.transaction(() => store.sessions.delete(sessionId))
     if (removed) {
       // 会话授权痕迹全部清除：队列 / 会话规则与覆盖项 / Danger 租约。
-      agent.clearQueue(sessionId)
+      agent.clearSessionResources(sessionId)
       approvals.clearSession(sessionId)
       danger.revoke(sessionId, 'session-deleted')
     }
@@ -151,7 +153,7 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
       const removed = store.projects.delete(projectId)
       if (removed) {
         for (const session of sessions) {
-          agent.clearQueue(session.id)
+          agent.clearSessionResources(session.id)
         }
       }
       return removed
@@ -171,6 +173,10 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
     return { removed }
   },
   'message.send': (p, { agent }) => agent.send(p as unknown as ChatCommand),
+  'message.edit_resend': (p, { agent }) =>
+    agent.startEditResend(
+      p as unknown as Parameters<typeof agent.startEditResend>[0],
+    ),
   'queue.list': (p, { agent }) =>
     agent.listQueue(requireString(p, 'sessionId')),
   'queue.update': (p, { agent }) =>

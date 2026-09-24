@@ -22,7 +22,7 @@ Runtime ready 是 Chat 可用条件。`system.ready` 只决定工具能力状态
 
 ## Commands
 
-MVP command：`runtime.get_status`、`system.ping`、`project.list`、`project.create`、`project.delete`、`session.list`、`session.create`、`session.get`、`message.send`、`run.cancel`、`run.retry`、`approval.resolve`、`provider.list`、`provider.configure`、`provider.delete`、`provider.test`。
+MVP command：`runtime.get_status`、`system.ping`、`project.list`、`project.create`、`project.delete`、`session.list`、`session.create`、`session.get`、`message.send`、`message.edit_resend`、`run.cancel`、`run.retry`、`approval.resolve`、`provider.list`、`provider.configure`、`provider.delete`、`provider.test`。
 
 每个请求含 JSON-RPC `id` 和业务 `requestId`。未连接、超时和拒绝必须返回标准 error response。`session.get` 返回 `{ session, messages, runs, toolCalls }`，`toolCalls` 为会话内全部工具调用（跨 Run 汇总），供 UI 呈现工具轨迹。`message.send` 可选携带 `permissionPreset`（`workspace-read` | `workspace-write` | `workspace-full`，缺省 workspace-read）作为本次 Run 的权限预设快照（协议 1.2；一版本内兼容读取 legacy `permissionMode/trusted` 并映射）。`approval.resolve` 携带 `{ toolCallId, choiceId }`——choiceId 必须属于当前 pending approval（Runtime 下发 choices，服务端保存真实 effect），重复 resolve 或未知 choice 返回 `accepted=false`。
 
@@ -38,7 +38,7 @@ TS Runtime 经自有 stdio 通道调用 Rust System Runtime（方案 A，spawn/�
 
 协议 1.2：每条事件信封含 `protocolVersion`、`eventId`、`scope`、`seq`、`occurredAt`、`type`。`scope` 是显式资源作用域（`runtime | run | session | project | mcp | terminal`），每个事件按作用域成对携带资源字段（run 通道 → `runId`；`queue.changed` → `sessionId`；`workspace.index.*` → `projectId`；`mcp.changed` → `serverId`；terminal 事件契约已在 W0 冻结、接线在 W2，携带 `projectId + terminalId`），`seq` 在单个发射器所代表的资源流内单调递增。信封与逐类事件的权威定义见 `packages/contracts/src/events.ts` 与 `docs/EVENT-PROTOCOL.md`。
 
-事件 notification 使用：`runtime.status`、`message.created`、`message.delta`、`message.reasoning_delta`、`message.reset`、`message.completed`、`run.started`、`run.completed`、`run.retrying`、`run.failed`、`run.cancelled`、`plan.created`、`plan.step.updated`、`plan.updated`、`queue.changed`、`workspace.index.progress`/`workspace.index.completed`/`workspace.index.failed`、`mcp.changed`、`delegation.created`/`delegation.updated`、`terminal.output`/`terminal.state`（集成终端输出帧与状态机事件，携带 `projectId + terminalId`），以及 Agent 工具链路事件：`tool.requested`、`tool.completed`、`approval.required`、`approval.resolved`（其授权范围字段名为 `grantScope`（`once | session`），避免与信封 `scope` 同键遮蔽；`approval.required` 可携带 `sessionId` 供侧栏显示待审批标记；V2 新增可选 `subject/risk/context/choices` 与 `approval.resolved.choiceId`，历史事件缺省仍可回放）、`danger.changed`（session 作用域的 Danger 租约生命周期：签发/撤销/到期/降级）。
+事件 notification 使用：`runtime.status`、`session.updated`、`message.created`、`message.delta`、`message.reasoning_delta`、`message.reset`、`message.completed`、`run.started`、`run.completed`、`run.retrying`、`run.failed`、`run.cancelled`、`plan.created`、`plan.step.updated`、`plan.updated`、`queue.changed`、`workspace.index.progress`/`workspace.index.completed`/`workspace.index.failed`、`mcp.changed`、`delegation.created`/`delegation.updated`、`terminal.output`/`terminal.state`（集成终端输出帧与状态机事件，携带 `projectId + terminalId`），以及 Agent 工具链路事件：`tool.requested`、`tool.completed`、`approval.required`、`approval.resolved`（其授权范围字段名为 `grantScope`（`once | session`），避免与信封 `scope` 同键遮蔽；`approval.required` 可携带 `sessionId` 供侧栏显示待审批标记；V2 新增可选 `subject/risk/context/choices` 与 `approval.resolved.choiceId`，历史事件缺省仍可回放）、`danger.changed`（session 作用域的 Danger 租约生命周期：签发/撤销/到期/降级）。
 
 `message.delta` 包含 `messageId`、`chunkSeq` 和 `delta`；`message.completed` 包含完整内容、`finishReason`（含 `tool_calls`）和可选 usage。UI 按 messageId 累积并以 completed 对账。
 

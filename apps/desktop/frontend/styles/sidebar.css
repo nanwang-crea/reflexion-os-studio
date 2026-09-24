@@ -4,7 +4,7 @@
   width: 272px;
   flex-shrink: 0;
   background: var(--bg-sidebar);
-  border-right: 1px solid var(--border-subtle);
+  border-right: 1px solid rgba(255, 255, 255, 0.045);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -21,21 +21,22 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 10px 8px;
+  padding: 14px 12px 10px;
   flex-shrink: 0;
 }
 
 .brand-mark {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  background: linear-gradient(135deg, #60a5fa, #a78bfa);
-  color: #0c1828;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: linear-gradient(145deg, #91a0ff, #7867e8);
+  color: #10121a;
   font-weight: 700;
   font-size: 13px;
   display: grid;
   place-items: center;
   flex-shrink: 0;
+  box-shadow: 0 6px 18px rgba(112, 101, 232, 0.28);
 }
 
 .brand-name {
@@ -65,16 +66,17 @@
   gap: 7px;
   margin: 0 4px 10px;
   padding: 0 10px;
-  height: 32px;
+  height: 36px;
   background: var(--bg-inset);
-  border: 1px solid transparent;
-  border-radius: 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 11px;
   color: var(--text-muted);
   flex-shrink: 0;
 }
 
 .panel-search:focus-within {
-  border-color: var(--border);
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .panel-search input {
@@ -104,15 +106,19 @@
 .session-row {
   display: flex;
   align-items: center;
-  border-radius: 8px;
-  min-height: 32px;
+  border-radius: 10px;
+  min-height: 36px;
 }
 
 .project-row:hover,
+.session-row:hover {
+  background: rgba(255, 255, 255, 0.045);
+}
+
 .project-row.active,
-.session-row:hover,
 .session-row.active {
-  background: var(--bg-elevated);
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .project-row .row,
@@ -385,7 +391,7 @@
 }
 
 .nav-item.active {
-  background: var(--bg-active);
+  background: var(--accent-soft);
   color: var(--text);
 }
 

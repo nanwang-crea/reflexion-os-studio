@@ -58,6 +58,36 @@ export const MessageSendParamsSchema = z.object({
 })
 export type ChatCommand = z.infer<typeof MessageSendParamsSchema>
 
+/** 消息编辑重发命令参数。 */
+export const MessageEditResendParamsSchema = z.object({
+  requestId: RequestIdSchema,
+  sessionId: z.string().min(1),
+  messageId: z.string().min(1),
+  content: z.string().min(1),
+  // 可选覆盖 Provider/模型/参数（与 message.send 同义）。
+  providerId: z.string().min(1).optional(),
+  model: z.string().min(1).optional(),
+  temperature: z.number().min(0).max(2).optional(),
+  maxTokens: z.number().int().positive().optional(),
+  permissionPreset: PermissionPresetSchema.optional(),
+  skillId: z.string().min(1).optional(),
+})
+export type MessageEditResendParams = z.infer<
+  typeof MessageEditResendParamsSchema
+>
+
+/** 消息编辑重发结果。 */
+export const MessageEditResendResultSchema = z.object({
+  queued: z.boolean(),
+  messageId: z.string().min(1).nullable(),
+  runId: z.string().min(1).nullable(),
+  queueId: z.string().min(1).nullable(),
+  position: z.number().int().nonnegative().nullable(),
+})
+export type MessageEditResendResult = z.infer<
+  typeof MessageEditResendResultSchema
+>
+
 /**
  * 审批裁决：只接受 toolCallId + choiceId。choiceId 必须属于当前 pending
  * approval，Runtime 据此查服务端保存的真实 effect；旧的 decision + scope
@@ -171,6 +201,10 @@ export const CommandSchemaRegistry = {
       queueId: z.string().min(1).nullable(),
       position: z.number().int().nonnegative().nullable(),
     }),
+  },
+  'message.edit_resend': {
+    params: MessageEditResendParamsSchema,
+    result: MessageEditResendResultSchema,
   },
   'queue.list': {
     params: z.object({

@@ -26,6 +26,7 @@
     "mcp.reload",
     "mcp.remove",
     "mcp.toggle",
+    "message.edit_resend",
     "message.send",
     "permission.approval_override.get",
     "permission.approval_override.set",

@@ -271,6 +271,7 @@ export default function App() {
     renameSession,
     deleteSession,
     sendMessage,
+    editResendMessage,
     stopRun,
     retryRun,
   } = useSessionActions({
@@ -452,6 +453,7 @@ export default function App() {
           composerPrefill,
           onPrefillConsumed: () => setComposerPrefill(null),
           onSend: sendMessage,
+          onEditResend: editResendMessage,
           onStop: stopRun,
           onRetry: retryRun,
           onGoSettings: () => setView('settings'),

@@ -13,6 +13,7 @@ import {
   PlanStepSchema,
   DelegationSchema,
   TerminalStatusSchema,
+  SessionSchema,
 } from './entities.js'
 import { RuntimeErrorSchema } from './errors.js'
 import { RuntimeStatusSchema } from './handshake.js'
@@ -212,6 +213,12 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     sessionId: z.string().min(1),
     paused: z.boolean().optional(),
     items: z.array(QueueEntrySchema),
+  }),
+  RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('session.updated'),
+    scope: z.literal('session'),
+    sessionId: z.string().min(1),
+    session: SessionSchema,
   }),
   // Danger lease 生命周期（签发/撤销/到期/降级）：session 作用域广播，
   // 前端 DangerLeaseBanner 与 UI 门禁据此同步；lease=null 表示当前无租约。

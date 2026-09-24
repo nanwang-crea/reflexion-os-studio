@@ -53,6 +53,7 @@ export function useSessionActions(deps: SessionActionsDeps): {
   renameSession: (sessionId: string, title: string) => Promise<void>
   deleteSession: (sessionId: string) => Promise<void>
   sendMessage: (content: string) => Promise<void>
+  editResendMessage: (messageId: string, content: string) => Promise<void>
   stopRun: () => Promise<void>
   retryRun: () => Promise<void>
 } {
@@ -232,6 +233,36 @@ export function useSessionActions(deps: SessionActionsDeps): {
     })
   }
 
+  const editResendMessage = async (
+    messageId: string,
+    content: string,
+  ): Promise<void> => {
+    const sessionId = deps.activeSessionId
+    if (!sessionId) return
+    const modelKey = deps.selectedModelKey
+    const separator = modelKey ? modelKey.indexOf('::') : -1
+    try {
+      await chatApi.editResendMessage({
+        sessionId,
+        messageId,
+        content,
+        providerId:
+          modelKey && separator > 0 ? modelKey.slice(0, separator) : undefined,
+        model:
+          modelKey && separator > 0 ? modelKey.slice(separator + 2) : undefined,
+        permissionPreset: deps.permissionPreset,
+      })
+      await deps.refreshSessionData(sessionId)
+      await deps.refreshStandaloneSessions()
+      if (deps.activeProjectId) {
+        await deps.refreshProjectSessions(deps.activeProjectId)
+      }
+    } catch (error) {
+      fail(error)
+      throw error
+    }
+  }
+
   const retryRun = async (): Promise<void> => {
     if (!deps.activeSessionId || !deps.sessionData) return
     // 已被替代（supersededByRunId 非空）的 Run 已在重试链上，再选会分叉链条。
@@ -259,6 +290,7 @@ export function useSessionActions(deps: SessionActionsDeps): {
     renameSession,
     deleteSession,
     sendMessage,
+    editResendMessage,
     stopRun,
     retryRun,
   }

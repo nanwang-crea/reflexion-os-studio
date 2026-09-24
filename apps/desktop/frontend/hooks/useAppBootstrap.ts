@@ -300,6 +300,15 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           deps.onDangerChanged(event)
           return
         }
+        if (event.type === 'session.updated') {
+          void deps.refreshStandaloneSessions()
+          const projectId = deps.activeProjectRef.current
+          if (projectId) void deps.refreshProjectSessions(projectId)
+          if (event.sessionId === deps.activeSessionRef.current) {
+            void deps.refreshSessionData(event.sessionId)
+          }
+          return
+        }
         if (
           event.type === 'run.completed' ||
           event.type === 'run.failed' ||

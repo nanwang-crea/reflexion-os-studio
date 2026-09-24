@@ -3,6 +3,7 @@ import type {
   AgentSettings,
   ChatCommand,
   DangerCapability,
+  MessageEditResendParams,
   Session,
 } from '@reflexion-os-studio/contracts'
 import { RunEventEmitter, type EventNotifier } from '../events.js'
@@ -22,6 +23,7 @@ import {
 import { resolveProvider, resolveSampling } from './provider-resolver.js'
 import { QueueService } from './queue.js'
 import { RunRunner } from './runner.js'
+import { SessionTitleService } from './session-titles.js'
 import { deriveSessionTitle } from './title.js'
 
 export { CommandError, ChildLimitError } from './errors.js'
@@ -78,6 +80,7 @@ export class ChatAgent {
   private readonly runner: RunRunner
   private readonly queues: QueueService
   private readonly launcher: RunLauncher
+  private readonly sessionTitles: SessionTitleService
 
   constructor(
     private readonly store: Store,
@@ -91,6 +94,7 @@ export class ChatAgent {
     this.contextBuilder = new ContextBuilder(store)
     this.runner = new RunRunner(store)
     this.queues = new QueueService(notifier)
+    this.sessionTitles = new SessionTitleService(store, notifier)
     this.launcher = new RunLauncher(
       {
         store,
@@ -278,9 +282,14 @@ export class ChatAgent {
       content: params.content,
       status: 'completed',
     })
-    if (session.title === DEFAULT_SESSION_TITLE) {
-      const title = deriveSessionTitle(params.content)
-      if (title) this.store.sessions.rename(params.sessionId, title)
+    const placeholderTitle =
+      session.title === DEFAULT_SESSION_TITLE &&
+      this.sessionTitles.shouldGenerate(params.sessionId)
+        ? deriveSessionTitle(params.content)
+        : null
+    if (placeholderTitle) {
+      this.store.sessions.rename(params.sessionId, placeholderTitle)
+      this.sessionTitles.emitUpdated(params.sessionId)
     }
     this.store.sessions.touch(params.sessionId)
     const assistantMessage = createPendingAssistantMessage(
@@ -306,7 +315,37 @@ export class ChatAgent {
       emitter,
     })
 
+    // 调度异步 LLM 标题生成：不阻塞 startSend 返回、不阻塞 Run。
+    // 仅在标题仍为默认值时触发，并标记防止重复。
+    if (placeholderTitle) {
+      this.sessionTitles.schedule({
+        sessionId: params.sessionId,
+        content: params.content,
+        placeholderTitle,
+        profile,
+        apiKey,
+        model,
+      })
+    }
+
     return { messageId: assistantMessage.id, runId: run.id }
+  }
+
+  emitSessionUpdated(sessionId: string): void {
+    this.sessionTitles.emitUpdated(sessionId)
+  }
+
+  markSessionTitleManuallyEdited(sessionId: string): void {
+    this.sessionTitles.markManuallyEdited(sessionId)
+  }
+
+  clearSessionResources(sessionId: string): void {
+    this.clearQueue(sessionId)
+    this.sessionTitles.clearSession(sessionId)
+  }
+
+  dispose(): void {
+    this.sessionTitles.dispose()
   }
 
   startRetry(params: { requestId: string; runId: string }): {
@@ -377,6 +416,104 @@ export class ChatAgent {
       messageId: assistantMessage.id,
       runId: run.id,
       retryOfRunId: original.id,
+    }
+  }
+
+  /** 编辑最后一条用户消息并重发。
+   * 产品语义：替换最后一条 user（标记旧 user+assistant 为 superseded），
+   * 以新内容作为新一轮发送；与 run.retry 区分（retry 同文案重跑，不改 user）。
+   * 会话有进行中的 Run → invalid_request（「请先停止当前回复」）。
+   * 排队中的消息继续只走 QueueBar，不走本命令。
+   */
+  startEditResend(params: MessageEditResendParams) {
+    const session = this.requireSession(params.sessionId)
+    this.requireIdleSession(params.sessionId)
+    const content = params.content.trim()
+    if (content === '') {
+      throw new CommandError('invalid_request', '消息内容不能为空')
+    }
+    const messages = this.store.messages.listBySession(params.sessionId)
+    const lastUserMessage = [...messages]
+      .reverse()
+      .find((message) => message.role === 'user')
+    if (!lastUserMessage || lastUserMessage.id !== params.messageId) {
+      throw new CommandError('invalid_request', '只能编辑最后一条用户消息')
+    }
+    const replacedRunIds: string[] = []
+    let replacedRun = lastUserMessage.runId
+      ? this.store.runs.get(lastUserMessage.runId)
+      : null
+    while (replacedRun) {
+      replacedRunIds.push(replacedRun.id)
+      replacedRun = replacedRun.supersededByRunId
+        ? this.store.runs.get(replacedRun.supersededByRunId)
+        : null
+    }
+    const { skill } = this.resolveSkillInvocation(content, params.skillId)
+    const { profile, apiKey, model } = resolveProvider(
+      this.store,
+      params.providerId,
+      params.model,
+    )
+    const sampling = resolveSampling(profile, params)
+    const { newRun, newUserMessage, newAssistantMessage } =
+      this.store.transaction(() => {
+        const newRun = this.store.runs.create({
+          sessionId: params.sessionId,
+          providerId: profile.id,
+          model,
+          skillId: skill?.manifest.id ?? null,
+        })
+        if (replacedRunIds.length > 0) {
+          const visibleRunId = replacedRunIds.at(-1)
+          if (visibleRunId) {
+            this.store.runs.markSuperseded(visibleRunId, newRun.id)
+          }
+          for (const runId of replacedRunIds) {
+            this.store.messages.markSupersededRound(runId)
+          }
+        } else {
+          this.store.messages.markSuperseded(lastUserMessage.id)
+        }
+        const newUserMessage = this.store.messages.create({
+          sessionId: params.sessionId,
+          runId: newRun.id,
+          role: 'user',
+          content,
+          status: 'completed',
+        })
+        const newAssistantMessage = createPendingAssistantMessage(
+          this.store,
+          params.sessionId,
+          newRun,
+        )
+        return { newRun, newUserMessage, newAssistantMessage }
+      })
+
+    this.store.sessions.touch(params.sessionId)
+    const emitter = new RunEventEmitter(newRun.id, this.notifier)
+    emitter.next({ type: 'run.started', run: newRun })
+    emitter.next({ type: 'message.created', message: newUserMessage })
+    emitter.next({ type: 'message.created', message: newAssistantMessage })
+    this.launch({
+      run: newRun,
+      session,
+      profile,
+      apiKey,
+      model,
+      sampling,
+      permissionPreset: resolveInputPreset(params),
+      skill,
+      assistantMessage: newAssistantMessage,
+      emitter,
+    })
+
+    return {
+      queued: false,
+      messageId: newAssistantMessage.id,
+      runId: newRun.id,
+      queueId: null,
+      position: null,
     }
   }
 

@@ -59,3 +59,26 @@ test('seq 在同一发射器实例内单调递增', () => {
     [0, 1],
   )
 })
+
+test('session.updated uses the session resource identity', () => {
+  const events = []
+  const emitter = new ResourceEventEmitter(
+    { scope: 'session', sessionId: 's1' },
+    (event) => events.push(event),
+  )
+  emitter.next({
+    type: 'session.updated',
+    session: {
+      id: 's1',
+      projectId: null,
+      gitBranch: null,
+      title: 'new title',
+      status: 'active',
+      createdAt: '2026-09-24T00:00:00.000Z',
+      updatedAt: '2026-09-24T00:00:00.000Z',
+    },
+  })
+  assert.equal(events[0].scope, 'session')
+  assert.equal(events[0].sessionId, 's1')
+  assert.equal(events[0].session.title, 'new title')
+})

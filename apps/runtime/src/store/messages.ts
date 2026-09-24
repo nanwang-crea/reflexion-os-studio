@@ -135,6 +135,19 @@ export class MessageStore {
       .run(runId)
   }
 
+  /** 编辑重发专用：旧 user 与 assistant 一并退出默认历史。 */
+  markSupersededRound(runId: string): void {
+    this.db
+      .prepare("UPDATE messages SET status = 'superseded' WHERE run_id = ?")
+      .run(runId)
+  }
+
+  markSuperseded(id: string): void {
+    this.db
+      .prepare("UPDATE messages SET status = 'superseded' WHERE id = ?")
+      .run(id)
+  }
+
   private toMessage(row: Row): Message {
     return {
       id: String(row.id),
