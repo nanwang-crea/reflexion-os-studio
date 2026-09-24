@@ -6,7 +6,7 @@ import {
   type ProviderCapability,
   type ProviderProfile,
 } from '@reflexion-os-studio/contracts'
-import { nowIso, type Row } from './shared.js'
+import { nowIso, type Row } from '../shared.js'
 
 /** 模型供应商领域：多供应商 × 多模型配置。 */
 export class ProviderStore {

@@ -4,7 +4,7 @@ import type {
   Delegation,
   DelegationStatus,
 } from '@reflexion-os-studio/contracts'
-import { nowIso, type Row } from './shared.js'
+import { nowIso, type Row } from '../shared.js'
 
 export class DelegationStore {
   constructor(private readonly db: DatabaseSync) {}

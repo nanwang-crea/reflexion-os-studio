@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
-import { nowIso, type Row } from './shared.js'
+import { nowIso, type Row } from '../shared.js'
 
 /** Checkpoint 摘要结构（§6.1）；zod 校验在 checkpoint 服务层完成。 */
 export interface ContextCheckpointSummary {

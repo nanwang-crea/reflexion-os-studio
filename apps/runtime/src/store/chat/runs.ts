@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import type { Run, RunStatus, Usage } from '@reflexion-os-studio/contracts'
-import { nowIso, type Row } from './shared.js'
+import { nowIso, type Row } from '../shared.js'
 
 /** Run 领域：一次回复的执行生命周期。 */
 export class RunStore {

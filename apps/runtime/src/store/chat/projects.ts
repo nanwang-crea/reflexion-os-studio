@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import type { Project } from '@reflexion-os-studio/contracts'
-import { nowIso, type Row } from './shared.js'
+import { nowIso, type Row } from '../shared.js'
 
 /** 项目领域：项目即本地文件夹的元数据。 */
 export class ProjectStore {

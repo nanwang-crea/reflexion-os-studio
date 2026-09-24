@@ -6,7 +6,7 @@ import {
 export type { ContextCheckpointSummary } from '@reflexion-os-studio/contracts'
 import type { ContextFrame } from '@reflexion-os-studio/agent-core'
 import type { Store } from '../store/index.js'
-import { emptySummary } from '../store/contextCheckpoints.js'
+import { emptySummary } from '../store/agents/contextCheckpoints.js'
 import type { ProviderRuntimeConfig } from './context.js'
 import { CHECKPOINT_SUMMARY_SYSTEM_PROMPT } from './prompts/index.js'
 

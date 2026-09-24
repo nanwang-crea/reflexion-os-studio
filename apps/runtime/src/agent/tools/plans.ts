@@ -3,7 +3,7 @@ import type {
   ToolResult,
 } from '@reflexion-os-studio/agent-core'
 import type { JsonValue, PlanStepStatus } from '@reflexion-os-studio/contracts'
-import { PlanError } from '../../store/plans.js'
+import { PlanError } from '../../store/chat/plans.js'
 import type { ToolContext } from './shared.js'
 
 /**

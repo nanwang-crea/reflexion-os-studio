@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type { PluginCompat, PluginRecord } from '@reflexion-os-studio/contracts'
-import { nowIso, type Row } from './shared.js'
+import { nowIso, type Row } from '../shared.js'
 
 export interface PluginUpsertInput {
   id: string

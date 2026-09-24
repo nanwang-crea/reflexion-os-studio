@@ -80,6 +80,8 @@ Prompt → Text-to-Image → Review → Image-to-Video → Export
 
 ## 8. 存储边界
 
+Runtime 的 SQLite 实现统一收敛在 `apps/runtime/src/store/`：根层负责连接、schema、迁移与共享设施，领域实现按 `chat/`、`agents/`、`integrations/`、`workspace/` 分组。业务层通过 `store/index.ts` 门面访问，避免 SQL 与具体 Store 路径扩散到 handler/agent。
+
 - Definition：Agent、Workflow、Node、Provider、Plugin 配置。
 - Runtime：Session、Run、Node Run、Tool Call、Approval、Checkpoint。
 - Event：不可变事件日志。

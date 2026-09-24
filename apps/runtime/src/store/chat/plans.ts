@@ -6,7 +6,7 @@ import type {
   PlanStep,
   PlanStepStatus,
 } from '@reflexion-os-studio/contracts'
-import { nowIso, type Row } from './shared.js'
+import { nowIso, type Row } from '../shared.js'
 
 /**
  * 计划领域状态机错误：携带稳定错误码供模型自纠。

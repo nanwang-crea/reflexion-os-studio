@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import type { McpServer } from '@reflexion-os-studio/contracts'
-import { nowIso, type Row } from './shared.js'
+import { nowIso, type Row } from '../shared.js'
 
 /** MCP server 配置文件(命令/参数/环境)与最后状态;工具清单在内存管理服务。 */
 export class McpServerStore {

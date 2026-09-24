@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import type { Session } from '@reflexion-os-studio/contracts'
-import { DEFAULT_SESSION_TITLE, nowIso, type Row } from './shared.js'
+import { DEFAULT_SESSION_TITLE, nowIso, type Row } from '../shared.js'
 
 /** 会话领域：项目内会话与独立会话（project_id 为空）。 */
 export class SessionStore {

@@ -181,7 +181,7 @@ MCP **不并入** PluginRecord 体系：`mcp_servers` 表与现有命令保持�
 - 新增 `plugins` 表（schema v24 → **v25**）：`id`（主键，= skill id）、`kind`、`version`、
   `source`、`source_ref`、`status`、`install_path`、`enabled`、`compat_json`、`error`、
   `created_at`/`updated_at`。
-- `store/plugins.ts` 为领域层（与 `mcpServers.ts` 同构：list/get/create/update/toggle/remove），
+- `store/integrations/plugins.ts` 为领域层（与同目录 `mcpServers.ts` 同构：list/get/create/update/toggle/remove），
   业务代码只调领域方法，不直接写 SQL。
 - 启动恢复：先从 DB 读出已登记插件恢复状态，再与磁盘扫描对账——磁盘存在但 DB 无记录
   → 新发现并标 `installed`（默认启用）；DB 有记录但磁盘缺失 → 标 `invalid` 并保留 error，
@@ -209,7 +209,7 @@ MCP **不并入** PluginRecord 体系：`mcp_servers` 表与现有命令保持�
 
 - contracts：PluginRecord/PluginSpecifier schema + `plugin.*` 命令 + `plugin.changed` 事件；
   协议 1.2 → 1.3；白名单 JSON 重新生成。
-- runtime：`store/plugins.ts`（schema v25 迁移）；`skills/` 目录扫描器（SKILL.md 解析、
+- runtime：`store/integrations/plugins.ts`（schema v25 迁移）；`skills/` 目录扫描器（SKILL.md 解析、
   strict zod 校验、invalid 容错）；`builtinSkills` 改注入式（D4）；启动对账恢复；
   `plugin.list/install(dir 通道)/toggle/uninstall/rescan` 命令 handler。
 - frontend：`api/plugins.ts`；SkillsView 卡片加来源/版本/状态/启停开关/卸载确认。

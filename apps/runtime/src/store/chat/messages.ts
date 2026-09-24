@@ -7,7 +7,7 @@ import {
   type MessageRole,
   type MessageStatus,
 } from '@reflexion-os-studio/contracts'
-import { nowIso, type Row } from './shared.js'
+import { nowIso, type Row } from '../shared.js'
 
 /** content（纯文本投影）对应的 canonical 内容块。 */
 function textParts(content: string): ContentPart[] {
