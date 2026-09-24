@@ -4,7 +4,7 @@
   width: 272px;
   flex-shrink: 0;
   background: var(--bg-sidebar);
-  border-right: 1px solid rgba(255, 255, 255, 0.045);
+  border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -21,22 +21,21 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 14px 12px 10px;
+  padding: 12px 10px 8px;
   flex-shrink: 0;
 }
 
 .brand-mark {
   width: 28px;
   height: 28px;
-  border-radius: 9px;
-  background: linear-gradient(145deg, #91a0ff, #7867e8);
-  color: #10121a;
+  border-radius: 8px;
+  background: #ececec;
+  color: #171717;
   font-weight: 700;
   font-size: 13px;
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  box-shadow: 0 6px 18px rgba(112, 101, 232, 0.28);
 }
 
 .brand-name {
@@ -66,17 +65,17 @@
   gap: 7px;
   margin: 0 4px 10px;
   padding: 0 10px;
-  height: 36px;
+  height: 34px;
   background: var(--bg-inset);
-  border: 1px solid var(--border-subtle);
-  border-radius: 11px;
+  border: 1px solid transparent;
+  border-radius: 8px;
   color: var(--text-muted);
   flex-shrink: 0;
 }
 
 .panel-search:focus-within {
-  border-color: var(--accent-border);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  border-color: var(--border);
+  box-shadow: none;
 }
 
 .panel-search input {
@@ -106,19 +105,19 @@
 .session-row {
   display: flex;
   align-items: center;
-  border-radius: 10px;
-  min-height: 36px;
+  border-radius: 8px;
+  min-height: 34px;
 }
 
 .project-row:hover,
 .session-row:hover {
-  background: rgba(255, 255, 255, 0.045);
+  background: var(--bg-hover);
 }
 
 .project-row.active,
 .session-row.active {
-  background: var(--accent-soft);
-  box-shadow: inset 2px 0 0 var(--accent);
+  background: var(--bg-active);
+  box-shadow: none;
 }
 
 .project-row .row,
@@ -391,7 +390,7 @@
 }
 
 .nav-item.active {
-  background: var(--accent-soft);
+  background: var(--bg-active);
   color: var(--text);
 }
 

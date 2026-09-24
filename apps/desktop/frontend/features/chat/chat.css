@@ -17,16 +17,16 @@
 .transcript {
   max-width: var(--chat-col);
   margin: 0 auto;
-  padding: 28px 18px 16px;
+  padding: 28px 0 16px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 22px;
 }
 
 /* ---------- 空态 ---------- */
 
 .chat-empty {
-  margin-top: 112px;
+  margin-top: 104px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -35,12 +35,12 @@
 }
 
 .chat-empty-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
-  border: 1px solid var(--accent-border);
-  background: linear-gradient(145deg, var(--accent-soft), var(--bg-elevated));
-  color: var(--accent-hover);
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
   display: grid;
   place-items: center;
 }
@@ -60,15 +60,14 @@
 
 .user-bubble {
   position: relative;
-  background: linear-gradient(145deg, #2e3343, #292d38);
-  border: 1px solid rgba(255, 255, 255, 0.055);
-  border-radius: 18px 18px 5px 18px;
-  padding: 10px 15px;
-  max-width: 74%;
+  background: var(--bg-elevated);
+  border: 1px solid transparent;
+  border-radius: 18px;
+  padding: 10px 16px;
+  max-width: 80%;
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
-  box-shadow: var(--shadow-sm);
 }
 
 /* 用户消息也可能很长：限高 5 行内部上下滚动
@@ -95,7 +94,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  line-height: 1.72;
+  line-height: 1.68;
 }
 
 .assistant-content {
@@ -195,7 +194,7 @@
 }
 
 .msg-action:hover:not(:disabled) {
-  background: var(--accent-soft);
+  background: var(--bg-hover);
   color: var(--text);
 }
 
@@ -206,14 +205,12 @@
 }
 
 .user-bubble-editing {
-  width: min(680px, 82%);
-  max-width: 82%;
-  padding: 12px;
-  border-color: var(--accent-border);
+  width: min(680px, 100%);
+  max-width: 100%;
+  padding: 10px;
+  border-color: var(--border);
   background: var(--bg-elevated);
-  box-shadow:
-    0 0 0 3px var(--accent-soft),
-    var(--shadow-lg);
+  box-shadow: none;
 }
 
 .edit-resend-inline {
@@ -227,7 +224,7 @@
   min-height: 96px;
   padding: 8px 10px;
   border: 0;
-  border-radius: 9px;
+  border-radius: 10px;
   outline: none;
   background: var(--bg-inset);
   color: var(--text);
@@ -237,7 +234,7 @@
 }
 
 .edit-resend-textarea:focus-visible {
-  box-shadow: 0 0 0 1px var(--accent);
+  box-shadow: none;
 }
 
 .edit-resend-actions {
@@ -248,7 +245,7 @@
 
 .edit-resend-actions .primary {
   background: var(--accent);
-  color: #fff;
+  color: #171717;
 }
 
 .edit-resend-actions .primary:hover:not(:disabled) {
@@ -703,8 +700,8 @@
   max-width: var(--chat-col);
   margin: 0 auto 8px;
   padding: 10px 14px;
-  border: 1px solid rgba(251, 191, 36, 0.2);
-  border-radius: 14px;
+  border: 1px solid rgba(251, 191, 36, 0.18);
+  border-radius: 10px;
   background: var(--warning-bg);
   color: var(--warning-text);
   font-size: 13px;
@@ -714,8 +711,7 @@
 
 .composer-wrap {
   position: relative;
-  padding: 10px 16px 18px;
-  background: linear-gradient(to top, var(--bg) 76%, transparent);
+  padding: 10px 20px 18px;
 }
 
 .composer {
@@ -724,21 +720,19 @@
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  background: color-mix(in srgb, var(--bg-elevated) 94%, #323849);
+  background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 22px;
-  padding: 13px 15px 11px;
-  box-shadow: var(--shadow-lg);
+  border-radius: 26px;
+  padding: 12px 14px 10px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
   transition:
     border-color 0.16s ease,
     box-shadow 0.16s ease;
 }
 
 .composer:focus-within {
-  border-color: var(--accent-border);
-  box-shadow:
-    0 0 0 3px var(--accent-soft),
-    var(--shadow-lg);
+  border-color: #5a5a5a;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
 }
 
 .slash-menu {
@@ -880,8 +874,8 @@
   display: grid;
   place-items: center;
   background: var(--accent);
-  color: #fff;
-  box-shadow: 0 6px 16px rgba(124, 140, 255, 0.28);
+  color: #171717;
+  box-shadow: none;
 }
 
 .composer-send:hover:not(:disabled),

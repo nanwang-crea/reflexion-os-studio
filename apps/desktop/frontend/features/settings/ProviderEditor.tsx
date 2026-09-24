@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { ApiFormat, ProviderProfile } from '@reflexion-os-studio/runtime-client'
+import type {
+  ApiFormat,
+  ProviderProfile,
+} from '@reflexion-os-studio/runtime-client'
 import {
   configureProvider,
   deleteProvider,
   testProvider,
 } from '../../api/providers'
-import { EyeIcon, PlusIcon, TrashIcon } from '../../ui/icons'
+import type { ConfirmDialogState } from '../../components/ConfirmDialog'
+import { EyeIcon, PlusIcon } from '../../ui/icons'
 import {
   draftFromProfile,
   EMPTY_DRAFT,
@@ -24,6 +28,7 @@ interface ProviderEditorProps {
   onSaved: () => Promise<void>
   onCreated: (id: string) => void
   onDeleted: () => void
+  confirm: (state: ConfirmDialogState) => Promise<boolean>
 }
 
 /**
@@ -137,6 +142,13 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
 
   const removeProvider = async (): Promise<void> => {
     if (!profile || busy) return
+    const confirmed = await props.confirm({
+      title: '删除供应商？',
+      message: `将删除“${profile.name}”及其本地配置。此操作无法撤销。`,
+      confirmLabel: '删除供应商',
+      danger: true,
+    })
+    if (!confirmed) return
     setBusy(true)
     setError(null)
     try {
@@ -198,24 +210,22 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
           {draft.enabled ? '已启用' : '已禁用'}
         </span>
         {profile && (
-          <button
-            className="ghost"
-            disabled={busy}
-            onClick={() => void toggleEnabled()}
-          >
-            {profile.enabled ? '禁用' : '启用'}
-          </button>
-        )}
-        <span className="spacer" />
-        {profile && (
-          <button
-            className="icon-btn danger"
-            title="删除供应商"
-            disabled={busy}
-            onClick={() => void removeProvider()}
-          >
-            <TrashIcon />
-          </button>
+          <>
+            <button
+              className="ghost"
+              disabled={busy}
+              onClick={() => void toggleEnabled()}
+            >
+              {profile.enabled ? '禁用' : '启用'}
+            </button>
+            <button
+              className="danger-text provider-delete"
+              disabled={busy}
+              onClick={() => void removeProvider()}
+            >
+              删除
+            </button>
+          </>
         )}
       </div>
 
@@ -241,9 +251,15 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
             updateDraft({ apiFormat: event.target.value as ApiFormat })
           }
         >
-          <option value="openai-chat">OpenAI Chat Completions (/chat/completions)</option>
-          <option value="openai-responses">OpenAI Responses API (/v1/responses)</option>
-          <option value="anthropic">Anthropic Messages API (/v1/messages)</option>
+          <option value="openai-chat">
+            OpenAI Chat Completions (/chat/completions)
+          </option>
+          <option value="openai-responses">
+            OpenAI Responses API (/v1/responses)
+          </option>
+          <option value="anthropic">
+            Anthropic Messages API (/v1/messages)
+          </option>
         </select>
       </label>
 
@@ -378,7 +394,11 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
       </div>
 
       <div className="form-actions">
-        <button disabled={busy || !dirty} onClick={() => void saveDraft()}>
+        <button
+          className="primary"
+          disabled={busy || !dirty}
+          onClick={() => void saveDraft()}
+        >
           {busy ? '保存中…' : profile ? '保存修改' : '创建供应商'}
         </button>
         <button

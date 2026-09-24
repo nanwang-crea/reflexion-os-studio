@@ -14,6 +14,17 @@ interface ProviderListProps {
 export function ProviderList(props: ProviderListProps): React.JSX.Element {
   return (
     <aside className="provider-list">
+      <div className="provider-list-head">
+        <span>供应商</span>
+        <button
+          className="provider-add"
+          onClick={() => props.onCreate()}
+          disabled={props.creating}
+        >
+          <PlusIcon />
+          添加
+        </button>
+      </div>
       <ul>
         {props.profiles.map((profile) => (
           <li key={profile.id}>
@@ -33,14 +44,6 @@ export function ProviderList(props: ProviderListProps): React.JSX.Element {
         ))}
         {props.profiles.length === 0 && <li className="empty">还没有供应商</li>}
       </ul>
-      <button
-        className="provider-add"
-        onClick={() => props.onCreate()}
-        disabled={props.creating}
-      >
-        <PlusIcon />
-        添加供应商
-      </button>
     </aside>
   )
 }

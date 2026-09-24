@@ -206,13 +206,6 @@ export function AgentRuntimePanel(): React.JSX.Element {
 
   return (
     <div className="agent-runtime">
-      <div className="settings-section-heading">
-        <span className="settings-eyebrow">Agent 运行时</span>
-        <h3>让回复过程更符合你的工作节奏</h3>
-        <p className="hint">
-          调整循环、反思和网络请求参数；留空时使用推荐默认值。
-        </p>
-      </div>
       <div className="agent-runtime-body">
         {GROUPS.map((group) => {
           return (

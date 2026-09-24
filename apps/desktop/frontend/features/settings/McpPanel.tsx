@@ -6,7 +6,6 @@ import {
 } from '@reflexion-os-studio/runtime-client'
 import { addMcp, listMcp, removeMcp, reloadMcp, toggleMcp } from '../../api/mcp'
 import type { ConfirmDialogState } from '../../components/ConfirmDialog'
-import { TrashIcon } from '../../ui/icons'
 
 const STATUS_LABELS: Record<string, string> = {
   disabled: '已停用',
@@ -28,6 +27,7 @@ export function McpPanel(props: McpPanelProps): React.JSX.Element {
   const [name, setName] = useState('')
   const [command, setCommand] = useState('')
   const [args, setArgs] = useState('')
+  const [showAddForm, setShowAddForm] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // 进行中的操作：server id 或特殊键（'add' / 'reload'），避免并发 mutation 交错。
@@ -95,6 +95,7 @@ export function McpPanel(props: McpPanelProps): React.JSX.Element {
       setName('')
       setCommand('')
       setArgs('')
+      setShowAddForm(false)
       await refresh()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
@@ -145,12 +146,70 @@ export function McpPanel(props: McpPanelProps): React.JSX.Element {
 
   return (
     <div className="mcp-panel">
-      <div className="agent-runtime-head">
-        <h2>MCP 服务器</h2>
-        <p className="hint">
-          连接外部 MCP server，其工具自动进入 Agent 工具集并在使用前请求审批。
-        </p>
+      <div className="settings-list-toolbar">
+        <div>
+          <h4>MCP 服务器</h4>
+          <p>{servers.length} 个已配置服务器</p>
+        </div>
+        <div className="settings-toolbar-actions">
+          <button
+            type="button"
+            className="ghost"
+            disabled={isPending('reload') || busy}
+            onClick={() => void reload()}
+          >
+            {isPending('reload') ? '正在重新加载…' : '重新加载'}
+          </button>
+          <button
+            type="button"
+            className="settings-primary"
+            onClick={() => setShowAddForm((current) => !current)}
+          >
+            {showAddForm ? '取消添加' : '添加服务器'}
+          </button>
+        </div>
       </div>
+
+      {showAddForm && (
+        <div className="mcp-add">
+          <div className="mcp-add-heading">
+            <h4>添加 MCP 服务器</h4>
+            <p>填写本地 stdio 服务器的启动信息。</p>
+          </div>
+          <input
+            placeholder="名称（例如 数据库）"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+          <input
+            placeholder="启动命令（例如 npx）"
+            value={command}
+            onChange={(event) => setCommand(event.target.value)}
+          />
+          <input
+            placeholder="参数（空格分隔，例如 -y @server/package）"
+            value={args}
+            onChange={(event) => setArgs(event.target.value)}
+          />
+          <div className="mcp-add-actions">
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => setShowAddForm(false)}
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              className="settings-primary"
+              disabled={busy || isPending('reload')}
+              onClick={() => void add()}
+            >
+              {busy ? '正在连接…' : '添加并连接'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <ul className="mcp-list">
         {servers.map((server) => (
@@ -184,13 +243,11 @@ export function McpPanel(props: McpPanelProps): React.JSX.Element {
               </button>
               <button
                 type="button"
-                className="icon-btn danger"
-                title="删除"
-                aria-label={`删除 ${server.name}`}
+                className="danger-text mcp-delete"
                 disabled={isPending(server.id) || isPending('reload')}
                 onClick={() => void remove(server)}
               >
-                <TrashIcon />
+                删除
               </button>
             </span>
           </li>
@@ -199,32 +256,6 @@ export function McpPanel(props: McpPanelProps): React.JSX.Element {
           <li className="mcp-empty">还没有 MCP 服务器</li>
         )}
       </ul>
-
-      <div className="mcp-add">
-        <input
-          placeholder="名称（例如 数据库）"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-        />
-        <input
-          placeholder="启动命令（例如 npx）"
-          value={command}
-          onChange={(event) => setCommand(event.target.value)}
-        />
-        <input
-          placeholder="参数（空格分隔，例如 -y @server/package）"
-          value={args}
-          onChange={(event) => setArgs(event.target.value)}
-        />
-        <button
-          type="button"
-          className="ghost"
-          disabled={busy || isPending('reload')}
-          onClick={() => void add()}
-        >
-          添加并连接
-        </button>
-      </div>
 
       {tools.length > 0 && (
         <div className="mcp-tools">
@@ -239,21 +270,11 @@ export function McpPanel(props: McpPanelProps): React.JSX.Element {
         </div>
       )}
 
-      <div className="form-actions">
-        <button
-          type="button"
-          className="ghost"
-          disabled={isPending('reload') || busy}
-          onClick={() => void reload()}
-        >
-          重新加载全部服务器
-        </button>
-        {error && (
-          <span className="error" role="alert">
-            {error}
-          </span>
-        )}
-      </div>
+      {error && (
+        <div className="settings-feedback error" role="alert">
+          {error}
+        </div>
+      )}
     </div>
   )
 }

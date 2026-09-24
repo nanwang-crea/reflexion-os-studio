@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ProviderProfile } from '@reflexion-os-studio/runtime-client'
 import type { ConfirmDialogState } from '../../components/ConfirmDialog'
-import { BoxIcon, DoubleChevronIcon, GearIcon, SparkIcon } from '../../ui/icons'
+import { BoxIcon, GearIcon, SparkIcon } from '../../ui/icons'
 import { AgentRuntimePanel } from './AgentRuntimePanel'
 import { McpPanel } from './McpPanel'
 import { ProviderEditor } from './ProviderEditor'
@@ -38,18 +38,12 @@ interface SettingsViewProps {
   confirm: (state: ConfirmDialogState) => Promise<boolean>
 }
 
-/** 设置页：可折叠左侧导航 + 右侧内容区；顶部压缩头部。 */
+/** 设置页：固定分类导航 + 单一内容列，保持各设置域的操作与状态独立。 */
 export function SettingsView(props: SettingsViewProps): React.JSX.Element {
   const [section, setSection] = useState<SettingsSection>('models')
   const [selectedKey, setSelectedKey] = useState<string | null>(
     props.profiles[0]?.id ?? null,
   )
-  const [navCollapsed, setNavCollapsed] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('settingsNavCollapsed') === 'true'
-    }
-    return false
-  })
 
   const selected = selectedKey
     ? (props.profiles.find((profile) => profile.id === selectedKey) ?? null)
@@ -66,12 +60,6 @@ export function SettingsView(props: SettingsViewProps): React.JSX.Element {
     }
   }, [props.profiles, selectedKey])
 
-  useEffect(() => {
-    localStorage.setItem('settingsNavCollapsed', String(navCollapsed))
-  }, [navCollapsed])
-
-  const toggleNav = () => setNavCollapsed((prev) => !prev)
-
   return (
     <div className="settings-view">
       <header className="settings-head">
@@ -85,14 +73,15 @@ export function SettingsView(props: SettingsViewProps): React.JSX.Element {
           </span>
           返回对话
         </button>
-        <h2>设置</h2>
+        <div>
+          <h2>设置</h2>
+          <p>管理模型、Agent 行为与工具连接</p>
+        </div>
       </header>
 
       <div className="settings-layout">
-        <nav
-          className={`settings-nav${navCollapsed ? ' collapsed' : ''}`}
-          aria-label="设置分类"
-        >
+        <nav className="settings-nav" aria-label="设置分类">
+          <span className="settings-nav-caption">设置</span>
           {SECTIONS.map((entry) => (
             <button
               key={entry.id}
@@ -101,32 +90,17 @@ export function SettingsView(props: SettingsViewProps): React.JSX.Element {
                 section === entry.id ? ' active' : ''
               }`}
               onClick={() => setSection(entry.id)}
-              title={navCollapsed ? entry.label : undefined}
             >
               {entry.icon}
-              {!navCollapsed && (
-                <span className="settings-nav-label">{entry.label}</span>
-              )}
+              <span className="settings-nav-label">{entry.label}</span>
             </button>
           ))}
-          <button
-            type="button"
-            className="settings-nav-toggle"
-            onClick={toggleNav}
-            aria-label={navCollapsed ? '展开导航' : '折叠导航'}
-            aria-expanded={!navCollapsed}
-          >
-            <DoubleChevronIcon
-              size={14}
-              direction={navCollapsed ? 'right' : 'left'}
-            />
-          </button>
         </nav>
 
         <div className="settings-content">
           {section === 'models' && (
             <>
-              <div className="settings-panel-head">
+              <div className="settings-panel-head settings-page-heading">
                 <h3 className="settings-panel-title">模型供应商</h3>
                 <p className="hint">
                   管理自定义模型供应商，配置后可在聊天时选择使用。
@@ -148,6 +122,7 @@ export function SettingsView(props: SettingsViewProps): React.JSX.Element {
                     onSaved={props.onSaved}
                     onCreated={(id) => setSelectedKey(id)}
                     onDeleted={() => setSelectedKey(null)}
+                    confirm={props.confirm}
                   />
                 </section>
               </div>
@@ -155,7 +130,7 @@ export function SettingsView(props: SettingsViewProps): React.JSX.Element {
           )}
           {section === 'runtime' && (
             <div className="settings-panel">
-              <div className="settings-panel-head">
+              <div className="settings-panel-head settings-page-heading">
                 <h3 className="settings-panel-title">Agent 运行时</h3>
                 <p className="hint">
                   调整循环、反思和网络请求参数；留空时使用推荐默认值。
@@ -166,7 +141,7 @@ export function SettingsView(props: SettingsViewProps): React.JSX.Element {
           )}
           {section === 'mcp' && (
             <div className="settings-panel">
-              <div className="settings-panel-head">
+              <div className="settings-panel-head settings-page-heading">
                 <h3 className="settings-panel-title">MCP 服务器</h3>
                 <p className="hint">
                   连接外部 MCP server，其工具自动进入 Agent
