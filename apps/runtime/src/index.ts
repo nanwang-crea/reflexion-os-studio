@@ -21,6 +21,7 @@ import { McpManager } from './mcp/manager.js'
 import { WorkspaceIndexer } from './workspace/indexer.js'
 import { AssetService } from './assets/service.js'
 import { TerminalService } from './terminal/service.js'
+import { SkillPluginService } from './skills/service.js'
 
 const RUNTIME_VERSION = '0.1.0'
 
@@ -115,8 +116,15 @@ function getStatus(): RuntimeStatus {
 }
 
 const store = new Store(resolveDataDir())
+const skillPlugins = new SkillPluginService(store, resolveDataDir(), notify)
 const mcpManager = new McpManager(store, notify)
-const agent = new ChatAgent(store, notify, systemRuntime, mcpManager)
+const agent = new ChatAgent(
+  store,
+  notify,
+  systemRuntime,
+  mcpManager,
+  skillPlugins.registry,
+)
 agentBox.current = agent
 const workspaceIndexer = new WorkspaceIndexer(store, notify)
 const assetService = new AssetService(store, resolveDataDir())
@@ -139,6 +147,7 @@ const commandContext = {
   mcp: mcpManager,
   assets: assetService,
   terminal: terminalService,
+  plugins: skillPlugins,
 }
 
 // P1 环境继承：先探测用户 shell 环境快照（不阻塞 Chat 就绪），

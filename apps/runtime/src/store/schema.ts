@@ -126,6 +126,23 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   last_error TEXT,
   updated_at TEXT NOT NULL
 );
+-- Plugin Foundation：首批只加载纯声明式 skill，provider/tool 为契约预留。
+CREATE TABLE IF NOT EXISTS plugins (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  version TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  source TEXT NOT NULL,
+  source_ref TEXT,
+  status TEXT NOT NULL,
+  install_path TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  compat_json TEXT,
+  error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 -- Agent 运行时全局设置(单行 JSON,id 恒为 1)。
 CREATE TABLE IF NOT EXISTS agent_settings (
   id INTEGER PRIMARY KEY,
@@ -205,4 +222,4 @@ CREATE TABLE IF NOT EXISTS context_checkpoints (
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 24
+export const LATEST_SCHEMA_VERSION = 25

@@ -660,7 +660,7 @@ test('project.delete handler: 行删除成功后项目记忆目录随清', async
   assert.ok(existsSync(dir))
   const ctx = {
     store,
-    agent: { clearQueue: () => {} },
+    agent: { clearQueue: () => {}, clearSessionResources: () => {} },
     approvals: { clearSession: () => {} },
     danger: { revoke: () => false },
     assets: { deleteProjectDir: async () => {} },

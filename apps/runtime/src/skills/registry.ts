@@ -8,6 +8,7 @@ import type { SkillDefinition } from './types.js'
  */
 export class SkillRegistry {
   private readonly skills = new Map<string, SkillDefinition>()
+  private readonly externalIds = new Set<string>()
 
   /** 注册并校验一个 Skill；id 冲突视为编程错误。 */
   register(skill: SkillDefinition): void {
@@ -19,6 +20,16 @@ export class SkillRegistry {
       throw new Error(`duplicate skill id: ${manifest.id}`)
     }
     this.skills.set(manifest.id, { manifest, instructions: skill.instructions })
+  }
+
+  registerExternal(skill: SkillDefinition): void {
+    this.register(skill)
+    this.externalIds.add(skill.manifest.id)
+  }
+
+  clearExternal(): void {
+    for (const id of this.externalIds) this.skills.delete(id)
+    this.externalIds.clear()
   }
 
   list(): SkillManifest[] {

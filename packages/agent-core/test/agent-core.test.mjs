@@ -148,6 +148,14 @@ test('registry folds unknown tool, bad JSON and tool errors into results', async
   )
   assert.deepEqual(ok, { content: 'echo:{"text":"a"}', isError: false })
 
+  const wrongShape = await registry.call(
+    { id: 'shape', name: 'echo', arguments: '{"text":42}' },
+    signal,
+  )
+  assert.equal(wrongShape.isError, true)
+  assert.equal(wrongShape.code, 'invalid_request')
+  assert.match(wrongShape.content, /\$\.text must be a string/)
+
   const boom = await registry.call(
     { id: '4', name: 'boom', arguments: '' },
     signal,

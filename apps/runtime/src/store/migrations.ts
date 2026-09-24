@@ -86,6 +86,7 @@ function tableColumns(db: DatabaseSync, table: string): TableColumn[] {
  *          再重建 messages 表；复制按 (created_at, rowid) 排序保持插入序。
  * v22 → v23：删除 SQLite 记忆链路——memories / memories_fts / memory_jobs
  *          整体 drop（文件即记忆 V2，真相源迁 MEMORY.md，不做数据搬迁）。
+ * v24 → v25：新增 plugins 表（由 SCHEMA 创建），无历史数据回填。
  * 各步骤带形状检测：SCHEMA 刚建好的新库不会空跑重建。
  */
 export function runMigrations(db: DatabaseSync, dir: string): void {
@@ -354,6 +355,7 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
         )
       }
     }
+    // v25：plugins 是纯新增表，由 SCHEMA CREATE TABLE IF NOT EXISTS 覆盖。
     db.exec('COMMIT')
     // 迁移全部执行完毕才推进版本号；否则下次启动会重复进入迁移分支。
     version = LATEST_SCHEMA_VERSION

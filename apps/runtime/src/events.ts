@@ -15,6 +15,7 @@ export type EventIdentity =
   | { scope: 'session'; sessionId: string }
   | { scope: 'project'; projectId: string }
   | { scope: 'mcp'; serverId: string }
+  | { scope: 'plugin'; pluginId: string }
   | { scope: 'terminal'; projectId: string; terminalId: string }
 
 /**
@@ -88,6 +89,7 @@ export class EmitterRegistry {
       (id.projectId as string) ?? '',
       (id.terminalId as string) ?? '',
       (id.serverId as string) ?? '',
+      (id.pluginId as string) ?? '',
     ].join(':')
   }
 

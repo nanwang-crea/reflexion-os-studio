@@ -12,8 +12,7 @@ export {
   skillsPromptSection,
 } from './invocation.js'
 
-/** 内置 Skill 注册表单例：Phase 1A 全部可用技能即此清单。 */
-export const builtinSkills: SkillRegistry = (() => {
+export function createSkillRegistry(): SkillRegistry {
   const registry = new SkillRegistry()
   for (const skill of [
     CODE_REVIEW_SKILL,
@@ -24,4 +23,4 @@ export const builtinSkills: SkillRegistry = (() => {
     registry.register(skill)
   }
   return registry
-})()
+}

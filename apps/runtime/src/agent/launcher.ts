@@ -9,9 +9,9 @@ import type {
 import { RunEventEmitter } from '../events.js'
 import {
   activeSkillPromptSection,
-  builtinSkills,
   skillsPromptSection,
   type SkillDefinition,
+  type SkillRegistry,
 } from '../skills/index.js'
 import type { Store } from '../store/index.js'
 import type { SystemRuntimeClient } from '../system.js'
@@ -67,6 +67,7 @@ export interface LaunchDeps {
   contextBuilder: ContextBuilder
   approvals: ApprovalGateway
   danger: DangerLeaseService
+  skills: SkillRegistry
 }
 
 export interface LaunchHooks {
@@ -161,7 +162,7 @@ export class RunLauncher {
       emitter,
       system: this.deps.system,
       workspaceRoot,
-      skills: builtinSkills,
+      skills: this.deps.skills,
       mcp: this.deps.mcp,
       childRunStarter: input.childRunStarter,
       allowedTools: input.allowedTools,
@@ -181,7 +182,8 @@ export class RunLauncher {
         buildHistory: (signal) =>
           this.deps.contextBuilder.build(
             sessionId,
-            input.systemPrompt ?? composeSystemPrompt(input.skill),
+            input.systemPrompt ??
+              composeSystemPrompt(this.deps.skills, input.skill),
             provider,
             signal,
           ),
@@ -213,8 +215,11 @@ export class RunLauncher {
 }
 
 /** system prompt = 主 prompt + 可用 Skills 清单 +（可选）本次激活技能的完整说明。 */
-export function composeSystemPrompt(skill: SkillDefinition | null): string {
-  const base = `${PRIMARY_AGENT_SYSTEM_PROMPT}${skillsPromptSection(builtinSkills.list())}`
+export function composeSystemPrompt(
+  skills: SkillRegistry,
+  skill: SkillDefinition | null,
+): string {
+  const base = `${PRIMARY_AGENT_SYSTEM_PROMPT}${skillsPromptSection(skills.list())}`
   return skill === null ? base : `${base}${activeSkillPromptSection(skill)}`
 }
 

@@ -1,7 +1,6 @@
 import { basename } from 'node:path'
 import type { ChatCommand } from '@reflexion-os-studio/contracts'
 import { CommandError } from './agent/index.js'
-import { builtinSkills } from './skills/index.js'
 import {
   requireString,
   type CommandContext,
@@ -228,7 +227,49 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
   'danger.status': (p, { danger }) => ({
     lease: danger.leaseFor(requireString(p, 'sessionId')),
   }),
-  'skill.list': () => ({ skills: builtinSkills.list() }),
+  'skill.list': (_p, { plugins }) => ({ skills: plugins.registry.list() }),
+  'plugin.list': (_p, { plugins }) => ({ plugins: plugins.list() }),
+  'plugin.install': (p, { plugins }) => {
+    try {
+      if (p.source !== 'dir') {
+        throw new Error('only workspace directory installation is supported')
+      }
+      return {
+        plugin: plugins.installFromWorkspace(
+          requireString(p, 'projectId'),
+          requireString(p, 'path'),
+        ),
+      }
+    } catch (error) {
+      throw new CommandError(
+        'invalid_request',
+        error instanceof Error ? error.message : String(error),
+      )
+    }
+  },
+  'plugin.toggle': (p, { plugins }) => {
+    try {
+      return {
+        plugin: plugins.toggle(requireString(p, 'id'), p.enabled === true),
+      }
+    } catch (error) {
+      throw new CommandError(
+        'invalid_request',
+        error instanceof Error ? error.message : String(error),
+      )
+    }
+  },
+  'plugin.uninstall': (p, { plugins }) => {
+    try {
+      return { removed: plugins.uninstall(requireString(p, 'id')) }
+    } catch (error) {
+      throw new CommandError(
+        'invalid_request',
+        error instanceof Error ? error.message : String(error),
+      )
+    }
+  },
+  'plugin.rescan': (_p, { plugins }) => ({ plugins: plugins.rescan() }),
 }
 
 export const commandHandlers: Record<string, CommandHandler> = {

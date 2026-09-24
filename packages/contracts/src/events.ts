@@ -14,6 +14,7 @@ import {
   DelegationSchema,
   TerminalStatusSchema,
   SessionSchema,
+  PluginRecordSchema,
 } from './entities.js'
 import { RuntimeErrorSchema } from './errors.js'
 import { RuntimeStatusSchema } from './handshake.js'
@@ -48,6 +49,7 @@ export const EventScopeSchema = z.enum([
   'project',
   'mcp',
   'terminal',
+  'plugin',
 ])
 export type EventScope = z.infer<typeof EventScopeSchema>
 
@@ -243,6 +245,12 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     scope: z.literal('mcp'),
     serverId: z.string().min(1),
     server: McpServerSchema,
+  }),
+  RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('plugin.changed'),
+    scope: z.literal('plugin'),
+    pluginId: z.string().min(1),
+    plugin: PluginRecordSchema.nullable(),
   }),
   // 集成终端事件（W2 接线，本阶段冻结契约）。output 载荷为 base64 字节帧。
   TerminalEnvelopeSchema.extend({

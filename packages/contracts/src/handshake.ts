@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const PROTOCOL_VERSION = '1.2'
+export const PROTOCOL_VERSION = '1.3'
 
 export const CapabilitySchema = z.enum([
   'chat',

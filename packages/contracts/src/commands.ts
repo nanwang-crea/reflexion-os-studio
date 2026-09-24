@@ -8,6 +8,7 @@ import {
   RunSchema,
   SessionSchema,
   SkillManifestSchema,
+  PluginRecordSchema,
   ToolCallSchema,
   WorkspaceEntrySchema,
   WorkspaceIndexSnapshotSchema,
@@ -528,6 +529,35 @@ export const CommandSchemaRegistry = {
     // 内置 Skill 清单（Phase 1A 无安装/启停，列表即全部可用项）。
     params: z.object({ requestId: RequestIdSchema }),
     result: z.object({ skills: z.array(SkillManifestSchema) }),
+  },
+  'plugin.list': {
+    params: z.object({ requestId: RequestIdSchema }),
+    result: z.object({ plugins: z.array(PluginRecordSchema) }),
+  },
+  'plugin.install': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      source: z.literal('dir'),
+      projectId: z.string().min(1),
+      path: z.string().min(1),
+    }),
+    result: z.object({ plugin: PluginRecordSchema }),
+  },
+  'plugin.toggle': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      id: z.string().min(1),
+      enabled: z.boolean(),
+    }),
+    result: z.object({ plugin: PluginRecordSchema }),
+  },
+  'plugin.uninstall': {
+    params: z.object({ requestId: RequestIdSchema, id: z.string().min(1) }),
+    result: z.object({ removed: z.boolean() }),
+  },
+  'plugin.rescan': {
+    params: z.object({ requestId: RequestIdSchema }),
+    result: z.object({ plugins: z.array(PluginRecordSchema) }),
   },
   // ---------- Phase 1B：Workspace Surface ----------
   'workspace.index.start': {

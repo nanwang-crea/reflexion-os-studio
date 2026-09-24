@@ -10,6 +10,7 @@ import type { McpManager } from './mcp/manager.js'
 import type { WorkspaceIndexer } from './workspace/indexer.js'
 import type { AssetService } from './assets/service.js'
 import type { TerminalService } from './terminal/service.js'
+import type { SkillPluginService } from './skills/service.js'
 
 export type CommandResult = Record<string, unknown>
 
@@ -29,6 +30,8 @@ export interface CommandContext {
   assets: AssetService
   /** 集成终端多会话服务（terminal.* 命令；W2）。 */
   terminal: TerminalService
+  /** Declarative Skill Plugin lifecycle and active registry. */
+  plugins: SkillPluginService
 }
 
 export type CommandHandler = (

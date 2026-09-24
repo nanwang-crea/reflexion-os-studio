@@ -1383,6 +1383,6 @@ test('permission.approval_override set/get 命令注册', () => {
   assert.equal(get.result.safeParse({ override: 'default' }).success, true)
 })
 
-test('协议版本升级到 1.2', () => {
-  assert.equal(PROTOCOL_VERSION, '1.2')
+test('协议版本升级到 1.3', () => {
+  assert.equal(PROTOCOL_VERSION, '1.3')
 })

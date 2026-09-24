@@ -35,6 +35,23 @@
   line-height: 1.6;
 }
 
+.skill-rescan {
+  align-self: flex-start;
+}
+
+.skill-card-error {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(248, 113, 113, 0.1);
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.skill-card-actions .danger {
+  color: var(--danger);
+}
+
 .inline-banner.error {
   border: 1px solid var(--danger);
   background: rgba(248, 113, 113, 0.1);

@@ -120,7 +120,42 @@ export async function executeToolCall(
   signal: AbortSignal,
 ): Promise<ToolResult> {
   const { store, state, run, emitter } = input
-  const args = parseToolArgs(request.arguments)
+  // Tool schema is the single admission boundary. Invalid input is rejected before
+  // subject construction or approval, so UI/audit/execution all see one meaning.
+  const validation = input.registry.validateRequest(request)
+  if (!validation.ok) {
+    const precreatedId = state.precreatedToolCallRows.get(request.id)
+    const row =
+      precreatedId === undefined
+        ? store.toolCalls.create({
+            runId: run.id,
+            messageId: state.lastAssistantMessageId,
+            toolName: request.name,
+            args: {},
+            status: 'pending',
+          })
+        : store.toolCalls.get(precreatedId)
+    if (row != null) {
+      if (precreatedId === undefined) {
+        emitter.next({
+          type: 'tool.requested',
+          toolCallId: row.id,
+          toolName: request.name,
+          args: {},
+        })
+      }
+      finalizeToolCall(
+        store,
+        state,
+        emitter,
+        row.id,
+        'failed',
+        validation.result.code ?? 'invalid_request',
+      )
+    }
+    return validation.result
+  }
+  const args = validation.args
   const record = argsRecord(args)
   const dangerActive = input.gate.dangerActive
 

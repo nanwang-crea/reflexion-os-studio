@@ -18,6 +18,7 @@ import { AgentStore } from './agents.js'
 import { DelegationStore } from './delegations.js'
 import { RunEventStore } from './runEvents.js'
 import { ContextCheckpointStore } from './contextCheckpoints.js'
+import { PluginStore } from './plugins.js'
 
 export { DEFAULT_SESSION_TITLE, resolveDataDir } from './shared.js'
 
@@ -42,6 +43,7 @@ export class Store {
   readonly delegations: DelegationStore
   readonly runEvents: RunEventStore
   readonly contextCheckpoints: ContextCheckpointStore
+  readonly plugins: PluginStore
 
   constructor(dir: string) {
     mkdirSync(dir, { recursive: true })
@@ -69,6 +71,7 @@ export class Store {
     this.delegations = new DelegationStore(this.db)
     this.runEvents = new RunEventStore(this.db)
     this.contextCheckpoints = new ContextCheckpointStore(this.db)
+    this.plugins = new PluginStore(this.db)
     this.agents.upsert({
       id: 'worker',
       name: 'Worker Agent',

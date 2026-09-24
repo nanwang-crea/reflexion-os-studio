@@ -352,6 +352,46 @@ export const SkillManifestSchema = z.object({
 })
 export type SkillManifest = z.infer<typeof SkillManifestSchema>
 
+export const PluginKindSchema = z.enum(['skill', 'provider', 'tool'])
+export type PluginKind = z.infer<typeof PluginKindSchema>
+
+export const PluginStatusSchema = z.enum([
+  'installed',
+  'enabled',
+  'disabled',
+  'invalid',
+])
+export type PluginStatus = z.infer<typeof PluginStatusSchema>
+
+export const PluginSourceSchema = z.enum(['builtin', 'dir', 'git', 'local'])
+export type PluginSource = z.infer<typeof PluginSourceSchema>
+
+export const PluginCompatSchema = z
+  .object({ protocol: z.string().min(1) })
+  .strict()
+export type PluginCompat = z.infer<typeof PluginCompatSchema>
+
+/** Plugin Foundation canonical record. Only declarative skill plugins load today. */
+export const PluginRecordSchema = z
+  .object({
+    id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+    kind: PluginKindSchema,
+    version: z.string().min(1),
+    name: z.string().min(1),
+    description: z.string().min(1),
+    source: PluginSourceSchema,
+    sourceRef: z.string().nullable(),
+    status: PluginStatusSchema,
+    installPath: z.string().nullable(),
+    enabled: z.boolean(),
+    compat: PluginCompatSchema.nullable(),
+    error: z.string().nullable(),
+    createdAt: IsoDateTimeSchema,
+    updatedAt: IsoDateTimeSchema,
+  })
+  .strict()
+export type PluginRecord = z.infer<typeof PluginRecordSchema>
+
 export const ProviderCapabilitySchema = z.enum([
   'chat',
   'embedding',

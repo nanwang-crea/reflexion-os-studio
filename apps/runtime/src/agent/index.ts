@@ -7,7 +7,11 @@ import type {
   Session,
 } from '@reflexion-os-studio/contracts'
 import { RunEventEmitter, type EventNotifier } from '../events.js'
-import { builtinSkills, resolveInvocation } from '../skills/index.js'
+import {
+  createSkillRegistry,
+  resolveInvocation,
+  type SkillRegistry,
+} from '../skills/index.js'
 import { DEFAULT_SESSION_TITLE, type Store } from '../store/index.js'
 import type { SystemRuntimeClient } from '../system.js'
 import type { McpManager } from '../mcp/manager.js'
@@ -87,6 +91,7 @@ export class ChatAgent {
     private readonly notifier: EventNotifier,
     private readonly system: SystemRuntimeClient | null,
     private readonly mcp: McpManager | null = null,
+    private readonly skills: SkillRegistry = createSkillRegistry(),
   ) {
     this.danger = new DangerLeaseService(notifier, () =>
       dangerCapability(this.system),
@@ -104,6 +109,7 @@ export class ChatAgent {
         contextBuilder: this.contextBuilder,
         approvals: this.approvals,
         danger: this.danger,
+        skills: this.skills,
       },
       {
         onRunSettled: (sessionId) => this.pumpQueue(sessionId),
@@ -407,7 +413,7 @@ export class ChatAgent {
       // 会话级 ask-everything 覆盖项仍生效（只会更严，不构成提权）。
       permissionPreset: DEFAULT_PRESET,
       skill:
-        original.skillId === null ? null : builtinSkills.get(original.skillId),
+        original.skillId === null ? null : this.skills.get(original.skillId),
       assistantMessage,
       emitter,
     })
@@ -545,7 +551,7 @@ export class ChatAgent {
     explicitSkillId: string | undefined,
   ): ReturnType<typeof resolveInvocation> {
     try {
-      return resolveInvocation(content, explicitSkillId, builtinSkills)
+      return resolveInvocation(content, explicitSkillId, this.skills)
     } catch (error) {
       throw new CommandError(
         'invalid_request',

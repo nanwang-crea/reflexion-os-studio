@@ -13,6 +13,7 @@ export type {
   RuntimeStatus,
   Session,
   SkillManifest,
+  PluginRecord,
   ToolCall,
   ChangedFile,
   ChangedFileAction,
