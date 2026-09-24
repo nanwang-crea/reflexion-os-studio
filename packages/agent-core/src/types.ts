@@ -1,4 +1,8 @@
-import type { JsonValue } from '@reflexion-os-studio/contracts'
+import type {
+  ChangedFile,
+  JsonValue,
+  ResourceLink,
+} from '@reflexion-os-studio/contracts'
 
 /**
  * 循环内流转的 canonical 消息：provider 无关。
@@ -60,6 +64,12 @@ export interface ToolResult {
   isError: boolean
   /** 错误分类码；宿主用于持久化与审计（unsupported / invalid_request / tool_error）。 */
   code?: string
+  /** 工具已明确提供的结构化数据；缺省时 Runtime 尝试从 content 解析 JSON。 */
+  data?: JsonValue
+  /** 可供 Artifact UI 导航的显式资源引用。 */
+  resourceLinks?: ResourceLink[]
+  /** 文件类工具产生的副作用；与普通 data 分离以便统一聚合。 */
+  changedFiles?: ChangedFile[]
 }
 
 export interface ToolDefinition {

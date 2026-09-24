@@ -15,6 +15,7 @@ export type {
   SkillManifest,
   PluginRecord,
   ToolCall,
+  ToolOutput,
   ChangedFile,
   ChangedFileAction,
   FileWriteResult,

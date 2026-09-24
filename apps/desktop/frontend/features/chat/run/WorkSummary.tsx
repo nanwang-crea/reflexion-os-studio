@@ -139,10 +139,7 @@ function ToolTraceItem(props: {
   const label = TOOL_LABELS[call.toolName] ?? call.toolName
   const inFlight = props.runActive && isInFlight(call)
   // 参数与结果/错误都展示：失败调用的 errorCode 不能被参数遮蔽。
-  const detail = [
-    formatArgs(call.args),
-    formatResult(call.result, call.errorCode),
-  ]
+  const detail = [formatArgs(call.args), formatResult(call)]
     .filter((section): section is string => section !== null)
     .join('\n')
   // 只在进行中/等待审批/失败时显示状态文案；完成的靠绿色状态点即可。
@@ -222,10 +219,14 @@ function formatArgs(args: JsonValue): string | null {
   return truncate(`参数：${JSON.stringify(args, null, 2)}`)
 }
 
-function formatResult(result: JsonValue | null, errorCode: string | null) {
-  if (errorCode !== null) {
-    return `失败（${errorCode}）`
+function formatResult(call: ToolCall) {
+  if (call.errorCode !== null) {
+    const detail = call.output?.content
+    return detail
+      ? `失败（${call.errorCode}）：${truncate(detail)}`
+      : `失败（${call.errorCode}）`
   }
+  const result = call.output?.data ?? call.result
   if (result === null) return null
   const text =
     typeof result === 'string' ? result : JSON.stringify(result, null, 2)

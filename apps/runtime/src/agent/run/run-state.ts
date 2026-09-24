@@ -1,4 +1,4 @@
-import type { JsonValue } from '@reflexion-os-studio/contracts'
+import type { ToolOutput } from '@reflexion-os-studio/contracts'
 import type { RunEventEmitter } from '../../events.js'
 import type { Store } from '../../store/index.js'
 
@@ -38,14 +38,10 @@ export function finalizeToolCall(
   rowId: string,
   status: 'completed' | 'failed' | 'cancelled',
   errorCode: string | null,
-  result?: JsonValue,
+  output?: ToolOutput,
 ): void {
   state.toolCallRowIds.delete(rowId)
-  if (status === 'completed') {
-    store.toolCalls.finalize(rowId, 'completed', result)
-  } else {
-    store.toolCalls.finalize(rowId, status, undefined, errorCode ?? undefined)
-  }
+  store.toolCalls.finalize(rowId, status, output, errorCode ?? undefined)
   emitter.next({
     type: 'tool.completed',
     toolCallId: rowId,

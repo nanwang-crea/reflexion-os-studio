@@ -139,9 +139,11 @@ function toAssistantToolCall(row: ToolCall): AssistantToolCall {
 }
 
 function toolResultText(row: ToolCall): string {
-  if (row.status === 'completed') {
-    // 历史重建与实时回填保持同一截断边界，避免重启前后上下文口径不一致。
-    return capToolResultForModel(JSON.stringify(row.result ?? null))
+  if (row.output !== null) {
+    // 历史重建与实时回填保持同一正文和截断边界，失败结果也不再丢失。
+    return capToolResultForModel(row.output.content)
   }
-  return `工具执行失败${row.errorCode ? `（${row.errorCode}）` : ''}`
+  return row.status === 'completed'
+    ? 'null'
+    : `工具执行失败${row.errorCode ? `（${row.errorCode}）` : ''}`
 }

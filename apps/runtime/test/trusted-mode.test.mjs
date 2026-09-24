@@ -150,6 +150,8 @@ test('workspace-full：file.write 免审批，签发 preset source 的精确 V2 
   // 工具轨迹：completed 且 approvalGrantId 记录 grant（审计可见，不进事件）。
   const row = store.toolCalls.listByRun(run.id)[0]
   assert.equal(row.status, 'completed')
+  assert.equal(row.output.content, 'written')
+  assert.equal(row.output.data, 'written')
   const storedGrant = JSON.parse(row.approvalGrantId)
   assert.equal(storedGrant.source, 'preset')
   assert.equal(storedGrant.subjectDigest, grant.subjectDigest)
@@ -196,6 +198,7 @@ test('拒绝 choice：工具以 permission_denied 失败，不签发 grant', asy
   const row = store.toolCalls.listByRun(run.id)[0]
   assert.equal(row.status, 'failed')
   assert.equal(row.errorCode, 'permission_denied')
+  assert.match(row.output.content, /用户拒绝/)
 })
 
 test('Danger lease 激活：内置操作跳过审批，grant source=danger-lease', async () => {

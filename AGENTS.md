@@ -67,6 +67,7 @@ React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
 - **存储**：MVP 用 Node 内置 `node:sqlite`（无原生依赖），数据目录 `REFLEXION_DATA_DIR` ?? `~/.reflexion-os-studio`；外键开启；Run/Message 终态写入用单事务；启动时把未完成 Run/Message 恢复为 `interrupted`。
 - **Secret 纪律**：API Key 等机密只经 `provider.configure` 的只写 `secret` 参数出现一次，落入数据目录 `secrets.json`（0600），其余任何地方只出现 `secretRef`；secret 不得进入响应、事件、日志或错误详情。
 - **前端访问 Runtime 的唯一通道**：`runtime-client` 的 `RuntimeTransport`（Tauri 白名单 command `runtime_request` + `bootstrap:message` 事件按 id 关联）；新增业务命令需同步更新 Rust 侧白名单数组。
+- **工具结果唯一结构**：工具执行可返回正文与可选结构化字段，Runtime 必须在 `agent/run/toolResults.ts` 统一归一化为版本化 `ToolOutput` 后写入 `tool_calls.result_json`；成功与失败结果都保存完整正文。模型回填、历史上下文、Tool Trace、Changed Files 与 Artifact UI 必须从该结构投影，不得分别解析工具私有 JSON。旧 `result_json` 只在 Store 读取边界兼容包装，禁止以破坏性迁移重写历史行；`ToolCall.result` 仅作旧调用方的 `data` 兼容投影，新代码读取 `ToolCall.output`。
 - **按职责拆分（硬规则，新代码先拆再写）**：不先写大文件再事后补拆。
   - **目录也必须保持单一职责**：禁止把一个领域下不断增长的文件长期平铺在根层。新增文件前先判断其 feature / subdomain；当同一目录已经出现两个以上稳定职责簇（例如读取与写入、消息与 Run、文件与 Git、权限与会话），必须先建立对应子目录再继续实现，不能用文件名前缀代替层次。
   - **根层只放装配与公共边界**：`index`、门面、注册表、共享类型、生命周期装配等可以留在领域根层；具体实现必须下沉到所属子领域。文件被两个以上领域复用才允许上移，不能为了少写一层相对路径而把模块放回根层。

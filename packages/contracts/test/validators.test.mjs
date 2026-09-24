@@ -16,6 +16,8 @@ import {
   RuntimeEventSchema,
   TerminalSchema,
   ToolCallSchema,
+  ToolOutputSchema,
+  coerceToolOutput,
   ToolSpecSchema,
   jsonSchemas,
   parseResourceUri,
@@ -41,6 +43,19 @@ const RUN_ENV = {
   seq: 0,
   occurredAt: NOW,
 }
+
+test('ToolOutputSchema validates canonical output and wraps legacy result_json', () => {
+  const legacy = {
+    changedFiles: [{ path: 'src/a.ts', action: 'modified' }],
+    writtenBytes: 2,
+  }
+  const output = coerceToolOutput(legacy)
+  assert.equal(ToolOutputSchema.safeParse(output).success, true)
+  assert.equal(output.content, JSON.stringify(legacy))
+  assert.deepEqual(output.data, legacy)
+  assert.deepEqual(output.changedFiles, legacy.changedFiles)
+  assert.deepEqual(output.resourceLinks, [])
+})
 
 test('ProjectSchema accepts a valid project and rejects missing fields', () => {
   const project = {

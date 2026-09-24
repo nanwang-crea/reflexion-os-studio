@@ -14,7 +14,7 @@ import {
 } from '@reflexion-os-studio/contracts'
 import type { RunEventEmitter } from '../../events.js'
 import type { Store } from '../../store/index.js'
-import { capToolResultForModel, parseToolResultPayload } from './toolResults.js'
+import { capToolResultForModel, normalizeToolOutput } from './toolResults.js'
 import {
   buildApprovalChoices,
   buildApprovalSubject,
@@ -66,40 +66,47 @@ export async function executeToolCall(
   signal: AbortSignal,
 ): Promise<ToolResult> {
   const { store, state, run, emitter } = input
+  const projectId = store.sessions.get(run.sessionId)?.projectId ?? null
+  const finalizeRejected = (
+    result: ToolResult,
+    args: JsonValue,
+  ): ToolResult => {
+    const precreatedId = state.precreatedToolCallRows.get(request.id)
+    const existing =
+      precreatedId === undefined ? null : store.toolCalls.get(precreatedId)
+    const row =
+      existing ??
+      store.toolCalls.create({
+        runId: run.id,
+        messageId: state.lastAssistantMessageId,
+        toolName: request.name,
+        args,
+        status: 'pending',
+      })
+    if (existing === null) {
+      emitter.next({
+        type: 'tool.requested',
+        toolCallId: row.id,
+        toolName: request.name,
+        args,
+      })
+    }
+    finalizeToolCall(
+      store,
+      state,
+      emitter,
+      row.id,
+      'failed',
+      result.code ?? 'invalid_request',
+      normalizeToolOutput(result, projectId, request.name),
+    )
+    return result
+  }
   // Tool schema is the single admission boundary. Invalid input is rejected before
   // subject construction or approval, so UI/audit/execution all see one meaning.
   const validation = input.registry.validateRequest(request)
   if (!validation.ok) {
-    const precreatedId = state.precreatedToolCallRows.get(request.id)
-    const row =
-      precreatedId === undefined
-        ? store.toolCalls.create({
-            runId: run.id,
-            messageId: state.lastAssistantMessageId,
-            toolName: request.name,
-            args: {},
-            status: 'pending',
-          })
-        : store.toolCalls.get(precreatedId)
-    if (row != null) {
-      if (precreatedId === undefined) {
-        emitter.next({
-          type: 'tool.requested',
-          toolCallId: row.id,
-          toolName: request.name,
-          args: {},
-        })
-      }
-      finalizeToolCall(
-        store,
-        state,
-        emitter,
-        row.id,
-        'failed',
-        validation.result.code ?? 'invalid_request',
-      )
-    }
-    return validation.result
+    return finalizeRejected(validation.result, {})
   }
   const args = validation.args
   const record = argsRecord(args)
@@ -116,11 +123,14 @@ export async function executeToolCall(
         })
       : undefined
   if (prepared !== undefined && !prepared.ok) {
-    return {
-      content: prepared.content,
-      isError: true,
-      code: prepared.code,
-    }
+    return finalizeRejected(
+      {
+        content: prepared.content,
+        isError: true,
+        code: prepared.code,
+      },
+      args,
+    )
   }
   const escalation = prepared?.escalation ?? false
   const networkRequested = prepared?.networkRequested ?? false
@@ -135,11 +145,14 @@ export async function executeToolCall(
     built = buildApprovalSubject(request.name, args, shellInput)
   } catch (error) {
     if (error instanceof InvalidWorkspacePathError) {
-      return {
-        content: `工具参数被拒绝：${error.message}。file.* 只接受工作区相对路径。`,
-        isError: true,
-        code: 'invalid_request',
-      }
+      return finalizeRejected(
+        {
+          content: `工具参数被拒绝：${error.message}。file.* 只接受工作区相对路径。`,
+          isError: true,
+          code: 'invalid_request',
+        },
+        args,
+      )
     }
     throw error
   }
@@ -172,6 +185,11 @@ export async function executeToolCall(
   }
 
   const denyResult = (rowId: string, message: string): ToolResult => {
+    const result: ToolResult = {
+      content: message,
+      isError: true,
+      code: 'permission_denied',
+    }
     finalizeToolCall(
       store,
       state,
@@ -179,8 +197,9 @@ export async function executeToolCall(
       rowId,
       'failed',
       'permission_denied',
+      normalizeToolOutput(result, projectId, request.name),
     )
-    return { content: message, isError: true, code: 'permission_denied' }
+    return result
   }
 
   // ---- 策略拒绝：落一条失败的调用记录，让模型知道原因而不是静默失败。----
@@ -439,6 +458,7 @@ export async function executeToolCall(
 
   const result = await input.registry.call(request, signal, grant)
   state.toolCallRowIds.delete(row.id)
+  const output = normalizeToolOutput(result, projectId, request.name)
   // 持久化保存完整结果（审计不做盲区），回填模型前只取截断副本。
   const modelResult: ToolResult = {
     ...result,
@@ -446,17 +466,9 @@ export async function executeToolCall(
   }
   if (result.isError) {
     const errorCode = result.code ?? 'tool_error'
-    finalizeToolCall(store, state, emitter, row.id, 'failed', errorCode)
+    finalizeToolCall(store, state, emitter, row.id, 'failed', errorCode, output)
   } else {
-    finalizeToolCall(
-      store,
-      state,
-      emitter,
-      row.id,
-      'completed',
-      null,
-      parseToolResultPayload(result.content),
-    )
+    finalizeToolCall(store, state, emitter, row.id, 'completed', null, output)
   }
   return modelResult
 }

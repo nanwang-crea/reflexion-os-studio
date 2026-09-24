@@ -89,6 +89,7 @@ Runtime 的 SQLite 实现统一收敛在 `apps/runtime/src/store/`：根层负�
 - Asset：Asset Store 中的内容存储实体，AI 生成媒体或导出内容使用 `AssetRef`。
 - Artifact：一次 Run 产生的面向用户的结果语义，可引用 Asset 或 WorkspaceFile。
 - ResourceLink：UI 导航引用，不拥有内容，可指向 WorkspaceFile、Asset 或 ExternalUrl；由 Resource Router 决定查看器、Browser Surface 或系统打开方式。
+- ToolOutput：工具结果的版本化 canonical envelope，同时保存回填模型的 `content`、结构化 `data`、`resourceLinks` 与 `changedFiles`。`tool_calls.result_json` 新记录统一写入该结构；旧任意 JSON 在 Store 读取边界按需包装，不做破坏性迁移。模型上下文与 Artifact UI 必须从同一 ToolOutput 投影，禁止各自猜测工具私有字段。
 - Workspace：文件树、文件统计、代码/文档查看和 Git 摘要是按需/异步投影，不允许 UI 直接读取任意本地路径。
 
 ## 9. 依赖规则

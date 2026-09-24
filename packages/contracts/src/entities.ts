@@ -1,26 +1,30 @@
 import { z } from 'zod'
 import { ResourceLinkSchema, type ResourceLink } from './resource-links.js'
+import { JsonValueSchema, type JsonValue } from './json-value.js'
+import {
+  ChangedFileSchema,
+  ToolOutputSchema,
+  type ChangedFile,
+} from './tool-output.js'
 
 export { ResourceLinkSchema }
 export type { ResourceLink }
+export { JsonValueSchema }
+export type { JsonValue }
+export {
+  ChangedFileActionSchema,
+  ChangedFileSchema,
+  ToolOutputSchema,
+  coerceToolOutput,
+} from './tool-output.js'
+export type {
+  ChangedFile,
+  ChangedFileAction,
+  ToolOutput,
+} from './tool-output.js'
 
 export const IsoDateTimeSchema = z.iso.datetime()
 export type IsoDateTime = z.infer<typeof IsoDateTimeSchema>
-
-/** JSON 动态值：工具参数/结果等不预设结构的负载。 */
-export type JsonValue =
-  string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
-
-export const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.null(),
-    z.array(JsonValueSchema),
-    z.record(z.string(), JsonValueSchema),
-  ]),
-)
 
 /** 消息内容块：canonical 表示；媒体以引用进入，不内联原始数据。 */
 export const TextPartSchema = z.object({
@@ -253,23 +257,6 @@ export const ToolCallStatusSchema = z.enum([
 ])
 export type ToolCallStatus = z.infer<typeof ToolCallStatusSchema>
 
-export const ToolCallSchema = z.object({
-  id: z.string().min(1),
-  runId: z.string().min(1),
-  // 发出该调用的 assistant 消息；无关联消息时为 null。
-  messageId: z.string().min(1).nullable(),
-  toolName: z.string().min(1),
-  args: JsonValueSchema,
-  result: JsonValueSchema.nullable(),
-  status: ToolCallStatusSchema,
-  errorCode: z.string().nullable(),
-  // 关联的短期审批授权引用；不进事件 payload，不落审计日志。
-  approvalGrantId: z.string().nullable(),
-  createdAt: IsoDateTimeSchema,
-  completedAt: IsoDateTimeSchema.nullable(),
-})
-export type ToolCall = z.infer<typeof ToolCallSchema>
-
 /** Agent 可见工具操作类型；与 PERMISSION-MODEL 的审批维度一致。 */
 export const ToolOperationSchema = z.enum([
   'file.read',
@@ -500,24 +487,25 @@ export const WorkspaceReadResultSchema = z.object({
 })
 export type WorkspaceReadResult = z.infer<typeof WorkspaceReadResultSchema>
 
-/** A workspace mutation's filesystem effect. Paths are workspace-relative. */
-export const ChangedFileActionSchema = z.enum([
-  'created',
-  'modified',
-  'deleted',
-  'moved',
-])
-export type ChangedFileAction = z.infer<typeof ChangedFileActionSchema>
-
-export const ChangedFileSchema = z.object({
-  path: z.string().min(1),
-  action: ChangedFileActionSchema,
-  oldPath: z.string().min(1).optional(),
-  /** Tool-local snapshot; absent when the runtime cannot safely capture text. */
-  before: z.string().optional(),
-  after: z.string().optional(),
+export const ToolCallSchema = z.object({
+  id: z.string().min(1),
+  runId: z.string().min(1),
+  // 发出该调用的 assistant 消息；无关联消息时为 null。
+  messageId: z.string().min(1).nullable(),
+  toolName: z.string().min(1),
+  args: JsonValueSchema,
+  /** @deprecated 新代码读取 output；保留 data 投影兼容现有 UI 与调用方。 */
+  result: JsonValueSchema.nullable(),
+  // Older Runtime snapshots do not include the canonical envelope.
+  output: ToolOutputSchema.nullable().default(null),
+  status: ToolCallStatusSchema,
+  errorCode: z.string().nullable(),
+  // 关联的短期审批授权引用；不进事件 payload，不落审计日志。
+  approvalGrantId: z.string().nullable(),
+  createdAt: IsoDateTimeSchema,
+  completedAt: IsoDateTimeSchema.nullable(),
 })
-export type ChangedFile = z.infer<typeof ChangedFileSchema>
+export type ToolCall = z.infer<typeof ToolCallSchema>
 
 export const FileWriteResultSchema = z.object({
   writtenBytes: z.number().int().nonnegative(),

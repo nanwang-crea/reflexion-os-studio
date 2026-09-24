@@ -72,7 +72,19 @@ test('reconstruction keeps multi-tool round atomic including failed calls', () =
     status: 'running',
   })
   store.toolCalls.finalize(ok.id, 'completed', { content: 'aaa' })
-  store.toolCalls.finalize(bad.id, 'failed', undefined, 'file_not_found')
+  store.toolCalls.finalize(
+    bad.id,
+    'failed',
+    {
+      type: 'tool_output',
+      version: 1,
+      content: 'b.ts does not exist',
+      data: null,
+      resourceLinks: [],
+      changedFiles: [],
+    },
+    'file_not_found',
+  )
   store.messages.finalize(assistant.id, '读取中', 'completed', '')
 
   const frames = reconstructSessionFrames(store, session.id, 'sys')
@@ -85,7 +97,7 @@ test('reconstruction keeps multi-tool round atomic including failed calls', () =
   assert.equal(round.results.length, 2)
   // 失败调用也有 error result（历史可重放）。
   assert.equal(round.results[1].isError, true)
-  assert.match(round.results[1].content, /file_not_found/)
+  assert.equal(round.results[1].content, 'b.ts does not exist')
   // 投影后序列合法。
   assert.deepEqual(validateModelMessages(framesToMessagesOf(frames)), [])
 })

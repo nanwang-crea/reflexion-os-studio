@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import {
+  coerceToolOutput,
   JsonValueSchema,
   type JsonValue,
   type ToolCall,
   type ToolCallStatus,
+  type ToolOutput,
 } from '@reflexion-os-studio/contracts'
 import { nowIso, type Row } from '../shared.js'
 
@@ -30,6 +32,7 @@ export class ToolCallStore {
       toolName: input.toolName,
       args: input.args,
       result: null,
+      output: null,
       status: input.status ?? 'pending',
       errorCode: null,
       approvalGrantId: input.approvalGrantId ?? null,
@@ -110,7 +113,7 @@ export class ToolCallStore {
   finalize(
     id: string,
     status: 'completed' | 'failed' | 'cancelled',
-    result?: JsonValue,
+    output?: ToolOutput,
     errorCode?: string,
   ): void {
     this.db
@@ -119,7 +122,7 @@ export class ToolCallStore {
       )
       .run(
         status,
-        result === undefined ? null : JSON.stringify(result),
+        output === undefined ? null : JSON.stringify(output),
         errorCode ?? null,
         nowIso(),
         id,
@@ -137,16 +140,18 @@ export class ToolCallStore {
   }
 
   private toToolCall(row: Row): ToolCall {
+    const storedResult =
+      row.result_json == null ? null : this.parseJson(String(row.result_json))
+    const output = storedResult === null ? null : coerceToolOutput(storedResult)
     return {
       id: String(row.id),
       runId: String(row.run_id),
       messageId: row.message_id == null ? null : String(row.message_id),
       toolName: String(row.tool_name),
       args: this.parseJson(String(row.args_json ?? '{}')),
-      result:
-        row.result_json == null
-          ? null
-          : this.parseJson(String(row.result_json)),
+      // Keep the legacy field as a data projection while all new consumers use output.
+      result: output?.data ?? null,
+      output,
       status: String(row.status) as ToolCallStatus,
       errorCode: row.error_code == null ? null : String(row.error_code),
       approvalGrantId:

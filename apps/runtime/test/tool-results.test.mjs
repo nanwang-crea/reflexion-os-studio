@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import {
   MODEL_TOOL_RESULT_MAX_CHARS,
   capToolResultForModel,
+  normalizeToolOutput,
 } from '../dist/agent/run/toolResults.js'
 
 test('capToolResultForModel keeps short text untouched', () => {
@@ -93,4 +94,93 @@ test('capToolResultForModel falls back to plain truncation when JSON cannot shri
   const capped = capToolResultForModel(content)
   assert.ok(capped.length <= MODEL_TOOL_RESULT_MAX_CHARS)
   assert.ok(capped.includes('中间省略'))
+})
+
+test('normalizeToolOutput unifies data, changed files and artifact links', () => {
+  const content = JSON.stringify({
+    writtenBytes: 2,
+    changedFiles: [{ path: 'src/a.ts', action: 'modified' }],
+  })
+  const output = normalizeToolOutput(
+    { content, isError: false },
+    'project-1',
+    'file.write',
+  )
+  assert.equal(output.type, 'tool_output')
+  assert.equal(output.version, 1)
+  assert.deepEqual(output.data, JSON.parse(content))
+  assert.deepEqual(output.changedFiles, [
+    { path: 'src/a.ts', action: 'modified' },
+  ])
+  assert.deepEqual(output.resourceLinks, [
+    {
+      kind: 'workspaceFile',
+      uri: 'workspace://project-1/src/a.ts',
+      projectId: 'project-1',
+      path: 'src/a.ts',
+    },
+  ])
+})
+
+test('normalizeToolOutput prefers explicit structured fields and deduplicates', () => {
+  const link = {
+    kind: 'asset',
+    uri: 'asset://asset-1',
+    assetId: 'asset-1',
+  }
+  const output = normalizeToolOutput(
+    {
+      content: 'created',
+      isError: false,
+      data: { ok: true },
+      resourceLinks: [link, link],
+      changedFiles: [],
+    },
+    null,
+    'asset.create',
+  )
+  assert.deepEqual(output.data, { ok: true })
+  assert.deepEqual(output.resourceLinks, [link])
+})
+
+test('normalizeToolOutput preserves explicit null data', () => {
+  const output = normalizeToolOutput(
+    { content: '{"fallback":true}', isError: false, data: null },
+    null,
+    'probe',
+  )
+  assert.equal(output.data, null)
+})
+
+test('normalizeToolOutput rejects cross-project tool-provided links', () => {
+  const output = normalizeToolOutput(
+    {
+      content: 'result',
+      isError: false,
+      resourceLinks: [
+        {
+          kind: 'workspaceFile',
+          uri: 'workspace://other/src/a.ts',
+          projectId: 'project-1',
+          path: 'src/a.ts',
+        },
+      ],
+    },
+    'project-1',
+    'probe',
+  )
+  assert.deepEqual(output.resourceLinks, [])
+})
+
+test('normalizeToolOutput does not promote arbitrary tool data to file effects', () => {
+  const output = normalizeToolOutput(
+    {
+      content: '{"changedFiles":[{"path":"fake.ts","action":"created"}]}',
+      isError: false,
+    },
+    'project-1',
+    'server/untrusted-tool',
+  )
+  assert.deepEqual(output.changedFiles, [])
+  assert.deepEqual(output.resourceLinks, [])
 })

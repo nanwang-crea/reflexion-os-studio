@@ -9,6 +9,7 @@ import type { RunActivity } from '../../../hooks/session/useRunActivity'
 import { AssistantMessage } from '../message/AssistantMessage'
 import { RunProcess, type ProcessItem } from './RunProcess'
 import { ChangedFiles } from './ChangedFiles'
+import { Artifacts } from './Artifacts'
 import { DelegationList } from './DelegationList'
 import { formatRetryLabel, useRetryCountdown } from './useRetryCountdown'
 
@@ -159,6 +160,12 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
         projectId={props.projectId}
         onResourceClick={props.onResourceClick}
         onOpenDiff={props.onOpenDiff}
+      />
+      <Artifacts
+        items={props.processItems}
+        finalItem={props.finalItem}
+        projectId={props.projectId}
+        onResourceClick={props.onResourceClick}
       />
       <DelegationList items={props.delegations} runActive={props.runActive} />
     </div>

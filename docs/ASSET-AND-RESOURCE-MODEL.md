@@ -17,11 +17,17 @@
 
 使用 discriminated union 表达目标类型，并携带显示名称、来源、归属、权限上下文和可选行列位置。Markdown 渲染器不得直接执行任意协议或路径。项目文件进入 Code/Document Viewer，Asset 进入预览器，https URL 进入安全 Browser Surface 或系统浏览器。
 
+## ToolOutput 与 Artifact 聚合
+
+工具执行结果统一收敛为 `ToolOutput { type, version, content, data, resourceLinks, changedFiles }`。工具可以直接返回结构化字段；现有只返回 JSON 文本的工具由 Runtime 在单一归一化边界提取 `data`、`changedFiles` 和显式资源引用。文件变更在有项目上下文时同步生成 canonical `workspace://` ResourceLink。
+
+Artifact UI 按 Run 聚合 ToolOutput 的资源引用和 changed files，以及 Assistant Message 已规范化的资源链接；以 URI 去重，只展示 WorkspaceFile 与 Asset。普通 https 引用仍由消息内 ResourceLink 处理，不升级为 Run Artifact。模型上下文只使用同一 ToolOutput 的 `content`，从而保证实时执行与重启后历史重建口径一致。
+
 ## 生命周期与安全
 
 Asset：`created → indexed → previewed → opened/exported → archived/deleted`。Phase 1B 只支持预览、定位和复制引用；导出到 Workspace、下载和系统应用打开需要后续明确权限。Asset Store 按 Project/Workspace 隔离；ResourceLink 是短期导航对象，不改变目标资源所有权或生命周期。
 
 ## 落地状态（2026-08-31，Phase 1B）
 
-- 已落地：Asset Store（数据目录 `assets/<projectId>/` 隔离、sha256、`asset.*` 命令：导入/列表/读取/删除）、ResourceLink（`workspace://<projectId>/<path>#L<行号>`、`asset://<assetId>`、https 三种引用的消息内渲染与点击分发）、Artifact 卡（Run 回复引用聚合展示）。
+- 已落地：Asset Store（数据目录 `assets/<projectId>/` 隔离、sha256、`asset.*` 命令：导入/列表/读取/删除）、ResourceLink（`workspace://<projectId>/<path>#L<行号>`、`asset://<assetId>`、https 三种引用的消息内渲染与点击分发）、版本化 ToolOutput，以及由工具结果和回复引用共同驱动的 Artifact 卡。
 - 边界：仅预览、定位与复制引用；导出到 Workspace、下载、系统应用打开、媒体内嵌预览（音频/视频）留后续阶段（需权限）。nodeRunId 字段当前恒 null（多 Agent 阶段填充）。

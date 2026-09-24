@@ -33,6 +33,12 @@ export function aggregateChangedFiles(
     )
       continue
     seenCalls.add(call.id)
+    const canonicalFiles = call.output?.changedFiles
+    if (canonicalFiles && canonicalFiles.length > 0) {
+      for (const file of canonicalFiles) files.set(file.path, file)
+      continue
+    }
+    // Older runtime snapshots expose only the legacy result projection.
     const result = call.result
     if (!result || typeof result !== 'object' || Array.isArray(result)) continue
     const changedFiles = (result as { changedFiles?: unknown }).changedFiles

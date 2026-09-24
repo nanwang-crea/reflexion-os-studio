@@ -1,4 +1,15 @@
-import { JsonValueSchema, type JsonValue } from '@reflexion-os-studio/contracts'
+import type { ToolResult } from '@reflexion-os-studio/agent-core'
+import {
+  ChangedFileSchema,
+  JsonValueSchema,
+  parseResourceUri,
+  ResourceLinkSchema,
+  workspaceFileUri,
+  type ChangedFile,
+  type JsonValue,
+  type ResourceLink,
+  type ToolOutput,
+} from '@reflexion-os-studio/contracts'
 
 /**
  * 回填模型的工具结果上限：file.read（默认 2000 行）、shell.execute（256KB）
@@ -31,6 +42,13 @@ const STRING_FLOOR_TAIL = 300
 const ARRAY_FLOOR_HEAD = 4
 const ARRAY_FLOOR_TAIL = 2
 const MAX_SHRINK_STEPS = 5
+const FILE_MUTATION_TOOLS = new Set([
+  'file.write',
+  'file.edit',
+  'file.delete',
+  'file.move',
+  'file.mkdir',
+])
 
 /** 文本截断：不超过上限原样返回；超过则保留头尾、省略中间。 */
 export function capToolResultForModel(content: string): string {
@@ -138,4 +156,106 @@ export function parseToolResultPayload(content: string): JsonValue {
   } catch {
     return content
   }
+}
+
+/** Convert every live ToolResult into the single persisted/UI representation. */
+export function normalizeToolOutput(
+  result: ToolResult,
+  projectId: string | null,
+  toolName: string,
+): ToolOutput {
+  const data =
+    result.data === undefined
+      ? parseToolResultPayload(result.content)
+      : result.data
+  const changedFiles = dedupeChangedFiles([
+    ...(result.changedFiles ?? []),
+    ...(FILE_MUTATION_TOOLS.has(toolName) ? changedFilesFromData(data) : []),
+  ])
+  const resourceLinks = dedupeResourceLinks(
+    canonicalizeResourceLinks(
+      [
+        ...(result.resourceLinks ?? []),
+        ...resourceLinksFromData(data),
+        ...(projectId === null
+          ? []
+          : changedFiles.map((file) => ({
+              kind: 'workspaceFile' as const,
+              uri: workspaceFileUri(projectId, file.path),
+              projectId,
+              path: file.path,
+            }))),
+      ],
+      projectId,
+    ),
+  )
+  return {
+    type: 'tool_output',
+    version: 1,
+    content: result.content,
+    data,
+    resourceLinks,
+    changedFiles,
+  }
+}
+
+function changedFilesFromData(data: JsonValue): ChangedFile[] {
+  if (typeof data !== 'object' || data === null || Array.isArray(data))
+    return []
+  const parsed = ChangedFileSchema.array().safeParse(data.changedFiles)
+  return parsed.success ? parsed.data : []
+}
+
+function resourceLinksFromData(data: JsonValue): ResourceLink[] {
+  if (typeof data !== 'object' || data === null || Array.isArray(data))
+    return []
+  const parsed = ResourceLinkSchema.array().safeParse(
+    data.resourceLinks ?? data.links,
+  )
+  return parsed.success ? parsed.data : []
+}
+
+function dedupeChangedFiles(files: ChangedFile[]): ChangedFile[] {
+  const byPath = new Map<string, ChangedFile>()
+  for (const file of files) byPath.set(file.path, file)
+  return [...byPath.values()]
+}
+
+function dedupeResourceLinks(links: ResourceLink[]): ResourceLink[] {
+  const byUri = new Map<string, ResourceLink>()
+  for (const link of links) byUri.set(link.uri, link)
+  return [...byUri.values()]
+}
+
+/** Treat tool-provided link fields as untrusted and rebuild them from the URI. */
+function canonicalizeResourceLinks(
+  links: ResourceLink[],
+  projectId: string | null,
+): ResourceLink[] {
+  const canonical: ResourceLink[] = []
+  for (const link of links) {
+    try {
+      const parsed = parseResourceUri(link.uri)
+      if (parsed.kind !== 'workspaceFile') {
+        canonical.push(parsed)
+        continue
+      }
+      if (projectId === null) continue
+      if (
+        parsed.path.startsWith('/') ||
+        /^[a-zA-Z]:/.test(parsed.path) ||
+        parsed.path.split('/').includes('..')
+      )
+        continue
+      if (parsed.projectId !== '' && parsed.projectId !== projectId) continue
+      canonical.push({
+        ...parsed,
+        projectId,
+        uri: workspaceFileUri(projectId, parsed.path, parsed.line),
+      })
+    } catch {
+      // Invalid or unsupported tool-provided links remain plain result data.
+    }
+  }
+  return canonical
 }

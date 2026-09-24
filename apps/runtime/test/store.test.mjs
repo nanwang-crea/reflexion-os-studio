@@ -292,6 +292,14 @@ test('tool call lifecycle: create, status, finalize, recovery', () => {
   const persisted = store.toolCalls.get(toolCall.id)
   assert.equal(persisted.status, 'completed')
   assert.deepEqual(persisted.result, { lines: 42 })
+  assert.deepEqual(persisted.output, {
+    type: 'tool_output',
+    version: 1,
+    content: '{"lines":42}',
+    data: { lines: 42 },
+    resourceLinks: [],
+    changedFiles: [],
+  })
   assert.ok(persisted.completedAt)
   assert.deepEqual(
     store.toolCalls.listByRun(run.id).map((t) => t.id),
