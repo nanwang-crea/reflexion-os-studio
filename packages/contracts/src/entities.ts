@@ -1,11 +1,7 @@
 import { z } from 'zod'
 import { ResourceLinkSchema, type ResourceLink } from './resource-links.js'
 import { JsonValueSchema, type JsonValue } from './json-value.js'
-import {
-  ChangedFileSchema,
-  ToolOutputSchema,
-  type ChangedFile,
-} from './tool-output.js'
+import { ChangedFileSchema, ToolOutputSchema } from './tool-output.js'
 export {
   PluginCapabilitySchema,
   PluginCompatSchema,

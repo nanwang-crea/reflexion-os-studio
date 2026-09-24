@@ -31,6 +31,7 @@ import {
   ShellExecuteParamsSchema,
   DangerAccessLeaseSchema,
   QueueEntrySchema,
+  PluginPackageManifestSchema,
 } from '../dist/index.js'
 
 const NOW = '2026-08-29T00:00:00.000Z'
@@ -1396,6 +1397,41 @@ test('permission.approval_override set/get 命令注册', () => {
   )
   const get = CommandSchemaRegistry['permission.approval_override.get']
   assert.equal(get.result.safeParse({ override: 'default' }).success, true)
+})
+
+test('plugin.json contract validates type, entry, compatibility and permissions', () => {
+  const manifest = {
+    manifestVersion: 1,
+    id: 'review-plus',
+    name: 'Review Plus',
+    version: '1.2.0',
+    description: 'Review workflow',
+    type: 'skill',
+    entry: 'SKILL.md',
+    compatibility: { protocol: '>=1.3 <2.0' },
+    capabilities: ['skill.instructions'],
+    permissions: {
+      filesystem: 'workspace-read',
+      network: false,
+      shell: false,
+    },
+    skill: { tools: ['file.read'], argumentHint: '<path>' },
+  }
+  assert.equal(PluginPackageManifestSchema.safeParse(manifest).success, true)
+  assert.equal(
+    PluginPackageManifestSchema.safeParse({
+      ...manifest,
+      entry: '../SKILL.md',
+    }).success,
+    false,
+  )
+  assert.equal(
+    PluginPackageManifestSchema.safeParse({
+      ...manifest,
+      capabilities: ['tool.execute'],
+    }).success,
+    false,
+  )
 })
 
 test('协议版本升级到 1.3', () => {

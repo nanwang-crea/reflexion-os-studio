@@ -1,8 +1,6 @@
-import { existsSync, lstatSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { readFileSync } from 'node:fs'
 import {
   PluginCompatSchema,
-  PROTOCOL_VERSION,
   SkillManifestSchema,
 } from '@reflexion-os-studio/contracts'
 import type { SkillDefinition } from './types.js'
@@ -12,17 +10,7 @@ export interface ParsedSkill {
   compat: { protocol: string } | null
 }
 
-export function assertSkillFileIsSafe(directory: string): void {
-  if (lstatSync(directory).isSymbolicLink()) {
-    throw new Error('symlinks are not allowed')
-  }
-  const skillFile = join(directory, 'SKILL.md')
-  if (!existsSync(skillFile)) throw new Error('SKILL.md is missing')
-  if (lstatSync(skillFile).isSymbolicLink()) {
-    throw new Error('SKILL.md must not be a symlink')
-  }
-}
-
+/** Legacy SKILL.md frontmatter reader used only for one-time package migration. */
 export function parseSkillFile(path: string): ParsedSkill {
   const source = readFileSync(path, 'utf8')
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/.exec(source)
@@ -55,20 +43,6 @@ export function parseSkillFile(path: string): ParsedSkill {
   const compat =
     raw.compat === undefined ? null : PluginCompatSchema.parse(raw.compat)
   return { definition: { manifest, instructions }, compat }
-}
-
-export function assertCompatible(compat: { protocol: string } | null): void {
-  if (compat === null) return
-  const requested = compat.protocol.split('.').map(Number)
-  const current = PROTOCOL_VERSION.split('.').map(Number)
-  if (
-    requested[0] > current[0] ||
-    (requested[0] === current[0] && requested[1] > current[1])
-  ) {
-    throw new Error(
-      `requires protocol ${compat.protocol}; runtime is ${PROTOCOL_VERSION}`,
-    )
-  }
 }
 
 function parseFrontmatter(text: string): Record<string, unknown> {

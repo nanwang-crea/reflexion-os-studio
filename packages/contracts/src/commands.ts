@@ -28,10 +28,7 @@ import {
   ApprovalOverrideSchema,
   ApiFormatSchema,
 } from './entities.js'
-import {
-  PluginInstallSourceSchema,
-  PluginPackageManifestSchema,
-} from './plugins.js'
+import { PluginPackageManifestSchema } from './plugins.js'
 import {
   DangerAccessLeaseSchema,
   DangerCapabilitySchema,
@@ -40,6 +37,25 @@ import { RuntimeStatusSchema } from './handshake.js'
 
 export const RequestIdSchema = z.string().min(1)
 export type RequestId = z.infer<typeof RequestIdSchema>
+
+const PluginInstallParamsSchema = z.discriminatedUnion('source', [
+  z.object({
+    requestId: RequestIdSchema,
+    source: z.literal('dir'),
+    projectId: z.string().min(1),
+    path: z.string().min(1),
+  }),
+  z.object({
+    requestId: RequestIdSchema,
+    source: z.literal('local'),
+    path: z.string().min(1),
+  }),
+  z.object({
+    requestId: RequestIdSchema,
+    source: z.literal('git'),
+    url: z.string().url(),
+  }),
+])
 
 export const MessageSendParamsSchema = z.object({
   requestId: RequestIdSchema,
@@ -539,15 +555,11 @@ export const CommandSchemaRegistry = {
     result: z.object({ plugins: z.array(PluginRecordSchema) }),
   },
   'plugin.install': {
-    params: PluginInstallSourceSchema.and(
-      z.object({ requestId: RequestIdSchema }),
-    ),
+    params: PluginInstallParamsSchema,
     result: z.object({ plugin: PluginRecordSchema }),
   },
   'plugin.preview': {
-    params: PluginInstallSourceSchema.and(
-      z.object({ requestId: RequestIdSchema }),
-    ),
+    params: PluginInstallParamsSchema,
     result: z.object({
       manifest: PluginPackageManifestSchema,
       installed: PluginRecordSchema.nullable(),

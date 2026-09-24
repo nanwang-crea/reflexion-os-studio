@@ -39,6 +39,113 @@
   align-self: flex-start;
 }
 
+.plugin-installer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+}
+
+.plugin-installer.dragging {
+  border-color: var(--info);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--info) 20%, transparent);
+}
+
+.plugin-installer-head,
+.plugin-local-actions,
+.plugin-git-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.plugin-installer-head {
+  justify-content: space-between;
+}
+
+.plugin-installer h2,
+.plugin-installer p {
+  margin: 0;
+}
+
+.plugin-installer h2 {
+  font-size: 15px;
+}
+
+.plugin-installer p {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.plugin-git-form input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--bg-inset);
+}
+
+.plugin-drop-hint {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  color: var(--info);
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.plugin-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--bg-inset);
+}
+
+.plugin-preview dl,
+.skill-permissions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.plugin-preview dl div,
+.skill-permissions div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.plugin-preview dt,
+.skill-permissions dt {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.plugin-preview dd,
+.skill-permissions dd {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.plugin-conflict {
+  color: var(--warning);
+  font-size: 12px;
+}
+
 .skill-card-error {
   padding: 8px 10px;
   border-radius: 6px;
@@ -126,6 +233,12 @@
   font-size: 11px;
 }
 
+.skill-card-source {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
 .skill-card-tag {
   background: var(--bg-inset);
   color: var(--text-muted);
@@ -179,6 +292,7 @@
 
 .skill-card-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
@@ -236,6 +350,10 @@
   white-space: pre-wrap;
   max-height: 240px;
   overflow-y: auto;
+}
+
+.skill-card-instructions p {
+  margin: 0 0 10px;
 }
 
 /* ---------- 自动化占位 ---------- */

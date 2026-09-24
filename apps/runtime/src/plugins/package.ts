@@ -43,7 +43,8 @@ export function resolvePackageDirectory(path: string): string {
   const info = lstatSync(absolute)
   if (info.isSymbolicLink()) throw new Error('symlinks are not allowed')
   if (info.isDirectory()) return absolute
-  if (!info.isFile()) throw new Error('plugin source must be a file or directory')
+  if (!info.isFile())
+    throw new Error('plugin source must be a file or directory')
   if (!['plugin.json', 'SKILL.md'].includes(basename(absolute))) {
     throw new Error('plugin file must be plugin.json or SKILL.md')
   }
@@ -90,6 +91,19 @@ export function loadSkillPackage(directory: string): LoadedSkillPackage {
 export function packageManifestForBuiltin(
   definition: SkillDefinition,
 ): PluginPackageManifest {
+  const tools = definition.manifest.tools
+  const writesWorkspace = tools.some((tool) =>
+    [
+      'file.write',
+      'file.edit',
+      'file.delete',
+      'file.move',
+      'file.mkdir',
+    ].includes(tool),
+  )
+  const readsWorkspace = tools.some(
+    (tool) => tool.startsWith('file.') || tool.startsWith('workspace.'),
+  )
   return PluginPackageManifestSchema.parse({
     manifestVersion: 1,
     id: definition.manifest.id,
@@ -101,12 +115,16 @@ export function packageManifestForBuiltin(
     compatibility: { protocol: '^1.3' },
     capabilities: ['skill.instructions'],
     permissions: {
-      filesystem: 'none',
-      network: false,
-      shell: false,
+      filesystem: writesWorkspace
+        ? 'workspace-write'
+        : readsWorkspace
+          ? 'workspace-read'
+          : 'none',
+      network: tools.includes('web.fetch'),
+      shell: tools.includes('shell.execute'),
     },
     skill: {
-      tools: definition.manifest.tools,
+      tools,
       argumentHint: definition.manifest.argumentHint,
     },
   })
@@ -114,10 +132,7 @@ export function packageManifestForBuiltin(
 
 export function compareVersions(left: string, right: string): number {
   const parse = (value: string): number[] =>
-    value
-      .split('-', 1)[0]
-      .split('.')
-      .map(Number)
+    value.split('-', 1)[0].split('.').map(Number)
   const a = parse(left)
   const b = parse(right)
   for (let index = 0; index < 3; index += 1) {
@@ -128,12 +143,14 @@ export function compareVersions(left: string, right: string): number {
 
 function assertPackageTree(directory: string): void {
   const root = resolve(directory)
-  if (lstatSync(root).isSymbolicLink()) throw new Error('symlinks are not allowed')
+  if (lstatSync(root).isSymbolicLink())
+    throw new Error('symlinks are not allowed')
   let files = 0
   let bytes = 0
   const walk = (current: string): void => {
     for (const entry of readdirSync(current, { withFileTypes: true })) {
       const normalized = entry.name.toLowerCase()
+      if (entry.isSymbolicLink()) throw new Error('symlinks are not allowed')
       if (
         entry.name.startsWith('.') ||
         FORBIDDEN_NAMES.has(normalized) ||
@@ -146,7 +163,6 @@ function assertPackageTree(directory: string): void {
       if (current === root && !ALLOWED_ROOT_ENTRIES.has(entry.name)) {
         throw new Error(`unsupported plugin root entry: ${entry.name}`)
       }
-      if (entry.isSymbolicLink()) throw new Error('symlinks are not allowed')
       const path = join(current, entry.name)
       if (entry.isDirectory()) walk(path)
       else if (entry.isFile()) {
@@ -166,7 +182,8 @@ function assertPackageTree(directory: string): void {
 function parseSkillInstructions(source: string): string {
   const frontmatter = /^---\r?\n[\s\S]*?\r?\n---\r?\n([\s\S]*)$/.exec(source)
   const instructions = (frontmatter?.[1] ?? source).trim()
-  if (instructions === '') throw new Error('skill instructions must not be empty')
+  if (instructions === '')
+    throw new Error('skill instructions must not be empty')
   return instructions
 }
 
@@ -183,7 +200,10 @@ function assertCompatible(range: string): void {
     : range.split(/\s+/).map((part) => {
         const match = /^(>=|>|<=|<|=)?(.+)$/.exec(part)
         if (!match) throw new Error(`invalid protocol range: ${range}`)
-        return { operator: match[1] ?? '=', version: normalizeProtocol(match[2]) }
+        return {
+          operator: match[1] ?? '=',
+          version: normalizeProtocol(match[2]),
+        }
       })
   const compatible = checks.every(({ operator, version }) => {
     const difference = compareParts(current, version)
@@ -194,7 +214,9 @@ function assertCompatible(range: string): void {
     return difference === 0
   })
   if (!compatible) {
-    throw new Error(`requires protocol ${range}; runtime is ${PROTOCOL_VERSION}`)
+    throw new Error(
+      `requires protocol ${range}; runtime is ${PROTOCOL_VERSION}`,
+    )
   }
 }
 

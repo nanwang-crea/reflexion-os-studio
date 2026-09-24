@@ -2,8 +2,8 @@
 
 > Phase 1A 已落地：内置 Skill 注册表（manifest 经 contracts schema 校验）、`skill.list` 命令、
 > `skill.use` Agent 工具、`/<skillId>` 斜杠激活与 `message.send` 显式 `skillId` 激活、
-> `runs.skill_id` 落库（schema v6）。Phase 2 的 Plugin Foundation 批 1 已接入全局目录发现、
-> 工作区目录安装、启停、隔离、状态持久化与管理 UI；拖拽交互与 git/file 安装仍属后续批次。
+> `runs.skill_id` 落库（schema v6）。Phase 2 Plugin Foundation 已完成 `plugin.json` 包契约、
+> 本地/工作区/Git HTTPS 安装、拖拽、更新回滚、启停卸载、状态恢复与管理 UI。
 
 Skill 是可发现、可组合、带约束的 Agent 能力包，描述“如何完成一类任务”，而不是直接执行系统调用。Skill 可以包含 Instructions、Tool references、Examples、输入要求、输出规范、Memory hints、权限要求和资源。
 
@@ -26,11 +26,10 @@ Skill 生命周期：`discover → validate → install → enable → load → 
 - **内置技能**：`code-review`（代码审查）、`verify-fix`（验证修复循环）、`workspace-report`（工作区盘点）、`web-research`（网络调研）。
 - **冒烟**：`scripts/smoke-skills.mjs` 覆盖清单/激活/拒绝/迁移。
 
-## Phase 2 Plugin Foundation 批 1
+## Phase 2 Plugin Foundation
 
-- 全局 `<dataDir>/skills/<id>/SKILL.md` 启动发现与手动重扫；仅加载声明式 Markdown，不执行第三方代码；
-- `plugins` 表（schema v25）持久化版本、来源、启停、错误与安装路径；
-- `plugin.install` 支持从当前项目内的技能目录或 `SKILL.md` 安全复制安装，拒绝路径穿越与符号链接；
+- 全局 `<dataDir>/plugins/<id>/` 启动发现与手动重扫；`plugin.json` 是元数据唯一真源，`SKILL.md` 只保存说明正文；仅加载声明式 Markdown，不执行第三方代码；
+- `plugins` 表（schema v26）持久化完整 manifest、版本、来源、启停、错误与安装路径；旧 `<dataDir>/skills` 包启动时复制并转换；
+- `plugin.preview/install/update` 支持本地文件/目录、当前项目相对目录和无凭据 HTTPS Git 源；安装先校验再复制，更新以 stage/backup/rename 原子替换并在失败时回滚；
 - 外部技能启用后与内置技能共用斜杠激活、`skill.use` 和 system prompt 清单；停用/无效后从三条链路同时隔离；
-- 技能页展示来源和状态，并支持启停、卸载与重扫；
-- 拖拽交互、git/file specifier 安装与更新留在 Plugin Foundation 后续批次。
+- 技能页支持拖拽、本地选择、Git URL、权限预览确认、更新、启停、卸载与重扫。

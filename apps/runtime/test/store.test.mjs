@@ -800,12 +800,12 @@ test('v23 migration drops legacy memories/FTS/memory_jobs tables', () => {
     .map((row) => row.name)
   assert.deepEqual(names, [])
   const version = after.prepare('PRAGMA user_version').get()
-  assert.equal(Number(version.user_version), 25)
+  assert.equal(Number(version.user_version), 26)
   after.close()
   store.close()
 })
 
-test('fresh store schema has plugins, no legacy memory tables, and version 25', () => {
+test('fresh store schema has plugin manifests, no legacy memory tables, and version 26', () => {
   const dir = mkdtempSync(join(tmpdir(), 'reflexion-v23-fresh-'))
   const store = new Store(dir)
   store.close()
@@ -818,13 +818,18 @@ test('fresh store schema has plugins, no legacy memory tables, and version 25', 
     .map((row) => row.name)
   assert.deepEqual(names, [])
   const version = db.prepare('PRAGMA user_version').get()
-  assert.equal(Number(version.user_version), 25)
+  assert.equal(Number(version.user_version), 26)
   const plugins = db
     .prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'plugins'",
     )
     .get()
   assert.equal(plugins.name, 'plugins')
+  const pluginColumns = db
+    .prepare('PRAGMA table_info(plugins)')
+    .all()
+    .map((column) => column.name)
+  assert.equal(pluginColumns.includes('manifest_json'), true)
   db.close()
 })
 

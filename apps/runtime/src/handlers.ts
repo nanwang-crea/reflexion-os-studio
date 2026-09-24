@@ -1,5 +1,8 @@
 import { basename } from 'node:path'
-import type { ChatCommand } from '@reflexion-os-studio/contracts'
+import type {
+  ChatCommand,
+  PluginInstallSource,
+} from '@reflexion-os-studio/contracts'
 import { CommandError } from './agent/index.js'
 import {
   requireString,
@@ -231,15 +234,27 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
   'plugin.list': (_p, { plugins }) => ({ plugins: plugins.list() }),
   'plugin.install': (p, { plugins }) => {
     try {
-      if (p.source !== 'dir') {
-        throw new Error('only workspace directory installation is supported')
-      }
-      return {
-        plugin: plugins.installFromWorkspace(
-          requireString(p, 'projectId'),
-          requireString(p, 'path'),
-        ),
-      }
+      return { plugin: plugins.install(pluginSourceFromParams(p)) }
+    } catch (error) {
+      throw new CommandError(
+        'invalid_request',
+        error instanceof Error ? error.message : String(error),
+      )
+    }
+  },
+  'plugin.preview': (p, { plugins }) => {
+    try {
+      return plugins.preview(pluginSourceFromParams(p))
+    } catch (error) {
+      throw new CommandError(
+        'invalid_request',
+        error instanceof Error ? error.message : String(error),
+      )
+    }
+  },
+  'plugin.update': (p, { plugins }) => {
+    try {
+      return { plugin: plugins.update(requireString(p, 'id')) }
     } catch (error) {
       throw new CommandError(
         'invalid_request',
@@ -284,6 +299,22 @@ export const commandHandlers: Record<string, CommandHandler> = {
 }
 
 export { testProviderConnection }
+
+function pluginSourceFromParams(
+  params: Record<string, unknown>,
+): PluginInstallSource {
+  if (params.source === 'git') {
+    return { source: 'git', url: requireString(params, 'url') }
+  }
+  if (params.source === 'local') {
+    return { source: 'local', path: requireString(params, 'path') }
+  }
+  return {
+    source: 'dir',
+    projectId: requireString(params, 'projectId'),
+    path: requireString(params, 'path'),
+  }
+}
 
 export async function dispatchCommand(
   method: string,

@@ -1,4 +1,6 @@
 import type {
+  PluginInstallSource,
+  PluginPackageManifest,
   PluginRecord,
   SkillManifest,
 } from '@reflexion-os-studio/runtime-client'
@@ -13,11 +15,21 @@ export function listPlugins(): Promise<{ plugins: PluginRecord[] }> {
   return requestList<{ plugins: PluginRecord[] }>('plugin.list')
 }
 
-export function installPluginFromWorkspace(
-  projectId: string,
-  path: string,
+export function previewPlugin(source: PluginInstallSource): Promise<{
+  manifest: PluginPackageManifest
+  installed: PluginRecord | null
+}> {
+  return request('plugin.preview', source)
+}
+
+export function installPlugin(
+  source: PluginInstallSource,
 ): Promise<{ plugin: PluginRecord }> {
-  return request('plugin.install', { source: 'dir', projectId, path })
+  return request('plugin.install', source)
+}
+
+export function updatePlugin(id: string): Promise<{ plugin: PluginRecord }> {
+  return request('plugin.update', { id })
 }
 
 export function togglePlugin(

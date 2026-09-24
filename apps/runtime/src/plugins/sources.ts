@@ -19,7 +19,8 @@ export function resolveInstallSource(
 ): { directory: string; sourceRef: string } {
   if (source.source === 'dir') {
     const project = store.projects.get(source.projectId)
-    if (!project?.folderPath) throw new Error(`project not found: ${source.projectId}`)
+    if (!project?.folderPath)
+      throw new Error(`project not found: ${source.projectId}`)
     return {
       directory: resolveWorkspacePath(project.folderPath, source.path),
       sourceRef: JSON.stringify({
@@ -29,7 +30,8 @@ export function resolveInstallSource(
     }
   }
   if (source.source === 'local') {
-    if (!isAbsolute(source.path)) throw new Error('local plugin path must be absolute')
+    if (!isAbsolute(source.path))
+      throw new Error('local plugin path must be absolute')
     return {
       directory: resolvePackageDirectory(source.path),
       sourceRef: resolve(source.path),
@@ -48,7 +50,17 @@ export function sourceForUpdate(
   if (source === 'git') return { source, url: sourceRef }
   if (source === 'local') return { source, path: sourceRef }
   if (source === 'dir') {
-    const parsed = JSON.parse(sourceRef) as { projectId: string; path: string }
+    let parsed: { projectId: string; path: string }
+    try {
+      parsed = JSON.parse(sourceRef) as { projectId: string; path: string }
+    } catch {
+      const separator = sourceRef.indexOf(':')
+      if (separator <= 0) throw new Error('legacy workspace source is invalid')
+      parsed = {
+        projectId: sourceRef.slice(0, separator),
+        path: sourceRef.slice(separator + 1),
+      }
+    }
     return { source, projectId: parsed.projectId, path: parsed.path }
   }
   throw new Error('builtin plugins cannot be updated')
@@ -122,7 +134,9 @@ function cloneGitRepository(url: string, target: string): void {
     },
   )
   if (result.status !== 0) {
-    throw new Error(`git clone failed: ${(result.stderr || result.error?.message || '').trim()}`)
+    throw new Error(
+      `git clone failed: ${(result.stderr || result.error?.message || '').trim()}`,
+    )
   }
   rmSync(join(target, '.git'), { recursive: true, force: true })
 }

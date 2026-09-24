@@ -12,9 +12,11 @@ import {
   rescanPlugins,
   togglePlugin,
   uninstallPlugin,
+  updatePlugin,
 } from '../../api/skills'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { useConfirmDialog } from '../../hooks/useConfirmDialog'
+import { PluginInstaller } from './PluginInstaller'
 
 interface SkillsViewProps {
   onUseSkill: (skillId: string, sessionId: string) => void
@@ -106,6 +108,12 @@ export function SkillsView(props: SkillsViewProps): React.JSX.Element {
 
       {error !== null && <div className="inline-banner error">{error}</div>}
 
+      <PluginInstaller
+        busy={busy !== null}
+        onInstalled={reload}
+        onError={setError}
+      />
+
       <div className="skill-grid">
         {plugins.map((plugin) => {
           const skill = skills.find((item) => item.id === plugin.id)
@@ -121,6 +129,15 @@ export function SkillsView(props: SkillsViewProps): React.JSX.Element {
                   <div className="skill-card-id">
                     /{plugin.id}{' '}
                     <span className="skill-card-ver">v{plugin.version}</span>
+                  </div>
+                  <div className="skill-card-source">
+                    {plugin.source === 'builtin'
+                      ? '随应用提供'
+                      : plugin.source === 'git'
+                        ? 'Git 安装'
+                        : plugin.source === 'local'
+                          ? '本地安装'
+                          : '工作区安装'}
                   </div>
                 </div>
                 <span className={`skill-card-tag ${plugin.status}`}>
@@ -188,6 +205,16 @@ export function SkillsView(props: SkillsViewProps): React.JSX.Element {
                       {enabled ? '停用' : '启用'}
                     </button>
                     <button
+                      className="ghost"
+                      type="button"
+                      disabled={busy === plugin.id}
+                      onClick={() =>
+                        void runAction(plugin.id, () => updatePlugin(plugin.id))
+                      }
+                    >
+                      更新
+                    </button>
+                    <button
                       className="ghost danger"
                       type="button"
                       disabled={busy === plugin.id}
@@ -211,8 +238,31 @@ export function SkillsView(props: SkillsViewProps): React.JSX.Element {
 
               {expanded[plugin.id] && (
                 <div className="skill-card-instructions">
-                  完整说明会在激活后注入 Agent 上下文，也可由{' '}
-                  <code>skill.use</code> 按需加载。
+                  <p>
+                    完整说明会在激活后注入 Agent 上下文，也可由{' '}
+                    <code>skill.use</code> 按需加载。
+                  </p>
+                  <dl className="skill-permissions">
+                    <div>
+                      <dt>协议兼容</dt>
+                      <dd>{plugin.manifest.compatibility.protocol}</dd>
+                    </div>
+                    <div>
+                      <dt>文件权限声明</dt>
+                      <dd>{plugin.manifest.permissions.filesystem}</dd>
+                    </div>
+                    <div>
+                      <dt>网络 / Shell</dt>
+                      <dd>
+                        {plugin.manifest.permissions.network ? '网络 ' : ''}
+                        {plugin.manifest.permissions.shell ? 'Shell' : ''}
+                        {!plugin.manifest.permissions.network &&
+                        !plugin.manifest.permissions.shell
+                          ? '无'
+                          : ''}
+                      </dd>
+                    </div>
+                  </dl>
                 </div>
               )}
             </article>

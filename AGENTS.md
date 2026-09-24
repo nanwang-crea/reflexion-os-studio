@@ -66,6 +66,7 @@ React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
 - 契约统一用 zod 定义（`packages/contracts/src/`），TS 类型用 `z.infer` 派生、JSON Schema 用 `z.toJSONSchema` 导出；禁止在 schema 之外手写平行的接口类型或校验逻辑。
 - **存储**：MVP 用 Node 内置 `node:sqlite`（无原生依赖），数据目录 `REFLEXION_DATA_DIR` ?? `~/.reflexion-os-studio`；外键开启；Run/Message 终态写入用单事务；启动时把未完成 Run/Message 恢复为 `interrupted`。
 - **Secret 纪律**：API Key 等机密只经 `provider.configure` 的只写 `secret` 参数出现一次，落入数据目录 `secrets.json`（0600），其余任何地方只出现 `secretRef`；secret 不得进入响应、事件、日志或错误详情。
+- **插件包纪律**：`plugin.json` 是可安装插件元数据的唯一真源，`SKILL.md` 只承载说明正文；安装必须先校验后复制，更新必须使用同 id 的递增版本并通过 stage/backup/rename 原子替换，失败恢复旧包。包内符号链接、隐藏项、凭据类文件、越界入口一律拒绝；manifest 的权限声明只用于展示，绝不能绕过 ToolRegistry、PermissionGate 或审批。第三方可执行代码隔离完成前只允许声明式 Skill。
 - **前端访问 Runtime 的唯一通道**：`runtime-client` 的 `RuntimeTransport`（Tauri 白名单 command `runtime_request` + `bootstrap:message` 事件按 id 关联）；新增业务命令需同步更新 Rust 侧白名单数组。
 - **工具结果唯一结构**：工具执行可返回正文与可选结构化字段，Runtime 必须在 `agent/run/toolResults.ts` 统一归一化为版本化 `ToolOutput` 后写入 `tool_calls.result_json`；成功与失败结果都保存完整正文。模型回填、历史上下文、Tool Trace、Changed Files 与 Artifact UI 必须从该结构投影，不得分别解析工具私有 JSON。旧 `result_json` 只在 Store 读取边界兼容包装，禁止以破坏性迁移重写历史行；`ToolCall.result` 仅作旧调用方的 `data` 兼容投影，新代码读取 `ToolCall.output`。
 - **按职责拆分（硬规则，新代码先拆再写）**：不先写大文件再事后补拆。
