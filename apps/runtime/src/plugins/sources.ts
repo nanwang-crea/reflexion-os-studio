@@ -6,17 +6,24 @@ import {
   realpathSync,
   rmSync,
 } from 'node:fs'
-import { spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import type { PluginInstallSource } from '@reflexion-os-studio/contracts'
 import type { Store } from '../store/index.js'
 import { resolvePackageDirectory } from './package.js'
 
-export function resolveInstallSource(
+export interface SourceResolutionOptions {
+  signal?: AbortSignal
+  onDownloadProgress?: (progress: number) => void
+}
+
+export async function resolveInstallSource(
   source: PluginInstallSource,
   store: Store,
   temporary: string,
-): { directory: string; sourceRef: string } {
+  options: SourceResolutionOptions = {},
+): Promise<{ directory: string; sourceRef: string }> {
+  throwIfAborted(options.signal)
   if (source.source === 'dir') {
     const project = store.projects.get(source.projectId)
     if (!project?.folderPath)
@@ -38,7 +45,7 @@ export function resolveInstallSource(
     }
   }
   assertGitUrl(source.url)
-  cloneGitRepository(source.url, temporary)
+  await cloneGitRepository(source.url, temporary, options)
   return { directory: temporary, sourceRef: source.url }
 }
 
@@ -108,37 +115,95 @@ function resolveWorkspacePath(rootPath: string, workspacePath: string): string {
 
 function assertGitUrl(url: string): void {
   const parsed = new URL(url)
-  if (parsed.protocol !== 'https:' || parsed.username || parsed.password) {
+  if (
+    parsed.protocol !== 'https:' ||
+    parsed.username ||
+    parsed.password ||
+    parsed.search ||
+    parsed.hash
+  ) {
     throw new Error('git source must be a credential-free HTTPS URL')
   }
 }
 
-function cloneGitRepository(url: string, target: string): void {
-  const result = spawnSync(
-    'git',
-    [
-      '-c',
-      'credential.helper=',
-      'clone',
-      '--depth',
-      '1',
-      '--config',
-      'core.askPass=',
-      url,
-      target,
-    ],
-    {
-      encoding: 'utf8',
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
-      timeout: 60_000,
-    },
-  )
-  if (result.status !== 0) {
-    throw new Error(
-      `git clone failed: ${(result.stderr || result.error?.message || '').trim()}`,
+async function cloneGitRepository(
+  url: string,
+  target: string,
+  options: SourceResolutionOptions,
+): Promise<void> {
+  await new Promise<void>((resolvePromise, reject) => {
+    const child = spawn(
+      'git',
+      [
+        '-c',
+        'credential.helper=',
+        'clone',
+        '--depth',
+        '1',
+        '--progress',
+        '--config',
+        'core.askPass=',
+        url,
+        target,
+      ],
+      {
+        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+        stdio: ['ignore', 'ignore', 'pipe'],
+      },
     )
-  }
+    let stderr = ''
+    let settled = false
+    let terminationError: Error | null = null
+    let forceKill: ReturnType<typeof setTimeout> | null = null
+    const finish = (error?: Error): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      if (forceKill !== null) clearTimeout(forceKill)
+      options.signal?.removeEventListener('abort', abort)
+      if (error) reject(error)
+      else resolvePromise()
+    }
+    const abort = (): void => {
+      terminationError = abortError()
+      child.kill()
+      forceKill = setTimeout(() => child.kill('SIGKILL'), 2_000)
+    }
+    const timeout = setTimeout(() => {
+      terminationError = new Error('git clone timed out after 60 seconds')
+      child.kill()
+      forceKill = setTimeout(() => child.kill('SIGKILL'), 2_000)
+    }, 60_000)
+    options.signal?.addEventListener('abort', abort, { once: true })
+    child.stderr?.on('data', (chunk: Buffer) => {
+      stderr = `${stderr}${chunk.toString('utf8')}`.slice(-8_192)
+      const matches = [...stderr.matchAll(/(\d{1,3})%/g)]
+      const percent = Number(matches.at(-1)?.[1])
+      if (Number.isFinite(percent)) {
+        options.onDownloadProgress?.(Math.min(100, percent))
+      }
+    })
+    child.once('error', (error) => finish(terminationError ?? error))
+    child.once('close', (code) => {
+      if (terminationError !== null) return finish(terminationError)
+      if (code !== 0) {
+        return finish(new Error(`git clone failed: ${stderr.trim()}`))
+      }
+      finish()
+    })
+    if (options.signal?.aborted) abort()
+  })
   rmSync(join(target, '.git'), { recursive: true, force: true })
+}
+
+export function abortError(): Error {
+  const error = new Error('plugin task cancelled')
+  error.name = 'AbortError'
+  return error
+}
+
+export function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw abortError()
 }
 
 function separator(): string {

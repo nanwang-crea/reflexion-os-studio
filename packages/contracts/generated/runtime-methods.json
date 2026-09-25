@@ -34,6 +34,8 @@
     "plugin.list",
     "plugin.preview",
     "plugin.rescan",
+    "plugin.task.cancel",
+    "plugin.task.list",
     "plugin.toggle",
     "plugin.uninstall",
     "plugin.update",

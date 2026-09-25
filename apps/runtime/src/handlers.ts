@@ -234,7 +234,7 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
   'plugin.list': (_p, { plugins }) => ({ plugins: plugins.list() }),
   'plugin.install': (p, { plugins }) => {
     try {
-      return { plugin: plugins.install(pluginSourceFromParams(p)) }
+      return { task: plugins.install(pluginSourceFromParams(p)) }
     } catch (error) {
       throw new CommandError(
         'invalid_request',
@@ -244,7 +244,7 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
   },
   'plugin.preview': (p, { plugins }) => {
     try {
-      return plugins.preview(pluginSourceFromParams(p))
+      return { task: plugins.preview(pluginSourceFromParams(p)) }
     } catch (error) {
       throw new CommandError(
         'invalid_request',
@@ -254,7 +254,18 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
   },
   'plugin.update': (p, { plugins }) => {
     try {
-      return { plugin: plugins.update(requireString(p, 'id')) }
+      return { task: plugins.update(requireString(p, 'id')) }
+    } catch (error) {
+      throw new CommandError(
+        'invalid_request',
+        error instanceof Error ? error.message : String(error),
+      )
+    }
+  },
+  'plugin.task.list': (_p, { plugins }) => ({ tasks: plugins.listTasks() }),
+  'plugin.task.cancel': (p, { plugins }) => {
+    try {
+      return { task: plugins.cancelTask(requireString(p, 'taskId')) }
     } catch (error) {
       throw new CommandError(
         'invalid_request',

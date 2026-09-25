@@ -9,6 +9,7 @@ import { basename, dirname, join, relative, resolve } from 'node:path'
 import {
   PluginPackageManifestSchema,
   PROTOCOL_VERSION,
+  compareSemVer,
   skillManifestFromPackage,
   type PluginPackageManifest,
 } from '@reflexion-os-studio/contracts'
@@ -130,16 +131,7 @@ export function packageManifestForBuiltin(
   })
 }
 
-export function compareVersions(left: string, right: string): number {
-  const parse = (value: string): number[] =>
-    value.split('-', 1)[0].split('.').map(Number)
-  const a = parse(left)
-  const b = parse(right)
-  for (let index = 0; index < 3; index += 1) {
-    if (a[index] !== b[index]) return a[index] - b[index]
-  }
-  return left.localeCompare(right)
-}
+export const compareVersions = compareSemVer
 
 function assertPackageTree(directory: string): void {
   const root = resolve(directory)

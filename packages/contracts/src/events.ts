@@ -17,6 +17,7 @@ import {
   PluginRecordSchema,
 } from './entities.js'
 import { RuntimeErrorSchema } from './errors.js'
+import { PluginTaskSchema } from './plugins.js'
 import { RuntimeStatusSchema } from './handshake.js'
 import {
   ApprovalChoiceSchema,
@@ -251,6 +252,11 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     scope: z.literal('plugin'),
     pluginId: z.string().min(1),
     plugin: PluginRecordSchema.nullable(),
+  }),
+  RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('plugin.task.changed'),
+    scope: z.literal('runtime'),
+    task: PluginTaskSchema,
   }),
   // 集成终端事件（W2 接线，本阶段冻结契约）。output 载荷为 base64 字节帧。
   TerminalEnvelopeSchema.extend({

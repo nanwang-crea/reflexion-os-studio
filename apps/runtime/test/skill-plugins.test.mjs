@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict'
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
+  renameSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs'
@@ -51,6 +54,21 @@ async function setup() {
   return { root, store, service }
 }
 
+async function waitForTask(service, started) {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const task = service.listTasks().find((item) => item.id === started.id)
+    if (['completed', 'failed', 'cancelled'].includes(task.status)) return task
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error(`plugin task timed out: ${started.id}`)
+}
+
+async function completed(service, task) {
+  const result = await waitForTask(service, task)
+  assert.equal(result.status, 'completed', result.error ?? undefined)
+  return result
+}
+
 test('package manifest and plugin records use the independent contract', () => {
   const manifest = writePackage(
     join(tmpdir(), `reflexion-contract-${Date.now()}`),
@@ -64,10 +82,15 @@ test('local directory install, toggle and restart preserve canonical state', asy
   const source = join(root, 'source-package')
   writePackage(source, 'external-test')
 
-  const preview = service.preview({ source: 'local', path: source })
+  const preview = await completed(
+    service,
+    service.preview({ source: 'local', path: source }),
+  )
   assert.equal(preview.manifest.id, 'external-test')
   assert.equal(preview.installed, null)
-  const installed = service.install({ source: 'local', path: source })
+  const installed = (
+    await completed(service, service.install({ source: 'local', path: source }))
+  ).plugin
   assert.equal(installed.manifest.permissions.filesystem, 'workspace-read')
   assert.equal(service.registry.has('external-test'), true)
   assert.equal(PluginRecordSchema.safeParse(installed).success, true)
@@ -86,7 +109,12 @@ test('local plugin.json file and workspace directory are valid install sources',
   const local = join(root, 'local-package')
   writePackage(local, 'file-test')
   assert.equal(
-    service.install({ source: 'local', path: join(local, 'plugin.json') }).id,
+    (
+      await completed(
+        service,
+        service.install({ source: 'local', path: join(local, 'plugin.json') }),
+      )
+    ).plugin.id,
     'file-test',
   )
 
@@ -95,11 +123,16 @@ test('local plugin.json file and workspace directory are valid install sources',
   writePackage(workspacePackage, 'workspace-test')
   const project = store.projects.create({ name: 'Test', folderPath: workspace })
   assert.equal(
-    service.install({
-      source: 'dir',
-      projectId: project.id,
-      path: 'skills/workspace-test',
-    }).source,
+    (
+      await completed(
+        service,
+        service.install({
+          source: 'dir',
+          projectId: project.id,
+          path: 'skills/workspace-test',
+        }),
+      )
+    ).plugin.source,
     'dir',
   )
   store.close()
@@ -109,15 +142,18 @@ test('update requires a newer version and keeps disabled state', async () => {
   const { root, store, service } = await setup()
   const source = join(root, 'update-source')
   writePackage(source, 'update-test')
-  service.install({ source: 'local', path: source })
+  await completed(service, service.install({ source: 'local', path: source }))
   service.toggle('update-test', false)
 
-  assert.throws(() => service.update('update-test'), /must be newer/)
+  const unchanged = await waitForTask(service, service.update('update-test'))
+  assert.equal(unchanged.status, 'failed')
+  assert.match(unchanged.error, /must be newer/)
   writePackage(source, 'update-test', {
     version: '1.1.0',
     instructions: '# Updated instructions',
   })
-  const updated = service.update('update-test')
+  const updated = (await completed(service, service.update('update-test')))
+    .plugin
   assert.equal(updated.version, '1.1.0')
   assert.equal(updated.enabled, false)
   assert.equal(service.registry.has('update-test'), false)
@@ -146,13 +182,21 @@ cpSync(process.env.REFLEXION_TEST_GIT_SOURCE, process.argv.at(-1), { recursive: 
     process.env.PATH = `${bin}:${previousPath}`
     process.env.REFLEXION_TEST_GIT_SOURCE = source
     try {
-      const installed = service.install({
-        source: 'git',
-        url: 'https://example.com/public/skill.git',
-      })
+      const installed = (
+        await completed(
+          service,
+          service.install({
+            source: 'git',
+            url: 'https://example.com/public/skill.git',
+          }),
+        )
+      ).plugin
       assert.equal(installed.source, 'git')
       writePackage(source, 'git-test', { version: '1.1.0' })
-      assert.equal(service.update('git-test').version, '1.1.0')
+      assert.equal(
+        (await completed(service, service.update('git-test'))).plugin.version,
+        '1.1.0',
+      )
     } finally {
       process.env.PATH = previousPath
       delete process.env.REFLEXION_TEST_GIT_SOURCE
@@ -161,11 +205,79 @@ cpSync(process.env.REFLEXION_TEST_GIT_SOURCE, process.argv.at(-1), { recursive: 
   },
 )
 
+test(
+  'git task reports progress and can be cancelled',
+  { skip: process.platform === 'win32' },
+  async () => {
+    const { root, store, service } = await setup()
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const fakeGit = join(bin, 'git')
+    writeFileSync(
+      fakeGit,
+      `#!/usr/bin/env node
+process.stderr.write('Receiving objects: 10%\\n')
+setInterval(() => {}, 1000)
+`,
+    )
+    chmodSync(fakeGit, 0o755)
+    const previousPath = process.env.PATH
+    process.env.PATH = `${bin}:${previousPath}`
+    try {
+      const started = service.install({
+        source: 'git',
+        url: 'https://example.com/slow/skill.git',
+      })
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      service.cancelTask(started.id)
+      const cancelled = await waitForTask(service, started)
+      assert.equal(cancelled.status, 'cancelled')
+      assert.ok(cancelled.progress >= 5)
+      assert.equal(existsSync(join(root, 'plugins', 'slow-skill')), false)
+    } finally {
+      process.env.PATH = previousPath
+      store.close()
+    }
+  },
+)
+
+test('startup recovery restores backup and removes abandoned stages', async () => {
+  const { root, store, service } = await setup()
+  const source = join(root, 'recovery-source')
+  writePackage(source, 'recovery-test', { instructions: 'original' })
+  const plugin = (
+    await completed(service, service.install({ source: 'local', path: source }))
+  ).plugin
+  const backup = join(root, 'plugins', '.backup-recovery-test-interrupted')
+  renameSync(plugin.installPath, backup)
+  writePackage(plugin.installPath, 'recovery-test', {
+    version: '2.0.0',
+    instructions: 'uncommitted replacement',
+  })
+  writePackage(join(root, 'plugins', '.stage-orphan'), 'orphan-test')
+  store.close()
+
+  const restartedStore = new Store(root)
+  new SkillPluginService(restartedStore, root, () => {})
+  assert.equal(
+    readFileSync(join(plugin.installPath, 'SKILL.md'), 'utf8'),
+    'original',
+  )
+  assert.equal(
+    readdirSync(join(root, 'plugins')).some((name) => name.startsWith('.')),
+    false,
+  )
+  assert.equal(restartedStore.plugins.get('recovery-test').version, '1.0.0')
+  restartedStore.close()
+})
+
 test('failed database commit restores the previous package directory', async () => {
   const { root, store, service } = await setup()
   const source = join(root, 'rollback-source')
   writePackage(source, 'rollback-test', { instructions: 'original' })
-  const installed = service.install({ source: 'local', path: source })
+  const installed = (
+    await completed(service, service.install({ source: 'local', path: source }))
+  ).plugin
   writePackage(source, 'rollback-test', {
     version: '2.0.0',
     instructions: 'replacement',
@@ -174,10 +286,9 @@ test('failed database commit restores the previous package directory', async () 
   store.plugins.upsert = () => {
     throw new Error('simulated database failure')
   }
-  assert.throws(
-    () => service.update('rollback-test'),
-    /simulated database failure/,
-  )
+  const failed = await waitForTask(service, service.update('rollback-test'))
+  assert.equal(failed.status, 'failed')
+  assert.match(failed.error, /simulated database failure/)
   store.plugins.upsert = originalUpsert
   assert.equal(
     readFileSync(join(installed.installPath, 'SKILL.md'), 'utf8'),
@@ -213,32 +324,34 @@ test(
       folderPath: workspace,
     })
 
-    assert.throws(
-      () =>
-        service.install({
-          source: 'dir',
-          projectId: project.id,
-          path: '../outside',
-        }),
-      /workspace-relative/,
+    const traversal = await waitForTask(
+      service,
+      service.install({
+        source: 'dir',
+        projectId: project.id,
+        path: '../outside',
+      }),
     )
-    assert.throws(
-      () => service.install({ source: 'local', path: unsafe }),
-      /symlinks are not allowed/,
+    assert.match(traversal.error, /workspace-relative/)
+    const symlink = await waitForTask(
+      service,
+      service.install({ source: 'local', path: unsafe }),
     )
+    assert.match(symlink.error, /symlinks are not allowed/)
     writeFileSync(join(unsafe, '.hidden'), 'forbidden hidden package entry')
-    assert.throws(
-      () => service.preview({ source: 'local', path: unsafe }),
-      /forbidden plugin package entry/,
+    const hidden = await waitForTask(
+      service,
+      service.preview({ source: 'local', path: unsafe }),
     )
-    assert.throws(
-      () =>
-        service.preview({
-          source: 'git',
-          url: 'https://user:token@example.com/plugin.git',
-        }),
-      /credential-free HTTPS/,
+    assert.match(hidden.error, /forbidden plugin package entry/)
+    const credentials = await waitForTask(
+      service,
+      service.preview({
+        source: 'git',
+        url: 'https://user:token@example.com/plugin.git',
+      }),
     )
+    assert.match(credentials.error, /credential-free HTTPS/)
     store.close()
   },
 )

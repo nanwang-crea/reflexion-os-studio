@@ -12,11 +12,12 @@ import {
   rescanPlugins,
   togglePlugin,
   uninstallPlugin,
-  updatePlugin,
 } from '../../api/skills'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { useConfirmDialog } from '../../hooks/useConfirmDialog'
 import { PluginInstaller } from './PluginInstaller'
+import { usePluginTasks } from './usePluginTasks'
+import { PluginUpdateActions } from './PluginUpdateActions'
 
 interface SkillsViewProps {
   onUseSkill: (skillId: string, sessionId: string) => void
@@ -41,6 +42,7 @@ export function SkillsView(props: SkillsViewProps): React.JSX.Element {
     setSkills(skillResult.skills)
     setPlugins(pluginResult.plugins)
   }, [])
+  const { tasks, remember, cancel } = usePluginTasks(reload, setError)
 
   useEffect(() => {
     void reload().catch((err: unknown) =>
@@ -110,14 +112,22 @@ export function SkillsView(props: SkillsViewProps): React.JSX.Element {
 
       <PluginInstaller
         busy={busy !== null}
-        onInstalled={reload}
         onError={setError}
+        tasks={tasks}
+        rememberTask={remember}
+        cancelTask={cancel}
       />
 
       <div className="skill-grid">
         {plugins.map((plugin) => {
           const skill = skills.find((item) => item.id === plugin.id)
           const enabled = plugin.enabled && plugin.status === 'enabled'
+          const updateTask = Object.values(tasks).find(
+            (task) =>
+              task.action === 'update' &&
+              task.pluginId === plugin.id &&
+              !['completed', 'failed', 'cancelled'].includes(task.status),
+          )
           return (
             <article key={plugin.id} className="skill-card">
               <header className="skill-card-head">
@@ -204,16 +214,14 @@ export function SkillsView(props: SkillsViewProps): React.JSX.Element {
                     >
                       {enabled ? '停用' : '启用'}
                     </button>
-                    <button
-                      className="ghost"
-                      type="button"
-                      disabled={busy === plugin.id}
-                      onClick={() =>
-                        void runAction(plugin.id, () => updatePlugin(plugin.id))
-                      }
-                    >
-                      更新
-                    </button>
+                    <PluginUpdateActions
+                      plugin={plugin}
+                      busy={busy === plugin.id}
+                      task={updateTask}
+                      remember={remember}
+                      cancel={cancel}
+                      onError={setError}
+                    />
                     <button
                       className="ghost danger"
                       type="button"

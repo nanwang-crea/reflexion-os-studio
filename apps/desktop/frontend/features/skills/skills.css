@@ -113,6 +113,26 @@
   background: var(--bg-inset);
 }
 
+.plugin-task-progress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.plugin-task-progress > div {
+  display: flex;
+  justify-content: space-between;
+  grid-column: 1 / -1;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.plugin-task-progress progress {
+  width: 100%;
+}
+
 .plugin-preview dl,
 .skill-permissions {
   display: grid;

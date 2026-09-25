@@ -32,6 +32,8 @@ import {
   DangerAccessLeaseSchema,
   QueueEntrySchema,
   PluginPackageManifestSchema,
+  SemVerSchema,
+  compareSemVer,
 } from '../dist/index.js'
 
 const NOW = '2026-08-29T00:00:00.000Z'
@@ -44,6 +46,25 @@ const RUN_ENV = {
   seq: 0,
   occurredAt: NOW,
 }
+
+test('SemVer validation and precedence follow SemVer 2.0.0', () => {
+  const precedence = [
+    '1.0.0-alpha',
+    '1.0.0-alpha.1',
+    '1.0.0-alpha.beta',
+    '1.0.0-beta',
+    '1.0.0-beta.2',
+    '1.0.0-beta.11',
+    '1.0.0-rc.1',
+    '1.0.0',
+  ]
+  for (let index = 1; index < precedence.length; index += 1) {
+    assert.equal(compareSemVer(precedence[index - 1], precedence[index]), -1)
+  }
+  assert.equal(compareSemVer('1.0.0+build.1', '1.0.0+build.2'), 0)
+  assert.equal(SemVerSchema.safeParse('01.0.0').success, false)
+  assert.equal(SemVerSchema.safeParse('1.0').success, false)
+})
 
 test('ToolOutputSchema validates canonical output and wraps legacy result_json', () => {
   const legacy = {

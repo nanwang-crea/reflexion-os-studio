@@ -1,9 +1,7 @@
 import { z } from 'zod'
+import { SemVerSchema } from './semver.js'
 
 const PluginIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]*$/)
-const VersionSchema = z
-  .string()
-  .regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/)
 const RelativeEntrySchema = z
   .string()
   .min(1)
@@ -19,7 +17,7 @@ export const SkillManifestSchema = z
   .object({
     id: PluginIdSchema,
     name: z.string().min(1),
-    version: VersionSchema,
+    version: SemVerSchema,
     description: z.string().min(1),
     tools: z.array(z.string().min(1)),
     argumentHint: z.string().min(1).nullable(),
@@ -45,7 +43,9 @@ export const PluginCompatSchema = z
   .object({
     protocol: z
       .string()
-      .regex(/^(?:\^\d+\.\d+(?:\.\d+)?|(?:>=|>|<=|<|=)?\d+\.\d+(?:\.\d+)?)(?:\s+(?:>=|>|<=|<|=)\d+\.\d+(?:\.\d+)?)*$/),
+      .regex(
+        /^(?:\^\d+\.\d+(?:\.\d+)?|(?:>=|>|<=|<|=)?\d+\.\d+(?:\.\d+)?)(?:\s+(?:>=|>|<=|<|=)\d+\.\d+(?:\.\d+)?)*$/,
+      ),
   })
   .strict()
 export type PluginCompat = z.infer<typeof PluginCompatSchema>
@@ -76,7 +76,7 @@ export const PluginPackageManifestSchema = z
     manifestVersion: z.literal(1),
     id: PluginIdSchema,
     name: z.string().min(1),
-    version: VersionSchema,
+    version: SemVerSchema,
     description: z.string().min(1),
     type: PluginKindSchema,
     entry: RelativeEntrySchema,
@@ -117,15 +117,13 @@ export const PluginPackageManifestSchema = z
       }
     }
   })
-export type PluginPackageManifest = z.infer<
-  typeof PluginPackageManifestSchema
->
+export type PluginPackageManifest = z.infer<typeof PluginPackageManifestSchema>
 
 export const PluginRecordSchema = z
   .object({
     id: PluginIdSchema,
     kind: PluginKindSchema,
-    version: VersionSchema,
+    version: SemVerSchema,
     name: z.string().min(1),
     description: z.string().min(1),
     source: PluginSourceSchema,
@@ -149,14 +147,52 @@ export const PluginInstallSourceSchema = z.discriminatedUnion('source', [
       path: z.string().min(1),
     })
     .strict(),
-  z
-    .object({ source: z.literal('local'), path: z.string().min(1) })
-    .strict(),
-  z
-    .object({ source: z.literal('git'), url: z.string().url() })
-    .strict(),
+  z.object({ source: z.literal('local'), path: z.string().min(1) }).strict(),
+  z.object({ source: z.literal('git'), url: z.string().url() }).strict(),
 ])
 export type PluginInstallSource = z.infer<typeof PluginInstallSourceSchema>
+
+export const PluginTaskActionSchema = z.enum(['preview', 'install', 'update'])
+export type PluginTaskAction = z.infer<typeof PluginTaskActionSchema>
+
+export const PluginTaskStatusSchema = z.enum([
+  'queued',
+  'running',
+  'completed',
+  'failed',
+  'cancelled',
+])
+export type PluginTaskStatus = z.infer<typeof PluginTaskStatusSchema>
+
+export const PluginTaskPhaseSchema = z.enum([
+  'queued',
+  'resolving',
+  'downloading',
+  'validating',
+  'staging',
+  'committing',
+  'reloading',
+  'completed',
+])
+export type PluginTaskPhase = z.infer<typeof PluginTaskPhaseSchema>
+
+export const PluginTaskSchema = z
+  .object({
+    id: z.string().uuid(),
+    action: PluginTaskActionSchema,
+    status: PluginTaskStatusSchema,
+    phase: PluginTaskPhaseSchema,
+    progress: z.number().int().min(0).max(100),
+    pluginId: PluginIdSchema.nullable(),
+    manifest: PluginPackageManifestSchema.nullable(),
+    installed: PluginRecordSchema.nullable(),
+    plugin: PluginRecordSchema.nullable(),
+    error: z.string().nullable(),
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime(),
+  })
+  .strict()
+export type PluginTask = z.infer<typeof PluginTaskSchema>
 
 export function skillManifestFromPackage(
   manifest: PluginPackageManifest,

@@ -6,6 +6,7 @@ import {
   type PluginInstallSource,
   type PluginPackageManifest,
   type PluginRecord,
+  type PluginTask,
 } from '@reflexion-os-studio/contracts'
 import { ResourceEventEmitter, type EventNotifier } from '../events.js'
 import type { Store } from '../store/index.js'
@@ -16,6 +17,8 @@ import {
 import { cleanupTemporary } from '../plugins/sources.js'
 import { PluginPackageInstaller } from '../plugins/installer.js'
 import { migrateLegacySkills } from '../plugins/legacy-migration.js'
+import { recoverPluginTransactions } from '../plugins/recovery.js'
+import { PluginTaskManager } from '../plugins/tasks.js'
 import { SkillRegistry } from './registry.js'
 
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/
@@ -27,6 +30,7 @@ export class SkillPluginService {
   private readonly emitters = new Map<string, ResourceEventEmitter>()
   private readonly builtinManifests = new Map<string, PluginPackageManifest>()
   private readonly installer: PluginPackageInstaller
+  private readonly tasks: PluginTaskManager
 
   constructor(
     private readonly store: Store,
@@ -42,11 +46,17 @@ export class SkillPluginService {
     mkdirSync(this.pluginsRoot, { recursive: true })
     const builtinIds = new Set(this.builtinManifests.keys())
     migrateLegacySkills(join(dataDir, 'skills'), this.pluginsRoot, builtinIds)
+    recoverPluginTransactions(this.pluginsRoot, this.store)
     this.installer = new PluginPackageInstaller(
       this.store,
       this.pluginsRoot,
       builtinIds,
     )
+    this.tasks = new PluginTaskManager(this.installer, this.notify, (id) => {
+      this.reloadRegistry()
+      const plugin = this.store.plugins.get(id)
+      if (plugin) this.emit(plugin)
+    })
     this.rescan()
   }
 
@@ -71,25 +81,24 @@ export class SkillPluginService {
     return [...builtins, ...this.store.plugins.list()]
   }
 
-  preview(source: PluginInstallSource): {
-    manifest: PluginPackageManifest
-    installed: PluginRecord | null
-  } {
-    return this.installer.preview(source)
+  preview(source: PluginInstallSource): PluginTask {
+    return this.tasks.startPreview(source)
   }
 
-  install(source: PluginInstallSource): PluginRecord {
-    const plugin = this.installer.install(source)
-    this.reloadRegistry()
-    this.emit(plugin)
-    return plugin
+  install(source: PluginInstallSource): PluginTask {
+    return this.tasks.startInstall(source)
   }
 
-  update(id: string): PluginRecord {
-    const plugin = this.installer.update(id)
-    this.reloadRegistry()
-    this.emit(plugin)
-    return plugin
+  update(id: string): PluginTask {
+    return this.tasks.startUpdate(id)
+  }
+
+  listTasks(): PluginTask[] {
+    return this.tasks.list()
+  }
+
+  cancelTask(id: string): PluginTask {
+    return this.tasks.cancel(id)
   }
 
   toggle(id: string, enabled: boolean): PluginRecord {

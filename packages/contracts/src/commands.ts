@@ -28,7 +28,7 @@ import {
   ApprovalOverrideSchema,
   ApiFormatSchema,
 } from './entities.js'
-import { PluginPackageManifestSchema } from './plugins.js'
+import { PluginTaskSchema } from './plugins.js'
 import {
   DangerAccessLeaseSchema,
   DangerCapabilitySchema,
@@ -556,18 +556,23 @@ export const CommandSchemaRegistry = {
   },
   'plugin.install': {
     params: PluginInstallParamsSchema,
-    result: z.object({ plugin: PluginRecordSchema }),
+    result: z.object({ task: PluginTaskSchema }),
   },
   'plugin.preview': {
     params: PluginInstallParamsSchema,
-    result: z.object({
-      manifest: PluginPackageManifestSchema,
-      installed: PluginRecordSchema.nullable(),
-    }),
+    result: z.object({ task: PluginTaskSchema }),
   },
   'plugin.update': {
     params: z.object({ requestId: RequestIdSchema, id: z.string().min(1) }),
-    result: z.object({ plugin: PluginRecordSchema }),
+    result: z.object({ task: PluginTaskSchema }),
+  },
+  'plugin.task.list': {
+    params: z.object({ requestId: RequestIdSchema }),
+    result: z.object({ tasks: z.array(PluginTaskSchema) }),
+  },
+  'plugin.task.cancel': {
+    params: z.object({ requestId: RequestIdSchema, taskId: z.uuid() }),
+    result: z.object({ task: PluginTaskSchema }),
   },
   'plugin.toggle': {
     params: z.object({

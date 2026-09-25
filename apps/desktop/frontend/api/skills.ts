@@ -1,10 +1,12 @@
 import type {
   PluginInstallSource,
-  PluginPackageManifest,
   PluginRecord,
+  PluginTask,
+  RuntimeEvent,
   SkillManifest,
 } from '@reflexion-os-studio/runtime-client'
 import { request, requestList } from './client'
+import { transport } from '../lib/transport'
 
 /** 内置 Skill 清单：斜杠命令浮层的数据源（Phase 1A 列表即全部可用项）。 */
 export function listSkills(): Promise<{ skills: SkillManifest[] }> {
@@ -16,20 +18,37 @@ export function listPlugins(): Promise<{ plugins: PluginRecord[] }> {
 }
 
 export function previewPlugin(source: PluginInstallSource): Promise<{
-  manifest: PluginPackageManifest
-  installed: PluginRecord | null
+  task: PluginTask
 }> {
   return request('plugin.preview', source)
 }
 
 export function installPlugin(
   source: PluginInstallSource,
-): Promise<{ plugin: PluginRecord }> {
+): Promise<{ task: PluginTask }> {
   return request('plugin.install', source)
 }
 
-export function updatePlugin(id: string): Promise<{ plugin: PluginRecord }> {
+export function updatePlugin(id: string): Promise<{ task: PluginTask }> {
   return request('plugin.update', { id })
+}
+
+export function listPluginTasks(): Promise<{ tasks: PluginTask[] }> {
+  return requestList('plugin.task.list')
+}
+
+export function cancelPluginTask(
+  taskId: string,
+): Promise<{ task: PluginTask }> {
+  return request('plugin.task.cancel', { taskId })
+}
+
+export function onPluginTaskChanged(
+  listener: (task: PluginTask) => void,
+): () => void {
+  return transport.onEvent((event: RuntimeEvent) => {
+    if (event.type === 'plugin.task.changed') listener(event.task)
+  })
 }
 
 export function togglePlugin(

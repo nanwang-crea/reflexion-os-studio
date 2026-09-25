@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 import {
   PluginPackageManifestSchema,
+  SemVerSchema,
   type PluginPackageManifest,
   type PluginRecord,
 } from '@reflexion-os-studio/contracts'
@@ -146,7 +147,5 @@ export class PluginStore {
 }
 
 function normalizeLegacyVersion(version: string): string {
-  return /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)
-    ? version
-    : '0.0.0'
+  return SemVerSchema.safeParse(version).success ? version : '0.0.0'
 }

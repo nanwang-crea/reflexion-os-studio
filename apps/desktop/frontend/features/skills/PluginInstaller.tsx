@@ -5,24 +5,28 @@ import type {
   PluginInstallSource,
   PluginPackageManifest,
   PluginRecord,
+  PluginTask,
 } from '@reflexion-os-studio/runtime-client'
 import { installPlugin, previewPlugin } from '../../api/skills'
 
 interface PluginInstallerProps {
   busy: boolean
-  onInstalled: () => Promise<void>
   onError: (message: string) => void
+  tasks: Record<string, PluginTask>
+  rememberTask: (task: PluginTask) => void
+  cancelTask: (taskId: string) => Promise<void>
 }
 
 export function PluginInstaller(
   props: PluginInstallerProps,
 ): React.JSX.Element {
-  const { busy, onError, onInstalled } = props
+  const { busy, cancelTask, onError, rememberTask, tasks } = props
   const [gitUrl, setGitUrl] = useState('')
   const [source, setSource] = useState<PluginInstallSource | null>(null)
   const [manifest, setManifest] = useState<PluginPackageManifest | null>(null)
   const [installed, setInstalled] = useState<PluginRecord | null>(null)
   const [working, setWorking] = useState(false)
+  const [taskId, setTaskId] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
 
   const inspect = useCallback(
@@ -32,16 +36,34 @@ export function PluginInstaller(
       try {
         const result = await previewPlugin(nextSource)
         setSource(nextSource)
-        setManifest(result.manifest)
-        setInstalled(result.installed)
+        setTaskId(result.task.id)
+        rememberTask(result.task)
       } catch (error) {
         onError(error instanceof Error ? error.message : String(error))
-      } finally {
         setWorking(false)
       }
     },
-    [onError],
+    [onError, rememberTask],
   )
+
+  const task = taskId === null ? null : (tasks[taskId] ?? null)
+  useEffect(() => {
+    if (task?.status === 'completed' && task.action === 'preview') {
+      setManifest(task.manifest)
+      setInstalled(task.installed)
+      setWorking(false)
+    } else if (task?.status === 'completed') {
+      setSource(null)
+      setManifest(null)
+      setInstalled(null)
+      setWorking(false)
+    } else if (task?.status === 'failed') {
+      onError(task.error ?? '插件任务失败')
+      setWorking(false)
+    } else if (task?.status === 'cancelled') {
+      setWorking(false)
+    }
+  }, [onError, task])
 
   useEffect(() => {
     let disposed = false
@@ -86,13 +108,11 @@ export function PluginInstaller(
     if (source === null || manifest === null || installed !== null) return
     setWorking(true)
     try {
-      await installPlugin(source)
-      setSource(null)
-      setManifest(null)
-      await onInstalled()
+      const result = await installPlugin(source)
+      setTaskId(result.task.id)
+      rememberTask(result.task)
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error))
-    } finally {
       setWorking(false)
     }
   }
@@ -146,6 +166,23 @@ export function PluginInstaller(
         </button>
       </form>
       {dragging && <div className="plugin-drop-hint">松开以检查插件包</div>}
+      {task !== null &&
+        !['completed', 'failed', 'cancelled'].includes(task.status) && (
+          <div className="plugin-task-progress">
+            <div>
+              <span>{phaseLabel(task.phase)}</span>
+              <strong>{task.progress}%</strong>
+            </div>
+            <progress max="100" value={task.progress} />
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => void cancelTask(task.id)}
+            >
+              取消
+            </button>
+          </div>
+        )}
       {manifest !== null && (
         <div className="plugin-preview">
           <div>
@@ -192,4 +229,17 @@ export function PluginInstaller(
       )}
     </section>
   )
+}
+
+function phaseLabel(phase: PluginTask['phase']): string {
+  return {
+    queued: '等待执行',
+    resolving: '解析来源',
+    downloading: '下载 Git 包',
+    validating: '校验插件',
+    staging: '准备安装',
+    committing: '原子替换',
+    reloading: '重新加载',
+    completed: '已完成',
+  }[phase]
 }
