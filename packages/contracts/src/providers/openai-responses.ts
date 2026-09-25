@@ -49,9 +49,20 @@ export type OpenAIResponsesFunctionTool = z.infer<
 
 export const OpenAIResponsesToolSchema = z.union([
   OpenAIResponsesFunctionToolSchema,
-  z.object({ type: z.literal('web_search'), search_context_size: z.string().optional() }),
-  z.object({ type: z.literal('file_search'), vector_store_ids: z.array(z.string()) }),
-  z.object({ type: z.literal('computer_use_preview'), display_width: z.number(), display_height: z.number(), environment: z.string() }),
+  z.object({
+    type: z.literal('web_search'),
+    search_context_size: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal('file_search'),
+    vector_store_ids: z.array(z.string()),
+  }),
+  z.object({
+    type: z.literal('computer_use_preview'),
+    display_width: z.number(),
+    display_height: z.number(),
+    environment: z.string(),
+  }),
   z.object({ type: z.literal('code_interpreter') }),
 ])
 export type OpenAIResponsesTool = z.infer<typeof OpenAIResponsesToolSchema>
@@ -66,7 +77,9 @@ export const OpenAIResponsesRequestSchema = z.object({
   temperature: z.number().min(0).max(2).optional(),
   top_p: z.number().min(0).max(1).optional(),
   previous_response_id: z.string().optional(),
-  tool_choice: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
+  tool_choice: z
+    .union([z.string(), z.record(z.string(), z.unknown())])
+    .optional(),
   reasoning: z
     .object({
       effort: z.enum(['low', 'medium', 'high']).optional(),
@@ -153,7 +166,13 @@ export const OpenAIResponsesResponseSchema = z.object({
   id: z.string(),
   object: z.literal('response'),
   created_at: z.number(),
-  status: z.enum(['in_progress', 'completed', 'failed', 'cancelled', 'incomplete']),
+  status: z.enum([
+    'in_progress',
+    'completed',
+    'failed',
+    'cancelled',
+    'incomplete',
+  ]),
   error: z
     .object({ code: z.string(), message: z.string() })
     .nullable()

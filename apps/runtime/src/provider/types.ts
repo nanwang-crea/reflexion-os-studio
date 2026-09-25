@@ -1,7 +1,4 @@
-import type {
-  ToolSpec,
-  Usage,
-} from '@reflexion-os-studio/contracts'
+import type { ToolSpec, Usage } from '@reflexion-os-studio/contracts'
 import type {
   ModelFinishReason,
   ModelMessage,

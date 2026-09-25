@@ -5,7 +5,11 @@ import { streamAnthropic } from './anthropic.js'
 import type { StreamChatOptions, StreamChatResult } from './types.js'
 
 export { ProviderError } from './provider-error.js'
-export type { StreamChatOptions, StreamChatResult, StreamedToolCall } from './types.js'
+export type {
+  StreamChatOptions,
+  StreamChatResult,
+  StreamedToolCall,
+} from './types.js'
 
 /**
  * 统一入口：按 apiFormat 路由到对应适配器。

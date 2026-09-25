@@ -42,7 +42,9 @@ export const OpenAIChatRequestSchema = z.object({
   max_tokens: z.number().int().positive().optional(),
   temperature: z.number().min(0).max(2).optional(),
   tools: z.array(OpenAIChatToolSchema).optional(),
-  tool_choice: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
+  tool_choice: z
+    .union([z.string(), z.record(z.string(), z.unknown())])
+    .optional(),
 })
 export type OpenAIChatRequest = z.infer<typeof OpenAIChatRequestSchema>
 

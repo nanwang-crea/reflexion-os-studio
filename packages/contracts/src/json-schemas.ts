@@ -47,10 +47,7 @@ import {
 import { RuntimeErrorSchema } from './errors.js'
 import { JsonRpcMessageSchema } from './jsonrpc.js'
 import { RuntimeEventSchema } from './events.js'
-import {
-  PluginPackageManifestSchema,
-  PluginRecordSchema,
-} from './plugins.js'
+import { PluginPackageManifestSchema, PluginRecordSchema } from './plugins.js'
 
 function toJSONSchema(name: string, schema: z.ZodType): [string, unknown] {
   return [name, z.toJSONSchema(schema)]

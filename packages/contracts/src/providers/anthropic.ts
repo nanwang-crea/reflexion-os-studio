@@ -68,7 +68,10 @@ export const AnthropicMessagesRequestSchema = z.object({
   messages: z.array(AnthropicMessageSchema),
   max_tokens: z.number().int().positive(),
   system: z
-    .union([z.string(), z.array(z.object({ type: z.literal('text'), text: z.string() }))])
+    .union([
+      z.string(),
+      z.array(z.object({ type: z.literal('text'), text: z.string() })),
+    ])
     .optional(),
   temperature: z.number().min(0).max(1).optional(),
   top_p: z.number().min(0).max(1).optional(),
@@ -78,9 +81,7 @@ export const AnthropicMessagesRequestSchema = z.object({
   tool_choice: AnthropicToolChoiceSchema.optional(),
   thinking: AnthropicThinkingSchema.optional(),
   stop_sequences: z.array(z.string()).optional(),
-  metadata: z
-    .object({ user_id: z.string().optional() })
-    .optional(),
+  metadata: z.object({ user_id: z.string().optional() }).optional(),
 })
 export type AnthropicMessagesRequest = z.infer<
   typeof AnthropicMessagesRequestSchema
