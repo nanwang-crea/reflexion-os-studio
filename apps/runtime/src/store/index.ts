@@ -10,6 +10,7 @@ import { PlanStore } from './chat/plans.js'
 import { RunEventStore } from './chat/runEvents.js'
 import { AgentSettingsStore } from './agents/agentSettings.js'
 import { AgentStore } from './agents/agents.js'
+import { BUILTIN_AGENTS } from './agents/builtins.js'
 import { ContextCheckpointStore } from './agents/contextCheckpoints.js'
 import { DelegationStore } from './agents/delegations.js'
 import { McpServerStore } from './integrations/mcpServers.js'
@@ -72,13 +73,7 @@ export class Store {
     this.runEvents = new RunEventStore(this.db)
     this.contextCheckpoints = new ContextCheckpointStore(this.db)
     this.plugins = new PluginStore(this.db)
-    this.agents.upsert({
-      id: 'worker',
-      name: 'Worker Agent',
-      description: '受控的通用子 Agent。',
-      systemPrompt: 'Complete the assigned task and return a concise result.',
-      enabled: true,
-    })
+    for (const agent of BUILTIN_AGENTS) this.agents.upsert(agent)
 
     // 启动恢复：上次进程未走完的生命周期统一落为 interrupted/cancelled。
     // 计划是任务进度板，跨重启保持 active 供后续 Run 隐式继续。

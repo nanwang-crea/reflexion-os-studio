@@ -38,14 +38,15 @@ Rust File/Shell Service、Workspace 边界、read-only/workspace Profile、Chat 
 - **已完成（2026-09，权限模型 V2 / Codex 风格）**：`permissionMode + trusted` 双轨合并为三档 `PermissionPreset`（谨慎模式 / 工作区读写 / 工作区完全允许）+ 会话级 `ask-everything` 覆盖项 + 两段确认的 Danger 租约（capability fail-closed）；文件审批绑定"操作 + 工作区相对路径"精确资源、Shell 按 token 前缀会话规则（复合命令只允许一次）、工作区外走显式提权（escalated 档 + 提权根 digest 绑定）、网络授权收敛到 shell rule 维度；grant 升级 ApprovalGrantV2（source/subjectDigest/sandbox），Rust 按实际请求重算 digest 复核并落实 read-only/workspace-write/escalated 三档沙箱（macOS 真机验证，Linux 渲染完成待真机、Windows 提权沿用受限令牌待真机）；审批 UI 重构为单焦点队列 + choice 驱动（Runtime 下发 choices，前端只回传 choiceId）。协议 1.1→1.2（握手 fail-closed，legacy message.send 字段兼容一个版本）。设计见 `docs/PERMISSION-MODEL.md`。**Windows/Linux 运行时边界待对应真机验收；Danger 在 Linux（待真机）与 Windows（无可验证凭据守卫）保持 fail-closed，不得宣称三平台完成。**
 - **待完成**：Provider/Tool Plugins（动态代码隔离模型确定后开放）、Browser Tool、检索式记忆（mem0 候选）、更完整的资产检索；权限规则持久化（当前刻意 session-only）与 Windows Danger credential guard spike。
 
-## Phase 3：Multi-Agent Orchestration（未开始）
+## Phase 3：Multi-Agent Orchestration（进行中）
 
-Agent Registry、Worker/Research/Coding/Review Agent、顺序/并行/层级委派、Context 隔离、结构化结果聚合、预算和恢复。
+- **Phase 3A 后端已完成**：内置 Worker/Researcher/Reviewer Registry；Primary 的 `task` 工具；单层只读子 Run；独立上下文；固定 workspace-read 与工具白名单；深度/数量/并发/超时/token 预算；父取消传导；Run/Delegation 持久化、事件与启动恢复；内部子会话从普通列表隐藏。契约见 `docs/MULTI-AGENT.md`。
+- **待完成**：前端父子 Run 树、状态与详情观测；可写 Coding Agent 的权限交集/审批；结构化结果聚合；确认安全模型后再评估多层递归委派。
 
 > 设计延伸：「自然语言生成结构化节点（每个节点作为一个 Agent）」的契约、生成管线、存储
 > 与分步安排见 `docs/NL-TO-STRUCTURE.md`（草案，待评审）；其 S1–S3 随本阶段落地。
 
-> 阶段隔离现状：delegation 表与查询命令保留用于历史诊断；`delegation.create/update/attach_child_run` 写命令返回 unsupported；`enableChildRuns` 在 Store 读取层强制 false（旧数据也为 false），Primary Agent 不注册 task 工具；设置页隐藏子 Agent 委派分组。正式启用须先完成本阶段设计评审并更新路线图，不得靠设置开关绕过。
+> 委派写命令仍只允许 Runtime 内部 `task` 链路，外部 `delegation.create/update/attach_child_run` 保持 unsupported；`enableChildRuns=false` 是全局逃生开关。设置页预算编辑与完整可观测 UI 随下一批交付。
 
 ## Phase 4：Workflow Engine（未开始）
 

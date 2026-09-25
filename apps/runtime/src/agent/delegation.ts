@@ -15,7 +15,6 @@ const CHILD_DEFAULT_TOOLS: ReadonlySet<string> = new Set([
   'get_current_time',
   'web.fetch',
   'skill.use',
-  'manage_plan',
   'file.read',
   'file.list',
   'file.glob',
@@ -25,8 +24,8 @@ const CHILD_DEFAULT_TOOLS: ReadonlySet<string> = new Set([
 /**
  * 子 Run 委派启动器工厂：闭包持有父 Run 级计数（maxChildRuns / maxParallelChildren），
  * 单次父执行内累计，父 Run 结束后随闭包释放，无需跨 Run 清理。
- * 委派边界上下文：深度与权限模式取父 Run 记录（顶层深度 0、权限默认 workspace），
- * 子 Run 只继承不升级——read-only 父的 child 仍 read-only。
+ * Phase 3A 委派边界：顶层深度为 0；子 Run 固定 workspace-read，
+ * 不继承父会话审批、Danger 租约或可写能力。
  */
 export function createChildRunStarter(
   deps: {
@@ -83,7 +82,7 @@ export function createChildRunStarter(
     const delegation = deps.store.delegations.create({
       sessionId: parentSession.id,
       parentRunId,
-      agentId: agentId ?? 'default',
+      agentId,
       task,
     })
     const run = deps.store.runs.create({
@@ -92,10 +91,10 @@ export function createChildRunStarter(
       model: profile.models[0] ?? null,
       parentRunId,
       delegationId: delegation.id,
-      agentId: agentId ?? null,
+      agentId,
     })
     deps.store.delegations.attachChildRun(delegation.id, run.id)
-    deps.store.delegations.update(delegation.id, 'running')
+    const running = deps.store.delegations.update(delegation.id, 'running')
     deps.store.messages.create({
       sessionId: session.id,
       runId: run.id,
@@ -105,7 +104,7 @@ export function createChildRunStarter(
     })
     const assistant = createPendingAssistantMessage(deps.store, session.id, run)
     const emitter = new RunEventEmitter(run.id, deps.notifier)
-    emitter.next({ type: 'delegation.created', delegation })
+    emitter.next({ type: 'delegation.created', delegation: running })
 
     // 子 Run 独立 AbortController：父取消传导为取消；超时以 ChildLimitError 中止
     //（不触碰父 signal，避免把子超时误标为父取消）。
@@ -148,6 +147,7 @@ export function createChildRunStarter(
           // 工具白名单只允许只读能力，写/Shell/MCP 对子 Agent 默认关闭。
           childRunStarter: undefined,
           allowedTools: CHILD_DEFAULT_TOOLS,
+          isolatedContext: true,
           parentSignal: childController.signal,
           childTokenBudget: settings.maxChildTotalTokens ?? undefined,
           onResult: (value) => {
@@ -167,7 +167,12 @@ export function createChildRunStarter(
               error.message,
             )
             emitter.next({ type: 'delegation.updated', delegation: updated })
-            reject(error)
+            const childRun = deps.store.runs.get(run.id)
+            reject(
+              childRun?.errorCode
+                ? new ChildLimitError(childRun.errorCode, error.message)
+                : error,
+            )
           },
           onCancel: () => {
             const updated = deps.store.delegations.update(

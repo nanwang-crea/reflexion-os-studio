@@ -192,6 +192,16 @@ function emitContextMetrics(
 export class ContextBuilder {
   constructor(private readonly store: Store) {}
 
+  /** Phase 3A 子 Agent 上下文：不读取父历史、AGENTS.md、MEMORY.md 或 checkpoint。 */
+  buildIsolated(sessionId: string, systemPrompt: string): ModelMessage[] {
+    const { frames } = reconstructSessionFramesWithIds(
+      this.store,
+      sessionId,
+      systemPrompt,
+    )
+    return framesToValidatedMessages(frames)
+  }
+
   /**
    * 从 canonical 存储重建 Frame 历史（system + 指令/记忆块 → Checkpoint → 最近
    * Frame）。超预算时走增量 Checkpoint（相同来源 hash 只摘要一次）；Checkpoint

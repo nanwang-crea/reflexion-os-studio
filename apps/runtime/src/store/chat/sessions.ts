@@ -3,7 +3,13 @@ import type { DatabaseSync } from 'node:sqlite'
 import type { Session } from '@reflexion-os-studio/contracts'
 import { DEFAULT_SESSION_TITLE, nowIso, type Row } from '../shared.js'
 
-/** 会话领域：项目内会话与独立会话（project_id 为空）。 */
+const USER_VISIBLE_SESSION = `NOT EXISTS (
+  SELECT 1 FROM runs child_run
+  WHERE child_run.session_id = sessions.id
+    AND child_run.parent_run_id IS NOT NULL
+)`
+
+/** 会话领域：项目内会话与独立会话；内部子 Agent 会话不进入用户列表。 */
 export class SessionStore {
   constructor(private readonly db: DatabaseSync) {}
 
@@ -14,7 +20,7 @@ export class SessionStore {
     if (projectId === null) {
       return this.db
         .prepare(
-          'SELECT * FROM sessions WHERE project_id IS NULL ORDER BY updated_at DESC',
+          `SELECT * FROM sessions WHERE project_id IS NULL AND ${USER_VISIBLE_SESSION} ORDER BY updated_at DESC`,
         )
         .all()
         .map((row) => this.toSession(row as Row))
@@ -22,13 +28,15 @@ export class SessionStore {
     if (projectId !== undefined) {
       return this.db
         .prepare(
-          'SELECT * FROM sessions WHERE project_id = ? ORDER BY updated_at DESC',
+          `SELECT * FROM sessions WHERE project_id = ? AND ${USER_VISIBLE_SESSION} ORDER BY updated_at DESC`,
         )
         .all(projectId)
         .map((row) => this.toSession(row as Row))
     }
     return this.db
-      .prepare('SELECT * FROM sessions ORDER BY updated_at DESC')
+      .prepare(
+        `SELECT * FROM sessions WHERE ${USER_VISIBLE_SESSION} ORDER BY updated_at DESC`,
+      )
       .all()
       .map((row) => this.toSession(row as Row))
   }
@@ -79,9 +87,19 @@ export class SessionStore {
       .run(nowIso(), id)
   }
 
-  /** 删除会话；消息与 Run 由外键级联删除。返回是否确实删除了行。 */
+  /** 删除用户会话及其内部子会话；消息、Run 与委派由外键级联删除。 */
   delete(id: string): boolean {
-    const result = this.db.prepare('DELETE FROM sessions WHERE id = ?').run(id)
+    const result = this.db
+      .prepare(
+        `DELETE FROM sessions
+         WHERE id = ? OR id IN (
+           SELECT child_run.session_id
+           FROM runs child_run
+           JOIN runs parent_run ON parent_run.id = child_run.parent_run_id
+           WHERE parent_run.session_id = ?
+         )`,
+      )
+      .run(id, id)
     return Number(result.changes) > 0
   }
 

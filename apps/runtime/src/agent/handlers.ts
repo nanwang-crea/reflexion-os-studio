@@ -2,13 +2,13 @@ import { requireString, type CommandHandler } from '../command-utils.js'
 import { CommandError } from './index.js'
 
 /**
- * Phase 3 未启动：委派写命令统一拒绝。数据表与查询命令保留用于历史诊断，
- * 不破坏兼容；正式启用需先完成 Phase 3 设计评审。
+ * 委派生命周期只能由 Runtime 内部 task 工具创建和推进。
+ * 外部写命令保留协议名用于兼容，但不得伪造父子 Run 或终态。
  */
 function unsupportedDelegationWrite(): never {
   throw new CommandError(
     'unsupported',
-    '子 Agent 委派属 Phase 3，当前未开放写操作',
+    '委派写操作仅允许由 Runtime 内部 task 工具执行',
   )
 }
 

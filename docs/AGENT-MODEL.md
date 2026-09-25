@@ -1,19 +1,13 @@
 # Agent Model
 
-> Phase 1 schema-only：Phase 1A 只实现一个 Primary Agent，不注册 Worker/Research/Coding/Review/Planner，不产生子 Agent。
-
-Agent 是可配置的执行主体，不是单独的一段 Prompt。`AgentDefinition` 由模型、工具、Skills、Memory Policy、Permission Policy 和 Delegation Policy 组成。
+Agent 是 Runtime 管理的执行主体，不由 Provider 或 UI 管理。`AgentDefinition` 当前保存身份、说明、system prompt 与启停状态；模型、工具、记忆、权限和委派能力由 Run 启动边界解析，避免 manifest 声明越权。
 
 ```text
-AgentDefinition
-├── model
-├── tools
-├── skills
-├── memoryPolicy
-├── permissionPolicy
-└── delegationPolicy
+Primary Agent
+  └── task → Worker | Researcher | Reviewer
+                 └── isolated read-only Run (no task)
 ```
 
-Primary Agent 直接服务用户；Worker、Research、Coding、Review 和 Planner Agent 通过相同 Runtime 执行，只是定义不同。Agent Runtime 管理生命周期、上下文、工具调用和结果，不由 Provider 或 UI 管理。
+Phase 3A 注册 `worker`、`researcher`、`reviewer` 三个内置定义。它们继承父 Run 的 Provider/模型，但不继承父上下文、长期记忆、审批或高权限工具。`agentId`、`parentRunId` 与 `delegationId` 持久化在 Run 中，Delegation 保存父子生命周期。
 
-第一阶段只实现一个 Primary Agent，但数据模型必须包含 `agentId`、`parentRunId`、`delegationId` 等字段，避免以后重做持久化协议。
+AgentDefinition 的工具/Skills/Memory Policy/Permission Policy/Delegation Policy 完整可配置化属于后续阶段；在隔离模型完成前，不允许定义自行扩大 Phase 3A 的固定只读边界。

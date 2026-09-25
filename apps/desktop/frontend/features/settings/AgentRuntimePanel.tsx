@@ -80,7 +80,7 @@ const FIELDS: FieldMeta[] = [
 ]
 
 /** 字段分组：每个小组独立小标题 + 分隔线，改善视觉密度。 */
-// Phase 3 未启动：子 Agent 委派设置分组整体隐藏，仅保留循环与网络。
+// Phase 3A 暂不暴露委派预算编辑器；保存其他设置时必须保留后端状态。
 const GROUPS: {
   id: string
   title: string
@@ -131,6 +131,7 @@ function buildFieldHint(field: FieldMeta): string {
 export function AgentRuntimePanel(): React.JSX.Element {
   const [draft, setDraft] = useState<Record<string, string> | null>(null)
   const initialRef = useRef<Record<string, string> | null>(null)
+  const enableChildRunsRef = useRef(true)
   const [busy, setBusy] = useState(false)
   const [savedAt, setSavedAt] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -140,6 +141,7 @@ export function AgentRuntimePanel(): React.JSX.Element {
     void getAgentSettings()
       .then((result) => {
         if (disposed) return
+        enableChildRunsRef.current = result.settings.enableChildRuns
         const next = toDraft(result.settings)
         initialRef.current = next
         setDraft(next)
@@ -170,8 +172,7 @@ export function AgentRuntimePanel(): React.JSX.Element {
       maxParallelChildren: parseNumber(draft.maxParallelChildren),
       maxChildTimeoutSec: parseNumber(draft.maxChildTimeoutSec),
       maxChildTotalTokens: parseNumber(draft.maxChildTotalTokens),
-      // Phase 3 未启动：委派设置不可编辑，保存时强制回 false。
-      enableChildRuns: false,
+      enableChildRuns: enableChildRunsRef.current,
     }
     // 保存前契约预检：把"必然被后端拒"的边界值就地报出中文字段名与范围，
     // 不再吐 "Invalid params" 一句话吞掉原因。

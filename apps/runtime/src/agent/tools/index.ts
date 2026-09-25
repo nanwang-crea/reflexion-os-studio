@@ -82,7 +82,8 @@ const BUILTIN_POLICIES: Record<string, ToolDefinition['execution']> = {
   'memory.remember': STATE_POLICY,
   manage_plan: STATE_POLICY,
   update_plan: STATE_POLICY,
-  task: STATE_POLICY,
+  // 同一模型轮声明的多个独立委派可并行；ChildRunStarter 负责并发上限。
+  task: { effect: 'read', resourceKeys: () => [] },
   'file.read': READ_POLICY(),
   'file.list': READ_POLICY(),
   'file.glob': READ_POLICY(false),

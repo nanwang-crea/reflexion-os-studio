@@ -367,6 +367,33 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
         "ALTER TABLE plugins ADD COLUMN manifest_json TEXT NOT NULL DEFAULT '{}'",
       )
     }
+    if (version < 27) {
+      // v27：Phase 3A 正式开放。旧版本的 false 是读取层强制隔离值，
+      // 当时 UI 也无法编辑，不代表用户选择；升级时一次性切换为启用。
+      const row = db
+        .prepare('SELECT settings_json FROM agent_settings WHERE id = 1')
+        .get() as { settings_json: string } | undefined
+      if (row) {
+        try {
+          const settings = JSON.parse(row.settings_json) as Record<
+            string,
+            unknown
+          >
+          if (
+            settings &&
+            typeof settings === 'object' &&
+            !Array.isArray(settings)
+          ) {
+            settings.enableChildRuns = true
+            db.prepare(
+              'UPDATE agent_settings SET settings_json = ?, updated_at = ? WHERE id = 1',
+            ).run(JSON.stringify(settings), nowIso())
+          }
+        } catch {
+          // 非法 JSON 由 AgentSettingsStore 安全回退到 v27 默认值。
+        }
+      }
+    }
     db.exec('COMMIT')
     // 迁移全部执行完毕才推进版本号；否则下次启动会重复进入迁移分支。
     version = LATEST_SCHEMA_VERSION

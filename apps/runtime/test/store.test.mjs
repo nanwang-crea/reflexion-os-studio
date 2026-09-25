@@ -30,6 +30,40 @@ test('project and session CRUD', () => {
   assert.ok(sessions.some((item) => item.id === named.id))
 })
 
+test('session lists hide internal child-agent sessions', () => {
+  const store = freshStore()
+  const project = store.projects.create({
+    name: 'Demo',
+    folderPath: '/tmp/demo',
+  })
+  const parentSession = store.sessions.create(project.id, 'Parent')
+  const parentRun = store.runs.create({
+    sessionId: parentSession.id,
+    providerId: null,
+    model: null,
+  })
+  const childSession = store.sessions.create(project.id, 'Internal child')
+  store.runs.create({
+    sessionId: childSession.id,
+    providerId: null,
+    model: null,
+    parentRunId: parentRun.id,
+    agentId: 'worker',
+  })
+
+  assert.deepEqual(
+    store.sessions.list(project.id).map((item) => item.id),
+    [parentSession.id],
+  )
+  assert.deepEqual(
+    store.sessions.list().map((item) => item.id),
+    [parentSession.id],
+  )
+  assert.equal(store.sessions.get(childSession.id).id, childSession.id)
+  assert.equal(store.sessions.delete(parentSession.id), true)
+  assert.equal(store.sessions.get(childSession.id), null)
+})
+
 test('message lifecycle: create, streaming, finalize keeps parts in sync', () => {
   const store = freshStore()
   const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
@@ -800,12 +834,12 @@ test('v23 migration drops legacy memories/FTS/memory_jobs tables', () => {
     .map((row) => row.name)
   assert.deepEqual(names, [])
   const version = after.prepare('PRAGMA user_version').get()
-  assert.equal(Number(version.user_version), 26)
+  assert.equal(Number(version.user_version), 27)
   after.close()
   store.close()
 })
 
-test('fresh store schema has plugin manifests, no legacy memory tables, and version 26', () => {
+test('fresh store schema has plugin manifests, no legacy memory tables, and version 27', () => {
   const dir = mkdtempSync(join(tmpdir(), 'reflexion-v23-fresh-'))
   const store = new Store(dir)
   store.close()
@@ -818,7 +852,7 @@ test('fresh store schema has plugin manifests, no legacy memory tables, and vers
     .map((row) => row.name)
   assert.deepEqual(names, [])
   const version = db.prepare('PRAGMA user_version').get()
-  assert.equal(Number(version.user_version), 26)
+  assert.equal(Number(version.user_version), 27)
   const plugins = db
     .prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'plugins'",
@@ -962,7 +996,7 @@ test('agent settings default and round-trip', () => {
     maxParallelChildren: 2,
     maxChildTimeoutSec: 120,
     maxChildTotalTokens: 12000,
-    enableChildRuns: false,
+    enableChildRuns: true,
   })
   const updated = store.agentSettings.upsert({
     maxTurns: 32,
@@ -982,10 +1016,26 @@ test('agent settings default and round-trip', () => {
   })
   assert.deepEqual(store.agentSettings.get(), updated)
   assert.equal(updated.maxTurns, 32)
-  // Phase 3 阶段隔离：即使写入 true，读取也强制 false（见 agentSettings.ts）。
-  assert.equal(updated.enableChildRuns, false)
+  assert.equal(updated.enableChildRuns, true)
   // 非法 JSON 容错回默认。
   const db = store
   assert.equal(db.agentSettings.get().maxTurns, 32)
   store.close()
+})
+
+test('v27 migration enables child runs that were previously forced off', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'reflexion-store-v27-'))
+  const store = new Store(dir)
+  store.agentSettings.upsert({
+    ...store.agentSettings.get(),
+    enableChildRuns: false,
+  })
+  store.close()
+  const before = new DatabaseSync(join(dir, 'reflexion.db'))
+  before.exec('PRAGMA user_version = 26')
+  before.close()
+
+  const reopened = new Store(dir)
+  assert.equal(reopened.agentSettings.get().enableChildRuns, true)
+  reopened.close()
 })

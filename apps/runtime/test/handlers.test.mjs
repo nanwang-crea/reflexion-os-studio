@@ -161,6 +161,117 @@ test('child task starter rejects disabled agents before creating a delegation', 
   assert.equal(store.delegations.listBySession(session.id).length, 0)
 })
 
+test('child task starter launches an isolated read-only child and persists its result', async () => {
+  const store = freshStore()
+  const events = []
+  const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
+  const session = store.sessions.create(project.id)
+  const parentRun = store.runs.create({
+    sessionId: session.id,
+    providerId: 'provider',
+    model: 'model',
+  })
+  let launchInput
+  const launcher = {
+    depthOf: () => 0,
+    launch: (input) => {
+      launchInput = input
+      input.onResult('verified result')
+    },
+  }
+  const starter = createChildRunStarter(
+    {
+      store,
+      notifier: (event) => events.push(event),
+      launcher,
+      profile: { id: 'provider', models: ['model'] },
+      apiKey: 'unused',
+    },
+    parentRun,
+    session,
+  )
+
+  const result = await starter({
+    task: 'review the implementation',
+    agentId: 'reviewer',
+    parentRunId: parentRun.id,
+    signal: new AbortController().signal,
+  })
+
+  assert.equal(result, 'verified result')
+  assert.equal(launchInput.depth, 1)
+  assert.equal(launchInput.permissionPreset, 'workspace-read')
+  assert.equal(launchInput.isolatedContext, true)
+  assert.equal(launchInput.childRunStarter, undefined)
+  assert.equal(launchInput.allowedTools.has('file.read'), true)
+  for (const forbidden of [
+    'file.write',
+    'shell.execute',
+    'task',
+    'manage_plan',
+  ]) {
+    assert.equal(launchInput.allowedTools.has(forbidden), false)
+  }
+  const [delegation] = store.delegations.listByParentRun(parentRun.id)
+  assert.equal(delegation.status, 'completed')
+  assert.equal(delegation.result, 'verified result')
+  assert.equal(store.runs.get(delegation.childRunId).parentRunId, parentRun.id)
+  assert.deepEqual(
+    store.sessions.list(project.id).map((item) => item.id),
+    [session.id],
+  )
+  assert.ok(events.some((event) => event.type === 'delegation.created'))
+  assert.ok(events.some((event) => event.type === 'delegation.updated'))
+})
+
+test('parent cancellation propagates to the active child delegation', async () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
+  const session = store.sessions.create(project.id)
+  const parentRun = store.runs.create({
+    sessionId: session.id,
+    providerId: 'provider',
+    model: 'model',
+  })
+  let childStarted
+  const started = new Promise((resolve) => {
+    childStarted = resolve
+  })
+  const launcher = {
+    depthOf: () => 0,
+    launch: (input) => {
+      input.parentSignal.addEventListener('abort', input.onCancel, {
+        once: true,
+      })
+      childStarted()
+    },
+  }
+  const starter = createChildRunStarter(
+    {
+      store,
+      notifier: () => {},
+      launcher,
+      profile: { id: 'provider', models: ['model'] },
+      apiKey: 'unused',
+    },
+    parentRun,
+    session,
+  )
+  const parentController = new AbortController()
+  const pending = starter({
+    task: 'long read-only work',
+    agentId: 'worker',
+    parentRunId: parentRun.id,
+    signal: parentController.signal,
+  })
+  await started
+  parentController.abort()
+
+  await assert.rejects(pending, { name: 'AbortError' })
+  const [delegation] = store.delegations.listByParentRun(parentRun.id)
+  assert.equal(delegation.status, 'cancelled')
+})
+
 test('task tool rejects without starter and validates arguments', async () => {
   const base = { store: freshStore(), runId: 'run-1' }
   const unavailable = await createTaskTool(base).execute({
@@ -190,13 +301,13 @@ test('task tool rejects without starter and validates arguments', async () => {
       }),
     /task is required/,
   )
-  // agentId 可选：缺省时回退 'default'（与工具 schema required: ['task'] 一致）。
+  // agentId 可选：缺省时回退内置 worker。
   const defaulted = await tool.execute({
     args: { task: 'do' },
     signal: new AbortController().signal,
   })
   assert.deepEqual(defaulted, { content: 'done', isError: false })
-  assert.equal(starterCalls[0].agentId, 'default')
+  assert.equal(starterCalls[0].agentId, 'worker')
   const result = await tool.execute({
     args: { task: ' do ', agentId: ' agent-1 ' },
     signal: new AbortController().signal,
@@ -292,7 +403,7 @@ test('provider.configure forwards tuning fields with omitted, null, and value se
   assert.equal(cleared.profile.contextBudget, null)
 })
 
-test('phase 3 isolation: enableChildRuns=true in stored settings is forced off on read', () => {
+test('phase 3A child-run setting round-trips and remains an escape hatch', () => {
   const store = freshStore()
   // 模拟旧数据直接写入 enableChildRuns=true（绕过契约层的落库形态）。
   store.agentSettings.upsert({
@@ -308,23 +419,23 @@ test('phase 3 isolation: enableChildRuns=true in stored settings is forced off o
     enableChildRuns: true,
   })
   const settings = store.agentSettings.get()
-  assert.equal(settings.enableChildRuns, false)
+  assert.equal(settings.enableChildRuns, true)
   assert.equal(settings.maxTurns, 8)
 })
 
-test('phase 3 isolation: delegation write commands are unsupported, queries still work', async () => {
+test('external delegation writes are unsupported while queries remain available', async () => {
   const store = freshStore()
   await assert.rejects(
     () => dispatchCommand('delegation.create', {}, { store }),
-    /unsupported|Phase 3/,
+    /unsupported|Runtime 内部/,
   )
   await assert.rejects(
     () => dispatchCommand('delegation.update', {}, { store }),
-    /unsupported|Phase 3/,
+    /unsupported|Runtime 内部/,
   )
   await assert.rejects(
     () => dispatchCommand('delegation.attach_child_run', {}, { store }),
-    /unsupported|Phase 3/,
+    /unsupported|Runtime 内部/,
   )
   // 查询命令保留：返回空列表而不是报错。
   const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })

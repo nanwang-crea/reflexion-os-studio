@@ -23,6 +23,7 @@ import { QueueService } from './session/queue.js'
 import { RunRunner } from './run/runner.js'
 import { SessionTitleService } from './session/session-titles.js'
 import { deriveSessionTitle } from './session/title.js'
+import { createChildRunStarter } from './delegation.js'
 import {
   dangerCapability,
   requireIdleSession,
@@ -483,13 +484,24 @@ export class ChatAgent {
     return { accepted }
   }
 
-  /** 组装并后台启动一次 Run（Phase 3 未启动：child task 强制不可达）。 */
+  /** 组装并后台启动一次顶层 Run；Phase 3A 仅为顶层注入一层只读委派。 */
   private launch(
     input: Omit<Parameters<RunLauncher['launch']>[0], 'childRunStarter'>,
   ): void {
-    // Phase 3 边界：子 Agent 委派未正式启用。即使旧 settings JSON 中
-    // enableChildRuns=true 也不得给 Primary Agent 注册 task 工具。
-    // 重新启用需先完成 ROADMAP Phase 3 设计评审，不得靠设置开关绕过。
-    this.launcher.launch({ ...input, childRunStarter: undefined })
+    const settings = this.store.agentSettings.get()
+    const childRunStarter = settings.enableChildRuns
+      ? createChildRunStarter(
+          {
+            store: this.store,
+            notifier: this.notifier,
+            launcher: this.launcher,
+            profile: input.profile,
+            apiKey: input.apiKey,
+          },
+          input.run,
+          input.session,
+        )
+      : undefined
+    this.launcher.launch({ ...input, childRunStarter })
   }
 }

@@ -59,6 +59,8 @@ export interface LaunchOptions {
   childTokenBudget?: number
   /** 工具白名单：设置后仅注册这些内置/MCP 工具；缺省不限制。 */
   allowedTools?: ReadonlySet<string> | null
+  /** 子 Agent 独立上下文：仅 system prompt + 显式任务包，不注入历史/记忆。 */
+  isolatedContext?: boolean
 }
 
 /** launch 依赖：跨 Run 共享的服务集合（由 ChatAgent 注入）。 */
@@ -182,14 +184,21 @@ export class RunLauncher {
       .execute({
         run,
         provider,
-        buildHistory: (signal) =>
-          this.deps.contextBuilder.build(
-            sessionId,
+        buildHistory: (signal) => {
+          const systemPrompt =
             input.systemPrompt ??
-              composeSystemPrompt(this.deps.skills, input.skill),
-            provider,
-            signal,
-          ),
+            composeSystemPrompt(this.deps.skills, input.skill)
+          return input.isolatedContext
+            ? Promise.resolve(
+                this.deps.contextBuilder.buildIsolated(sessionId, systemPrompt),
+              )
+            : this.deps.contextBuilder.build(
+                sessionId,
+                systemPrompt,
+                provider,
+                signal,
+              )
+        },
         registry,
         workspaceRoot,
         gate,

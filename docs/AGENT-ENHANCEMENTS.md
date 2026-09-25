@@ -84,10 +84,10 @@
 - **差距**:工具集完全静态内置,无外部工具生态接入。
 - **方向**:runtime 侧 MCP client + 工具桥,contracts 增加 mcp.* 命令;大改动,单独排期。
 
-### #11 多 Agent 委派 ⬜（Phase 3 边界,不得提前实现）
+### #11 多 Agent 委派 ◐（Phase 3A 后端已完成）
 
-- 差 subagent 委派(Claude Code subagents / AutoGen 式);`RunSchema` 的 agentId/parentRunId/delegationId 字段已预留,仅契约级占位。
-- **阶段隔离(2026-09-08)**:历史遗留的实验性委派代码已收敛为生产不可达——`delegation.create/update/attach_child_run` 写命令返回 unsupported(查询保留用于诊断)、`enableChildRuns` 在 Store 读取层强制 false、Primary Agent 不再注册 `task` 工具、设置页隐藏委派分组。delegation 表与契约保留,避免破坏兼容。
+- **Phase 3A 落地**：Primary 通过 `task` 委派单层只读 Worker/Researcher/Reviewer；子 Run 独立上下文与 Session，具备工具白名单、预算、取消、持久化事件和启动恢复。外部 delegation 写命令仍拒绝，生命周期只由 Runtime 内部维护。
+- **剩余**：完整父子树 UI、可写 Coding Agent 的权限/审批交集、结构化结果聚合与递归委派评估。
 
 ### #12 浏览器工具 / 多模态 / 附件 ⬜（Phase 2/5）
 
@@ -112,4 +112,4 @@
 - **#15 副作用调度与 Loop Guard ✅**：`ToolExecutionPolicy`（pure/read/write/shell/state + resourceKeys）不进 ToolSpec；相邻纯读并行成批、mutation 独占串行批、结果按声明顺序回填；ToolCall 批量预建（模型轮事务内，崩溃可审计）；Loop Guard 指纹（canonicalJson + freshness epoch）、相同只读指纹第三次拦截 `no_progress`、成功 mutation 重放拦截 `duplicate_side_effect`；Run 预算四项可配置（默认 7200s / 2 亿 tokens / 1000 工具调用 / 2 续写；null = 内置默认而非无限制，取值范围以 `AgentSettingsSchema` 为唯一真源，口径详见 `docs/RELIABILITY-AND-RECOVERY.md`）。
 - **#16 增量 Checkpoint ✅**：v20 `context_checkpoints`；source hash 命中复用、watermark 增量切片（旧摘要+新增帧一次调用）、single-flight、失败缓存；结构化摘要（zod + secret 过滤）；同 source hash 摘要调用严格 ≤1。
 - **#17 持久化 Memory Job ✅**：`memory_jobs` 表 + 单 worker（空闲消费、前台抢占、重启恢复、3 次退避 5s/30s/5min）；成功 Run 终态事务幂等入队；transcript 脱敏（参数摘要、`<redacted>`、状态/errorCode）；复合召回 query（用户消息×3 + Checkpoint goal/pending + Plan）；embedding 500ms deadline 降级。
-- **Phase 3 隔离 ✅（W0）**：`delegation.create/update/attach_child_run` 返回 unsupported；`enableChildRuns` 读取层强制 false；Primary Agent 不注册 task；设置页隐藏委派分组。
+- **Phase 3A 后端 ✅**：`task` 单层只读委派、内置 Agent、隔离上下文、预算/取消/恢复已接入；外部 delegation 写命令保持 unsupported，设置页暂不暴露委派预算编辑。

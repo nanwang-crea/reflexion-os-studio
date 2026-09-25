@@ -1,11 +1,25 @@
 # Multi-Agent Orchestration
 
-Phase 1A 只保留多 Agent 字段和契约，禁止 Delegation、并行、层级协作和结果聚合；完整实现从 Phase 3 开始。
+## Phase 3A：单层只读委派
 
-多 Agent 是 Runtime 的受控委派能力，不是让 Agent 无限递归创建子 Agent。支持顺序、并行和层级委派：Primary Agent 可以将独立任务交给 Worker/Research/Coding/Review Agent，再由 Coordinator 聚合结构化结果。
+Phase 3A 已开放 Primary Agent 到只读子 Agent 的受控委派。它不是递归工作流，也不允许子 Agent 写入工作区。
 
-每次委派必须记录 `delegationId`、`parentRunId`、`childRunId`、`parentAgentId`、`childAgentId`、工具白名单、权限策略、上下文预算、时间限制、最大深度和最大子任务数。子 Agent 默认使用独立 Context，只接收任务所需的信息和显式输入。
+Primary 通过 `task` 工具提交 `{ task, agentId? }`；`agentId` 缺省为 `worker`，内置定义还包括 `researcher`（检索归纳）和 `reviewer`（独立审查）。多个互不依赖的 `task` 调用可在同一模型轮并行，最终文本结果回填给 Primary，由 Primary 核验和汇总。
 
-子 Agent 不得默认继承父 Agent 的全部工具、权限或长期记忆，不得绕过审批，也不得直接写入用户级长期记忆。取消父 Run 时按策略取消子 Run；子任务失败可按策略重试、降级或交给人工处理。所有委派和结果都产生事件。
+### 固定执行边界
 
-Phase 1 只保留契约和 Primary Agent；Phase 3 才实现完整并行、层级、预算、聚合和 UI 展示。
+- 子 Run 继承父 Run 的 Provider 与模型，但使用独立 Session、独立上下文和 Agent system prompt；只注入委派任务，不注入父历史、AGENTS.md、MEMORY.md 或 checkpoint。
+- 子 Run 固定使用 `workspace-read`。工具白名单仅含时间、网页读取、Skill 读取与 `file.read/list/glob/grep`；没有写文件、Shell、MCP、memory、plan 或 `task`，因此不能递归委派。
+- 父会话审批、会话规则和 Danger 租约不向子 Run 传播。子权限始终是父边界与固定只读边界的收窄结果，不可扩大。
+- 默认限制：深度 1、每个父 Run 最多 4 个子 Run、最多并行 2 个、单子 Run 120 秒、总 token 12000。限额从 AgentSettings 读取，超过时返回稳定错误码。
+- 内部子 Session 不出现在普通会话列表，但 Run、Message、Delegation 均持久化，供后续观测与诊断。
+
+### 生命周期与恢复
+
+每次委派记录 `delegationId`、`parentRunId`、`childRunId`、`agentId`、任务、状态、结果或错误。父 Run 取消会通过 AbortSignal 取消活动子 Run；子任务失败只使本次 `task` 工具调用失败，Primary 可据此调整或继续。启动恢复会把遗留的活动 child Run 标为 interrupted，并将对应 Delegation 收敛为 failed。
+
+Delegation 写入只允许 Runtime 内部 `task` 链路；外部 `delegation.create/update/attach_child_run` 命令保持拒绝，避免伪造生命周期。创建和更新都会产生 delegation 事件。
+
+## 后续阶段
+
+Phase 3B 再开放可写 Coding Agent、细粒度权限交集与审批；Phase 3C 再评估递归层级、结构化结果聚合及完整的前端树状观测。任何扩展都不能绕过 ToolRegistry、PermissionGate 或现有预算边界。

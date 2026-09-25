@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Store } from '../dist/store/index.js'
@@ -48,5 +48,33 @@ test('ContextBuilder.build degrades to deterministic trim when both summaries fa
   assert.ok(messages.length > 0)
   assert.equal(messages[0].role, 'system')
   assert.match(messages[0].content, /助手/)
+  store.close()
+})
+
+test('ContextBuilder.buildIsolated injects only child system prompt and task history', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'reflexion-ctx-isolated-data-'))
+  const workspace = mkdtempSync(join(tmpdir(), 'reflexion-ctx-isolated-work-'))
+  writeFileSync(join(workspace, 'AGENTS.md'), 'must-not-enter-child-context')
+  const store = new Store(dataDir)
+  const project = store.projects.create({ name: 'p', folderPath: workspace })
+  const session = store.sessions.create(project.id)
+  store.messages.create({
+    sessionId: session.id,
+    runId: null,
+    role: 'user',
+    content: 'bounded child task',
+    status: 'completed',
+  })
+
+  const messages = new ContextBuilder(store).buildIsolated(
+    session.id,
+    'child-system',
+  )
+
+  assert.deepEqual(messages, [
+    { role: 'system', content: 'child-system' },
+    { role: 'user', content: 'bounded child task' },
+  ])
+  assert.doesNotMatch(JSON.stringify(messages), /must-not-enter-child-context/)
   store.close()
 })

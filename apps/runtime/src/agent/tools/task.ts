@@ -12,7 +12,11 @@ export function createTaskTool(ctx: ToolContext): ToolDefinition {
       type: 'object',
       properties: {
         task: { type: 'string', description: '要委派的子任务' },
-        agentId: { type: 'string', description: '可选的子 Agent ID' },
+        agentId: {
+          type: 'string',
+          description:
+            '可选的子 Agent ID：worker（通用，默认）、researcher（检索归纳）或 reviewer（独立审查）',
+        },
       },
       required: ['task'],
     },
@@ -40,7 +44,7 @@ export function createTaskTool(ctx: ToolContext): ToolDefinition {
       const agentId =
         typeof input.agentId === 'string' && input.agentId.trim()
           ? input.agentId.trim()
-          : 'default'
+          : 'worker'
       try {
         const result = await ctx.childRunStarter({
           task: input.task,
