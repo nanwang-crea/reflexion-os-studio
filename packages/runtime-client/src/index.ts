@@ -94,9 +94,11 @@ export {
 
 export {
   createRuntimeAgentClient,
+  cancelDelegation,
   listAgents,
   listDelegations,
   listDelegationsByParent,
+  setAgentEnabled,
   type AgentClientRequestOptions,
   type AgentDelegationUpdate,
   type RuntimeAgentClient,

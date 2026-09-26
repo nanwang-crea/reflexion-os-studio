@@ -277,6 +277,14 @@ export const CommandSchemaRegistry = {
     params: z.object({ requestId: RequestIdSchema }),
     result: z.object({ agents: z.array(AgentDefinitionSchema) }),
   },
+  'agent.set_enabled': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      agentId: z.string().min(1),
+      enabled: z.boolean(),
+    }),
+    result: z.object({ agent: AgentDefinitionSchema }),
+  },
   'delegation.list': {
     params: z.object({
       requestId: RequestIdSchema,
@@ -307,6 +315,13 @@ export const CommandSchemaRegistry = {
       childRunId: z.string().min(1),
     }),
     result: z.object({ delegation: DelegationSchema.nullable() }),
+  },
+  'delegation.cancel': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      delegationId: z.string().min(1),
+    }),
+    result: z.object({ accepted: z.boolean() }),
   },
   'delegation.attach_child_run': {
     params: z.object({

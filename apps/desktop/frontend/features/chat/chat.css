@@ -1447,6 +1447,59 @@
   flex-direction: column;
   gap: 3px;
   min-width: 0;
+  flex: 1;
+}
+
+.delegation-head,
+.delegation-actions,
+.child-trace-run-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.delegation-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.delegation-actions button {
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
+.delegation-actions .danger {
+  color: var(--danger);
+}
+
+.delegation-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  margin: 6px 0;
+  padding: 8px;
+  border-radius: 7px;
+  background: var(--surface-hover);
+  font-size: 11.5px;
+}
+
+.delegation-details div {
+  min-width: 0;
+}
+
+.delegation-details dt {
+  color: var(--text-muted);
+}
+
+.delegation-details dd {
+  margin: 1px 0 0;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.delegation-details .delegation-tools {
+  grid-column: 1 / -1;
 }
 
 .delegation-agent {
@@ -1475,6 +1528,106 @@
   color: var(--danger, #f87171);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.child-trace-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.child-trace-panel {
+  width: min(640px, 88vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+  box-shadow: -12px 0 30px rgba(0, 0, 0, 0.18);
+}
+
+.child-trace-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.child-trace-head div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.child-trace-head span {
+  color: var(--text-muted);
+  font-size: 12px;
+  word-break: break-word;
+}
+
+.child-trace-body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+.child-trace-run {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.child-trace-run-head,
+.child-trace-message,
+.child-trace-tool {
+  padding: 9px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+}
+
+.child-trace-message > span,
+.child-trace-tool > span {
+  margin-right: 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.child-trace-message pre,
+.child-trace-tool pre {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: inherit;
+  color: var(--text-secondary);
+}
+
+.child-trace-children {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.child-trace-children > div {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  padding: 9px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.child-trace-children p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--text-secondary);
 }
 
 /* Composer 高级权限入口（ask-everything / Danger） */

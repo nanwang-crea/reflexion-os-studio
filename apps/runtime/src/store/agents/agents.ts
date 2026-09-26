@@ -18,6 +18,13 @@ export class AgentStore {
     return row ? this.toAgent(row) : null
   }
 
+  setEnabled(id: string, enabled: boolean): AgentDefinition | null {
+    const changed = this.db
+      .prepare('UPDATE agents SET enabled = ?, updated_at = ? WHERE id = ?')
+      .run(enabled ? 1 : 0, nowIso(), id)
+    return Number(changed.changes) === 0 ? null : this.get(id)
+  }
+
   upsert(
     input: Pick<
       AgentDefinition,

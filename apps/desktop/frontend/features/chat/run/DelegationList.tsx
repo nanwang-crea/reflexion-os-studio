@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import type { Delegation } from '@reflexion-os-studio/runtime-client'
+import { cancelDelegation } from '../../../api/agents'
 import { ChevronIcon } from '../../../ui/icons'
+import { ChildAgentTrace } from './ChildAgentTrace'
 
 interface DelegationListProps {
   items: Delegation[]
@@ -21,11 +23,16 @@ export function DelegationList({
   runActive,
 }: DelegationListProps): React.JSX.Element {
   const [open, setOpen] = useState(true)
+  const [detailId, setDetailId] = useState<string | null>(null)
+  const [traceId, setTraceId] = useState<string | null>(null)
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   if (items.length === 0) return <></>
   const running = items.some(
     (entry) => entry.status === 'pending' || entry.status === 'running',
   )
+  const trace = items.find((item) => item.id === traceId) ?? null
 
   return (
     <div className="delegation-list">
@@ -57,8 +64,86 @@ export function DelegationList({
               <div className="delegation-content">
                 <div className="delegation-head">
                   <span className="delegation-agent">{delegation.agentId}</span>
+                  <div className="delegation-actions">
+                    <button
+                      type="button"
+                      className="ghost"
+                      onClick={() =>
+                        setDetailId((current) =>
+                          current === delegation.id ? null : delegation.id,
+                        )
+                      }
+                    >
+                      {detailId === delegation.id ? '收起详情' : '详情'}
+                    </button>
+                    {delegation.childSessionId && (
+                      <button
+                        type="button"
+                        className="ghost"
+                        onClick={() => setTraceId(delegation.id)}
+                      >
+                        执行轨迹
+                      </button>
+                    )}
+                    {['pending', 'running'].includes(delegation.status) && (
+                      <button
+                        type="button"
+                        className="ghost danger"
+                        disabled={cancellingId === delegation.id}
+                        onClick={() => {
+                          setCancellingId(delegation.id)
+                          setActionError(null)
+                          void cancelDelegation(delegation.id)
+                            .then(({ accepted }) => {
+                              if (!accepted)
+                                setActionError('子 Agent 已结束或无法取消')
+                            })
+                            .catch((caught) =>
+                              setActionError(
+                                caught instanceof Error
+                                  ? caught.message
+                                  : String(caught),
+                              ),
+                            )
+                            .finally(() => setCancellingId(null))
+                        }}
+                      >
+                        {cancellingId === delegation.id ? '取消中…' : '取消'}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="delegation-task">{delegation.task}</div>
+                {detailId === delegation.id && delegation.execution && (
+                  <dl className="delegation-details">
+                    <div>
+                      <dt>模型</dt>
+                      <dd>{delegation.execution.model}</dd>
+                    </div>
+                    <div>
+                      <dt>权限</dt>
+                      <dd>{delegation.execution.permissionPreset}</dd>
+                    </div>
+                    <div>
+                      <dt>深度</dt>
+                      <dd>{delegation.execution.depth}</dd>
+                    </div>
+                    <div>
+                      <dt>超时</dt>
+                      <dd>{delegation.execution.timeoutSec ?? '默认'} 秒</dd>
+                    </div>
+                    <div>
+                      <dt>输出预算</dt>
+                      <dd>
+                        {delegation.execution.tokenBudget ?? '默认'} tokens
+                      </dd>
+                    </div>
+                    <div className="delegation-tools">
+                      <dt>工具</dt>
+                      <dd>{delegation.execution.allowedTools.join('、')}</dd>
+                    </div>
+                  </dl>
+                )}
                 {delegation.result && (
                   <div className="delegation-result">{delegation.result}</div>
                 )}
@@ -68,7 +153,15 @@ export function DelegationList({
               </div>
             </div>
           ))}
+          {actionError && (
+            <div className="delegation-error" role="alert">
+              {actionError}
+            </div>
+          )}
         </div>
+      )}
+      {trace && (
+        <ChildAgentTrace delegation={trace} onClose={() => setTraceId(null)} />
       )}
     </div>
   )

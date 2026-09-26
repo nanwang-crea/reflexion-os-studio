@@ -6,110 +6,17 @@ import {
   validateCommandParams,
 } from '@reflexion-os-studio/runtime-client'
 import { getAgentSettings, updateAgentSettings } from '../../api/settings'
-
-interface FieldMeta {
-  key: keyof AgentSettings
-  /** 该字段在 agent_settings.update params 里的路径（settings.xxx），供契约派生。 */
-  path: string
-  label: string
-  placeholder: string
-  /** 语义说明；契约范围 hint 会自动追加到末尾。 */
-  description: string
-}
-
-const FIELDS: FieldMeta[] = [
-  {
-    key: 'maxTurns',
-    path: 'settings.maxTurns',
-    label: '最大轮次（模型调用上限）',
-    placeholder: '100（默认）',
-    description: '一次回复最多经历多少轮模型调用；超限如实失败，不假装完成。',
-  },
-  {
-    key: 'reflectionThreshold',
-    path: 'settings.reflectionThreshold',
-    label: '反思阈值（失败次数）',
-    placeholder: '2（默认）',
-    description: '工具失败累计达到该次数后自动注入反思消息；0 表示禁用反思。',
-  },
-  {
-    key: 'requestRetries',
-    path: 'settings.requestRetries',
-    label: '请求重试次数',
-    placeholder: '5（默认）',
-    description:
-      'Provider 请求建立阶段失败(可恢复 400/429/5xx/网络)自动重试次数；0 表示不重试；退避 1s 起步逐次翻倍，封顶 60s。',
-  },
-  {
-    key: 'requestTimeoutSec',
-    path: 'settings.requestTimeoutSec',
-    label: '请求超时（秒）',
-    placeholder: '120（默认）',
-    description: '单次 Provider 请求超时；流式输出期间也受此约束。',
-  },
-  {
-    key: 'maxRunTimeoutSec',
-    path: 'settings.maxRunTimeoutSec',
-    label: 'Run 总时长上限（秒）',
-    placeholder: '7200（默认，2 小时）',
-    description:
-      '一次回复的总时长上限；到点如实失败（run_timeout），不假装完成。',
-  },
-  {
-    key: 'maxRunTotalTokens',
-    path: 'settings.maxRunTotalTokens',
-    label: 'Run token 总预算',
-    placeholder: '200000000（默认，2 亿）',
-    description:
-      '各模型轮累计（输入+输出）token 上限；按 Provider 返回的 usage 计。',
-  },
-  {
-    key: 'maxToolCalls',
-    path: 'settings.maxToolCalls',
-    label: '工具调用次数上限',
-    placeholder: '1000（默认）',
-    description: '一次回复最多执行多少次工具调用；超限以稳定错误码失败。',
-  },
-  {
-    key: 'maxContinuationTurns',
-    path: 'settings.maxContinuationTurns',
-    label: '续写轮次上限',
-    placeholder: '2（默认）',
-    description: '输出被截断（length）时自动续写的最大连续轮次；耗尽如实失败。',
-  },
-]
-
-/** 字段分组：每个小组独立小标题 + 分隔线，改善视觉密度。 */
-// Phase 3A 暂不暴露委派预算编辑器；保存其他设置时必须保留后端状态。
-const GROUPS: {
-  id: string
-  title: string
-  keys: (keyof AgentSettings)[]
-}[] = [
-  {
-    id: 'loop',
-    title: '循环',
-    keys: [
-      'maxTurns',
-      'reflectionThreshold',
-      'maxRunTimeoutSec',
-      'maxRunTotalTokens',
-      'maxToolCalls',
-      'maxContinuationTurns',
-    ],
-  },
-  {
-    id: 'network',
-    title: '网络',
-    keys: ['requestRetries', 'requestTimeoutSec'],
-  },
-]
-
-const FIELD_BY_KEY = new Map(FIELDS.map((field) => [field.key, field]))
+import { AgentDefinitionsPanel } from './AgentDefinitionsPanel'
+import {
+  AGENT_RUNTIME_FIELDS,
+  AGENT_RUNTIME_FIELD_BY_KEY,
+  AGENT_RUNTIME_GROUPS,
+  type AgentRuntimeField,
+} from './agent-runtime-fields'
 
 function toDraft(settings: AgentSettings): Record<string, string> {
   return Object.fromEntries(
-    FIELDS.map((field) => [
+    AGENT_RUNTIME_FIELDS.map((field) => [
       field.key,
       settings[field.key] == null ? '' : String(settings[field.key]),
     ]),
@@ -120,7 +27,7 @@ function toDraft(settings: AgentSettings): Record<string, string> {
  * 字段 hint = 契约范围（派生自 agent_settings.update zod）+ 语义描述。
  * 契约是范围数字的唯一真源；改上限时 UI 自动同步，不再手写常量。
  */
-function buildFieldHint(field: FieldMeta): string {
+function buildFieldHint(field: AgentRuntimeField): string {
   const range = contractRangeHint('agent_settings.update', field.path)
   return range ? `范围：${range}。${field.description}` : field.description
 }
@@ -131,7 +38,8 @@ function buildFieldHint(field: FieldMeta): string {
 export function AgentRuntimePanel(): React.JSX.Element {
   const [draft, setDraft] = useState<Record<string, string> | null>(null)
   const initialRef = useRef<Record<string, string> | null>(null)
-  const enableChildRunsRef = useRef(true)
+  const [enableChildRuns, setEnableChildRuns] = useState(true)
+  const initialEnabledRef = useRef(true)
   const [busy, setBusy] = useState(false)
   const [savedAt, setSavedAt] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -141,7 +49,8 @@ export function AgentRuntimePanel(): React.JSX.Element {
     void getAgentSettings()
       .then((result) => {
         if (disposed) return
-        enableChildRunsRef.current = result.settings.enableChildRuns
+        setEnableChildRuns(result.settings.enableChildRuns)
+        initialEnabledRef.current = result.settings.enableChildRuns
         const next = toDraft(result.settings)
         initialRef.current = next
         setDraft(next)
@@ -172,7 +81,7 @@ export function AgentRuntimePanel(): React.JSX.Element {
       maxParallelChildren: parseNumber(draft.maxParallelChildren),
       maxChildTimeoutSec: parseNumber(draft.maxChildTimeoutSec),
       maxChildTotalTokens: parseNumber(draft.maxChildTotalTokens),
-      enableChildRuns: enableChildRunsRef.current,
+      enableChildRuns,
     }
     // 保存前契约预检：把"必然被后端拒"的边界值就地报出中文字段名与范围，
     // 不再吐 "Invalid params" 一句话吞掉原因。
@@ -188,6 +97,8 @@ export function AgentRuntimePanel(): React.JSX.Element {
     setError(null)
     try {
       await updateAgentSettings(settings)
+      initialRef.current = { ...draft }
+      initialEnabledRef.current = enableChildRuns
       setSavedAt(new Date().toLocaleTimeString())
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
@@ -199,7 +110,10 @@ export function AgentRuntimePanel(): React.JSX.Element {
   const dirty =
     draft !== null &&
     initialRef.current !== null &&
-    FIELDS.some((field) => draft[field.key] !== initialRef.current?.[field.key])
+    (AGENT_RUNTIME_FIELDS.some(
+      (field) => draft[field.key] !== initialRef.current?.[field.key],
+    ) ||
+      enableChildRuns !== initialEnabledRef.current)
 
   if (draft === null) {
     return <div className="agent-runtime">加载中…</div>
@@ -208,13 +122,30 @@ export function AgentRuntimePanel(): React.JSX.Element {
   return (
     <div className="agent-runtime">
       <div className="agent-runtime-body">
-        {GROUPS.map((group) => {
+        <AgentDefinitionsPanel />
+        <section className="runtime-group">
+          <h4 className="runtime-group-title">委派总开关</h4>
+          <label className="agent-definition-row">
+            <span>
+              <strong>允许子 Agent</strong>
+              <small>
+                关闭后新 Run 不再获得 task 工具；进行中的子 Run 不受影响。
+              </small>
+            </span>
+            <input
+              type="checkbox"
+              checked={enableChildRuns}
+              onChange={(event) => setEnableChildRuns(event.target.checked)}
+            />
+          </label>
+        </section>
+        {AGENT_RUNTIME_GROUPS.map((group) => {
           return (
             <section className="runtime-group" key={group.id}>
               <h4 className="runtime-group-title">{group.title}</h4>
               <div className="agent-runtime-grid">
                 {group.keys.map((key) => {
-                  const field = FIELD_BY_KEY.get(key)!
+                  const field = AGENT_RUNTIME_FIELD_BY_KEY.get(key)!
                   const hint = buildFieldHint(field)
                   return (
                     <label className="field" key={field.key}>

@@ -484,6 +484,18 @@ export class ChatAgent {
     return { accepted }
   }
 
+  cancelDelegation(delegationId: string): { accepted: boolean } {
+    const delegation = this.store.delegations.get(delegationId)
+    if (
+      !delegation ||
+      !['pending', 'running'].includes(delegation.status) ||
+      delegation.childRunId === null
+    ) {
+      return { accepted: false }
+    }
+    return { accepted: this.launcher.cancel(delegation.childRunId) }
+  }
+
   /** 组装并后台启动一次顶层 Run；Phase 3A 仅为顶层注入一层只读委派。 */
   private launch(
     input: Omit<Parameters<RunLauncher['launch']>[0], 'childRunStarter'>,

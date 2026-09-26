@@ -69,6 +69,8 @@ const AUTOMATIC_OTHER_TOOLS = new Set([
   'update_plan',
   // 记忆只写数据目录内应用自管的 MEMORY.md，不触用户工作区，免审批。
   'memory.remember',
+  // 委派只创建 Runtime 管理的受限 child Run；工具/深度/并发预算由 starter 强制。
+  'task',
 ])
 
 /** Rust 侧 require_grant 强制校验凭据的操作（写类 + Shell）；读取类不受约束。 */

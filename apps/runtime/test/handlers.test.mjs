@@ -361,6 +361,58 @@ test('parent cancellation during child setup is not lost', async () => {
   assert.equal(delegation.status, 'cancelled')
 })
 
+test('child delegation exposes task only below the configured depth limit', async () => {
+  const store = freshStore()
+  store.agentSettings.upsert({
+    ...store.agentSettings.get(),
+    maxDepth: 2,
+  })
+  const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
+  const session = store.sessions.create(project.id)
+  const parentRun = store.runs.create({
+    sessionId: session.id,
+    providerId: 'provider',
+    model: 'model',
+  })
+  const launches = []
+  const launcher = {
+    depthOf: (runId) => (runId === parentRun.id ? 0 : 1),
+    launch: (input) => {
+      launches.push(input)
+      input.onResult('done')
+    },
+  }
+  const starter = createChildRunStarter(
+    {
+      store,
+      notifier: () => {},
+      launcher,
+      profile: { id: 'provider', models: ['model'] },
+      apiKey: 'unused',
+      model: 'model',
+      sampling: {},
+    },
+    parentRun,
+    session,
+  )
+
+  await starter({
+    task: 'level one',
+    agentId: 'worker',
+    signal: new AbortController().signal,
+  })
+  assert.equal(launches[0].allowedTools.has('task'), true)
+  assert.equal(typeof launches[0].childRunStarter, 'function')
+
+  await launches[0].childRunStarter({
+    task: 'level two',
+    agentId: 'reviewer',
+    signal: new AbortController().signal,
+  })
+  assert.equal(launches[1].allowedTools.has('task'), false)
+  assert.equal(launches[1].childRunStarter, undefined)
+})
+
 test('task tool rejects without starter and validates arguments', async () => {
   const base = { store: freshStore(), runId: 'run-1' }
   const unavailable = await createTaskTool(base).execute({
@@ -439,6 +491,10 @@ test('tool registry: child has no task and allowedTools filters tools', () => {
     childRunStarter: async () => 'x',
   })
   assert.equal(primary.has('task'), true)
+  assert.equal(
+    primary.list().find((tool) => tool.name === 'task').execution.effect,
+    'read',
+  )
 
   // allowedTools 白名单：仅注册名单内工具，其余（含 MCP/写工具）被过滤。
   const allowed = new Set(['get_current_time', 'file.read'])
@@ -564,6 +620,34 @@ test('external delegation writes are unsupported while queries remain available'
     { store },
   )
   assert.deepEqual(listed, { delegations: [] })
+})
+
+test('agent toggle and delegation cancel use constrained command paths', async () => {
+  const store = freshStore()
+  const toggled = await dispatchCommand(
+    'agent.set_enabled',
+    { agentId: 'reviewer', enabled: false },
+    { store },
+  )
+  assert.equal(toggled.agent.enabled, false)
+  assert.equal(store.agents.get('reviewer').enabled, false)
+
+  const calls = []
+  const cancelled = await dispatchCommand(
+    'delegation.cancel',
+    { delegationId: 'delegation-1' },
+    {
+      store,
+      agent: {
+        cancelDelegation: (delegationId) => {
+          calls.push(delegationId)
+          return { accepted: true }
+        },
+      },
+    },
+  )
+  assert.deepEqual(calls, ['delegation-1'])
+  assert.deepEqual(cancelled, { accepted: true })
 })
 
 test('phase 3 isolation: tool registry never registers task without starter', () => {

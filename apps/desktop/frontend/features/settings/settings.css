@@ -577,6 +577,35 @@
   gap: 6px;
 }
 
+.agent-definition-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agent-definition-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  background: var(--bg-elevated);
+}
+
+.agent-definition-row > span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.agent-definition-row small {
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
 .runtime-group {
   display: flex;
   flex-direction: column;

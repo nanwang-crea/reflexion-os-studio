@@ -2,6 +2,7 @@
   "version": 1,
   "methods": [
     "agent.list",
+    "agent.set_enabled",
     "agent_settings.get",
     "agent_settings.update",
     "approval.resolve",
@@ -14,6 +15,7 @@
     "danger.prepare",
     "danger.status",
     "delegation.attach_child_run",
+    "delegation.cancel",
     "delegation.create",
     "delegation.get_by_child_run",
     "delegation.list",

@@ -10,7 +10,7 @@ import { createPendingAssistantMessage, type RunLauncher } from './launcher.js'
 import type { ToolContext } from './tools/shared.js'
 
 /** 子 Agent 默认工具白名单：纯计算 + 只读文件查询，不暴露写/Shell/MCP，且无 task(不递归)。 */
-const CHILD_DEFAULT_TOOLS: ReadonlySet<string> = new Set([
+const CHILD_BASE_TOOLS = [
   'get_current_time',
   'web.fetch',
   'skill.use',
@@ -18,7 +18,7 @@ const CHILD_DEFAULT_TOOLS: ReadonlySet<string> = new Set([
   'file.list',
   'file.glob',
   'file.grep',
-])
+]
 
 /**
  * 子 Run 委派启动器工厂：闭包持有父 Run 级计数（maxChildRuns / maxParallelChildren），
@@ -76,13 +76,20 @@ export function createChildRunStarter(
     childCount += 1
     activeChildren += 1
 
+    const canDelegate =
+      settings.enableChildRuns &&
+      (settings.maxDepth == null || childDepth < settings.maxDepth)
+    const allowedTools = new Set([
+      ...CHILD_BASE_TOOLS,
+      ...(canDelegate ? ['task'] : []),
+    ])
     const execution = {
       version: 1 as const,
       depth: childDepth,
       providerId: profile.id,
       model: deps.model,
       permissionPreset: 'workspace-read' as const,
-      allowedTools: [...CHILD_DEFAULT_TOOLS],
+      allowedTools: [...allowedTools],
       timeoutSec: settings.maxChildTimeoutSec,
       tokenBudget: settings.maxChildTotalTokens,
     }
@@ -179,10 +186,12 @@ export function createChildRunStarter(
           systemPrompt: agent.systemPrompt,
           assistantMessage: assistant,
           emitter,
-          // child 默认无 task：不注入 childRunStarter，子 Run 不能再委派；
-          // 工具白名单只允许只读能力，写/Shell/MCP 对子 Agent 默认关闭。
-          childRunStarter: undefined,
-          allowedTools: CHILD_DEFAULT_TOOLS,
+          // 递归委派只在深度预算内开放；每层仍独立执行数量/并发/超时限制。
+          childRunStarter: canDelegate
+            ? createChildRunStarter(deps, run, session)
+            : undefined,
+          // 无论深度如何都不开放写/Shell/MCP。
+          allowedTools,
           isolatedContext: true,
           parentSignal: childController.signal,
           childTokenBudget: settings.maxChildTotalTokens ?? undefined,

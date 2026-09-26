@@ -15,6 +15,14 @@ function unsupportedDelegationWrite(): never {
 /** 委派记录与 Agent 运行时设置命令（多 Agent 阶段的查询/配置面）。 */
 export const agentCommandHandlers: Record<string, CommandHandler> = {
   'agent.list': (_p, { store }) => ({ agents: store.agents.list() }),
+  'agent.set_enabled': (p, { store }) => {
+    const agent = store.agents.setEnabled(
+      requireString(p, 'agentId'),
+      p.enabled === true,
+    )
+    if (!agent) throw new CommandError('not_found', 'Agent 不存在')
+    return { agent }
+  },
   'delegation.list': (p, { store }) => ({
     delegations: store.delegations.listBySession(requireString(p, 'sessionId')),
   }),
@@ -27,6 +35,8 @@ export const agentCommandHandlers: Record<string, CommandHandler> = {
   'delegation.get_by_child_run': (p, { store }) => ({
     delegation: store.delegations.getByChildRun(requireString(p, 'childRunId')),
   }),
+  'delegation.cancel': (p, { agent }) =>
+    agent.cancelDelegation(requireString(p, 'delegationId')),
   'delegation.attach_child_run': unsupportedDelegationWrite,
   'delegation.update': unsupportedDelegationWrite,
   'agent_settings.get': (_p, { agent }) => agent.getSettings(),

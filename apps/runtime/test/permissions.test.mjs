@@ -242,6 +242,7 @@ test('MCP 与未知工具默认 ask；纯计算白名单 automatic', () => {
     'skill.use',
     'manage_plan',
     'memory.remember',
+    'task',
   ]) {
     assert.equal(
       gate.decisionFor({

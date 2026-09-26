@@ -38,8 +38,8 @@ export type { ToolContext } from './shared.js'
 /**
  * 单次 Run 的工具装配：时间/网络/Skill 等纯计算工具始终可用；
  * 文件/Shell 工具走 Rust System Runtime，仅在系统就绪且会话有工作区时注册。
- * allowedTools 白名单过滤内置与 MCP 工具；子 Run 未注入 childRunStarter，
- * 因此 task(委派)工具默认不注册——"child 默认无 task"。
+ * allowedTools 白名单过滤内置与 MCP 工具；只有深度预算内的 Run 注入
+ * childRunStarter 并注册 task，达到上限后自然失去继续委派能力。
  */
 export function createToolRegistry(ctx: ToolContext): ToolRegistry {
   const registry = new ToolRegistry()
@@ -105,7 +105,7 @@ function alwaysAvailableTools(ctx: ToolContext): ToolDefinition[] {
     createManagePlanTool(ctx),
     createLegacyUpdatePlanTool(ctx),
   ]
-  // 只有注入 childRunStarter 的 Run 才具备委派能力(task 工具)；子 Run 默认无此工具。
+  // 只有注入 childRunStarter 的 Run 才具备委派能力；深度上限由装配层截断。
   if (ctx.childRunStarter) {
     tools.push(createTaskTool(ctx))
   }

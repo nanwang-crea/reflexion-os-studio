@@ -124,8 +124,10 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
   )
   const scheduleDelegationRefresh = useCallback(
     (sessionId?: string): void => {
-      const target = sessionId ?? deps.activeSessionRef.current
-      if (target === null) return
+      const activeSessionId = deps.activeSessionRef.current
+      const target = sessionId ?? activeSessionId
+      // 隐藏子 Session 的递归委派由轨迹面板独立刷新，不能覆盖当前父会话列表。
+      if (target === null || target !== activeSessionId) return
       if (delegationRefreshTimer.current)
         clearTimeout(delegationRefreshTimer.current)
       delegationRefreshTimer.current = setTimeout(() => {

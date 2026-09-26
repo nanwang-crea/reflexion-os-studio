@@ -40,13 +40,13 @@ Rust File/Shell Service、Workspace 边界、read-only/workspace Profile、Chat 
 
 ## Phase 3：Multi-Agent Orchestration（进行中）
 
-- **Phase 3A 后端已完成**：内置 Worker/Researcher/Reviewer Registry；Primary 的 `task` 工具；单层只读子 Run；独立上下文；固定 workspace-read 与工具白名单；深度/数量/并发/超时/token 预算；父取消传导；Run/Delegation 持久化、版本化执行快照、事件与启动恢复；内部子会话从普通列表隐藏。契约见 `docs/MULTI-AGENT.md`。
-- **待完成**：前端父子 Run 树、状态与详情观测；可写 Coding Agent 的权限交集/审批；结构化结果聚合；确认安全模型后再评估多层递归委派。
+- **Phase 3 只读委派已完成**：内置 Worker/Researcher/Reviewer Registry；受深度约束的递归 `task`；独立上下文；固定 workspace-read 与只读工具白名单；数量/并发/超时/token 预算；单项与父级取消；Run/Delegation 持久化、版本化执行快照、事件与启动恢复；运行卡片、执行边界详情、隐藏子 Session 轨迹、Agent 启停与预算设置 UI。契约见 `docs/MULTI-AGENT.md`。
+- **待完成**：可写 Coding Agent 的权限交集/审批；结构化结果聚合；更完整的跨层树导航。
 
 > 设计延伸：「自然语言生成结构化节点（每个节点作为一个 Agent）」的契约、生成管线、存储
 > 与分步安排见 `docs/NL-TO-STRUCTURE.md`（草案，待评审）；其 S1–S3 随本阶段落地。
 
-> 委派写命令仍只允许 Runtime 内部 `task` 链路，外部 `delegation.create/update/attach_child_run` 保持 unsupported；`enableChildRuns=false` 是全局逃生开关。设置页预算编辑与完整可观测 UI 随下一批交付。
+> 委派创建/终态写入仍只允许 Runtime 内部 `task` 链路，外部 `delegation.create/update/attach_child_run` 保持 unsupported；UI 仅可调用受控 `delegation.cancel`。`enableChildRuns=false` 是全局逃生开关。
 
 ## Phase 4：Workflow Engine（未开始）
 
