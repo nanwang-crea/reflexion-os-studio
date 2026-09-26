@@ -13,10 +13,11 @@ Primary 通过 `task` 工具提交 `{ task, agentId? }`；`agentId` 缺省为 `w
 - 父会话审批、会话规则和 Danger 租约不向子 Run 传播。子权限始终是父边界与固定只读边界的收窄结果，不可扩大。
 - 默认限制：深度 1、每个父 Run 最多 4 个子 Run、最多并行 2 个、单子 Run 120 秒、总 token 12000。限额从 AgentSettings 读取，超过时返回稳定错误码。
 - 内部子 Session 不出现在普通会话列表，但 Run、Message、Delegation 均持久化，供后续观测与诊断。
+- Delegation 保存 `parentAgentId`、`childSessionId`，并以版本化 `execution` 快照冻结实际深度、Provider/模型、权限预设、工具白名单、超时与 token 预算；后续 UI 和恢复逻辑读取快照，不从当前全局设置反推历史执行边界。
 
 ### 生命周期与恢复
 
-每次委派记录 `delegationId`、`parentRunId`、`childRunId`、`agentId`、任务、状态、结果或错误。父 Run 取消会通过 AbortSignal 取消活动子 Run；子任务失败只使本次 `task` 工具调用失败，Primary 可据此调整或继续。启动恢复会把遗留的活动 child Run 标为 interrupted，并将对应 Delegation 收敛为 failed。
+每次委派记录 `delegationId`、父子 Run/Session/Agent 身份、执行快照、任务、状态、结果或错误。父 Run 取消会通过 AbortSignal 取消活动子 Run；子任务失败只使本次 `task` 工具调用失败，Primary 可据此调整或继续。启动恢复以 child Run 为 canonical 状态：遗留活动 Run 收敛为 interrupted/failed；若 Run 已完成或取消但 Delegation 终态回调漏写，则反向补齐 completed/cancelled，避免永久 running。
 
 Delegation 写入只允许 Runtime 内部 `task` 链路；外部 `delegation.create/update/attach_child_run` 命令保持拒绝，避免伪造生命周期。创建和更新都会产生 delegation 事件。
 

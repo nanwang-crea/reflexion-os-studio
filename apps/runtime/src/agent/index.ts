@@ -497,6 +497,8 @@ export class ChatAgent {
             launcher: this.launcher,
             profile: input.profile,
             apiKey: input.apiKey,
+            model: input.model,
+            sampling: input.sampling,
           },
           input.run,
           input.session,

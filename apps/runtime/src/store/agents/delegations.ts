@@ -4,20 +4,42 @@ import type {
   Delegation,
   DelegationStatus,
 } from '@reflexion-os-studio/contracts'
+import { DelegationExecutionSchema } from '@reflexion-os-studio/contracts'
 import { nowIso, type Row } from '../shared.js'
+
+function parseExecution(value: unknown): Delegation['execution'] {
+  if (value == null) return null
+  try {
+    const parsed = DelegationExecutionSchema.safeParse(
+      JSON.parse(String(value)),
+    )
+    return parsed.success ? parsed.data : null
+  } catch {
+    return null
+  }
+}
 
 export class DelegationStore {
   constructor(private readonly db: DatabaseSync) {}
 
   create(
-    input: Pick<Delegation, 'sessionId' | 'parentRunId' | 'agentId' | 'task'>,
+    input: Pick<Delegation, 'sessionId' | 'parentRunId' | 'agentId' | 'task'> &
+      Partial<
+        Pick<Delegation, 'parentAgentId' | 'childSessionId' | 'execution'>
+      >,
   ): Delegation {
     const now = nowIso()
     const delegation: Delegation = {
       id: randomUUID(),
-      ...input,
+      sessionId: input.sessionId,
+      parentRunId: input.parentRunId,
+      parentAgentId: input.parentAgentId ?? null,
+      agentId: input.agentId,
+      task: input.task,
       status: 'pending',
+      childSessionId: input.childSessionId ?? null,
       childRunId: null,
+      execution: input.execution ?? null,
       result: null,
       error: null,
       createdAt: now,
@@ -26,16 +48,25 @@ export class DelegationStore {
     }
     this.db
       .prepare(
-        `INSERT INTO delegations (id, session_id, parent_run_id, agent_id, task, status, child_run_id, result, error, created_at, updated_at, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO delegations (
+          id, session_id, parent_run_id, parent_agent_id, agent_id, task, status,
+          child_run_id, child_session_id, execution_json, result, error,
+          created_at, updated_at, completed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         delegation.id,
         input.sessionId,
         input.parentRunId,
+        delegation.parentAgentId,
         input.agentId,
         input.task,
         delegation.status,
         null,
+        delegation.childSessionId,
+        delegation.execution === null
+          ? null
+          : JSON.stringify(delegation.execution),
         null,
         null,
         now,
@@ -77,27 +108,45 @@ export class DelegationStore {
     return row ? this.toDelegation(row) : null
   }
 
-  /** 启动恢复：无法继续执行的子任务统一收敛为可解释的失败。 */
+  /** 启动恢复：以 child Run canonical 终态收敛可能漏写的委派终态。 */
   recoverInterrupted(): void {
     const rows = this.db
       .prepare(
-        `SELECT d.* FROM delegations d
+        `SELECT d.*, r.status AS child_status, r.error_code AS child_error_code
+         FROM delegations d
          LEFT JOIN runs r ON r.id = d.child_run_id
-         WHERE d.status IN ('pending', 'running')
-           AND (d.child_run_id IS NULL OR r.id IS NULL OR r.status = 'interrupted')`,
+         WHERE d.status IN ('pending', 'running')`,
       )
       .all() as Row[]
-    const now = nowIso()
-    const statement = this.db.prepare(
-      `UPDATE delegations SET status = 'failed', error = ?, updated_at = ?, completed_at = ?
-       WHERE id = ? AND status IN ('pending', 'running')`,
-    )
     for (const row of rows) {
-      const reason =
+      const id = String(row.id)
+      const childRunId =
         row.child_run_id == null || row.child_run_id === ''
-          ? 'recovered: child run missing'
-          : 'recovered: child run interrupted'
-      statement.run(reason, now, now, String(row.id))
+          ? null
+          : String(row.child_run_id)
+      if (childRunId === null || row.child_status == null) {
+        this.update(id, 'failed', null, 'recovered: child run missing')
+        continue
+      }
+      const childStatus = String(row.child_status)
+      if (childStatus === 'completed') {
+        const message = this.db
+          .prepare(
+            `SELECT content FROM messages
+             WHERE run_id = ? AND role = 'assistant' AND status = 'completed'
+             ORDER BY rowid DESC LIMIT 1`,
+          )
+          .get(childRunId) as { content: string } | undefined
+        this.update(id, 'completed', message?.content ?? '')
+      } else if (childStatus === 'cancelled') {
+        this.update(id, 'cancelled', null, 'recovered: child run cancelled')
+      } else {
+        const code =
+          row.child_error_code == null
+            ? childStatus
+            : String(row.child_error_code)
+        this.update(id, 'failed', null, `recovered: child run ${code}`)
+      }
     }
   }
 
@@ -166,10 +215,15 @@ export class DelegationStore {
       id: String(row.id),
       sessionId: String(row.session_id),
       parentRunId: String(row.parent_run_id),
+      parentAgentId:
+        row.parent_agent_id == null ? null : String(row.parent_agent_id),
       agentId: String(row.agent_id),
       task: String(row.task),
       status: String(row.status) as DelegationStatus,
       childRunId: row.child_run_id == null ? null : String(row.child_run_id),
+      childSessionId:
+        row.child_session_id == null ? null : String(row.child_session_id),
+      execution: parseExecution(row.execution_json),
       result: row.result == null ? null : String(row.result),
       error: row.error == null ? null : String(row.error),
       createdAt: String(row.created_at),

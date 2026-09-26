@@ -25,7 +25,6 @@ export interface ToolContext {
   childRunStarter?: (input: {
     task: string
     agentId: string
-    parentRunId: string
     signal: AbortSignal
   }) => Promise<string>
 }

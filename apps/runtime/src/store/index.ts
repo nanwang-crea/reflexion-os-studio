@@ -73,7 +73,14 @@ export class Store {
     this.runEvents = new RunEventStore(this.db)
     this.contextCheckpoints = new ContextCheckpointStore(this.db)
     this.plugins = new PluginStore(this.db)
-    for (const agent of BUILTIN_AGENTS) this.agents.upsert(agent)
+    for (const agent of BUILTIN_AGENTS) {
+      const current = this.agents.get(agent.id)
+      this.agents.upsert({
+        ...agent,
+        // 内置元数据可随版本升级，用户的启停选择必须跨重启保留。
+        enabled: current?.enabled ?? agent.enabled,
+      })
+    }
 
     // 启动恢复：上次进程未走完的生命周期统一落为 interrupted/cancelled。
     // 计划是任务进度板，跨重启保持 active 供后续 Run 隐式继续。

@@ -8,6 +8,7 @@ import { dispatchCommand } from '../dist/handlers.js'
 import { createTaskTool } from '../dist/agent/tools/task.js'
 import { createToolRegistry } from '../dist/agent/tools/index.js'
 import { createChildRunStarter } from '../dist/agent/delegation.js'
+import { composeSystemPrompt } from '../dist/agent/launcher.js'
 
 function freshStore() {
   return new Store(mkdtempSync(join(tmpdir(), 'reflexion-handlers-')))
@@ -144,6 +145,8 @@ test('child task starter rejects disabled agents before creating a delegation', 
       launcher,
       profile: { id: 'provider', models: ['model'] },
       apiKey: 'unused',
+      model: 'model',
+      sampling: {},
     },
     parentRun,
     session,
@@ -153,7 +156,6 @@ test('child task starter rejects disabled agents before creating a delegation', 
       starter({
         task: 'do work',
         agentId: 'disabled-agent',
-        parentRunId: parentRun.id,
         signal: new AbortController().signal,
       }),
     /agent not found or disabled: disabled-agent/,
@@ -184,8 +186,13 @@ test('child task starter launches an isolated read-only child and persists its r
       store,
       notifier: (event) => events.push(event),
       launcher,
-      profile: { id: 'provider', models: ['model'] },
+      profile: {
+        id: 'provider',
+        models: ['profile-default', 'selected-model'],
+      },
       apiKey: 'unused',
+      model: 'selected-model',
+      sampling: { temperature: 0.2, maxTokens: 4096 },
     },
     parentRun,
     session,
@@ -194,12 +201,16 @@ test('child task starter launches an isolated read-only child and persists its r
   const result = await starter({
     task: 'review the implementation',
     agentId: 'reviewer',
-    parentRunId: parentRun.id,
     signal: new AbortController().signal,
   })
 
   assert.equal(result, 'verified result')
   assert.equal(launchInput.depth, 1)
+  assert.equal(launchInput.model, 'selected-model')
+  assert.deepEqual(launchInput.sampling, {
+    temperature: 0.2,
+    maxTokens: 4096,
+  })
   assert.equal(launchInput.permissionPreset, 'workspace-read')
   assert.equal(launchInput.isolatedContext, true)
   assert.equal(launchInput.childRunStarter, undefined)
@@ -214,14 +225,42 @@ test('child task starter launches an isolated read-only child and persists its r
   }
   const [delegation] = store.delegations.listByParentRun(parentRun.id)
   assert.equal(delegation.status, 'completed')
+  assert.equal(delegation.parentAgentId, null)
+  assert.equal(delegation.childSessionId, launchInput.session.id)
+  assert.deepEqual(delegation.execution, {
+    version: 1,
+    depth: 1,
+    providerId: 'provider',
+    model: 'selected-model',
+    permissionPreset: 'workspace-read',
+    allowedTools: [
+      'get_current_time',
+      'web.fetch',
+      'skill.use',
+      'file.read',
+      'file.list',
+      'file.glob',
+      'file.grep',
+    ],
+    timeoutSec: 120,
+    tokenBudget: 12000,
+  })
   assert.equal(delegation.result, 'verified result')
   assert.equal(store.runs.get(delegation.childRunId).parentRunId, parentRun.id)
   assert.deepEqual(
     store.sessions.list(project.id).map((item) => item.id),
     [session.id],
   )
-  assert.ok(events.some((event) => event.type === 'delegation.created'))
-  assert.ok(events.some((event) => event.type === 'delegation.updated'))
+  assert.deepEqual(
+    events
+      .filter((event) => event.type.startsWith('delegation.'))
+      .map((event) => [event.type, event.delegation.status]),
+    [
+      ['delegation.created', 'pending'],
+      ['delegation.updated', 'running'],
+      ['delegation.updated', 'completed'],
+    ],
+  )
 })
 
 test('parent cancellation propagates to the active child delegation', async () => {
@@ -253,6 +292,8 @@ test('parent cancellation propagates to the active child delegation', async () =
       launcher,
       profile: { id: 'provider', models: ['model'] },
       apiKey: 'unused',
+      model: 'model',
+      sampling: {},
     },
     parentRun,
     session,
@@ -261,7 +302,6 @@ test('parent cancellation propagates to the active child delegation', async () =
   const pending = starter({
     task: 'long read-only work',
     agentId: 'worker',
-    parentRunId: parentRun.id,
     signal: parentController.signal,
   })
   await started
@@ -313,7 +353,7 @@ test('task tool rejects without starter and validates arguments', async () => {
     signal: new AbortController().signal,
   })
   assert.deepEqual(result, { content: 'done', isError: false })
-  assert.equal(starterCalls[1].parentRunId, 'run-1')
+  assert.equal('parentRunId' in starterCalls[1], false)
   assert.equal(starterCalls[1].agentId, 'agent-1')
 })
 
@@ -353,6 +393,27 @@ test('tool registry: child has no task and allowedTools filters tools', () => {
   assert.equal(scoped.has('web.fetch'), false)
   assert.equal(scoped.has('manage_plan'), false)
   assert.equal(scoped.has('update_plan'), false)
+})
+
+test('primary prompt projects enabled agents from the registry', () => {
+  const store = freshStore()
+  const reviewer = store.agents.get('reviewer')
+  store.agents.upsert({
+    id: reviewer.id,
+    name: reviewer.name,
+    description: reviewer.description,
+    systemPrompt: reviewer.systemPrompt,
+    enabled: false,
+  })
+  const prompt = composeSystemPrompt(
+    { list: () => [] },
+    null,
+    store.agents.list(),
+  )
+  assert.match(prompt, /\[可用子 Agent\]/)
+  assert.match(prompt, /worker: Worker Agent/)
+  assert.match(prompt, /researcher: Research Agent/)
+  assert.doesNotMatch(prompt, /reviewer: Review Agent/)
 })
 
 test('provider.configure forwards tuning fields with omitted, null, and value semantics', async () => {

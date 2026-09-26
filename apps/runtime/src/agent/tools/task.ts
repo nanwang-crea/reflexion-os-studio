@@ -49,7 +49,6 @@ export function createTaskTool(ctx: ToolContext): ToolDefinition {
         const result = await ctx.childRunStarter({
           task: input.task,
           agentId,
-          parentRunId: ctx.runId,
           signal,
         })
         return { content: result, isError: false }

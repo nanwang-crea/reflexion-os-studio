@@ -1,4 +1,5 @@
 import type {
+  AgentDefinition,
   ApprovalOverride,
   Message,
   PermissionPreset,
@@ -27,7 +28,10 @@ import {
   PermissionGate,
   resolveInputPreset,
 } from './permissions/index.js'
-import { PRIMARY_AGENT_SYSTEM_PROMPT } from './prompts/index.js'
+import {
+  PRIMARY_AGENT_SYSTEM_PROMPT,
+  availableAgentsPromptSection,
+} from './prompts/index.js'
 import type { RunRunner } from './run/runner.js'
 import { createToolRegistry } from './tools/index.js'
 import type { ToolContext } from './tools/shared.js'
@@ -187,7 +191,11 @@ export class RunLauncher {
         buildHistory: (signal) => {
           const systemPrompt =
             input.systemPrompt ??
-            composeSystemPrompt(this.deps.skills, input.skill)
+            composeSystemPrompt(
+              this.deps.skills,
+              input.skill,
+              input.childRunStarter ? this.deps.store.agents.list() : undefined,
+            )
           return input.isolatedContext
             ? Promise.resolve(
                 this.deps.contextBuilder.buildIsolated(sessionId, systemPrompt),
@@ -230,8 +238,9 @@ export class RunLauncher {
 export function composeSystemPrompt(
   skills: SkillRegistry,
   skill: SkillDefinition | null,
+  agents: readonly AgentDefinition[] = [],
 ): string {
-  const base = `${PRIMARY_AGENT_SYSTEM_PROMPT}${skillsPromptSection(skills.list())}`
+  const base = `${PRIMARY_AGENT_SYSTEM_PROMPT}${skillsPromptSection(skills.list())}${availableAgentsPromptSection(agents)}`
   return skill === null ? base : `${base}${activeSkillPromptSection(skill)}`
 }
 

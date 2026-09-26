@@ -7,7 +7,6 @@ import { RunEventEmitter, type EventNotifier } from '../events.js'
 import type { Store } from '../store/index.js'
 import { ChildLimitError } from './errors.js'
 import { createPendingAssistantMessage, type RunLauncher } from './launcher.js'
-import { resolveSampling } from './provider-resolver.js'
 import type { ToolContext } from './tools/shared.js'
 
 /** 子 Agent 默认工具白名单：纯计算 + 只读文件查询，不暴露写/Shell/MCP，且无 task(不递归)。 */
@@ -34,6 +33,8 @@ export function createChildRunStarter(
     launcher: RunLauncher
     profile: ProviderProfile
     apiKey: string
+    model: string
+    sampling: { temperature?: number; maxTokens?: number }
   },
   parentRun: Run,
   parentSession: Session,
@@ -41,7 +42,7 @@ export function createChildRunStarter(
   let childCount = 0
   let activeChildren = 0
   const settings = deps.store.agentSettings.get()
-  return async ({ task, agentId, parentRunId, signal }) => {
+  return async ({ task, agentId, signal }) => {
     const parentDepth = deps.launcher.depthOf(parentRun.id)
     const { profile, apiKey } = deps
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
@@ -75,36 +76,69 @@ export function createChildRunStarter(
     childCount += 1
     activeChildren += 1
 
-    const session = deps.store.sessions.create(
-      parentSession.projectId,
-      `子任务：${task.slice(0, 40)}`,
-    )
-    const delegation = deps.store.delegations.create({
-      sessionId: parentSession.id,
-      parentRunId,
-      agentId,
-      task,
-    })
-    const run = deps.store.runs.create({
-      sessionId: session.id,
+    const execution = {
+      version: 1 as const,
+      depth: childDepth,
       providerId: profile.id,
-      model: profile.models[0] ?? null,
-      parentRunId,
-      delegationId: delegation.id,
-      agentId,
-    })
-    deps.store.delegations.attachChildRun(delegation.id, run.id)
-    const running = deps.store.delegations.update(delegation.id, 'running')
-    deps.store.messages.create({
-      sessionId: session.id,
-      runId: run.id,
-      role: 'user',
-      content: task,
-      status: 'completed',
-    })
-    const assistant = createPendingAssistantMessage(deps.store, session.id, run)
+      model: deps.model,
+      permissionPreset: 'workspace-read' as const,
+      allowedTools: [...CHILD_DEFAULT_TOOLS],
+      timeoutSec: settings.maxChildTimeoutSec,
+      tokenBudget: settings.maxChildTotalTokens,
+    }
+    const setup = (() => {
+      try {
+        return deps.store.transaction(() => {
+          const session = deps.store.sessions.create(
+            parentSession.projectId,
+            `子任务：${task.slice(0, 40)}`,
+          )
+          const delegation = deps.store.delegations.create({
+            sessionId: parentSession.id,
+            parentRunId: parentRun.id,
+            parentAgentId: parentRun.agentId,
+            agentId,
+            task,
+            childSessionId: session.id,
+            execution,
+          })
+          const run = deps.store.runs.create({
+            sessionId: session.id,
+            providerId: profile.id,
+            model: deps.model,
+            parentRunId: parentRun.id,
+            delegationId: delegation.id,
+            agentId,
+          })
+          deps.store.delegations.attachChildRun(delegation.id, run.id)
+          const running = deps.store.delegations.update(
+            delegation.id,
+            'running',
+          )
+          deps.store.messages.create({
+            sessionId: session.id,
+            runId: run.id,
+            role: 'user',
+            content: task,
+            status: 'completed',
+          })
+          const assistant = createPendingAssistantMessage(
+            deps.store,
+            session.id,
+            run,
+          )
+          return { session, delegation, run, assistant, running }
+        })
+      } catch (error) {
+        childCount -= 1
+        activeChildren -= 1
+        throw error
+      }
+    })()
+    const { session, delegation, run, assistant, running } = setup
     const emitter = new RunEventEmitter(run.id, deps.notifier)
-    emitter.next({ type: 'delegation.created', delegation: running })
+    emitter.next({ type: 'delegation.created', delegation })
+    emitter.next({ type: 'delegation.updated', delegation: running })
 
     // 子 Run 独立 AbortController：父取消传导为取消；超时以 ChildLimitError 中止
     //（不触碰父 signal，避免把子超时误标为父取消）。
@@ -133,8 +167,8 @@ export function createChildRunStarter(
           session,
           profile,
           apiKey,
-          model: profile.models[0]!,
-          sampling: resolveSampling(profile, {}),
+          model: deps.model,
+          sampling: deps.sampling,
           // 子 Run 权限只降不升：预设固定为最窄日常档（白名单本就无写/Shell，
           // Danger/高权限一律不继承；子会话独立，父覆盖项不外溢）。
           permissionPreset: 'workspace-read',

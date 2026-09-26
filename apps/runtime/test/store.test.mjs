@@ -292,6 +292,28 @@ test('delegation store attaches child run idempotently and queries by session, p
   store.close()
 })
 
+test('built-in agent state survives store restart', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'reflexion-store-agents-'))
+  const first = new Store(dir)
+  const worker = first.agents.get('worker')
+  first.agents.upsert({
+    id: worker.id,
+    name: 'Stale Worker',
+    description: 'Stale description',
+    systemPrompt: 'Stale prompt',
+    enabled: false,
+  })
+  first.close()
+
+  const reopened = new Store(dir)
+  const refreshedWorker = reopened.agents.get('worker')
+  assert.equal(refreshedWorker.enabled, false)
+  assert.equal(refreshedWorker.name, 'Worker Agent')
+  assert.notEqual(refreshedWorker.description, 'Stale description')
+  assert.notEqual(refreshedWorker.systemPrompt, 'Stale prompt')
+  reopened.close()
+})
+
 test('tool call lifecycle: create, status, finalize, recovery', () => {
   const store = freshStore()
   const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
@@ -386,7 +408,31 @@ test('recovery converges pending/running delegations with missing or interrupted
   })
   first.delegations.attachChildRun(interrupted.id, child.id)
   first.delegations.update(interrupted.id, 'running')
-  // ④ 已完成委派不受恢复影响。
+  // ④ child Run 已完成、Delegation 仍 running：从 canonical message 补齐结果。
+  const missedCompletion = first.delegations.create({
+    sessionId: session.id,
+    parentRunId: parent.id,
+    agentId: 'worker',
+    task: 'completed before callback',
+  })
+  const completedChild = first.runs.create({
+    sessionId: session.id,
+    providerId: null,
+    model: null,
+    parentRunId: parent.id,
+    delegationId: missedCompletion.id,
+  })
+  first.delegations.attachChildRun(missedCompletion.id, completedChild.id)
+  first.delegations.update(missedCompletion.id, 'running')
+  first.messages.create({
+    sessionId: session.id,
+    runId: completedChild.id,
+    role: 'assistant',
+    content: 'recovered result',
+    status: 'completed',
+  })
+  first.runs.finalize(completedChild.id, 'completed')
+  // ⑤ 已完成委派不受恢复影响。
   const done = first.delegations.create({
     sessionId: session.id,
     parentRunId: parent.id,
@@ -405,6 +451,8 @@ test('recovery converges pending/running delegations with missing or interrupted
   assert.equal(byId[gone.id].error, 'recovered: child run missing')
   assert.equal(byId[interrupted.id].status, 'failed')
   assert.equal(byId[interrupted.id].error, 'recovered: child run interrupted')
+  assert.equal(byId[missedCompletion.id].status, 'completed')
+  assert.equal(byId[missedCompletion.id].result, 'recovered result')
   assert.equal(byId[done.id].status, 'completed')
   assert.equal(byId[done.id].result, 'ok')
 })
@@ -834,12 +882,12 @@ test('v23 migration drops legacy memories/FTS/memory_jobs tables', () => {
     .map((row) => row.name)
   assert.deepEqual(names, [])
   const version = after.prepare('PRAGMA user_version').get()
-  assert.equal(Number(version.user_version), 27)
+  assert.equal(Number(version.user_version), 28)
   after.close()
   store.close()
 })
 
-test('fresh store schema has plugin manifests, no legacy memory tables, and version 27', () => {
+test('fresh store schema has plugin manifests, no legacy memory tables, and version 28', () => {
   const dir = mkdtempSync(join(tmpdir(), 'reflexion-v23-fresh-'))
   const store = new Store(dir)
   store.close()
@@ -852,7 +900,7 @@ test('fresh store schema has plugin manifests, no legacy memory tables, and vers
     .map((row) => row.name)
   assert.deepEqual(names, [])
   const version = db.prepare('PRAGMA user_version').get()
-  assert.equal(Number(version.user_version), 27)
+  assert.equal(Number(version.user_version), 28)
   const plugins = db
     .prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'plugins'",
@@ -1037,5 +1085,50 @@ test('v27 migration enables child runs that were previously forced off', () => {
 
   const reopened = new Store(dir)
   assert.equal(reopened.agentSettings.get().enableChildRuns, true)
+  reopened.close()
+})
+
+test('v28 migration backfills reusable delegation identities', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'reflexion-store-v28-'))
+  const store = new Store(dir)
+  const parentSession = store.sessions.create(null, 'parent')
+  const parentRun = store.runs.create({
+    sessionId: parentSession.id,
+    providerId: null,
+    model: null,
+    agentId: 'worker',
+  })
+  const childSession = store.sessions.create(null, 'child')
+  const delegation = store.delegations.create({
+    sessionId: parentSession.id,
+    parentRunId: parentRun.id,
+    agentId: 'reviewer',
+    task: 'review',
+  })
+  const childRun = store.runs.create({
+    sessionId: childSession.id,
+    providerId: null,
+    model: null,
+    parentRunId: parentRun.id,
+    delegationId: delegation.id,
+    agentId: 'reviewer',
+  })
+  store.delegations.attachChildRun(delegation.id, childRun.id)
+  store.close()
+
+  const before = new DatabaseSync(join(dir, 'reflexion.db'))
+  before
+    .prepare(
+      'UPDATE delegations SET parent_agent_id = NULL, child_session_id = NULL, execution_json = NULL',
+    )
+    .run()
+  before.exec('PRAGMA user_version = 27')
+  before.close()
+
+  const reopened = new Store(dir)
+  const migrated = reopened.delegations.get(delegation.id)
+  assert.equal(migrated.parentAgentId, 'worker')
+  assert.equal(migrated.childSessionId, childSession.id)
+  assert.equal(migrated.execution, null)
   reopened.close()
 })

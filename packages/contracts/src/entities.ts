@@ -251,23 +251,6 @@ export const DelegationStatusSchema = z.enum([
 ])
 export type DelegationStatus = z.infer<typeof DelegationStatusSchema>
 
-/** A request for a child agent run; execution is intentionally deferred. */
-export const DelegationSchema = z.object({
-  id: z.string().min(1),
-  sessionId: z.string().min(1),
-  parentRunId: z.string().min(1),
-  agentId: z.string().min(1),
-  task: z.string().min(1),
-  status: DelegationStatusSchema,
-  childRunId: z.string().min(1).nullable(),
-  result: z.string().nullable(),
-  error: z.string().nullable(),
-  createdAt: IsoDateTimeSchema,
-  updatedAt: IsoDateTimeSchema,
-  completedAt: IsoDateTimeSchema.nullable(),
-})
-export type Delegation = z.infer<typeof DelegationSchema>
-
 export const ToolCallStatusSchema = z.enum([
   'pending',
   'awaiting_approval',
@@ -314,6 +297,39 @@ export const PermissionPresetSchema = z.enum([
   'workspace-full',
 ])
 export type PermissionPreset = z.infer<typeof PermissionPresetSchema>
+
+/** 委派创建时冻结的实际执行边界；版本化以支持后续 Agent 类型复用。 */
+export const DelegationExecutionSchema = z.object({
+  version: z.literal(1),
+  depth: z.number().int().positive(),
+  providerId: z.string().min(1).nullable(),
+  model: z.string().min(1),
+  permissionPreset: PermissionPresetSchema,
+  allowedTools: z.array(z.string().min(1)),
+  timeoutSec: z.number().int().positive().nullable(),
+  tokenBudget: z.number().int().positive().nullable(),
+})
+export type DelegationExecution = z.infer<typeof DelegationExecutionSchema>
+
+/** 子 Agent 委派及其可审计执行快照；旧记录的新增字段允许为 null。 */
+export const DelegationSchema = z.object({
+  id: z.string().min(1),
+  sessionId: z.string().min(1),
+  parentRunId: z.string().min(1),
+  parentAgentId: z.string().min(1).nullable(),
+  agentId: z.string().min(1),
+  task: z.string().min(1),
+  status: DelegationStatusSchema,
+  childSessionId: z.string().min(1).nullable(),
+  childRunId: z.string().min(1).nullable(),
+  execution: DelegationExecutionSchema.nullable(),
+  result: z.string().nullable(),
+  error: z.string().nullable(),
+  createdAt: IsoDateTimeSchema,
+  updatedAt: IsoDateTimeSchema,
+  completedAt: IsoDateTimeSchema.nullable(),
+})
+export type Delegation = z.infer<typeof DelegationSchema>
 
 /**
  * 高级审批覆盖项：ask-everything 时读取/写入/删除/Shell 全部进入 ask

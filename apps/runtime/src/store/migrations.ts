@@ -88,6 +88,7 @@ function tableColumns(db: DatabaseSync, table: string): TableColumn[] {
  *          整体 drop（文件即记忆 V2，真相源迁 MEMORY.md，不做数据搬迁）。
  * v24 → v25：新增 plugins 表（由 SCHEMA 创建），无历史数据回填。
  * v25 → v26：plugins 增加 manifest_json；旧记录由启动重扫按安装目录回填。
+ * v27 → v28：delegations 增加父 Agent、子 Session 与版本化执行快照。
  * 各步骤带形状检测：SCHEMA 刚建好的新库不会空跑重建。
  */
 export function runMigrations(db: DatabaseSync, dir: string): void {
@@ -393,6 +394,36 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
           // 非法 JSON 由 AgentSettingsStore 安全回退到 v27 默认值。
         }
       }
+    }
+    if (version < 28) {
+      const delegationColumns = tableColumns(db, 'delegations').map(
+        (column) => column.name,
+      )
+      if (!delegationColumns.includes('parent_agent_id')) {
+        db.exec('ALTER TABLE delegations ADD COLUMN parent_agent_id TEXT')
+      }
+      if (!delegationColumns.includes('child_session_id')) {
+        db.exec('ALTER TABLE delegations ADD COLUMN child_session_id TEXT')
+      }
+      if (!delegationColumns.includes('execution_json')) {
+        db.exec('ALTER TABLE delegations ADD COLUMN execution_json TEXT')
+      }
+      db.exec(
+        `UPDATE delegations
+         SET child_session_id = (
+           SELECT runs.session_id FROM runs
+           WHERE runs.id = delegations.child_run_id
+         )
+         WHERE child_session_id IS NULL AND child_run_id IS NOT NULL`,
+      )
+      db.exec(
+        `UPDATE delegations
+         SET parent_agent_id = (
+           SELECT runs.agent_id FROM runs
+           WHERE runs.id = delegations.parent_run_id
+         )
+         WHERE parent_agent_id IS NULL`,
+      )
     }
     db.exec('COMMIT')
     // 迁移全部执行完毕才推进版本号；否则下次启动会重复进入迁移分支。

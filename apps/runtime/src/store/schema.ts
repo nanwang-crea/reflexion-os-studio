@@ -180,10 +180,13 @@ CREATE TABLE IF NOT EXISTS delegations (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
   parent_run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  parent_agent_id TEXT,
   agent_id TEXT NOT NULL REFERENCES agents(id),
   task TEXT NOT NULL,
   status TEXT NOT NULL,
   child_run_id TEXT,
+  child_session_id TEXT,
+  execution_json TEXT,
   result TEXT,
   error TEXT,
   created_at TEXT NOT NULL,
@@ -223,4 +226,4 @@ CREATE TABLE IF NOT EXISTS context_checkpoints (
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 27
+export const LATEST_SCHEMA_VERSION = 28
