@@ -15,7 +15,7 @@ export function createTaskTool(ctx: ToolContext): ToolDefinition {
         agentId: {
           type: 'string',
           description:
-            '可选的子 Agent ID：worker（通用，默认）、researcher（检索归纳）或 reviewer（独立审查）',
+            '可选的子 Agent ID；必须从系统提示提供的可用子 Agent 清单中选择，缺省为 worker',
         },
       },
       required: ['task'],

@@ -147,6 +147,8 @@ export function createChildRunStarter(
       childController.abort(signal.reason)
     }
     signal.addEventListener('abort', onParentAbort, { once: true })
+    // signal 可能在首次检查与监听注册之间被取消；注册后重检，避免漏停子 Run。
+    if (signal.aborted) onParentAbort()
     let timer: ReturnType<typeof setTimeout> | undefined
     if (settings.maxChildTimeoutSec != null) {
       timer = setTimeout(

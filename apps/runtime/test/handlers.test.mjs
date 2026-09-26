@@ -312,6 +312,55 @@ test('parent cancellation propagates to the active child delegation', async () =
   assert.equal(delegation.status, 'cancelled')
 })
 
+test('parent cancellation during child setup is not lost', async () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
+  const session = store.sessions.create(project.id)
+  const parentRun = store.runs.create({
+    sessionId: session.id,
+    providerId: 'provider',
+    model: 'model',
+  })
+  const parentController = new AbortController()
+  const transaction = store.transaction.bind(store)
+  store.transaction = (fn) => {
+    const result = transaction(fn)
+    parentController.abort()
+    return result
+  }
+  const launcher = {
+    depthOf: () => 0,
+    launch: (input) => {
+      assert.equal(input.parentSignal.aborted, true)
+      input.onCancel()
+    },
+  }
+  const starter = createChildRunStarter(
+    {
+      store,
+      notifier: () => {},
+      launcher,
+      profile: { id: 'provider', models: ['model'] },
+      apiKey: 'unused',
+      model: 'model',
+      sampling: {},
+    },
+    parentRun,
+    session,
+  )
+
+  await assert.rejects(
+    starter({
+      task: 'cancel during setup',
+      agentId: 'worker',
+      signal: parentController.signal,
+    }),
+    { name: 'AbortError' },
+  )
+  const [delegation] = store.delegations.listByParentRun(parentRun.id)
+  assert.equal(delegation.status, 'cancelled')
+})
+
 test('task tool rejects without starter and validates arguments', async () => {
   const base = { store: freshStore(), runId: 'run-1' }
   const unavailable = await createTaskTool(base).execute({
@@ -329,6 +378,14 @@ test('task tool rejects without starter and validates arguments', async () => {
       return 'done'
     },
   })
+  assert.match(
+    tool.parameters.properties.agentId.description,
+    /可用子 Agent 清单/,
+  )
+  assert.doesNotMatch(
+    tool.parameters.properties.agentId.description,
+    /reviewer/,
+  )
   await assert.rejects(
     () => tool.execute({ args: null, signal: new AbortController().signal }),
     /arguments must be an object/,
