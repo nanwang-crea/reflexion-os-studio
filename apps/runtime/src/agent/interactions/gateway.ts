@@ -48,6 +48,12 @@ export class InteractionGateway {
       })
       this.store.runs.setIntermediateStatus(input.runId, 'awaiting_user_input')
       this.store.toolCalls.markStatus(input.toolCallId, 'awaiting_user_input')
+      const turn = this.store.turnExecutions.latestForRun(input.runId)
+      if (turn !== null && turn.completedAt === null) {
+        this.store.turnExecutions.transition(turn.id, 'awaiting_user_input', {
+          pendingInteractionId: interactionId,
+        })
+      }
     })
     return new Promise<UserQuestionAnswer[]>((resolve, reject) => {
       const onAbort = (): void => {
@@ -69,6 +75,12 @@ export class InteractionGateway {
           this.pending.delete(interactionId)
           this.store.runs.setIntermediateStatus(input.runId, 'running')
           this.store.toolCalls.markStatus(input.toolCallId, 'running')
+          const turn = this.store.turnExecutions.latestForRun(input.runId)
+          if (turn !== null && turn.completedAt === null) {
+            this.store.turnExecutions.transition(turn.id, 'executing_tools', {
+              pendingInteractionId: null,
+            })
+          }
           input.emitter.next({
             type: 'interaction.resolved',
             interactionId,

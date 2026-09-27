@@ -176,6 +176,18 @@ export class RunFinalizer {
         decision.status,
         decision.errorCode ?? undefined,
       )
+      const latestTurn = this.store.turnExecutions.latestForRun(run.id)
+      if (latestTurn !== null && latestTurn.completedAt === null) {
+        this.store.turnExecutions.transition(
+          latestTurn.id,
+          decision.status === 'completed'
+            ? 'completed'
+            : decision.status === 'cancelled'
+              ? 'cancelled'
+              : 'failed',
+          { continuationReason: decision.errorCode },
+        )
+      }
       // 4. 失败事件持久化。
       if (decision.status === 'failed') {
         this.store.runEvents.createFailed({

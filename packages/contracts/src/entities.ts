@@ -219,6 +219,45 @@ export const RunSchema = z.object({
 })
 export type Run = z.infer<typeof RunSchema>
 
+export const TurnPhaseSchema = z.enum([
+  'processing_input',
+  'awaiting_model_response',
+  'streaming',
+  'scheduling_tools',
+  'awaiting_permission',
+  'executing_tools',
+  'aggregating_results',
+  'awaiting_user_input',
+  'completed',
+  'failed',
+  'cancelled',
+  'interrupted',
+])
+export type TurnPhase = z.infer<typeof TurnPhaseSchema>
+
+/**
+ * A persisted execution checkpoint for one model/tool cycle within a Run.
+ * JSON payloads intentionally remain versioned opaque snapshots: the runtime
+ * may inspect them for recovery, but never treats them as executable grants.
+ */
+export const TurnExecutionSchema = z.object({
+  id: z.string().min(1),
+  runId: z.string().min(1),
+  phase: TurnPhaseSchema,
+  attempt: z.number().int().positive(),
+  modelRequest: JsonValueSchema.nullable(),
+  assistantMessageId: z.string().min(1).nullable(),
+  toolBatch: JsonValueSchema.nullable(),
+  pendingInteractionId: z.string().min(1).nullable(),
+  pendingApprovalId: z.string().min(1).nullable(),
+  continuationReason: z.string().nullable(),
+  checkpointVersion: z.number().int().positive(),
+  createdAt: IsoDateTimeSchema,
+  updatedAt: IsoDateTimeSchema,
+  completedAt: IsoDateTimeSchema.nullable(),
+})
+export type TurnExecution = z.infer<typeof TurnExecutionSchema>
+
 export const RunEventTypeSchema = z.enum(['retrying', 'failed'])
 export type RunEventType = z.infer<typeof RunEventTypeSchema>
 
@@ -235,18 +274,6 @@ export const RunEventSchema = z.object({
   createdAt: IsoDateTimeSchema,
 })
 export type RunEvent = z.infer<typeof RunEventSchema>
-
-/** Stable definition of an agent available for delegation. */
-export const AgentDefinitionSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  description: z.string(),
-  systemPrompt: z.string().min(1),
-  enabled: z.boolean(),
-  createdAt: IsoDateTimeSchema,
-  updatedAt: IsoDateTimeSchema,
-})
-export type AgentDefinition = z.infer<typeof AgentDefinitionSchema>
 
 export const DelegationStatusSchema = z.enum([
   'pending',
@@ -305,8 +332,75 @@ export const PermissionPresetSchema = z.enum([
 ])
 export type PermissionPreset = z.infer<typeof PermissionPresetSchema>
 
-/** 委派创建时冻结的实际执行边界；版本化以支持后续 Agent 类型复用。 */
-export const DelegationExecutionSchema = z.object({
+/** Agent 自身能力上限；Runtime 仍会与父 Run/全局安全边界取交集。 */
+export const AgentPolicySchema = z.object({
+  version: z.literal(1),
+  permissionCeiling: PermissionPresetSchema,
+  allowedTools: z.array(z.string().min(1)),
+  canDelegate: z.boolean(),
+})
+export type AgentPolicy = z.infer<typeof AgentPolicySchema>
+
+/** Stable definition of an agent available for delegation. */
+export const AgentDefinitionSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string(),
+  systemPrompt: z.string().min(1),
+  policy: AgentPolicySchema,
+  enabled: z.boolean(),
+  createdAt: IsoDateTimeSchema,
+  updatedAt: IsoDateTimeSchema,
+})
+export type AgentDefinition = z.infer<typeof AgentDefinitionSchema>
+
+export const AgentTemplateSourceSchema = z.enum(['builtin', 'user', 'project'])
+export type AgentTemplateSource = z.infer<typeof AgentTemplateSourceSchema>
+
+/** Optional reusable guidance. It may only narrow a child's inherited boundary. */
+export const AgentTemplateSchema = AgentDefinitionSchema.extend({
+  source: AgentTemplateSourceSchema,
+  builtin: z.boolean(),
+})
+export type AgentTemplate = z.infer<typeof AgentTemplateSchema>
+
+export const AgentSpawnSpecSchema = z.object({
+  name: z.string().min(1).max(80).optional(),
+  role: z.string().min(1).max(120).optional(),
+  instructions: z.string().min(1).max(20_000).optional(),
+  templateId: z.string().min(1).optional(),
+})
+export type AgentSpawnSpec = z.infer<typeof AgentSpawnSpecSchema>
+
+/** Immutable snapshot created for each delegation. */
+export const AgentInstanceSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  role: z.string(),
+  templateId: z.string().min(1).nullable(),
+  instructions: z.string().min(1),
+  permissionPreset: PermissionPresetSchema,
+  permissionDomainId: z.string().min(1),
+  allowedTools: z.array(z.string().min(1)),
+  canDelegate: z.boolean(),
+  createdAt: IsoDateTimeSchema,
+})
+export type AgentInstance = z.infer<typeof AgentInstanceSchema>
+
+export const MutationReceiptSchema = z.object({
+  id: z.string().min(1),
+  rootRunId: z.string().min(1),
+  runId: z.string().min(1),
+  delegationId: z.string().min(1).nullable(),
+  agentInstanceId: z.string().min(1).nullable(),
+  toolCallId: z.string().min(1),
+  toolName: z.string().min(1),
+  changedFiles: z.array(ChangedFileSchema),
+  createdAt: IsoDateTimeSchema,
+})
+export type MutationReceipt = z.infer<typeof MutationReceiptSchema>
+
+const DelegationExecutionV1Schema = z.object({
   version: z.literal(1),
   depth: z.number().int().positive(),
   providerId: z.string().min(1).nullable(),
@@ -316,21 +410,70 @@ export const DelegationExecutionSchema = z.object({
   timeoutSec: z.number().int().positive().nullable(),
   tokenBudget: z.number().int().positive().nullable(),
 })
+
+/** 委派创建时冻结的实际执行边界及根级治理上限。 */
+export const DelegationExecutionV2Schema = z.object({
+  version: z.literal(2),
+  rootRunId: z.string().min(1),
+  depth: z.number().int().positive().max(4),
+  providerId: z.string().min(1).nullable(),
+  model: z.string().min(1),
+  permissionPreset: PermissionPresetSchema,
+  allowedTools: z.array(z.string().min(1)),
+  agentPolicy: AgentPolicySchema,
+  timeoutSec: z.number().int().positive().nullable(),
+  tokenBudget: z.number().int().positive().nullable(),
+  treeRunBudget: z.number().int().positive().nullable(),
+  treeParallelBudget: z.number().int().positive().nullable(),
+})
+export const DelegationExecutionSchema = z.union([
+  DelegationExecutionV1Schema,
+  DelegationExecutionV2Schema,
+  z.object({
+    version: z.literal(3),
+    rootRunId: z.string().min(1),
+    permissionDomainId: z.string().min(1),
+    depth: z.number().int().positive().max(4),
+    providerId: z.string().min(1).nullable(),
+    model: z.string().min(1),
+    permissionPreset: PermissionPresetSchema,
+    allowedTools: z.array(z.string().min(1)),
+    instance: AgentInstanceSchema,
+    timeoutSec: z.number().int().positive().nullable(),
+    tokenBudget: z.number().int().positive().nullable(),
+    treeRunBudget: z.number().int().positive().nullable(),
+    treeParallelBudget: z.number().int().positive().nullable(),
+  }),
+])
 export type DelegationExecution = z.infer<typeof DelegationExecutionSchema>
+
+/** Runtime 从 child Run canonical 数据派生；模型只提供 summary。 */
+export const DelegationResultSchema = z.object({
+  version: z.literal(1),
+  summary: z.string(),
+  resourceLinks: z.array(ResourceLinkSchema),
+  changedFiles: z.array(ChangedFileSchema),
+  usage: UsageSchema.nullable(),
+  toolCallCount: z.number().int().nonnegative(),
+})
+export type DelegationResult = z.infer<typeof DelegationResultSchema>
 
 /** 子 Agent 委派及其可审计执行快照；旧记录的新增字段允许为 null。 */
 export const DelegationSchema = z.object({
   id: z.string().min(1),
   sessionId: z.string().min(1),
   parentRunId: z.string().min(1),
+  rootRunId: z.string().min(1).nullable(),
   parentAgentId: z.string().min(1).nullable(),
   agentId: z.string().min(1),
+  agentInstance: AgentInstanceSchema.nullable(),
   task: z.string().min(1),
   status: DelegationStatusSchema,
   childSessionId: z.string().min(1).nullable(),
   childRunId: z.string().min(1).nullable(),
   execution: DelegationExecutionSchema.nullable(),
   result: z.string().nullable(),
+  structuredResult: DelegationResultSchema.nullable(),
   error: z.string().nullable(),
   createdAt: IsoDateTimeSchema,
   updatedAt: IsoDateTimeSchema,
@@ -631,10 +774,10 @@ export const AgentSettingsSchema = z.object({
   // length 续写最大连续轮次。
   maxContinuationTurns: z.number().int().min(0).max(8).nullable(),
   // 子 Agent 最大委派深度。
-  maxDepth: z.number().int().min(1).max(8).nullable(),
-  // 单次 Run 最多创建的子 Agent 数量。
+  maxDepth: z.number().int().min(1).max(4).nullable(),
+  // 单个顶层 Run 的整棵委派树最多创建的子 Agent 数量。
   maxChildRuns: z.number().int().min(1).max(32).nullable(),
-  // 子 Agent 最大并行数。
+  // 单个顶层 Run 的整棵委派树最大并行数。
   maxParallelChildren: z.number().int().min(1).max(8).nullable(),
   // 单个子 Agent 最大运行时间(秒)。
   maxChildTimeoutSec: z.number().int().min(10).max(3600).nullable(),

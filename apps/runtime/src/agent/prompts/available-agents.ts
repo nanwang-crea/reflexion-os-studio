@@ -9,5 +9,5 @@ export function availableAgentsPromptSection(
   const lines = enabled.map(
     (agent) => `- ${agent.id}: ${agent.name} — ${agent.description}`,
   )
-  return `\n\n[可用子 Agent]\n${lines.join('\n')}`
+  return `\n\n[可用子 Agent]（可选模板）\n模板不是固定角色。调用 task 时可选择 templateId，也可不选模板并动态给出 name、role、instructions。\n${lines.join('\n')}`
 }

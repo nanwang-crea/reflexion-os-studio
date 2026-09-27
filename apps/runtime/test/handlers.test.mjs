@@ -7,12 +7,105 @@ import { Store } from '../dist/store/index.js'
 import { dispatchCommand } from '../dist/handlers.js'
 import { createTaskTool } from '../dist/agent/tools/task.js'
 import { createToolRegistry } from '../dist/agent/tools/index.js'
-import { createChildRunStarter } from '../dist/agent/delegation.js'
+import {
+  createChildRunStarter,
+  DelegationBudgetCoordinator,
+  RootMutationCoordinator,
+} from '../dist/agent/delegation.js'
 import { composeSystemPrompt } from '../dist/agent/launcher.js'
+import { createAgentInstance } from '../dist/agent/delegation/instance.js'
 
 function freshStore() {
   return new Store(mkdtempSync(join(tmpdir(), 'reflexion-handlers-')))
 }
+
+test('delegation budget is shared across the whole root tree', () => {
+  const settings = {
+    ...freshStore().agentSettings.get(),
+    maxChildRuns: 2,
+    maxParallelChildren: 1,
+  }
+  const budget = new DelegationBudgetCoordinator('root-run', settings)
+  const first = budget.acquire()
+  assert.throws(() => budget.acquire(), /整棵委派树的并发/)
+  first.release()
+  const second = budget.acquire()
+  second.release()
+  assert.throws(() => budget.acquire(), /整棵委派树的子 Agent 数量/)
+})
+
+test('root mutation coordinator serializes sibling writes', async () => {
+  const coordinator = new RootMutationCoordinator()
+  const order = []
+  let releaseFirst
+  const firstGate = new Promise((resolve) => {
+    releaseFirst = resolve
+  })
+  const first = coordinator.run(async () => {
+    order.push('first:start')
+    await firstGate
+    order.push('first:end')
+  })
+  const second = coordinator.run(async () => {
+    order.push('second:start')
+    order.push('second:end')
+  })
+  await Promise.resolve()
+  assert.deepEqual(order, ['first:start'])
+  releaseFirst()
+  await Promise.all([first, second])
+  assert.deepEqual(order, [
+    'first:start',
+    'first:end',
+    'second:start',
+    'second:end',
+  ])
+})
+
+test('dynamic instance inherits writes while templates can only narrow', () => {
+  const inheritedTools = new Set(['file.read', 'file.edit', 'shell.execute'])
+  const dynamic = createAgentInstance({
+    spawn: { name: 'Editor' },
+    template: null,
+    inheritedPreset: 'workspace-write',
+    inheritedTools,
+    permissionDomainId: 'root-session',
+    canDelegateByDepth: true,
+  })
+  assert.equal(dynamic.permissionPreset, 'workspace-write')
+  assert.deepEqual(dynamic.allowedTools, [
+    'file.read',
+    'file.edit',
+    'shell.execute',
+  ])
+
+  const narrowed = createAgentInstance({
+    spawn: { templateId: 'reviewer' },
+    template: {
+      id: 'reviewer',
+      name: 'Reviewer',
+      description: 'Review only',
+      systemPrompt: 'Review.',
+      policy: {
+        version: 1,
+        permissionCeiling: 'workspace-read',
+        allowedTools: ['file.read'],
+        canDelegate: false,
+      },
+      enabled: true,
+      source: 'builtin',
+      builtin: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+    inheritedPreset: 'workspace-full',
+    inheritedTools,
+    permissionDomainId: 'root-session',
+    canDelegateByDepth: true,
+  })
+  assert.equal(narrowed.permissionPreset, 'workspace-read')
+  assert.deepEqual(narrowed.allowedTools, ['file.read'])
+})
 
 test('workspace.list_dir forwards pagination and preserves metadata', async () => {
   const store = freshStore()
@@ -229,7 +322,8 @@ test('child task starter launches an isolated read-only child and persists its r
     signal: new AbortController().signal,
   })
 
-  assert.equal(result, 'verified result')
+  assert.equal(result.summary, 'verified result')
+  assert.deepEqual(result.resourceLinks, [])
   assert.equal(launchInput.depth, 1)
   assert.equal(launchInput.model, 'selected-model')
   assert.deepEqual(launchInput.sampling, {
@@ -252,24 +346,12 @@ test('child task starter launches an isolated read-only child and persists its r
   assert.equal(delegation.status, 'completed')
   assert.equal(delegation.parentAgentId, null)
   assert.equal(delegation.childSessionId, launchInput.session.id)
-  assert.deepEqual(delegation.execution, {
-    version: 1,
-    depth: 1,
-    providerId: 'provider',
-    model: 'selected-model',
-    permissionPreset: 'workspace-read',
-    allowedTools: [
-      'get_current_time',
-      'web.fetch',
-      'skill.use',
-      'file.read',
-      'file.list',
-      'file.glob',
-      'file.grep',
-    ],
-    timeoutSec: 120,
-    tokenBudget: 12000,
-  })
+  assert.equal(delegation.execution.version, 3)
+  assert.equal(delegation.execution.rootRunId, parentRun.id)
+  assert.equal(delegation.execution.depth, 1)
+  assert.equal(delegation.execution.instance.canDelegate, false)
+  assert.equal(delegation.execution.treeRunBudget, 4)
+  assert.equal(delegation.structuredResult.summary, 'verified result')
   assert.equal(delegation.result, 'verified result')
   assert.equal(store.runs.get(delegation.childRunId).parentRunId, parentRun.id)
   assert.deepEqual(
@@ -452,13 +534,17 @@ test('task tool rejects without starter and validates arguments', async () => {
     ...base,
     childRunStarter: async (input) => {
       starterCalls.push(input)
-      return 'done'
+      return {
+        version: 1,
+        summary: 'done',
+        resourceLinks: [],
+        changedFiles: [],
+        usage: null,
+        toolCallCount: 0,
+      }
     },
   })
-  assert.match(
-    tool.parameters.properties.agentId.description,
-    /可用子 Agent 清单/,
-  )
+  assert.match(tool.parameters.properties.agentId.description, /模板/)
   assert.doesNotMatch(
     tool.parameters.properties.agentId.description,
     /reviewer/,
@@ -475,20 +561,22 @@ test('task tool rejects without starter and validates arguments', async () => {
       }),
     /task is required/,
   )
-  // agentId 可选：缺省时回退内置 worker。
+  // 模板可选：缺省时创建无模板动态实例。
   const defaulted = await tool.execute({
     args: { task: 'do' },
     signal: new AbortController().signal,
   })
-  assert.deepEqual(defaulted, { content: 'done', isError: false })
-  assert.equal(starterCalls[0].agentId, 'worker')
+  assert.equal(defaulted.content, 'done')
+  assert.equal(defaulted.isError, false)
+  assert.equal(starterCalls[0].agent.templateId, undefined)
   const result = await tool.execute({
     args: { task: ' do ', agentId: ' agent-1 ' },
     signal: new AbortController().signal,
   })
-  assert.deepEqual(result, { content: 'done', isError: false })
+  assert.equal(result.content, 'done')
+  assert.equal(result.isError, false)
   assert.equal('parentRunId' in starterCalls[1], false)
-  assert.equal(starterCalls[1].agentId, 'agent-1')
+  assert.equal(starterCalls[1].agent.templateId, 'agent-1')
 })
 
 test('tool registry: child has no task and allowedTools filters tools', () => {

@@ -40,8 +40,8 @@ Rust File/Shell Service、Workspace 边界、read-only/workspace Profile、Chat 
 
 ## Phase 3：Multi-Agent Orchestration（进行中）
 
-- **Phase 3 只读委派已完成**：内置 Worker/Researcher/Reviewer Registry；受深度约束的递归 `task`；独立上下文；固定 workspace-read 与只读工具白名单；数量/并发/超时/token 预算；单项与父级取消；Run/Delegation 持久化、版本化执行快照、事件与启动恢复；运行卡片、执行边界详情、隐藏子 Session 轨迹、Agent 启停与预算设置 UI。契约见 `docs/MULTI-AGENT.md`。
-- **待完成**：可写 Coding Agent 的权限交集/审批；结构化结果聚合；更完整的跨层树导航。
+- **Phase 3 只读委派已完成**：内置 Worker/Researcher/Reviewer Registry；Agent Policy；最大 4 层递归 `task`；固定 workspace-read 与策略工具交集；整棵树共享数量/并发预算；结构化结果聚合；完整跨层树导航与任意子 Session 轨迹；取消、恢复及 Agent/预算 UI。契约见 `docs/MULTI-AGENT.md`。
+- **待完成**：可写 Coding Agent 的权限交集、审批与变更归属治理。
 
 > 设计延伸：「自然语言生成结构化节点（每个节点作为一个 Agent）」的契约、生成管线、存储
 > 与分步安排见 `docs/NL-TO-STRUCTURE.md`（草案，待评审）；其 S1–S3 随本阶段落地。

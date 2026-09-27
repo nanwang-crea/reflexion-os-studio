@@ -375,6 +375,61 @@ test('built-in agent state survives store restart', () => {
   reopened.close()
 })
 
+test('user agent templates and mutation receipts round-trip', () => {
+  const store = freshStore()
+  const template = store.agents.saveUser({
+    name: 'Writer',
+    description: 'Scoped writer',
+    systemPrompt: 'Make the requested edit.',
+    enabled: true,
+    allowedTools: ['file.read', 'file.edit'],
+    canDelegate: false,
+  })
+  assert.equal(template.builtin, false)
+  assert.equal(template.source, 'user')
+  assert.deepEqual(template.policy.allowedTools, ['file.read', 'file.edit'])
+
+  const project = store.projects.create({
+    name: 'p',
+    folderPath: '/tmp/p',
+  })
+  const session = store.sessions.create(project.id)
+  const run = store.runs.create({
+    sessionId: session.id,
+    providerId: null,
+    model: null,
+  })
+  const toolCall = store.toolCalls.create({
+    runId: run.id,
+    messageId: null,
+    toolName: 'file.edit',
+    args: { path: 'a.ts' },
+    status: 'running',
+  })
+  store.mutationReceipts.record({
+    rootRunId: run.id,
+    runId: run.id,
+    delegationId: null,
+    agentInstanceId: 'agent-dynamic',
+    toolCallId: toolCall.id,
+    toolName: 'file.edit',
+    output: {
+      version: 1,
+      content: 'done',
+      data: null,
+      resourceLinks: [],
+      artifacts: [],
+      changedFiles: [{ path: 'a.ts', action: 'modified' }],
+      isError: false,
+      errorCode: null,
+    },
+  })
+  const [receipt] = store.mutationReceipts.listByRootRun(run.id)
+  assert.equal(receipt.agentInstanceId, 'agent-dynamic')
+  assert.deepEqual(receipt.changedFiles, [{ path: 'a.ts', action: 'modified' }])
+  assert.equal(store.agents.removeUser(template.id), true)
+})
+
 test('tool call lifecycle: create, status, finalize, recovery', () => {
   const store = freshStore()
   const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
@@ -601,6 +656,88 @@ test('recovery marks unfinished runs/messages/tool calls on reopen', () => {
   assert.equal(recoveredMessage.content, '部分内容')
   // 崩溃时未完结的工具调用不保留半执行状态。
   assert.equal(reopened.toolCalls.get(toolCall.id).status, 'cancelled')
+})
+
+test('turn recovery reducer interrupts unsafe execution phases', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'reflexion-turn-recover-'))
+  const first = new Store(dir)
+  const session = first.sessions.create(null)
+  const run = first.runs.create({
+    sessionId: session.id,
+    providerId: null,
+    model: null,
+  })
+  const turn = first.turnExecutions.create({
+    runId: run.id,
+    attempt: 1,
+    phase: 'executing_tools',
+    modelRequest: { model: 'test', messageCount: 2 },
+  })
+  first.close()
+
+  const reopened = new Store(dir)
+  const recovered = reopened.turnExecutions.get(turn.id)
+  assert.equal(recovered.phase, 'interrupted')
+  assert.equal(
+    recovered.continuationReason,
+    'recovery_unsafe_phase:executing_tools',
+  )
+  assert.ok(recovered.completedAt)
+  assert.equal(reopened.runs.get(run.id).status, 'interrupted')
+  reopened.close()
+})
+
+test('turn recovery reducer preserves a persisted user-input wait', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'reflexion-turn-input-'))
+  const first = new Store(dir)
+  const session = first.sessions.create(null)
+  const run = first.runs.create({
+    sessionId: session.id,
+    providerId: null,
+    model: null,
+  })
+  const message = first.messages.create({
+    sessionId: session.id,
+    runId: run.id,
+    role: 'assistant',
+    content: '',
+    status: 'completed',
+  })
+  const call = first.toolCalls.create({
+    runId: run.id,
+    messageId: message.id,
+    toolName: 'ask_user',
+    args: {},
+    status: 'awaiting_user_input',
+  })
+  const interactionId = 'recoverable-interaction'
+  first.interactions.create({
+    id: interactionId,
+    sessionId: session.id,
+    runId: run.id,
+    toolCallId: call.id,
+    kind: 'user_question',
+    questions: [],
+  })
+  const turn = first.turnExecutions.create({
+    runId: run.id,
+    attempt: 1,
+    phase: 'executing_tools',
+  })
+  first.turnExecutions.transition(turn.id, 'awaiting_user_input', {
+    pendingInteractionId: interactionId,
+  })
+  first.runs.setIntermediateStatus(run.id, 'awaiting_user_input')
+  first.close()
+
+  const reopened = new Store(dir)
+  assert.equal(
+    reopened.turnExecutions.get(turn.id).phase,
+    'awaiting_user_input',
+  )
+  assert.equal(reopened.runs.get(run.id).status, 'awaiting_user_input')
+  assert.equal(reopened.interactions.listPending()[0].id, interactionId)
+  reopened.close()
 })
 
 test('replaceWithRetry preserves original run and marks it superseded', () => {
@@ -943,12 +1080,12 @@ test('v23 migration drops legacy memories/FTS/memory_jobs tables', () => {
     .map((row) => row.name)
   assert.deepEqual(names, [])
   const version = after.prepare('PRAGMA user_version').get()
-  assert.equal(Number(version.user_version), 30)
+  assert.equal(Number(version.user_version), 33)
   after.close()
   store.close()
 })
 
-test('fresh store schema has interactions, plugin manifests, no legacy memory tables, and version 30', () => {
+test('fresh store schema has dynamic agent governance and version 33', () => {
   const dir = mkdtempSync(join(tmpdir(), 'reflexion-v23-fresh-'))
   const store = new Store(dir)
   store.close()
@@ -961,7 +1098,7 @@ test('fresh store schema has interactions, plugin manifests, no legacy memory ta
     .map((row) => row.name)
   assert.deepEqual(names, [])
   const version = db.prepare('PRAGMA user_version').get()
-  assert.equal(Number(version.user_version), 30)
+  assert.equal(Number(version.user_version), 33)
   const plugins = db
     .prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'plugins'",
@@ -973,6 +1110,12 @@ test('fresh store schema has interactions, plugin manifests, no legacy memory ta
     .all()
     .map((column) => column.name)
   assert.equal(pluginColumns.includes('manifest_json'), true)
+  const turnExecutions = db
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'turn_executions'",
+    )
+    .get()
+  assert.equal(turnExecutions.name, 'turn_executions')
   db.close()
 })
 

@@ -49,6 +49,26 @@ CREATE TABLE IF NOT EXISTS runs (
   plan_id TEXT REFERENCES plans(id) ON DELETE SET NULL,
   plan_step_id TEXT REFERENCES plan_steps(id) ON DELETE SET NULL
 );
+CREATE TABLE IF NOT EXISTS turn_executions (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  phase TEXT NOT NULL,
+  attempt INTEGER NOT NULL,
+  model_request_json TEXT,
+  assistant_message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
+  tool_batch_json TEXT,
+  pending_interaction_id TEXT,
+  pending_approval_id TEXT,
+  continuation_reason TEXT,
+  checkpoint_version INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  completed_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_turn_executions_run_attempt
+  ON turn_executions(run_id, attempt);
+CREATE INDEX IF NOT EXISTS idx_turn_executions_active
+  ON turn_executions(run_id, completed_at);
 CREATE TABLE IF NOT EXISTS plans (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -187,6 +207,9 @@ CREATE TABLE IF NOT EXISTS agents (
   name TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   system_prompt TEXT NOT NULL,
+  policy_json TEXT NOT NULL DEFAULT '{"version":1,"permissionCeiling":"workspace-read","allowedTools":["get_current_time","web.fetch","skill.use","file.read","file.list","file.glob","file.grep"],"canDelegate":true}',
+  source TEXT NOT NULL DEFAULT 'builtin',
+  builtin INTEGER NOT NULL DEFAULT 1,
   enabled INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -195,20 +218,35 @@ CREATE TABLE IF NOT EXISTS delegations (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
   parent_run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  root_run_id TEXT,
   parent_agent_id TEXT,
-  agent_id TEXT NOT NULL REFERENCES agents(id),
+  agent_id TEXT NOT NULL,
   task TEXT NOT NULL,
   status TEXT NOT NULL,
   child_run_id TEXT,
   child_session_id TEXT,
   execution_json TEXT,
+  instance_json TEXT,
   result TEXT,
+  result_json TEXT,
   error TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   completed_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_delegations_session ON delegations(session_id, created_at);
+CREATE TABLE IF NOT EXISTS mutation_receipts (
+  id TEXT PRIMARY KEY,
+  root_run_id TEXT NOT NULL,
+  run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  delegation_id TEXT REFERENCES delegations(id) ON DELETE SET NULL,
+  agent_instance_id TEXT,
+  tool_call_id TEXT NOT NULL UNIQUE REFERENCES tool_calls(id) ON DELETE CASCADE,
+  tool_name TEXT NOT NULL,
+  changed_files_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mutation_receipts_root ON mutation_receipts(root_run_id, created_at);
 CREATE TABLE IF NOT EXISTS assets (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -241,4 +279,4 @@ CREATE TABLE IF NOT EXISTS context_checkpoints (
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 30
+export const LATEST_SCHEMA_VERSION = 33

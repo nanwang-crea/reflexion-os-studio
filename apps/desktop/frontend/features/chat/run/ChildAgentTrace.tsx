@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react'
-import type { Delegation } from '@reflexion-os-studio/runtime-client'
-import { listDelegations } from '../../../api/agents'
+import type {
+  Delegation,
+  MutationReceipt,
+} from '@reflexion-os-studio/runtime-client'
+import { getDelegationTree, listMutationReceipts } from '../../../api/agents'
 import { getSessionData, type SessionData } from '../../../api/sessions'
+import { DelegationTree } from './DelegationTree'
 
 interface ChildAgentTraceProps {
   delegation: Delegation
@@ -14,20 +18,32 @@ export function ChildAgentTrace({
   onClose,
 }: ChildAgentTraceProps): React.JSX.Element {
   const [data, setData] = useState<SessionData | null>(null)
-  const [children, setChildren] = useState<Delegation[]>([])
+  const [selected, setSelected] = useState(delegation)
+  const [tree, setTree] = useState<Delegation[]>([])
+  const [receipts, setReceipts] = useState<MutationReceipt[]>([])
   const [error, setError] = useState<string | null>(null)
-  const running = ['pending', 'running'].includes(delegation.status)
+  const running = tree.some((item) =>
+    ['pending', 'running'].includes(item.status),
+  )
+  const rootRunId = delegation.rootRunId ?? delegation.parentRunId
+
+  useEffect(() => setSelected(delegation), [delegation])
 
   useEffect(() => {
-    const sessionId = delegation.childSessionId
+    const sessionId = selected.childSessionId
     if (sessionId === null) return
     let disposed = false
     const refresh = (): void => {
-      void Promise.all([getSessionData(sessionId), listDelegations(sessionId)])
-        .then(([next, nextChildren]) => {
+      void Promise.all([
+        getSessionData(sessionId),
+        getDelegationTree(rootRunId),
+        listMutationReceipts(rootRunId),
+      ])
+        .then(([next, nextTree, nextReceipts]) => {
           if (!disposed) {
             setData(next)
-            setChildren(nextChildren)
+            setTree(nextTree)
+            setReceipts(nextReceipts)
             setError(null)
           }
         })
@@ -42,7 +58,7 @@ export function ChildAgentTrace({
       disposed = true
       if (timer !== undefined) window.clearInterval(timer)
     }
-  }, [delegation.childSessionId, running])
+  }, [rootRunId, running, selected.childSessionId])
 
   return (
     <div className="child-trace-backdrop" role="presentation" onClick={onClose}>
@@ -55,17 +71,26 @@ export function ChildAgentTrace({
       >
         <header className="child-trace-head">
           <div>
-            <strong>{delegation.agentId}</strong>
-            <span>{delegation.task}</span>
+            <strong>{selected.agentId}</strong>
+            <span>{selected.task}</span>
           </div>
           <button type="button" className="ghost" onClick={onClose}>
             关闭
           </button>
         </header>
         <div className="child-trace-body">
-          {delegation.childSessionId === null && <p>子会话尚未创建。</p>}
+          <DelegationTree
+            items={tree.length > 0 ? tree : [delegation]}
+            rootRunId={rootRunId}
+            selectedId={selected.id}
+            onSelect={(item) => {
+              setData(null)
+              setSelected(item)
+            }}
+          />
+          {selected.childSessionId === null && <p>子会话尚未创建。</p>}
           {error && <p className="delegation-error">{error}</p>}
-          {!data && delegation.childSessionId !== null && !error && (
+          {!data && selected.childSessionId !== null && !error && (
             <p>加载轨迹…</p>
           )}
           {data?.runs.map((run) => (
@@ -91,20 +116,20 @@ export function ChildAgentTrace({
                     {call.output?.content && <pre>{call.output.content}</pre>}
                   </div>
                 ))}
+              {receipts
+                .filter((receipt) => receipt.runId === run.id)
+                .map((receipt) => (
+                  <div className="child-trace-tool" key={receipt.id}>
+                    <span>变更归属 · {receipt.toolName}</span>
+                    <span>
+                      {receipt.changedFiles
+                        .map((file) => `${file.action}: ${file.path}`)
+                        .join('、')}
+                    </span>
+                  </div>
+                ))}
             </article>
           ))}
-          {children.length > 0 && (
-            <section className="child-trace-children">
-              <strong>下级委派</strong>
-              {children.map((child) => (
-                <div key={child.id}>
-                  <span>{child.agentId}</span>
-                  <span>{child.status}</span>
-                  <p>{child.task}</p>
-                </div>
-              ))}
-            </section>
-          )}
         </div>
       </section>
     </div>

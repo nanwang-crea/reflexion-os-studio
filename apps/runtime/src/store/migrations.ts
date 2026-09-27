@@ -53,6 +53,28 @@ CREATE TABLE messages (
   completed_at TEXT
 )`
 
+const DELEGATIONS_TABLE_V33 = `
+CREATE TABLE delegations (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  parent_run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  root_run_id TEXT,
+  parent_agent_id TEXT,
+  agent_id TEXT NOT NULL,
+  task TEXT NOT NULL,
+  status TEXT NOT NULL,
+  child_run_id TEXT,
+  child_session_id TEXT,
+  execution_json TEXT,
+  instance_json TEXT,
+  result TEXT,
+  result_json TEXT,
+  error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  completed_at TEXT
+)`
+
 interface TableColumn {
   name: string
   notnull: number | bigint
@@ -91,6 +113,9 @@ function tableColumns(db: DatabaseSync, table: string): TableColumn[] {
  * v27 → v28：delegations 增加父 Agent、子 Session 与版本化执行快照。
  * v28 → v29：sessions 增加 execution_mode，默认 execute。
  * v29 → v30：新增 user_interactions 表（由 SCHEMA 创建），持久化待回答问题。
+ * v30 → v31：Agent Policy、Delegation 根 Run 与结构化结果。
+ * v31 → v32：新增 turn_executions 表（由 SCHEMA 创建），作为统一恢复检查点。
+ * v32 → v33：Agent 模板来源、动态实例快照与 mutation receipts。
  * 各步骤带形状检测：SCHEMA 刚建好的新库不会空跑重建。
  */
 export function runMigrations(db: DatabaseSync, dir: string): void {
@@ -435,6 +460,74 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
     ) {
       db.exec(
         "ALTER TABLE sessions ADD COLUMN execution_mode TEXT NOT NULL DEFAULT 'execute'",
+      )
+    }
+    if (version < 31) {
+      const agentColumns = tableColumns(db, 'agents').map(
+        (column) => column.name,
+      )
+      if (!agentColumns.includes('policy_json')) {
+        db.exec(
+          `ALTER TABLE agents ADD COLUMN policy_json TEXT NOT NULL DEFAULT '{"version":1,"permissionCeiling":"workspace-read","allowedTools":["get_current_time","web.fetch","skill.use","file.read","file.list","file.glob","file.grep"],"canDelegate":true}'`,
+        )
+      }
+      const delegationColumns = tableColumns(db, 'delegations').map(
+        (column) => column.name,
+      )
+      if (!delegationColumns.includes('root_run_id')) {
+        db.exec('ALTER TABLE delegations ADD COLUMN root_run_id TEXT')
+      }
+      if (!delegationColumns.includes('result_json')) {
+        db.exec('ALTER TABLE delegations ADD COLUMN result_json TEXT')
+      }
+      db.exec(`
+        WITH RECURSIVE delegation_roots(id, child_run_id, root_run_id) AS (
+          SELECT d.id, d.child_run_id, d.parent_run_id
+          FROM delegations d
+          WHERE NOT EXISTS (
+            SELECT 1 FROM delegations parent
+            WHERE parent.child_run_id = d.parent_run_id
+          )
+          UNION ALL
+          SELECT child.id, child.child_run_id, roots.root_run_id
+          FROM delegation_roots roots
+          JOIN delegations child ON child.parent_run_id = roots.child_run_id
+        )
+        UPDATE delegations
+        SET root_run_id = (
+          SELECT roots.root_run_id FROM delegation_roots roots
+          WHERE roots.id = delegations.id
+        )
+        WHERE root_run_id IS NULL
+      `)
+    }
+    if (version < 33) {
+      const agentColumns = tableColumns(db, 'agents').map(
+        (column) => column.name,
+      )
+      if (!agentColumns.includes('source')) {
+        db.exec(
+          "ALTER TABLE agents ADD COLUMN source TEXT NOT NULL DEFAULT 'builtin'",
+        )
+      }
+      if (!agentColumns.includes('builtin')) {
+        db.exec(
+          'ALTER TABLE agents ADD COLUMN builtin INTEGER NOT NULL DEFAULT 1',
+        )
+      }
+      db.exec('ALTER TABLE delegations RENAME TO delegations_v32')
+      db.exec(DELEGATIONS_TABLE_V33)
+      db.exec(`INSERT INTO delegations (
+        id, session_id, parent_run_id, root_run_id, parent_agent_id, agent_id,
+        task, status, child_run_id, child_session_id, execution_json,
+        instance_json, result, result_json, error, created_at, updated_at, completed_at
+      ) SELECT id, session_id, parent_run_id, root_run_id, parent_agent_id, agent_id,
+        task, status, child_run_id, child_session_id, execution_json,
+        NULL, result, result_json, error, created_at, updated_at, completed_at
+        FROM delegations_v32`)
+      db.exec('DROP TABLE delegations_v32')
+      db.exec(
+        'CREATE INDEX IF NOT EXISTS idx_delegations_session ON delegations(session_id, created_at)',
       )
     }
     db.exec('COMMIT')

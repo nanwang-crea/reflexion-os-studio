@@ -36,6 +36,7 @@ import type { RunRunner } from './run/runner.js'
 import { createToolRegistry } from './tools/index.js'
 import type { ToolContext } from './tools/shared.js'
 import type { InteractionGateway } from './interactions/index.js'
+import type { RootMutationCoordinator } from './delegation/mutations.js'
 
 /** launch 选项：单次 Run 的装配参数（Provider/工具/闸门/回调）。 */
 export interface LaunchOptions {
@@ -66,6 +67,10 @@ export interface LaunchOptions {
   allowedTools?: ReadonlySet<string> | null
   /** 子 Agent 独立上下文：仅 system prompt + 显式任务包，不注入历史/记忆。 */
   isolatedContext?: boolean
+  /** Root tree identity for reusable rules; never used for once grants/Danger. */
+  permissionDomainId?: string
+  rootRunId?: string
+  mutationCoordinator?: RootMutationCoordinator
 }
 
 /** launch 依赖：跨 Run 共享的服务集合（由 ChatAgent 注入）。 */
@@ -217,6 +222,9 @@ export class RunLauncher {
         gate,
         approvals: this.deps.approvals,
         sandboxProvider: this.deps.system?.sandboxName ?? null,
+        permissionDomainId: input.permissionDomainId ?? run.sessionId,
+        rootRunId: input.rootRunId ?? run.id,
+        mutationCoordinator: input.mutationCoordinator,
         controller,
         emitter,
         firstAssistantMessage: assistantMessage,

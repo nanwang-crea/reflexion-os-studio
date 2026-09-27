@@ -23,6 +23,36 @@ export const agentCommandHandlers: Record<string, CommandHandler> = {
     if (!agent) throw new CommandError('not_found', 'Agent 不存在')
     return { agent }
   },
+  'agent_template.list': (_p, { store }) => ({
+    templates: store.agents.list(),
+  }),
+  'agent_template.save': (p, { store }) => {
+    try {
+      return {
+        template: store.agents.saveUser({
+          id: typeof p.id === 'string' ? p.id : undefined,
+          name: requireString(p, 'name'),
+          description: typeof p.description === 'string' ? p.description : '',
+          systemPrompt: requireString(p, 'systemPrompt'),
+          enabled: p.enabled === true,
+          canDelegate: p.canDelegate === true,
+          allowedTools: Array.isArray(p.allowedTools)
+            ? p.allowedTools.filter(
+                (tool): tool is string => typeof tool === 'string',
+              )
+            : [],
+        }),
+      }
+    } catch (error) {
+      throw new CommandError(
+        'invalid_request',
+        error instanceof Error ? error.message : String(error),
+      )
+    }
+  },
+  'agent_template.remove': (p, { store }) => ({
+    removed: store.agents.removeUser(requireString(p, 'templateId')),
+  }),
   'delegation.list': (p, { store }) => ({
     delegations: store.delegations.listBySession(requireString(p, 'sessionId')),
   }),
@@ -30,6 +60,14 @@ export const agentCommandHandlers: Record<string, CommandHandler> = {
   'delegation.list_by_parent': (p, { store }) => ({
     delegations: store.delegations.listByParentRun(
       requireString(p, 'parentRunId'),
+    ),
+  }),
+  'delegation.tree': (p, { store }) => ({
+    delegations: store.delegations.listByRootRun(requireString(p, 'rootRunId')),
+  }),
+  'mutation_receipt.list': (p, { store }) => ({
+    receipts: store.mutationReceipts.listByRootRun(
+      requireString(p, 'rootRunId'),
     ),
   }),
   'delegation.get_by_child_run': (p, { store }) => ({

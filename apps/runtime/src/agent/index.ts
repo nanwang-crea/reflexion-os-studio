@@ -23,7 +23,12 @@ import { QueueService } from './session/queue.js'
 import { RunRunner } from './run/runner.js'
 import { SessionTitleService } from './session/session-titles.js'
 import { deriveSessionTitle } from './session/title.js'
-import { createChildRunStarter } from './delegation.js'
+import {
+  createChildRunStarter,
+  DelegationBudgetCoordinator,
+  INHERITABLE_CHILD_TOOLS,
+  RootMutationCoordinator,
+} from './delegation.js'
 import { InteractionGateway } from './interactions/index.js'
 import { normalizeToolOutput } from './run/toolResults.js'
 import { formatAnswers } from './tools/ask-user.js'
@@ -363,6 +368,13 @@ export class ChatAgent {
       this.store.interactions.resolve(interactionId, answers)
       this.store.toolCalls.finalize(interaction.toolCallId, 'completed', output)
       this.store.runs.setIntermediateStatus(run.id, 'running')
+      const previousTurn = this.store.turnExecutions.latestForRun(run.id)
+      if (previousTurn !== null && previousTurn.completedAt === null) {
+        this.store.turnExecutions.transition(previousTurn.id, 'completed', {
+          pendingInteractionId: null,
+          continuationReason: 'user_input_resolved',
+        })
+      }
       return createPendingAssistantMessage(this.store, session.id, run)
     })
     const resumedRun = this.store.runs.get(run.id) ?? run
@@ -598,6 +610,22 @@ export class ChatAgent {
     input: Omit<Parameters<RunLauncher['launch']>[0], 'childRunStarter'>,
   ): void {
     const settings = this.store.agentSettings.get()
+    const budget = new DelegationBudgetCoordinator(
+      input.run.id,
+      settings,
+      this.store.delegations.listByRootRun(input.run.id).length,
+    )
+    const mutationCoordinator = new RootMutationCoordinator()
+    const permissionPreset = resolveInputPreset({
+      permissionPreset: input.permissionPreset,
+    })
+    const permissionDomainId = input.session.id
+    const inheritedTools = new Set([
+      ...INHERITABLE_CHILD_TOOLS,
+      ...(this.mcp
+        ?.allTools()
+        .map((tool) => `${tool.serverId}/${tool.toolName}`) ?? []),
+    ])
     const childRunStarter = settings.enableChildRuns
       ? createChildRunStarter(
           {
@@ -608,11 +636,22 @@ export class ChatAgent {
             apiKey: input.apiKey,
             model: input.model,
             sampling: input.sampling,
+            budget,
+            permissionPreset,
+            permissionDomainId,
+            inheritedTools,
+            mutationCoordinator,
           },
           input.run,
           input.session,
         )
       : undefined
-    this.launcher.launch({ ...input, childRunStarter })
+    this.launcher.launch({
+      ...input,
+      childRunStarter,
+      permissionDomainId,
+      rootRunId: input.run.id,
+      mutationCoordinator,
+    })
   }
 }

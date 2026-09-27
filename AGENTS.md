@@ -20,12 +20,12 @@ React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
   - **Skills**：内置 code-review / web-research / workspace-report；斜杠命令激活 + skill.use 工具加载全文；
   - **Memory（V2 文件即记忆）**：全局/项目 AGENTS.md + 全局/项目 MEMORY.md 四层文件注入（缺失静默、每文件 20000 token 截断）、`memory.remember` 免审批工具（仅 global/project 两档显式写入，无 user 档；单条≤200 字单行、机密拒绝、64KB 闸门）、指令页查看编辑；**不再有自动提取**（SQLite 自动记忆链路已删，v23 迁移不搬迁数据），未来检索式记忆直引 mem0 不自研；
   - **MCP**：stdio 协议 client（握手/tools/list/call、严格超时）+ 管理服务（配置/启停/重连/工具清单）、工具桥注册为 `serverId/toolName`、默认 ask 审批、设置页 MCP 面板、mcp_servers 表；
-  - **Multi-Agent（Phase 3 只读委派）**：Primary 通过 `task` 委派只读 Worker/Researcher/Reviewer；子 Run 独立上下文，固定 workspace-read 与只读工具白名单，不继承审批/Danger/长期记忆，在 `maxDepth` 内可继续委派；继承父 Run 实际 Provider/模型/采样参数，具备深度、数量、并发、超时、token 预算；Delegation 持久化父子身份与版本化执行快照，支持父级/单项取消、事件、启动恢复、运行卡详情、子 Session 轨迹及 Agent 启停与预算 UI；可写 Agent 留后续；
+  - **Multi-Agent（Phase 3 动态委派）**：Primary 通过 `task` 动态创建唯一 Agent 实例，内置/用户模板均为可选指导而非固定角色；实例继承父 Run 的 Provider、模型、权限档位和工具交集，模板只能收窄，审批仍逐调用执行且不继承 Danger/一次授权/长期记忆；最大递归深度 4，数量与并发为整棵树共享的根级预算；根权限域共享可复用路径/命令规则，mutation coordinator 串行化跨 Run 写操作并从 canonical ToolOutput 记录变更归属；Delegation 持久化实例/父子/根身份、执行快照与结构化结果，支持完整跨层树导航、任意子 Session 轨迹、取消、恢复及模板/预算 UI；
   - **Workspace（Phase 1B 第一部分）**：异步 Indexer（progress/cancel/stale/failed、忽略目录与符号链接、快照落库）、文件树按需加载、代码/文档查看器与编辑器保存（行号/复制/跳转行/分段加载/Markdown·JSON 预览）、**Git 变更（状态列表 + 单文件 diff 预览）与写操作（stage/unstage/commit/fetch/push/pull(--ff-only)/分支创建与切换：UI 直接动作免审批、磁盘未提交改动交给 git 原生、内存脏 buffer 在切分支/pull 前三键守卫并成功后强制重载）**、**提交历史浏览（分页 log / commit 文件 / 单文件 diff / 基于 commit 建分支 / 切换（detached））与远程管理（remote 列表/添加/移除、远程分支检出为本地跟踪、发布=推送）**，全部经 Rust 侧 workspace 边界；
   - **Asset / ResourceLink（Phase 1B 第二部分）**：Asset Store（数据目录按项目隔离、sha256 元数据、导入/列表/预览/删除/复制引用）；消息内资源引用渲染（`workspace://<projectId>/<path>#L<行号>` 进查看器定位、`asset://<assetId>` 进资产预览、https 链接经 Tauri 白名单命令转系统浏览器，仅 https 放行）；Run 回复的引用聚合为 Artifact 卡片；导出/下载/系统应用打开留后续阶段；
   - **Terminal Surface（集成终端，Phase 2 · macOS 已验证）**：底部多标签用户终端（portable-pty 纵向切片、xterm v6、attach/ack/窗口背压/公平调度、故障矩阵与 10 分钟长稳 macOS 实测；Windows/Linux 待真机）；发布入口开关：`VITE_TERMINAL_DISABLED=1`（构建期）或 localStorage `terminal.forceDisabled='1'`（运行期逃生舱）禁用新建终端入口，已打开的终端不受影响；
   - **存储**：`node:sqlite`（WAL、外键、启动把未完成 Run/Message 恢复为 interrupted、终态单事务、workspace_index 快照表、assets 表）。
-- **尚未实现、不得提前实现**：Phase 1B 剩余（Browser Surface）、Phase 2 剩余（Provider/Tool 插件、Browser 工具、检索式记忆——按演进承诺直引 mem0，不得自研提取/召回管线）、Phase 3 剩余（可写 Agent、结构化聚合与完整跨层树导航）、Phase 4 Workflow、Phase 5 多模态、Phase 6 硬化与激活码许可。
+- **尚未实现、不得提前实现**：Phase 1B 剩余（Browser Surface）、Phase 2 剩余（Provider/Tool 插件、Browser 工具、检索式记忆——按演进承诺直引 mem0，不得自研提取/召回管线）、Phase 4 Workflow、Phase 5 多模态、Phase 6 硬化与激活码许可。
 - 现有页面与占位边界：聊天区、落地页、技能页、指令页（AGENTS.md/MEMORY.md 四类文件管理）、设置页（Provider）均为独立页面；工作区（索引状态+文件树+查看器）是对话区的**右侧可开合面板**（顶栏文件夹按钮切换，局部状态记忆），不是独立页；Automations 页是 Phase 4 占位（文案如实标注"尚未开放"），不要在占位页假装能力存在。
 
 ## 2. 目录结构与职责

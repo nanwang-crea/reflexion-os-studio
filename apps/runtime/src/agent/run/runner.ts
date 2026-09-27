@@ -19,6 +19,7 @@ import { createRunExecutionState } from './run-state.js'
 import { RunFinalizer, type RunTerminalDecision } from './run-finalizer.js'
 import { executeToolCall } from './tool-executor.js'
 import { executeToolBatch, type SchedulerDeps } from './tool-scheduler.js'
+import type { RootMutationCoordinator } from '../delegation/mutations.js'
 
 export interface RunStreamInput {
   run: Run
@@ -44,6 +45,9 @@ export interface RunStreamInput {
   onCancel?: () => void
   /** 子 Run 单次累计输出 token 预算；超出以 child_token_budget 稳定错误码中止。 */
   childTokenBudget?: number
+  permissionDomainId: string
+  rootRunId: string
+  mutationCoordinator?: RootMutationCoordinator
 }
 
 /** 稳定停止原因的用户可见描述（run.failed 的 message；错误码本身随事件下发）。 */
@@ -99,6 +103,8 @@ export class RunRunner {
     let finalFragments: string[] = []
     let toolCallsUsed = 0
     let modelTurnsUsed = 0
+    let turnAttempt =
+      this.store.turnExecutions.latestForRun(run.id)?.attempt ?? 0
 
     /** 单工具执行（供调度器与预算分支共用）：权限上下文完整。 */
     const executeOneGuarded = (
@@ -116,6 +122,9 @@ export class RunRunner {
           registry,
           emitter,
           sandboxProvider: input.sandboxProvider ?? null,
+          permissionDomainId: input.permissionDomainId,
+          rootRunId: input.rootRunId,
+          mutationCoordinator: input.mutationCoordinator,
         },
         request,
         signal,
@@ -166,6 +175,17 @@ export class RunRunner {
           reflectionThreshold: input.settings.reflectionThreshold ?? undefined,
           callModel: async (messages, signal) => {
             modelTurnsUsed += 1
+            turnAttempt += 1
+            const turnExecution = this.store.turnExecutions.create({
+              runId: run.id,
+              attempt: turnAttempt,
+              phase: 'awaiting_model_response',
+              modelRequest: {
+                model: input.provider.model,
+                messageCount: messages.length,
+              },
+            })
+            state.currentTurnId = turnExecution.id
             // Run 累计 token 预算在 model-turn 内检查（usage 累计后）。
             const result = await executeModelTurn(
               {
@@ -207,6 +227,19 @@ export class RunRunner {
               )
             }
             toolCallsUsed += requests.length
+            if (state.currentTurnId !== null) {
+              this.store.turnExecutions.transition(
+                state.currentTurnId,
+                'executing_tools',
+                {
+                  toolBatch: requests.map((request) => ({
+                    id: request.id,
+                    name: request.name,
+                    arguments: request.arguments,
+                  })),
+                },
+              )
+            }
             const deps: SchedulerDeps = {
               store: this.store,
               state,
@@ -219,7 +252,15 @@ export class RunRunner {
               guard,
               executeOne: executeOneGuarded,
             }
-            return executeToolBatch(deps, requests, signal)
+            return executeToolBatch(deps, requests, signal).then((results) => {
+              if (state.currentTurnId !== null) {
+                this.store.turnExecutions.transition(
+                  state.currentTurnId,
+                  'completed',
+                )
+              }
+              return results
+            })
           },
         })
 

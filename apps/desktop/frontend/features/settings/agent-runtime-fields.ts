@@ -61,19 +61,19 @@ export const AGENT_RUNTIME_FIELDS: AgentRuntimeField[] = [
     'maxDepth',
     '最大委派深度',
     '1（默认）',
-    '顶层 Run 为 0；设为 1 时子 Agent 不可继续委派。',
+    '顶层 Run 为 0；最大可设为 4，设为 1 时子 Agent 不可继续委派。',
   ],
   [
     'maxChildRuns',
-    '每个 Run 的子 Agent 总数',
+    '整棵委派树的子 Agent 总数',
     '4（默认）',
-    '限制单个父 Run 生命周期内创建的子 Agent 数量。',
+    '限制一个顶层 Run 的整棵委派树累计创建数量。',
   ],
   [
     'maxParallelChildren',
     '并行子 Agent 数',
     '2（默认）',
-    '模型并行发起 task 时允许同时运行的子 Agent 数量。',
+    '限制整棵委派树同时运行的子 Agent 数量。',
   ],
   [
     'maxChildTimeoutSec',

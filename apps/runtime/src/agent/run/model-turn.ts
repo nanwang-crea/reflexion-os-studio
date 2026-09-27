@@ -65,14 +65,25 @@ export async function executeModelTurn(
   }
   state.turn = draft
   state.lastAssistantMessageId = assistantMessage.id
+  if (state.currentTurnId !== null) {
+    store.turnExecutions.transition(
+      state.currentTurnId,
+      'awaiting_model_response',
+      { assistantMessageId: assistantMessage.id },
+    )
+  }
   emitter.next({ type: 'message.created', message: assistantMessage })
 
   let chunkSeq = 0
   let reasoningSeq = 0
   let streamingMarked = false
   const markStreaming = (): void => {
-    if (streamingMarked || reuseFirst) return
+    if (streamingMarked) return
     streamingMarked = true
+    if (state.currentTurnId !== null) {
+      store.turnExecutions.transition(state.currentTurnId, 'streaming')
+    }
+    if (reuseFirst) return
     store.messages.markStreaming(draft.id)
   }
 
@@ -177,6 +188,11 @@ export async function executeModelTurn(
       normalized.parts,
     )
     state.turn = null
+    if (state.currentTurnId !== null) {
+      store.turnExecutions.transition(state.currentTurnId, 'failed', {
+        continuationReason: 'content_filtered',
+      })
+    }
     if (result.usage) {
       store.runs.addUsage(run.id, result.usage)
     }
@@ -217,6 +233,20 @@ export async function executeModelTurn(
   if (result.toolCalls.length > 0) {
     state.precreatedToolCallRows.clear()
     precreateToolCalls(store, state, run, emitter, result.toolCalls)
+    if (state.currentTurnId !== null) {
+      store.turnExecutions.transition(state.currentTurnId, 'scheduling_tools', {
+        toolBatch: result.toolCalls.map((call) => ({
+          id: call.id,
+          name: call.name,
+          arguments: call.arguments,
+        })),
+      })
+    }
+  } else if (state.currentTurnId !== null) {
+    store.turnExecutions.transition(state.currentTurnId, 'completed', {
+      continuationReason:
+        disposition.kind === 'truncated' ? 'output_truncated' : null,
+    })
   }
   state.turn = null
   // Run 累计 token 预算（Provider usage 累计；W4）：以稳定错误码中止。

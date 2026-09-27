@@ -1,5 +1,9 @@
 import type { ToolResult } from '@reflexion-os-studio/agent-core'
-import type { JsonValue } from '@reflexion-os-studio/contracts'
+import type {
+  AgentSpawnSpec,
+  DelegationResult,
+  JsonValue,
+} from '@reflexion-os-studio/contracts'
 import type { SkillRegistry } from '../../skills/index.js'
 import type { McpManager } from '../../mcp/manager.js'
 import type { SystemRuntimeClient } from '../../system.js'
@@ -23,12 +27,12 @@ export interface ToolContext {
   mcp: McpManager | null
   /** 工具白名单；设置后仅注册名单中的内置/MCP 工具。 */
   allowedTools?: ReadonlySet<string> | null
-  /** 启动一个受限子 Run，并等待其最终文本结果。 */
+  /** 启动一个受限子 Run，并等待其结构化结果。 */
   childRunStarter?: (input: {
     task: string
-    agentId: string
+    agent: AgentSpawnSpec
     signal: AbortSignal
-  }) => Promise<string>
+  }) => Promise<DelegationResult>
 }
 
 const SYSTEM_REQUEST_TIMEOUT_MS = 130_000

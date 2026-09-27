@@ -22,6 +22,8 @@ import {
   McpToolSchema,
   PlanSchema,
   AgentDefinitionSchema,
+  AgentTemplateSchema,
+  MutationReceiptSchema,
   DelegationSchema,
   TerminalSchema,
   PermissionPresetSchema,
@@ -298,6 +300,30 @@ export const CommandSchemaRegistry = {
     }),
     result: z.object({ agent: AgentDefinitionSchema }),
   },
+  'agent_template.list': {
+    params: z.object({ requestId: RequestIdSchema }),
+    result: z.object({ templates: z.array(AgentTemplateSchema) }),
+  },
+  'agent_template.save': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      id: z.string().min(1).optional(),
+      name: z.string().min(1).max(80),
+      description: z.string().max(500),
+      systemPrompt: z.string().min(1).max(20_000),
+      enabled: z.boolean(),
+      canDelegate: z.boolean(),
+      allowedTools: z.array(z.string().min(1)),
+    }),
+    result: z.object({ template: AgentTemplateSchema }),
+  },
+  'agent_template.remove': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      templateId: z.string().min(1),
+    }),
+    result: z.object({ removed: z.boolean() }),
+  },
   'delegation.list': {
     params: z.object({
       requestId: RequestIdSchema,
@@ -321,6 +347,20 @@ export const CommandSchemaRegistry = {
       parentRunId: z.string().min(1),
     }),
     result: z.object({ delegations: z.array(DelegationSchema) }),
+  },
+  'delegation.tree': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      rootRunId: z.string().min(1),
+    }),
+    result: z.object({ delegations: z.array(DelegationSchema) }),
+  },
+  'mutation_receipt.list': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      rootRunId: z.string().min(1),
+    }),
+    result: z.object({ receipts: z.array(MutationReceiptSchema) }),
   },
   'delegation.get_by_child_run': {
     params: z.object({

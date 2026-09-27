@@ -14,9 +14,12 @@ export function createTaskTool(ctx: ToolContext): ToolDefinition {
         task: { type: 'string', description: '要委派的子任务' },
         agentId: {
           type: 'string',
-          description:
-            '可选的子 Agent ID；必须从系统提示提供的可用子 Agent 清单中选择，缺省为 worker',
+          description: '兼容字段：可选模板 ID。新调用优先使用 templateId。',
         },
+        templateId: { type: 'string', description: '可选模板 ID' },
+        name: { type: 'string', description: '动态 Agent 名称' },
+        role: { type: 'string', description: '动态 Agent 职责' },
+        instructions: { type: 'string', description: '本次实例补充指令' },
       },
       required: ['task'],
     },
@@ -41,17 +44,28 @@ export function createTaskTool(ctx: ToolContext): ToolDefinition {
       if (typeof input.task !== 'string' || !input.task.trim()) {
         throw new Error('task is required')
       }
-      const agentId =
-        typeof input.agentId === 'string' && input.agentId.trim()
-          ? input.agentId.trim()
-          : 'worker'
+      const optional = (key: string): string | undefined =>
+        typeof input[key] === 'string' && input[key].trim()
+          ? input[key].trim()
+          : undefined
       try {
         const result = await ctx.childRunStarter({
           task: input.task,
-          agentId,
+          agent: {
+            templateId: optional('templateId') ?? optional('agentId'),
+            name: optional('name'),
+            role: optional('role'),
+            instructions: optional('instructions'),
+          },
           signal,
         })
-        return { content: result, isError: false }
+        return {
+          content: result.summary,
+          data: result,
+          resourceLinks: result.resourceLinks,
+          changedFiles: result.changedFiles,
+          isError: false,
+        }
       } catch (error) {
         // 子 Run 限额/超时等用 ChildLimitError 携带稳定 code，透传而不是折叠为 tool_error。
         const code =

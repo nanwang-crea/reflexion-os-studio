@@ -12,6 +12,7 @@ import {
   PROTOCOL_VERSION,
   ProviderProfileSchema,
   RunSchema,
+  TurnExecutionSchema,
   RuntimeErrorSchema,
   RuntimeEventSchema,
   TerminalSchema,
@@ -34,6 +35,7 @@ import {
   PluginPackageManifestSchema,
   SemVerSchema,
   compareSemVer,
+  AgentSettingsSchema,
 } from '../dist/index.js'
 
 const NOW = '2026-08-29T00:00:00.000Z'
@@ -46,6 +48,30 @@ const RUN_ENV = {
   seq: 0,
   occurredAt: NOW,
 }
+
+test('AgentSettings caps delegation depth at four', () => {
+  const base = {
+    maxTurns: null,
+    reflectionThreshold: null,
+    requestRetries: null,
+    requestTimeoutSec: null,
+    maxRunTimeoutSec: null,
+    maxRunTotalTokens: null,
+    maxToolCalls: null,
+    maxContinuationTurns: null,
+    maxDepth: 4,
+    maxChildRuns: null,
+    maxParallelChildren: null,
+    maxChildTimeoutSec: null,
+    maxChildTotalTokens: null,
+    enableChildRuns: true,
+  }
+  assert.equal(AgentSettingsSchema.safeParse(base).success, true)
+  assert.equal(
+    AgentSettingsSchema.safeParse({ ...base, maxDepth: 5 }).success,
+    false,
+  )
+})
 
 test('SemVer validation and precedence follow SemVer 2.0.0', () => {
   const precedence = [
@@ -186,6 +212,26 @@ test('RunSchema carries agent delegation fields and awaiting_approval', () => {
     }).success,
     true,
   )
+})
+
+test('TurnExecutionSchema validates persisted recovery checkpoints', () => {
+  const parsed = TurnExecutionSchema.safeParse({
+    id: 'turn-1',
+    runId: 'run-1',
+    phase: 'awaiting_permission',
+    attempt: 1,
+    modelRequest: { model: 'test', messageCount: 2 },
+    assistantMessageId: 'message-1',
+    toolBatch: [{ id: 'call-1', name: 'file.read', arguments: '{}' }],
+    pendingInteractionId: null,
+    pendingApprovalId: 'call-1',
+    continuationReason: null,
+    checkpointVersion: 1,
+    createdAt: '2026-09-27T00:00:00.000Z',
+    updatedAt: '2026-09-27T00:00:00.000Z',
+    completedAt: null,
+  })
+  assert.equal(parsed.success, true)
 })
 
 test('ToolCallSchema and ToolSpecSchema validate dynamic args', () => {

@@ -40,6 +40,10 @@ import {
   fileSandboxFor,
   riskFor,
 } from './tool-execution-context.js'
+import {
+  isMutatingTool,
+  type RootMutationCoordinator,
+} from '../delegation/mutations.js'
 
 export interface ToolExecutorInput {
   store: Store
@@ -52,6 +56,9 @@ export interface ToolExecutorInput {
   emitter: RunEventEmitter
   /** Rust 沙箱 provider 标识（"none"/"seatbelt"/"bwrap"/"windows-token"）。 */
   sandboxProvider: string | null
+  permissionDomainId: string
+  rootRunId: string
+  mutationCoordinator?: RootMutationCoordinator
 }
 
 /**
@@ -234,7 +241,10 @@ export async function executeToolCall(
   }
 
   // ---- 会话规则免问：只决定"是否免问"，grant 仍按当前请求重新签发。----
-  const scope = { sessionId: run.sessionId, workspaceRoot: input.workspaceRoot }
+  const scope = {
+    sessionId: input.permissionDomainId,
+    workspaceRoot: input.workspaceRoot,
+  }
   let sessionRuleHit = false
   if (decision === 'ask' && !dangerActive) {
     if (shellInput && built.subject.kind === 'shell-command') {
@@ -295,6 +305,13 @@ export async function executeToolCall(
     choices: ChoiceSpec[],
   ): Promise<ApprovalOutcome> => {
     store.runs.setIntermediateStatus(run.id, 'awaiting_approval')
+    if (state.currentTurnId !== null) {
+      store.turnExecutions.transition(
+        state.currentTurnId,
+        'awaiting_permission',
+        { pendingApprovalId: toolCallId },
+      )
+    }
     try {
       return await input.approvals.request({
         toolCallId,
@@ -313,6 +330,13 @@ export async function executeToolCall(
       // 否则才回置 running，避免 Run 状态错报。
       if (!input.approvals.hasPendingRun(run.id)) {
         store.runs.setIntermediateStatus(run.id, 'running')
+        if (state.currentTurnId !== null) {
+          store.turnExecutions.transition(
+            state.currentTurnId,
+            'executing_tools',
+            { pendingApprovalId: null },
+          )
+        }
       }
     }
   }
@@ -456,7 +480,11 @@ export async function executeToolCall(
     store.toolCalls.markStatus(row.id, 'running', grant)
   }
 
-  const result = await input.registry.call(request, signal, grant)
+  const invoke = () => input.registry.call(request, signal, grant)
+  const result =
+    input.mutationCoordinator && isMutatingTool(request.name)
+      ? await input.mutationCoordinator.run(invoke)
+      : await invoke()
   state.toolCallRowIds.delete(row.id)
   const output = normalizeToolOutput(result, projectId, request.name)
   // 持久化保存完整结果（审计不做盲区），回填模型前只取截断副本。
@@ -469,6 +497,15 @@ export async function executeToolCall(
     finalizeToolCall(store, state, emitter, row.id, 'failed', errorCode, output)
   } else {
     finalizeToolCall(store, state, emitter, row.id, 'completed', null, output)
+    store.mutationReceipts.record({
+      rootRunId: input.rootRunId,
+      runId: run.id,
+      delegationId: run.delegationId,
+      agentInstanceId: run.agentId,
+      toolCallId: row.id,
+      toolName: request.name,
+      output,
+    })
   }
   return modelResult
 }

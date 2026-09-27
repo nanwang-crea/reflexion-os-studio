@@ -63,7 +63,9 @@ export function DelegationList({
               </span>
               <div className="delegation-content">
                 <div className="delegation-head">
-                  <span className="delegation-agent">{delegation.agentId}</span>
+                  <span className="delegation-agent">
+                    {delegation.agentInstance?.name ?? delegation.agentId}
+                  </span>
                   <div className="delegation-actions">
                     <button
                       type="button"
@@ -116,6 +118,17 @@ export function DelegationList({
                 <div className="delegation-task">{delegation.task}</div>
                 {detailId === delegation.id && delegation.execution && (
                   <dl className="delegation-details">
+                    {delegation.agentInstance && (
+                      <div>
+                        <dt>实例</dt>
+                        <dd>
+                          {delegation.agentInstance.role}
+                          {delegation.agentInstance.templateId
+                            ? ` · 模板 ${delegation.agentInstance.templateId}`
+                            : ' · 无模板'}
+                        </dd>
+                      </div>
+                    )}
                     <div>
                       <dt>模型</dt>
                       <dd>{delegation.execution.model}</dd>
@@ -146,6 +159,13 @@ export function DelegationList({
                 )}
                 {delegation.result && (
                   <div className="delegation-result">{delegation.result}</div>
+                )}
+                {delegation.structuredResult && (
+                  <div className="delegation-result-meta">
+                    {delegation.structuredResult.toolCallCount} 次工具调用 ·
+                    {delegation.structuredResult.resourceLinks.length} 个资源 ·
+                    {delegation.structuredResult.changedFiles.length} 个变更文件
+                  </div>
                 )}
                 {delegation.error && (
                   <div className="delegation-error">{delegation.error}</div>

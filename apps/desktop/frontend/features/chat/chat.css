@@ -1608,26 +1608,41 @@
   color: var(--text-secondary);
 }
 
-.child-trace-children {
+.delegation-tree {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 16px;
+  margin-bottom: 16px;
 }
 
-.child-trace-children > div {
+.delegation-tree-branch {
+  margin: 0;
+  padding-left: 18px;
+  list-style: none;
+}
+
+.delegation-tree-branch button {
+  width: 100%;
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 4px 12px;
-  padding: 9px 10px;
+  gap: 2px 10px;
+  margin: 3px 0;
+  padding: 7px 9px;
+  text-align: left;
+  color: inherit;
+  background: transparent;
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: 7px;
 }
 
-.child-trace-children p {
+.delegation-tree-branch button.selected {
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+}
+
+.delegation-tree-branch small {
   grid-column: 1 / -1;
-  margin: 0;
-  color: var(--text-secondary);
+  color: var(--text-muted);
 }
 
 /* Composer 高级权限入口（ask-everything / Danger） */

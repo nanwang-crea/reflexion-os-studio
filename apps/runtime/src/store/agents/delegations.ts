@@ -1,11 +1,18 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import type {
+  AgentInstance,
   Delegation,
+  DelegationResult,
   DelegationStatus,
 } from '@reflexion-os-studio/contracts'
-import { DelegationExecutionSchema } from '@reflexion-os-studio/contracts'
+import {
+  AgentInstanceSchema,
+  DelegationExecutionSchema,
+  DelegationResultSchema,
+} from '@reflexion-os-studio/contracts'
 import { nowIso, type Row } from '../shared.js'
+import { buildDelegationResult } from './delegationResults.js'
 
 function parseExecution(value: unknown): Delegation['execution'] {
   if (value == null) return null
@@ -19,13 +26,40 @@ function parseExecution(value: unknown): Delegation['execution'] {
   }
 }
 
+function parseInstance(value: unknown): AgentInstance | null {
+  if (value == null) return null
+  try {
+    const parsed = AgentInstanceSchema.safeParse(JSON.parse(String(value)))
+    return parsed.success ? parsed.data : null
+  } catch {
+    return null
+  }
+}
+
+function parseResult(value: unknown): Delegation['structuredResult'] {
+  if (value == null) return null
+  try {
+    const parsed = DelegationResultSchema.safeParse(JSON.parse(String(value)))
+    return parsed.success ? parsed.data : null
+  } catch {
+    return null
+  }
+}
+
 export class DelegationStore {
   constructor(private readonly db: DatabaseSync) {}
 
   create(
     input: Pick<Delegation, 'sessionId' | 'parentRunId' | 'agentId' | 'task'> &
       Partial<
-        Pick<Delegation, 'parentAgentId' | 'childSessionId' | 'execution'>
+        Pick<
+          Delegation,
+          | 'rootRunId'
+          | 'parentAgentId'
+          | 'childSessionId'
+          | 'execution'
+          | 'agentInstance'
+        >
       >,
   ): Delegation {
     const now = nowIso()
@@ -33,14 +67,17 @@ export class DelegationStore {
       id: randomUUID(),
       sessionId: input.sessionId,
       parentRunId: input.parentRunId,
+      rootRunId: input.rootRunId ?? input.parentRunId,
       parentAgentId: input.parentAgentId ?? null,
       agentId: input.agentId,
+      agentInstance: input.agentInstance ?? null,
       task: input.task,
       status: 'pending',
       childSessionId: input.childSessionId ?? null,
       childRunId: null,
       execution: input.execution ?? null,
       result: null,
+      structuredResult: null,
       error: null,
       createdAt: now,
       updatedAt: now,
@@ -49,15 +86,17 @@ export class DelegationStore {
     this.db
       .prepare(
         `INSERT INTO delegations (
-          id, session_id, parent_run_id, parent_agent_id, agent_id, task, status,
-          child_run_id, child_session_id, execution_json, result, error,
-          created_at, updated_at, completed_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          id, session_id, parent_run_id, root_run_id, parent_agent_id, agent_id,
+          task, status, child_run_id, child_session_id, execution_json,
+          instance_json, result, result_json, error, created_at, updated_at,
+          completed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         delegation.id,
         input.sessionId,
         input.parentRunId,
+        delegation.rootRunId,
         delegation.parentAgentId,
         input.agentId,
         input.task,
@@ -67,6 +106,10 @@ export class DelegationStore {
         delegation.execution === null
           ? null
           : JSON.stringify(delegation.execution),
+        delegation.agentInstance === null
+          ? null
+          : JSON.stringify(delegation.agentInstance),
+        null,
         null,
         null,
         now,
@@ -99,6 +142,19 @@ export class DelegationStore {
       )
       .all(parentRunId)
       .map((row) => this.toDelegation(row as Row))
+  }
+
+  listByRootRun(rootRunId: string): Delegation[] {
+    return this.db
+      .prepare(
+        'SELECT * FROM delegations WHERE root_run_id = ? ORDER BY created_at, rowid',
+      )
+      .all(rootRunId)
+      .map((row) => this.toDelegation(row as Row))
+  }
+
+  buildStructuredResult(childRunId: string, summary: string): DelegationResult {
+    return buildDelegationResult(this.db, childRunId, summary)
   }
 
   getByChildRun(childRunId: string): Delegation | null {
@@ -137,7 +193,14 @@ export class DelegationStore {
              ORDER BY rowid DESC LIMIT 1`,
           )
           .get(childRunId) as { content: string } | undefined
-        this.update(id, 'completed', message?.content ?? '')
+        const summary = message?.content ?? ''
+        this.update(
+          id,
+          'completed',
+          summary,
+          null,
+          this.buildStructuredResult(childRunId, summary),
+        )
       } else if (childStatus === 'cancelled') {
         this.update(id, 'cancelled', null, 'recovered: child run cancelled')
       } else {
@@ -181,6 +244,7 @@ export class DelegationStore {
     status: DelegationStatus,
     result?: string | null,
     error?: string | null,
+    structuredResult?: DelegationResult | null,
   ): Delegation {
     const current = this.get(id)
     if (!current) throw new Error('delegation not found')
@@ -197,11 +261,18 @@ export class DelegationStore {
       return current
     this.db
       .prepare(
-        'UPDATE delegations SET status = ?, result = ?, error = ?, updated_at = ?, completed_at = ? WHERE id = ?',
+        'UPDATE delegations SET status = ?, result = ?, result_json = ?, error = ?, updated_at = ?, completed_at = ? WHERE id = ?',
       )
       .run(
         status,
         result ?? current.result,
+        structuredResult === undefined
+          ? current.structuredResult === null
+            ? null
+            : JSON.stringify(current.structuredResult)
+          : structuredResult === null
+            ? null
+            : JSON.stringify(structuredResult),
         error ?? current.error,
         now,
         terminal ? now : current.completedAt,
@@ -215,9 +286,11 @@ export class DelegationStore {
       id: String(row.id),
       sessionId: String(row.session_id),
       parentRunId: String(row.parent_run_id),
+      rootRunId: row.root_run_id == null ? null : String(row.root_run_id),
       parentAgentId:
         row.parent_agent_id == null ? null : String(row.parent_agent_id),
       agentId: String(row.agent_id),
+      agentInstance: parseInstance(row.instance_json),
       task: String(row.task),
       status: String(row.status) as DelegationStatus,
       childRunId: row.child_run_id == null ? null : String(row.child_run_id),
@@ -225,6 +298,7 @@ export class DelegationStore {
         row.child_session_id == null ? null : String(row.child_session_id),
       execution: parseExecution(row.execution_json),
       result: row.result == null ? null : String(row.result),
+      structuredResult: parseResult(row.result_json),
       error: row.error == null ? null : String(row.error),
       createdAt: String(row.created_at),
       updatedAt: String(row.updated_at),

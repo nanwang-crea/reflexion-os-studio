@@ -11,6 +11,8 @@ export interface TurnDraft {
 
 /** 单次 Run 执行期的可变状态：轮次草稿 + 未收尾工具调用行 + 预建行映射。 */
 export interface RunExecutionState {
+  /** 当前持久化 TurnExecution；每次模型调用开始时替换。 */
+  currentTurnId: string | null
   /** 流式中断/失败时未落终态的当前轮次草稿。 */
   turn: TurnDraft | null
   /** 进行中未落终态的工具调用行（同轮并行时可能多个）。 */
@@ -23,6 +25,7 @@ export interface RunExecutionState {
 
 export function createRunExecutionState(): RunExecutionState {
   return {
+    currentTurnId: null,
     turn: null,
     toolCallRowIds: new Set(),
     lastAssistantMessageId: null,

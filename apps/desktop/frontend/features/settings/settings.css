@@ -606,6 +606,19 @@
   line-height: 1.4;
 }
 
+.agent-template-editor {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.agent-template-editor textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
 .runtime-group {
   display: flex;
   flex-direction: column;

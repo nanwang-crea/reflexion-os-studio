@@ -51,6 +51,14 @@ export function listDelegationsByParent(
   })
 }
 
+/** Load one top-level run's complete delegation tree in a single query. */
+export function getDelegationTree(
+  { transport, requestId }: AgentClientRequestOptions,
+  rootRunId: string,
+): Promise<{ delegations: Delegation[] }> {
+  return transport.request('delegation.tree', { requestId, rootRunId })
+}
+
 export function cancelDelegation(
   { transport, requestId }: AgentClientRequestOptions,
   delegationId: string,
@@ -68,6 +76,7 @@ export interface RuntimeAgentClient {
   listDelegationsByParent(
     parentRunId: string,
   ): Promise<{ delegations: Delegation[] }>
+  getDelegationTree(rootRunId: string): Promise<{ delegations: Delegation[] }>
   cancelDelegation(delegationId: string): Promise<{ accepted: boolean }>
 }
 
@@ -87,6 +96,8 @@ export function createRuntimeAgentClient(
         { ...options, requestId: requestId() },
         parentRunId,
       ),
+    getDelegationTree: (rootRunId) =>
+      getDelegationTree({ ...options, requestId: requestId() }, rootRunId),
     cancelDelegation: (delegationId) =>
       cancelDelegation({ ...options, requestId: requestId() }, delegationId),
   }
