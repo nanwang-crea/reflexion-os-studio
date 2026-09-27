@@ -24,6 +24,16 @@ export function ChildAgentTrace({
     ['pending', 'running'].includes(item.status),
   )
   const rootRunId = delegation.rootRunId ?? delegation.parentRunId
+  const selectedStatus =
+    selected.status === 'pending'
+      ? '等待中'
+      : selected.status === 'running'
+        ? '执行中'
+        : selected.status === 'completed'
+          ? '已完成'
+          : selected.status === 'failed'
+            ? '失败'
+            : '已取消'
 
   useEffect(() => setSelected(delegation), [delegation])
 
@@ -131,7 +141,14 @@ export function ChildAgentTrace({
       >
         <header className="child-trace-head">
           <div>
-            <strong>{selected.agentInstance?.name ?? selected.agentId}</strong>
+            <div className="child-trace-title">
+              <strong>
+                {selected.agentInstance?.name ?? selected.agentId}
+              </strong>
+              <span className={`delegation-status ${selected.status}`}>
+                {selectedStatus}
+              </span>
+            </div>
             <span>{selected.task}</span>
           </div>
           <button type="button" className="ghost" onClick={onClose}>

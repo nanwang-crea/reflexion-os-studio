@@ -10,13 +10,14 @@ import { AssistantMessage } from '../message/AssistantMessage'
 import { RunProcess, type ProcessItem } from './RunProcess'
 import { ChangedFiles } from './ChangedFiles'
 import { Artifacts } from './Artifacts'
-import { DelegationList } from './DelegationList'
+import { DelegationList, type DelegationAttention } from './DelegationList'
 import { formatRetryLabel, useRetryCountdown } from './useRetryCountdown'
 
 interface RunBlockProps {
   processItems: ProcessItem[]
   finalItem: ProcessItem | null
   delegations: Delegation[]
+  delegationAttention?: ReadonlyMap<string, DelegationAttention>
   runActive: boolean
   runActivity?: RunActivity
   streaming: Record<string, string>
@@ -167,7 +168,11 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
         projectId={props.projectId}
         onResourceClick={props.onResourceClick}
       />
-      <DelegationList items={props.delegations} runActive={props.runActive} />
+      <DelegationList
+        items={props.delegations}
+        runActive={props.runActive}
+        attentionByAgentId={props.delegationAttention}
+      />
     </div>
   )
 }

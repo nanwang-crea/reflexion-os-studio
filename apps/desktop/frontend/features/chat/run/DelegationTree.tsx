@@ -7,6 +7,14 @@ interface DelegationTreeProps {
   onSelect: (delegation: Delegation) => void
 }
 
+const STATUS_LABELS: Record<Delegation['status'], string> = {
+  pending: '等待中',
+  running: '执行中',
+  completed: '已完成',
+  failed: '失败',
+  cancelled: '已取消',
+}
+
 function Branch({
   parentRunId,
   items,
@@ -26,7 +34,9 @@ function Branch({
             onClick={() => onSelect(item)}
           >
             <span>{item.agentInstance?.name ?? item.agentId}</span>
-            <span>{item.status}</span>
+            <span className={`delegation-tree-status ${item.status}`}>
+              {STATUS_LABELS[item.status]}
+            </span>
             <small>{item.task}</small>
           </button>
           {item.childRunId && (
@@ -52,7 +62,7 @@ export function DelegationTree({
 }: DelegationTreeProps): React.JSX.Element {
   return (
     <nav aria-label="子 Agent 委派树" className="delegation-tree">
-      <strong>完整委派树</strong>
+      <strong>任务委派</strong>
       <Branch
         parentRunId={rootRunId}
         items={items}

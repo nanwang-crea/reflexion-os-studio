@@ -16,6 +16,7 @@ import { ApprovalQueue } from './approvals/ApprovalQueue'
 import { DangerLeaseBanner } from './approvals/DangerLeaseBanner'
 import { AssistantMessage } from './message/AssistantMessage'
 import { RunBlock } from './run/RunBlock'
+import type { DelegationAttention } from './run/DelegationList'
 import { QueueBar } from './QueueBar'
 import { PlanCard } from './run/PlanCard'
 import { RunEventCard } from './run/RunEventCard'
@@ -161,6 +162,22 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
       ),
     [props.pendingInteractions, runIds],
   )
+  const delegationAttention = useMemo(() => {
+    const attention = new Map<string, DelegationAttention>()
+    for (const entry of sessionApprovals) {
+      const instanceId = entry.context?.agent?.instanceId
+      if (instanceId !== null && instanceId !== undefined) {
+        attention.set(instanceId, 'approval')
+      }
+    }
+    for (const entry of sessionInteractions) {
+      const instanceId = entry.agent?.instanceId
+      if (instanceId !== null && instanceId !== undefined) {
+        attention.set(instanceId, 'input')
+      }
+    }
+    return attention
+  }, [sessionApprovals, sessionInteractions])
   const runById = useMemo(() => {
     const map = new Map<string, Run>()
     for (const run of runs) map.set(run.id, run)
@@ -331,6 +348,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
                     delegations={
                       delegationsByRun.get(block.runId) ?? EMPTY_DELEGATIONS
                     }
+                    delegationAttention={delegationAttention}
                     runActive={activeRunIds.has(block.runId)}
                     runActivity={props.runActivities[block.runId]}
                     streaming={props.streaming}
@@ -479,7 +497,9 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
         </div>
       )}
 
-      {sessionId !== null && <QueueBar sessionId={sessionId} />}
+      {sessionId !== null && (
+        <QueueBar sessionId={sessionId} agentTemplates={props.agentTemplates} />
+      )}
 
       <div className="composer-wrap">
         {props.sessionData?.session?.executionMode === 'plan' && (

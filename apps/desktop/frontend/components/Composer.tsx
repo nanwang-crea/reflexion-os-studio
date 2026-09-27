@@ -12,6 +12,7 @@ import {
   PERMISSION_PRESET_LABELS,
 } from '../hooks/permissions/usePermissionPreset'
 import { ChevronIcon, SendIcon, ShieldIcon, StopIcon } from '../ui/icons'
+import { ComposerRunConfig } from './ComposerRunConfig'
 
 export interface ComposerModelOption {
   /** `${providerId}::${model}` */
@@ -78,6 +79,19 @@ export function Composer(props: ComposerProps): React.JSX.Element {
     props.modelOptions !== undefined &&
     props.modelOptions.length > 0 &&
     props.onModelChange !== undefined
+  const enabledAgentTemplates = useMemo(
+    () => props.agentTemplates?.filter((template) => template.enabled) ?? [],
+    [props.agentTemplates],
+  )
+
+  useEffect(() => {
+    if (
+      agentTemplateId !== '' &&
+      !enabledAgentTemplates.some((template) => template.id === agentTemplateId)
+    ) {
+      setAgentTemplateId('')
+    }
+  }, [agentTemplateId, enabledAgentTemplates])
 
   const slashMatches = useMemo(() => {
     if (props.skills === undefined) return []
@@ -249,28 +263,27 @@ export function Composer(props: ComposerProps): React.JSX.Element {
             <ChevronIcon />
           </label>
         )}
-        {props.advanced && <AdvancedPermissionMenu advanced={props.advanced} />}
-        {props.agentTemplates && props.agentTemplates.length > 0 && (
-          <label
-            className="composer-select"
-            title="本次发送的默认子 Agent 模板"
+        {(props.advanced || enabledAgentTemplates.length > 0) && (
+          <ComposerRunConfig
+            advanced={props.advanced}
+            agentTemplates={enabledAgentTemplates}
+            agentTemplateId={agentTemplateId}
+            onAgentTemplateChange={setAgentTemplateId}
+          />
+        )}
+        {agentTemplateId !== '' && (
+          <button
+            type="button"
+            className="composer-delegation-chip"
+            title="清除本次任务的委派模板"
+            onClick={() => setAgentTemplateId('')}
           >
-            <span>子 Agent</span>
-            <select
-              value={agentTemplateId}
-              onChange={(event) => setAgentTemplateId(event.target.value)}
-            >
-              <option value="">动态选择</option>
-              {props.agentTemplates
-                .filter((template) => template.enabled)
-                .map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.name}
-                  </option>
-                ))}
-            </select>
-            <ChevronIcon />
-          </label>
+            委派：
+            {enabledAgentTemplates.find(
+              (template) => template.id === agentTemplateId,
+            )?.name ?? agentTemplateId}
+            <span aria-hidden>×</span>
+          </button>
         )}
         <span className="bar-spacer" />
         {showModelSelect && (
@@ -317,83 +330,6 @@ export function Composer(props: ComposerProps): React.JSX.Element {
           </button>
         )}
       </div>
-    </div>
-  )
-}
-
-/** 高级入口：ask-everything 开关（仅当前会话）与 Danger 能力（两段确认在对话框内完成）。 */
-function AdvancedPermissionMenu({
-  advanced,
-}: {
-  advanced: ComposerAdvancedState
-}): React.JSX.Element {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement | null>(null)
-  useEffect(() => {
-    if (!open) return
-    const onPointerDown = (event: MouseEvent): void => {
-      if (!ref.current?.contains(event.target as Node)) setOpen(false)
-    }
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [open])
-  return (
-    <div className="composer-advanced" ref={ref}>
-      <button
-        type="button"
-        className={`composer-advanced-trigger${advanced.dangerActive ? ' danger-on' : ''}`}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-      >
-        高级
-      </button>
-      {open && (
-        <div className="composer-advanced-panel" role="menu">
-          <label className="advanced-row">
-            <input
-              type="checkbox"
-              checked={advanced.approvalOverride === 'ask-everything'}
-              onChange={(event) =>
-                advanced.onApprovalOverrideChange(
-                  event.target.checked ? 'ask-everything' : 'default',
-                )
-              }
-            />
-            <span>
-              所有操作均询问
-              <small>
-                本会话内读取/写入/删除/命令全部逐次确认（硬拒绝不变）
-              </small>
-            </span>
-          </label>
-          <div className="advanced-sep" />
-          <button
-            type="button"
-            role="menuitem"
-            className="advanced-danger"
-            disabled={advanced.dangerActive}
-            onClick={() => {
-              setOpen(false)
-              advanced.onOpenDanger()
-            }}
-          >
-            {advanced.dangerActive
-              ? '危险访问已启用（见状态条）'
-              : '危险：系统范围完全访问…'}
-            <small>
-              需两次明确确认；平台无凭据守卫时报错并拒绝启用（fail-closed）
-            </small>
-          </button>
-        </div>
-      )}
     </div>
   )
 }

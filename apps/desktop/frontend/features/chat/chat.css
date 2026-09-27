@@ -1412,6 +1412,11 @@
   background: var(--bg-elevated);
 }
 
+.delegation-row.needs-attention {
+  border-color: color-mix(in srgb, var(--warning-text) 55%, var(--border));
+  background: color-mix(in srgb, var(--warning-text) 6%, var(--bg-elevated));
+}
+
 .delegation-open {
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr) auto;
@@ -1469,6 +1474,11 @@
 
 .delegation-status.cancelled {
   color: var(--text-muted);
+}
+
+.trace-status.attention {
+  color: var(--warning-text);
+  font-weight: 600;
 }
 
 .delegation-content {
@@ -1594,6 +1604,11 @@
   min-width: 0;
 }
 
+.child-trace-head .child-trace-title {
+  flex-direction: row;
+  align-items: center;
+}
+
 .child-trace-head span {
   color: var(--text-muted);
   font-size: 12px;
@@ -1646,17 +1661,42 @@
   background: var(--bg-elevated);
 }
 
+.delegation-tree-status {
+  align-self: start;
+  padding: 1px 7px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--surface-hover);
+  font-size: 11px;
+}
+
+.delegation-tree-status.running,
+.delegation-tree-status.pending {
+  color: var(--accent);
+}
+
+.delegation-tree-status.completed {
+  color: var(--ok, #4ade80);
+}
+
+.delegation-tree-status.failed {
+  color: var(--danger);
+}
+
 .delegation-tree-branch small {
   grid-column: 1 / -1;
   color: var(--text-muted);
 }
 
-/* Composer 高级权限入口（ask-everything / Danger） */
-.composer-advanced {
+/* Composer 运行配置（任务委派 / 高级权限） */
+.composer-run-config {
   position: relative;
   display: inline-flex;
 }
-.composer-advanced-trigger {
+.composer-run-config-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 12px;
   padding: 3px 10px;
   border-radius: 999px;
@@ -1665,19 +1705,19 @@
   color: var(--text-secondary);
   cursor: pointer;
 }
-.composer-advanced-trigger:hover {
+.composer-run-config-trigger:hover {
   background: var(--bg-hover);
   color: var(--text);
 }
-.composer-advanced-trigger.danger-on {
+.composer-run-config-trigger.danger-on {
   border-color: var(--danger);
   color: var(--danger);
 }
-.composer-advanced-panel {
+.composer-run-config-panel {
   position: absolute;
   bottom: calc(100% + 8px);
   left: 0;
-  width: 300px;
+  width: 320px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1687,6 +1727,59 @@
   background: var(--bg-elevated);
   box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
   z-index: 40;
+}
+.run-config-section {
+  display: grid;
+  gap: 7px;
+}
+.run-config-section > strong {
+  color: var(--text);
+  font-size: 13px;
+}
+.run-config-section > small {
+  margin-top: -4px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.run-config-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.run-config-field select {
+  min-width: 150px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+.composer-delegation-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 220px;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--info) 45%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--info) 9%, transparent);
+  color: var(--info);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer-delegation-chip:hover {
+  background: color-mix(in srgb, var(--info) 15%, transparent);
+}
+.composer-delegation-chip span {
+  color: var(--text-muted);
+  font-size: 14px;
 }
 .advanced-row {
   display: flex;

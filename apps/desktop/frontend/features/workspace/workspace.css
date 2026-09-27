@@ -448,16 +448,28 @@
   overflow: hidden;
 }
 
+.git-source-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px 2px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
 .git-source-tabs {
   display: flex;
-  gap: 4px;
-  padding: 6px 8px 0;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--bg-elevated);
 }
 
 .git-source-tabs button {
   border: 0;
   border-radius: 6px;
-  padding: 4px 8px;
+  padding: 3px 7px;
   color: var(--text-muted);
   background: transparent;
 }
@@ -1326,6 +1338,34 @@
 .project-files-tab.active {
   color: var(--text);
   border-bottom-color: var(--text);
+}
+
+.project-files-subtabs {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  padding: 7px 8px 4px;
+}
+
+.project-files-subtabs button {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.project-files-subtabs button:hover {
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+}
+
+.project-files-subtabs button.active {
+  border-color: var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text);
 }
 
 .project-files-body {

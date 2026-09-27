@@ -7,7 +7,10 @@ import { ChildAgentTrace } from './ChildAgentTrace'
 interface DelegationListProps {
   items: Delegation[]
   runActive: boolean
+  attentionByAgentId?: ReadonlyMap<string, DelegationAttention>
 }
+
+export type DelegationAttention = 'approval' | 'input'
 
 const STATUS_LABELS: Record<Delegation['status'], string> = {
   pending: '等待中',
@@ -21,6 +24,7 @@ const STATUS_LABELS: Record<Delegation['status'], string> = {
 export function DelegationList({
   items,
   runActive,
+  attentionByAgentId,
 }: DelegationListProps): React.JSX.Element {
   const [open, setOpen] = useState(true)
   const [traceId, setTraceId] = useState<string | null>(null)
@@ -52,67 +56,80 @@ export function DelegationList({
       </button>
       {open && (
         <div className="delegation-body">
-          {items.map((delegation) => (
-            <div
-              key={delegation.id}
-              className={`delegation-row status-${delegation.status}`}
-            >
-              <button
-                type="button"
-                className="delegation-open"
-                disabled={delegation.childSessionId === null}
-                onClick={() => setTraceId(delegation.id)}
+          {items.map((delegation) => {
+            const attention = delegation.agentInstance
+              ? attentionByAgentId?.get(delegation.agentInstance.id)
+              : undefined
+            return (
+              <div
+                key={delegation.id}
+                className={`delegation-row status-${delegation.status}${
+                  attention ? ' needs-attention' : ''
+                }`}
               >
-                <span
-                  className={`trace-dot${
-                    delegation.status === 'pending' ||
-                    delegation.status === 'running'
-                      ? ' pulse'
-                      : ''
-                  }`}
-                  aria-hidden
-                />
-                <span className="trace-name">
-                  {delegation.agentInstance?.name ?? delegation.agentId}
-                </span>
-                <span className="trace-summary">
-                  {delegation.task.replace(/\s+/g, ' ').trim()}
-                </span>
-                <span className="trace-status">
-                  {STATUS_LABELS[delegation.status]}
-                </span>
-              </button>
-              {['pending', 'running'].includes(delegation.status) && (
                 <button
                   type="button"
-                  className="ghost danger delegation-cancel"
-                  disabled={cancellingId === delegation.id}
-                  onClick={() => {
-                    setCancellingId(delegation.id)
-                    setActionError(null)
-                    void cancelDelegation(delegation.id)
-                      .then(({ accepted }) => {
-                        if (!accepted)
-                          setActionError('子 Agent 已结束或无法取消')
-                      })
-                      .catch((caught) =>
-                        setActionError(
-                          caught instanceof Error
-                            ? caught.message
-                            : String(caught),
-                        ),
-                      )
-                      .finally(() => setCancellingId(null))
-                  }}
+                  className="delegation-open"
+                  disabled={delegation.childSessionId === null}
+                  onClick={() => setTraceId(delegation.id)}
                 >
-                  {cancellingId === delegation.id ? '取消中…' : '取消'}
+                  <span
+                    className={`trace-dot${
+                      delegation.status === 'pending' ||
+                      delegation.status === 'running'
+                        ? ' pulse'
+                        : ''
+                    }`}
+                    aria-hidden
+                  />
+                  <span className="trace-name">
+                    {delegation.agentInstance?.name ?? delegation.agentId}
+                  </span>
+                  <span className="trace-summary">
+                    {delegation.task.replace(/\s+/g, ' ').trim()}
+                  </span>
+                  <span
+                    className={`trace-status${attention ? ' attention' : ''}`}
+                  >
+                    {attention === 'approval'
+                      ? '等待审批'
+                      : attention === 'input'
+                        ? '等待回答'
+                        : STATUS_LABELS[delegation.status]}
+                  </span>
                 </button>
-              )}
-              {delegation.error && (
-                <div className="delegation-error">{delegation.error}</div>
-              )}
-            </div>
-          ))}
+                {['pending', 'running'].includes(delegation.status) && (
+                  <button
+                    type="button"
+                    className="ghost danger delegation-cancel"
+                    disabled={cancellingId === delegation.id}
+                    onClick={() => {
+                      setCancellingId(delegation.id)
+                      setActionError(null)
+                      void cancelDelegation(delegation.id)
+                        .then(({ accepted }) => {
+                          if (!accepted)
+                            setActionError('子 Agent 已结束或无法取消')
+                        })
+                        .catch((caught) =>
+                          setActionError(
+                            caught instanceof Error
+                              ? caught.message
+                              : String(caught),
+                          ),
+                        )
+                        .finally(() => setCancellingId(null))
+                    }}
+                  >
+                    {cancellingId === delegation.id ? '取消中…' : '取消'}
+                  </button>
+                )}
+                {delegation.error && (
+                  <div className="delegation-error">{delegation.error}</div>
+                )}
+              </div>
+            )
+          })}
           {actionError && (
             <div className="delegation-error" role="alert">
               {actionError}

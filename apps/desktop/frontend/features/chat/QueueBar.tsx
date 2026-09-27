@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { QueueEntry } from '@reflexion-os-studio/runtime-client'
+import type {
+  AgentTemplate,
+  QueueEntry,
+} from '@reflexion-os-studio/runtime-client'
 import {
   listQueue,
   onQueueChanged,
@@ -14,6 +17,7 @@ const PREVIEW_MAX = 80
 
 interface QueueBarProps {
   sessionId: string
+  agentTemplates: AgentTemplate[]
 }
 
 /**
@@ -165,7 +169,10 @@ export function QueueBar(props: QueueBarProps): React.JSX.Element {
               )}
             {entry.agentTemplateId && editingId !== entry.id && (
               <span className="queue-trusted-badge">
-                模板 {entry.agentTemplateId}
+                委派：
+                {props.agentTemplates.find(
+                  (template) => template.id === entry.agentTemplateId,
+                )?.name ?? entry.agentTemplateId}
               </span>
             )}
             <span className="queue-actions">

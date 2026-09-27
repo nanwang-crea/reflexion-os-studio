@@ -32,10 +32,12 @@ interface ProjectFilesProps {
   onFocusConsumed?: () => void
 }
 
-type View = 'files' | 'git' | 'history' | 'assets'
+type View = 'files' | 'git' | 'assets'
+type GitView = 'changes' | 'history'
 
 /**
- * 侧边栏的项目文件工作区：文件 / Git 变更 / 提交历史 / 资产 四视图 + 顶部文件名搜索。
+ * 侧边栏的项目文件工作区：文件 / Git / 资产三视图 + 顶部文件名搜索。
+ * Git 内部再区分工作树变更与提交历史，避免窄侧栏堆叠四个一级标签。
  * 文件树根目录即当前项目目录，惰性展开；搜索用只读 glob（workspace.search_files）
  * 全量匹配文件名，命中即点开右侧查看器。切换项目时重新触发一次索引。
  */
@@ -43,6 +45,7 @@ export function ProjectFiles(props: ProjectFilesProps): React.JSX.Element {
   const project = props.project
   const projectId = project?.id ?? null
   const [view, setView] = useState<View>('files')
+  const [gitView, setGitView] = useState<GitView>('changes')
   const [query, setQuery] = useState('')
   const [searchResults, setSearchResults] = useState<{
     entries: WorkspaceEntry[]
@@ -58,6 +61,7 @@ export function ProjectFiles(props: ProjectFilesProps): React.JSX.Element {
   // 切换项目：重置视图、搜索并重新触发一次索引（索引按钮不再暴露）。
   useEffect(() => {
     setView('files')
+    setGitView('changes')
     setQuery('')
     setSearchResults(null)
     setSearchError(null)
@@ -139,14 +143,7 @@ export function ProjectFiles(props: ProjectFilesProps): React.JSX.Element {
           className={`project-files-tab${view === 'git' ? ' active' : ''}`}
           onClick={() => setView('git')}
         >
-          Git 变更
-        </button>
-        <button
-          type="button"
-          className={`project-files-tab${view === 'history' ? ' active' : ''}`}
-          onClick={() => setView('history')}
-        >
-          历史
+          Git
         </button>
         <button
           type="button"
@@ -193,26 +190,58 @@ export function ProjectFiles(props: ProjectFilesProps): React.JSX.Element {
             )}
           </>
         ) : view === 'git' ? (
-          <GitChanges
-            projectId={project.id}
-            activeSessionId={props.activeSessionId}
-            systemReady={props.systemReady}
-            onOpenFile={props.onOpenFile}
-            onOpenDiff={props.onOpenDiff}
-            guardDirtyBuffersThen={props.guardDirtyBuffersThen}
-            reloadAllTextTabs={props.reloadAllTextTabs}
-            loadGitStatus={repository.refresh}
-            onAfterMutation={() => void repository.refresh().catch(() => {})}
-          />
-        ) : view === 'history' ? (
-          <GitHistory
-            projectId={project.id}
-            systemReady={props.systemReady}
-            onOpenDiff={props.onOpenDiff}
-            guardDirtyBuffersThen={props.guardDirtyBuffersThen}
-            reloadAllTextTabs={props.reloadAllTextTabs}
-            onAfterMutation={() => void repository.refresh().catch(() => {})}
-          />
+          <>
+            <div
+              className="project-files-subtabs"
+              role="tablist"
+              aria-label="Git 视图"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={gitView === 'changes'}
+                className={gitView === 'changes' ? 'active' : ''}
+                onClick={() => setGitView('changes')}
+              >
+                变更
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={gitView === 'history'}
+                className={gitView === 'history' ? 'active' : ''}
+                onClick={() => setGitView('history')}
+              >
+                历史
+              </button>
+            </div>
+            {gitView === 'changes' ? (
+              <GitChanges
+                projectId={project.id}
+                activeSessionId={props.activeSessionId}
+                systemReady={props.systemReady}
+                onOpenFile={props.onOpenFile}
+                onOpenDiff={props.onOpenDiff}
+                guardDirtyBuffersThen={props.guardDirtyBuffersThen}
+                reloadAllTextTabs={props.reloadAllTextTabs}
+                loadGitStatus={repository.refresh}
+                onAfterMutation={() =>
+                  void repository.refresh().catch(() => {})
+                }
+              />
+            ) : (
+              <GitHistory
+                projectId={project.id}
+                systemReady={props.systemReady}
+                onOpenDiff={props.onOpenDiff}
+                guardDirtyBuffersThen={props.guardDirtyBuffersThen}
+                reloadAllTextTabs={props.reloadAllTextTabs}
+                onAfterMutation={() =>
+                  void repository.refresh().catch(() => {})
+                }
+              />
+            )}
+          </>
         ) : (
           <AssetsPanel
             projectId={project.id}
