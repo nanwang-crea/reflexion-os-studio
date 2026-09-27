@@ -319,6 +319,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
             kind: event.kind,
             questions: event.questions,
             runId: event.runId,
+            ...(event.agent !== undefined ? { agent: event.agent } : {}),
           })
           scheduleToolRefresh()
           return

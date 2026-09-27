@@ -141,13 +141,24 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
     }
     return groups
   }, [toolCalls])
-  // 审批卡只展示当前会话的等待项（切会话时不串场）。
+  // 当前父会话统一承载根 Run 及其整棵委派树的审批与结构化提问。
   const sessionApprovals = useMemo(
-    () => props.pendingApprovals.filter((entry) => runIds.has(entry.runId)),
+    () =>
+      props.pendingApprovals.filter(
+        (entry) =>
+          runIds.has(entry.runId) ||
+          (entry.context?.agent !== undefined &&
+            runIds.has(entry.context.agent.rootRunId)),
+      ),
     [props.pendingApprovals, runIds],
   )
   const sessionInteractions = useMemo(
-    () => props.pendingInteractions.filter((entry) => runIds.has(entry.runId)),
+    () =>
+      props.pendingInteractions.filter(
+        (entry) =>
+          runIds.has(entry.runId) ||
+          (entry.agent !== undefined && runIds.has(entry.agent.rootRunId)),
+      ),
     [props.pendingInteractions, runIds],
   )
   const runById = useMemo(() => {

@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react'
-import type {
-  Delegation,
-  MutationReceipt,
-} from '@reflexion-os-studio/runtime-client'
-import { getDelegationTree, listMutationReceipts } from '../../../api/agents'
+import { useEffect, useMemo, useState } from 'react'
+import type { Delegation } from '@reflexion-os-studio/runtime-client'
+import { getDelegationTree } from '../../../api/agents'
 import { getSessionData, type SessionData } from '../../../api/sessions'
+import { buildChatBlocks, computeRunDurationMs } from '../chat-blocks'
 import { DelegationTree } from './DelegationTree'
+import { RunBlock } from './RunBlock'
 
 interface ChildAgentTraceProps {
   delegation: Delegation
@@ -20,7 +19,6 @@ export function ChildAgentTrace({
   const [data, setData] = useState<SessionData | null>(null)
   const [selected, setSelected] = useState(delegation)
   const [tree, setTree] = useState<Delegation[]>([])
-  const [receipts, setReceipts] = useState<MutationReceipt[]>([])
   const [error, setError] = useState<string | null>(null)
   const running = tree.some((item) =>
     ['pending', 'running'].includes(item.status),
@@ -37,13 +35,15 @@ export function ChildAgentTrace({
       void Promise.all([
         getSessionData(sessionId),
         getDelegationTree(rootRunId),
-        listMutationReceipts(rootRunId),
       ])
-        .then(([next, nextTree, nextReceipts]) => {
+        .then(([next, nextTree]) => {
           if (!disposed) {
             setData(next)
             setTree(nextTree)
-            setReceipts(nextReceipts)
+            setSelected(
+              (current) =>
+                nextTree.find((item) => item.id === current.id) ?? current,
+            )
             setError(null)
           }
         })
@@ -60,6 +60,66 @@ export function ChildAgentTrace({
     }
   }, [rootRunId, running, selected.childSessionId])
 
+  const activeRunIds = useMemo(
+    () =>
+      new Set(
+        (data?.runs ?? [])
+          .filter((run) =>
+            [
+              'created',
+              'running',
+              'awaiting_approval',
+              'awaiting_user_input',
+            ].includes(run.status),
+          )
+          .map((run) => run.id),
+      ),
+    [data],
+  )
+  const runById = useMemo(
+    () => new Map((data?.runs ?? []).map((run) => [run.id, run])),
+    [data],
+  )
+  const chatBlocks = useMemo(() => {
+    if (data === null) return []
+    const callsByMessage = new Map<string, SessionData['toolCalls']>()
+    for (const call of data.toolCalls) {
+      if (call.messageId === null) continue
+      const calls = callsByMessage.get(call.messageId)
+      if (calls) calls.push(call)
+      else callsByMessage.set(call.messageId, [call])
+    }
+    return buildChatBlocks(data.messages, callsByMessage)
+  }, [data])
+  const streaming = useMemo(() => {
+    if (activeRunIds.size === 0 || data === null) return {}
+    return Object.fromEntries(
+      data.messages
+        .filter(
+          (message) =>
+            message.role === 'assistant' &&
+            message.runId !== null &&
+            activeRunIds.has(message.runId) &&
+            message.content !== '',
+        )
+        .map((message) => [message.id, message.content]),
+    )
+  }, [activeRunIds, data])
+  const streamingReasoning = useMemo(() => {
+    if (activeRunIds.size === 0 || data === null) return {}
+    return Object.fromEntries(
+      data.messages
+        .filter(
+          (message) =>
+            message.role === 'assistant' &&
+            message.runId !== null &&
+            activeRunIds.has(message.runId) &&
+            message.reasoning !== '',
+        )
+        .map((message) => [message.id, message.reasoning]),
+    )
+  }, [activeRunIds, data])
+
   return (
     <div className="child-trace-backdrop" role="presentation" onClick={onClose}>
       <section
@@ -71,7 +131,7 @@ export function ChildAgentTrace({
       >
         <header className="child-trace-head">
           <div>
-            <strong>{selected.agentId}</strong>
+            <strong>{selected.agentInstance?.name ?? selected.agentId}</strong>
             <span>{selected.task}</span>
           </div>
           <button type="button" className="ghost" onClick={onClose}>
@@ -93,43 +153,36 @@ export function ChildAgentTrace({
           {!data && selected.childSessionId !== null && !error && (
             <p>加载轨迹…</p>
           )}
-          {data?.runs.map((run) => (
-            <article className="child-trace-run" key={run.id}>
-              <div className="child-trace-run-head">
-                <span>{run.model ?? '未指定模型'}</span>
-                <span>{run.status}</span>
-              </div>
-              {data.messages
-                .filter((message) => message.runId === run.id)
-                .map((message) => (
-                  <div className="child-trace-message" key={message.id}>
-                    <span>{message.role}</span>
-                    <pre>{message.content || '（无正文）'}</pre>
-                  </div>
-                ))}
-              {data.toolCalls
-                .filter((call) => call.runId === run.id)
-                .map((call) => (
-                  <div className="child-trace-tool" key={call.id}>
-                    <span>{call.toolName}</span>
-                    <span>{call.status}</span>
-                    {call.output?.content && <pre>{call.output.content}</pre>}
-                  </div>
-                ))}
-              {receipts
-                .filter((receipt) => receipt.runId === run.id)
-                .map((receipt) => (
-                  <div className="child-trace-tool" key={receipt.id}>
-                    <span>变更归属 · {receipt.toolName}</span>
-                    <span>
-                      {receipt.changedFiles
-                        .map((file) => `${file.action}: ${file.path}`)
-                        .join('、')}
-                    </span>
-                  </div>
-                ))}
-            </article>
-          ))}
+          <div className="child-trace-stream">
+            {chatBlocks.map((block) => {
+              if (block.kind !== 'run') return null
+              const run = runById.get(block.runId) ?? null
+              const finalMessage =
+                block.finalItem?.message ??
+                block.processItems[block.processItems.length - 1]?.message
+              return (
+                <RunBlock
+                  key={block.runId}
+                  processItems={block.processItems}
+                  finalItem={block.finalItem}
+                  delegations={[]}
+                  runActive={activeRunIds.has(block.runId)}
+                  streaming={streaming}
+                  streamingReasoning={streamingReasoning}
+                  runDurationMs={
+                    finalMessage
+                      ? computeRunDurationMs(run, finalMessage)
+                      : null
+                  }
+                  runUsage={run?.usage ?? null}
+                  runFailed={run?.status === 'failed'}
+                  canRetry={false}
+                  onRetry={() => undefined}
+                  projectId={data?.session?.projectId ?? ''}
+                />
+              )
+            })}
+          </div>
         </div>
       </section>
     </div>

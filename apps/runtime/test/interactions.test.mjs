@@ -48,10 +48,53 @@ function createGateway() {
         [...interactions.values()].filter((item) => item.status === 'pending'),
     },
     runs: {
+      get: (id) =>
+        id === 'run-1'
+          ? {
+              id: 'run-1',
+              sessionId: 'child-session',
+              agentId: 'agent-1',
+              parentRunId: 'root-run',
+              delegationId: 'delegation-1',
+            }
+          : id === 'root-run'
+            ? {
+                id: 'root-run',
+                sessionId: 'root-session',
+                agentId: null,
+                parentRunId: null,
+                delegationId: null,
+              }
+            : null,
       setIntermediateStatus: (id, status) => runStatuses.push({ id, status }),
+    },
+    delegations: {
+      get: (id) =>
+        id === 'delegation-1'
+          ? {
+              rootRunId: 'root-run',
+              agentInstance: { name: '代码审查员' },
+              execution: { depth: 1 },
+            }
+          : null,
+    },
+    messages: {
+      listBySession: (id) =>
+        id === 'root-session'
+          ? [
+              {
+                runId: 'root-run',
+                role: 'user',
+                content: '审查 Agent 实现',
+              },
+            ]
+          : [],
     },
     toolCalls: {
       markStatus: (id, status) => toolStatuses.push({ id, status }),
+    },
+    turnExecutions: {
+      latestForRun: () => null,
     },
   })
   const emitter = new RunEventEmitter('run-1', (event) => events.push(event))
@@ -71,6 +114,14 @@ test('structured question pauses the run and resumes with stable ids', async () 
   const required = context.events[0]
   assert.equal(required.type, 'interaction.required')
   assert.equal(required.toolCallId, 'call-1')
+  assert.deepEqual(required.agent, {
+    instanceId: 'agent-1',
+    displayName: '代码审查员',
+    depth: 1,
+    rootRunId: 'root-run',
+    rootTask: '审查 Agent 实现',
+  })
+  assert.deepEqual(context.gateway.listPending()[0].agent, required.agent)
   assert.equal(context.gateway.hasPendingRun('run-1'), true)
 
   const answers = [

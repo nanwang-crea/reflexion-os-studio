@@ -58,6 +58,16 @@ export const ApprovalChoiceSchema = z.object({
 })
 export type ApprovalChoice = z.infer<typeof ApprovalChoiceSchema>
 
+/** Run 所属 Agent 的脱敏展示信息；审批与结构化提问共用。 */
+export const AgentContextSchema = z.object({
+  instanceId: z.string().min(1).nullable(),
+  displayName: z.string().min(1),
+  depth: z.number().int().nonnegative().max(4),
+  rootRunId: z.string().min(1),
+  rootTask: z.string().min(1),
+})
+export type AgentContextView = z.infer<typeof AgentContextSchema>
+
 /** 审批上下文：脱敏后的执行环境描述，供 UI 以短标签展示。 */
 export const ApprovalContextSchema = z.object({
   displayCwd: z.string().nullable(),
@@ -67,15 +77,7 @@ export const ApprovalContextSchema = z.object({
   network: z.boolean(),
   escalation: z.boolean(),
   justification: z.string().nullable(),
-  agent: z
-    .object({
-      instanceId: z.string().min(1).nullable(),
-      displayName: z.string().min(1),
-      depth: z.number().int().nonnegative().max(4),
-      rootRunId: z.string().min(1),
-      rootTask: z.string().min(1),
-    })
-    .optional(),
+  agent: AgentContextSchema.optional(),
 })
 export type ApprovalContextView = z.infer<typeof ApprovalContextSchema>
 

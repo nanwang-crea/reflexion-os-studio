@@ -1412,6 +1412,35 @@
   background: var(--bg-elevated);
 }
 
+.delegation-open {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.delegation-open:hover:not(:disabled) .trace-name {
+  color: var(--text);
+}
+
+.delegation-open:disabled {
+  cursor: default;
+}
+
+.delegation-cancel {
+  flex: none;
+  padding: 2px 6px;
+  color: var(--danger);
+  font-size: 11px;
+}
+
 .delegation-status {
   flex: none;
   font-size: 11px;
@@ -1540,7 +1569,7 @@
 }
 
 .child-trace-panel {
-  width: min(640px, 88vw);
+  width: min(780px, 92vw);
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -1577,35 +1606,12 @@
   padding: 16px;
 }
 
-.child-trace-run {
+.child-trace-stream {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-
-.child-trace-run-head,
-.child-trace-message,
-.child-trace-tool {
-  padding: 9px 10px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  background: var(--bg-elevated);
-}
-
-.child-trace-message > span,
-.child-trace-tool > span {
-  margin-right: 8px;
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.child-trace-message pre,
-.child-trace-tool pre {
-  margin: 6px 0 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font: inherit;
-  color: var(--text-secondary);
+  gap: 22px;
+  width: min(100%, var(--chat-col));
+  margin: 0 auto;
 }
 
 .delegation-tree {
@@ -1732,6 +1738,18 @@
 .interaction-queue {
   display: grid;
   gap: 6px;
+}
+
+.agent-source {
+  color: var(--info);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.interaction-agent-source {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .plan-mode-banner {

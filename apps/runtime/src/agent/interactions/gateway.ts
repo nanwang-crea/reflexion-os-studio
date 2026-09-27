@@ -8,6 +8,7 @@ import {
 } from '@reflexion-os-studio/contracts'
 import type { RunEventEmitter } from '../../events.js'
 import type { Store } from '../../store/index.js'
+import { agentContextForRun } from '../run/agent-context.js'
 
 interface PendingInteraction {
   runId: string
@@ -37,6 +38,8 @@ export class InteractionGateway {
 
   requestQuestions(input: UserQuestionRequest): Promise<UserQuestionAnswer[]> {
     const interactionId = randomUUID()
+    const run = this.store.runs.get(input.runId)
+    const agent = run ? agentContextForRun(this.store, run) : undefined
     this.store.transaction(() => {
       this.store.interactions.create({
         id: interactionId,
@@ -97,6 +100,7 @@ export class InteractionGateway {
         sessionId: input.sessionId,
         kind: input.kind ?? 'user_question',
         questions: input.questions,
+        ...(agent ? { agent } : {}),
       })
     })
   }
@@ -123,7 +127,12 @@ export class InteractionGateway {
   }
 
   listPending(): UserInteraction[] {
-    return this.store.interactions.listPending()
+    return this.store.interactions.listPending().map((interaction) => {
+      const run = this.store.runs.get(interaction.runId)
+      return run
+        ? { ...interaction, agent: agentContextForRun(this.store, run) }
+        : interaction
+    })
   }
 
   hasPendingRun(runId: string): boolean {

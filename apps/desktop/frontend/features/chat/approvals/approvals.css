@@ -49,8 +49,15 @@
   color: var(--text-muted);
 }
 .approval-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
   font-size: 13px;
   font-weight: 600;
+}
+.approval-title > .agent-source {
+  flex-basis: 100%;
+  margin-bottom: 2px;
 }
 .approval-risk-label {
   font-weight: 400;

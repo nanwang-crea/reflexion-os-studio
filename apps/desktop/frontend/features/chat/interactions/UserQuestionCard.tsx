@@ -45,6 +45,13 @@ export function UserQuestionCard(props: {
         props.interaction.kind === 'plan_approval' ? '计划审批' : 'Agent 提问'
       }
     >
+      {props.interaction.agent !== undefined &&
+        props.interaction.agent.depth > 0 && (
+          <div className="agent-source interaction-agent-source">
+            {props.interaction.agent.displayName} · 子 Agent · 第{' '}
+            {props.interaction.agent.depth} 层
+          </div>
+        )}
       {props.interaction.questions.map((question) => (
         <fieldset key={question.id}>
           <legend>

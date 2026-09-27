@@ -46,6 +46,7 @@ export function usePendingInteractions() {
         runId: entry.runId,
         kind: entry.kind,
         questions: entry.questions,
+        ...(entry.agent !== undefined ? { agent: entry.agent } : {}),
       })),
     )
   }, [])

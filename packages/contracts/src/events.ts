@@ -25,6 +25,7 @@ import {
   UserQuestionSchema,
 } from './interactions.js'
 import {
+  AgentContextSchema,
   ApprovalChoiceSchema,
   ApprovalContextSchema,
   ApprovalRiskSchema,
@@ -199,6 +200,7 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     sessionId: z.string().min(1),
     kind: InteractionKindSchema,
     questions: z.array(UserQuestionSchema).min(1).max(3),
+    agent: AgentContextSchema.optional(),
   }),
   RunEnvelopeSchema.extend({
     type: z.literal('interaction.resolved'),

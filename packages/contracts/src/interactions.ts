@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { AgentContextSchema } from './permissions.js'
 
 export const UserQuestionOptionSchema = z.object({
   id: z.string().min(1),
@@ -74,6 +75,8 @@ export const UserInteractionSchema = z.object({
   status: z.enum(['pending', 'resolved']),
   createdAt: z.string().min(1),
   resolvedAt: z.string().min(1).nullable(),
+  // 运行时由 Run/Delegation canonical 数据投影；旧记录可缺省。
+  agent: AgentContextSchema.optional(),
 })
 export type UserInteraction = z.infer<typeof UserInteractionSchema>
 

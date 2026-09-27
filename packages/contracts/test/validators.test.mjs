@@ -758,6 +758,41 @@ test('approval.resolved 以 grantScope 承载授权范围，信封 scope 不被�
   )
 })
 
+test('interaction.required can identify its root task and child Agent', () => {
+  const parsed = RuntimeEventSchema.safeParse({
+    ...RUN_ENV,
+    type: 'interaction.required',
+    interactionId: 'interaction-1',
+    toolCallId: 'tool-1',
+    sessionId: 'child-session',
+    kind: 'user_question',
+    questions: [
+      {
+        id: 'choice',
+        header: '方案',
+        question: '选择方案',
+        multiSelect: false,
+        options: [
+          { id: 'a', label: 'A', description: '方案 A' },
+          { id: 'b', label: 'B', description: '方案 B' },
+        ],
+      },
+    ],
+    agent: {
+      instanceId: 'agent-1',
+      displayName: '代码审查员',
+      depth: 1,
+      rootRunId: 'root-run',
+      rootTask: '审查 Agent 实现',
+    },
+  })
+  assert.equal(
+    parsed.success,
+    true,
+    JSON.stringify(parsed.error?.issues ?? null),
+  )
+})
+
 test('FinishReason includes tool_calls', () => {
   assert.equal(FinishReasonSchema.safeParse('tool_calls').success, true)
   assert.equal(FinishReasonSchema.safeParse('function_call').success, false)
