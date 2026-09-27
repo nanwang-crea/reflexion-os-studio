@@ -111,11 +111,13 @@ export class Store {
 
   /**
    * 唯一启动恢复入口。Turn reducer 先决定续跑或中断，领域 Store 只负责把
-   * 该决定投影到兼容行；计划保持 active，不在 Run 终态时隐式收敛。
+   * 该决定投影到兼容行；仅顶层等待输入可续跑。计划保持 active，不在 Run
+   * 终态时隐式收敛。
    */
   private recoverRuntimeState(): void {
     this.turnExecutions.recoverNonTerminal()
     this.runs.recoverInterrupted()
+    this.interactions.recoverUnresumable()
     this.delegations.recoverInterrupted()
     this.messages.recoverInterrupted()
     this.toolCalls.recoverUnfinished()

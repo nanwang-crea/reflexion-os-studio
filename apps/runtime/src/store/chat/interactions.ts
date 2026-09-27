@@ -9,7 +9,7 @@ import {
 } from '@reflexion-os-studio/contracts'
 import { nowIso, type Row } from '../shared.js'
 
-/** 用户交互领域：持久化等待问题，使 Runtime 重启后仍可继续原 Run。 */
+/** 用户交互领域：持久化等待问题，并为可恢复的顶层 Run 保留重启续答能力。 */
 export class UserInteractionStore {
   constructor(private readonly db: DatabaseSync) {}
 
@@ -78,6 +78,21 @@ export class UserInteractionStore {
       .run(id)
   }
 
+  /** 启动恢复：父执行栈无法重建的等待项保留审计记录，但不再对用户开放回答。 */
+  recoverUnresumable(): void {
+    this.db
+      .prepare(
+        `UPDATE user_interactions
+         SET status = 'cancelled', resolved_at = ?
+         WHERE status = 'pending' AND NOT EXISTS (
+           SELECT 1 FROM runs
+           WHERE runs.id = user_interactions.run_id
+             AND runs.status = 'awaiting_user_input'
+         )`,
+      )
+      .run(nowIso())
+  }
+
   private toInteraction(row: Row): UserInteraction {
     return {
       id: String(row.id),
@@ -94,7 +109,7 @@ export class UserInteractionStore {
           : UserQuestionAnswerSchema.array().parse(
               JSON.parse(String(row.answers_json)),
             ),
-      status: String(row.status) as 'pending' | 'resolved',
+      status: String(row.status) as 'pending' | 'resolved' | 'cancelled',
       createdAt: String(row.created_at),
       resolvedAt: row.resolved_at == null ? null : String(row.resolved_at),
     }

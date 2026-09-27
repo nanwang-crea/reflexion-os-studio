@@ -167,12 +167,13 @@ export class TurnExecutionStore {
   recoverNonTerminal(): TurnRecoveryDecision[] {
     const rows = this.db
       .prepare(
-        `SELECT t.*,
+        `SELECT t.*, r.delegation_id,
                 EXISTS(
                   SELECT 1 FROM user_interactions i
                   WHERE i.id = t.pending_interaction_id AND i.status = 'pending'
                 ) AS has_pending_interaction
          FROM turn_executions t
+         JOIN runs r ON r.id = t.run_id
          WHERE t.completed_at IS NULL
          ORDER BY t.created_at ASC, t.rowid ASC`,
       )
@@ -181,6 +182,7 @@ export class TurnExecutionStore {
       const turn = this.toTurn(row)
       if (
         turn.phase === 'awaiting_user_input' &&
+        row.delegation_id == null &&
         Number(row.has_pending_interaction) === 1
       ) {
         return {

@@ -204,6 +204,95 @@ test('pending user interaction survives restart with its run and tool call', () 
   recovered.close()
 })
 
+test('delegated user interaction fails closed with its whole active chain on restart', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'reflexion-child-interaction-'))
+  const first = new Store(dir)
+  const project = first.projects.create({ name: 'p', folderPath: '/tmp/p' })
+  const rootSession = first.sessions.create(project.id)
+  const rootRun = first.runs.create({
+    sessionId: rootSession.id,
+    providerId: null,
+    model: null,
+  })
+  const childSession = first.sessions.create(project.id, '子任务')
+  const delegation = first.delegations.create({
+    sessionId: rootSession.id,
+    parentRunId: rootRun.id,
+    rootRunId: rootRun.id,
+    agentId: 'agent-child',
+    task: '需要用户确认',
+    childSessionId: childSession.id,
+  })
+  const childRun = first.runs.create({
+    sessionId: childSession.id,
+    providerId: null,
+    model: null,
+    agentId: 'agent-child',
+    parentRunId: rootRun.id,
+    delegationId: delegation.id,
+  })
+  first.delegations.attachChildRun(delegation.id, childRun.id)
+  first.delegations.update(delegation.id, 'running')
+  const message = first.messages.create({
+    sessionId: childSession.id,
+    runId: childRun.id,
+    role: 'assistant',
+    content: '',
+    status: 'completed',
+  })
+  const toolCall = first.toolCalls.create({
+    runId: childRun.id,
+    messageId: message.id,
+    toolName: 'ask_user',
+    args: {},
+  })
+  first.interactions.create({
+    id: 'child-interaction-1',
+    sessionId: childSession.id,
+    runId: childRun.id,
+    toolCallId: toolCall.id,
+    kind: 'user_question',
+    questions: [
+      {
+        id: 'choice',
+        header: '选择',
+        question: '请选择',
+        multiSelect: false,
+        options: [
+          { id: 'a', label: 'A', description: 'A 方案' },
+          { id: 'b', label: 'B', description: 'B 方案' },
+        ],
+      },
+    ],
+  })
+  first.runs.setIntermediateStatus(childRun.id, 'awaiting_user_input')
+  first.toolCalls.markStatus(toolCall.id, 'awaiting_user_input')
+  const turn = first.turnExecutions.create({
+    runId: childRun.id,
+    attempt: 1,
+  })
+  first.turnExecutions.transition(turn.id, 'awaiting_user_input', {
+    pendingInteractionId: 'child-interaction-1',
+  })
+  first.close()
+
+  const recovered = new Store(dir)
+  assert.equal(recovered.runs.get(rootRun.id).status, 'interrupted')
+  assert.equal(recovered.runs.get(childRun.id).status, 'interrupted')
+  assert.equal(recovered.turnExecutions.get(turn.id).phase, 'interrupted')
+  assert.equal(recovered.toolCalls.get(toolCall.id).status, 'cancelled')
+  assert.equal(recovered.interactions.listPending().length, 0)
+  assert.equal(
+    recovered.interactions.get('child-interaction-1').status,
+    'cancelled',
+  )
+  assert.ok(
+    recovered.interactions.get('child-interaction-1').resolvedAt != null,
+  )
+  assert.equal(recovered.delegations.get(delegation.id).status, 'failed')
+  recovered.close()
+})
+
 test('run lifecycle: awaiting_approval counts as active', () => {
   const store = freshStore()
   const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })

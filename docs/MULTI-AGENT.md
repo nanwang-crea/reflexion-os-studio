@@ -20,7 +20,7 @@ Primary 通过 `task` 工具提交任务和可选的 `templateId/name/role/instr
 
 ### 生命周期与恢复
 
-每次委派记录 `delegationId`、父子 Run/Session/Agent 身份、执行快照、任务、状态、结果或错误。父 Run 取消会通过 AbortSignal 取消活动子 Run；子任务失败只使本次 `task` 工具调用失败，Primary 可据此调整或继续。启动恢复以 child Run 为 canonical 状态：遗留活动 Run 收敛为 interrupted/failed；若 Run 已完成或取消但 Delegation 终态回调漏写，则反向补齐 completed/cancelled，避免永久 running。
+每次委派记录 `delegationId`、父子 Run/Session/Agent 身份、执行快照、任务、状态、结果或错误。父 Run 取消会通过 AbortSignal 取消活动子 Run；子任务失败只使本次 `task` 工具调用失败，Primary 可据此调整或继续。启动恢复以 child Run 为 canonical 状态：遗留活动 Run（包括等待用户输入的子 Run）收敛为 interrupted/failed，对应 interaction 取消，避免出现父 Run 已中断但子问题仍可回答的半恢复状态；若 Run 已完成或取消但 Delegation 终态回调漏写，则反向补齐 completed/cancelled，避免永久 running。完整委派树续跑必须先持久化父 ToolCall 关联与可验证的树级 checkpoint，当前不做推测性重接。
 
 Delegation 写入只允许 Runtime 内部 `task` 链路；外部 `delegation.create/update/attach_child_run` 命令保持拒绝，避免伪造生命周期。创建和更新都会产生 delegation 事件。
 

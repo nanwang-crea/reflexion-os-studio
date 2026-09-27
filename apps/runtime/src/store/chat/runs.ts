@@ -160,15 +160,17 @@ export class RunStore {
     return row ? this.toRun(row as Row) : null
   }
 
-  /** 启动恢复：用户输入等待可恢复；其余未结束 Run 标记为 interrupted。 */
+  /** 启动恢复：仅顶层用户输入等待可恢复；委派 Run 缺少父调用栈，必须中断。 */
   recoverInterrupted(): void {
     this.db
       .prepare(
         `UPDATE runs SET status = 'interrupted', completed_at = ?
          WHERE status IN ('created', 'running', 'awaiting_approval')
-            OR (status = 'awaiting_user_input' AND NOT EXISTS (
-              SELECT 1 FROM user_interactions ui
-              WHERE ui.run_id = runs.id AND ui.status = 'pending'
+            OR (status = 'awaiting_user_input' AND (
+              delegation_id IS NOT NULL OR NOT EXISTS (
+                SELECT 1 FROM user_interactions ui
+                WHERE ui.run_id = runs.id AND ui.status = 'pending'
+              )
             ))`,
       )
       .run(nowIso())

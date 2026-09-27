@@ -129,15 +129,21 @@ export class ToolCallStore {
       )
   }
 
-  /** 启动恢复：用户输入等待可恢复；其余未完结调用取消。 */
+  /** 启动恢复：仅顶层用户输入等待可恢复；委派调用随子 Run 中断。 */
   recoverUnfinished(): void {
     this.db
       .prepare(
         `UPDATE tool_calls SET status = 'cancelled', completed_at = ?
          WHERE status IN ('pending', 'awaiting_approval', 'running')
-            OR (status = 'awaiting_user_input' AND NOT EXISTS (
-              SELECT 1 FROM user_interactions ui
-              WHERE ui.tool_call_id = tool_calls.id AND ui.status = 'pending'
+            OR (status = 'awaiting_user_input' AND (
+              EXISTS (
+                SELECT 1 FROM runs
+                WHERE runs.id = tool_calls.run_id
+                  AND runs.delegation_id IS NOT NULL
+              ) OR NOT EXISTS (
+                SELECT 1 FROM user_interactions ui
+                WHERE ui.tool_call_id = tool_calls.id AND ui.status = 'pending'
+              )
             ))`,
       )
       .run(nowIso())

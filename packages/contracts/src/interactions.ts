@@ -72,7 +72,7 @@ export const UserInteractionSchema = z.object({
   kind: InteractionKindSchema,
   questions: z.array(UserQuestionSchema).min(1).max(3),
   answers: z.array(UserQuestionAnswerSchema).max(3).nullable(),
-  status: z.enum(['pending', 'resolved']),
+  status: z.enum(['pending', 'resolved', 'cancelled']),
   createdAt: z.string().min(1),
   resolvedAt: z.string().min(1).nullable(),
   // 运行时由 Run/Delegation canonical 数据投影；旧记录可缺省。
