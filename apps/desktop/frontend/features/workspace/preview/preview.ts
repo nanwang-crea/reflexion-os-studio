@@ -4,38 +4,34 @@
  * 其余按纯文本处理（回落 ContentView / Monaco）。
  */
 
-export type PreviewKind = 'markdown' | 'binary' | 'text'
+export type PreviewKind =
+  'markdown' | 'image' | 'pdf' | 'audio' | 'video' | 'binary' | 'text'
 
 const MARKDOWN_EXTENSIONS = new Set(['md', 'markdown'])
-
-/**
- * 以占位提示替代乱码展示的类型。图片预览属后续迭代（需 read_file 提供
- * base64 编码契约），当前仅阻止把二进制内容当文本渲染。
- */
-const BINARY_EXTENSIONS = new Set([
-  // 图片
+const IMAGE_EXTENSIONS = new Set([
   'png',
   'jpg',
   'jpeg',
   'gif',
   'webp',
   'bmp',
+  'avif',
+  'svg',
+])
+const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'ogg', 'flac', 'm4a'])
+const VIDEO_EXTENSIONS = new Set(['mp4', 'mov', 'webm'])
+
+/**
+ * 以占位提示替代乱码展示的类型。图片预览属后续迭代（需 read_file 提供
+ * base64 编码契约），当前仅阻止把二进制内容当文本渲染。
+ */
+const BINARY_EXTENSIONS = new Set([
   'ico',
   'tif',
   'tiff',
-  'avif',
-  'svg',
   'heic',
   // 音视频
-  'mp3',
-  'wav',
-  'ogg',
-  'flac',
-  'm4a',
   'aac',
-  'mp4',
-  'mov',
-  'webm',
   'mkv',
   'avi',
   // 文档 / 压缩包 / 字体 / 可执行与数据文件
@@ -71,6 +67,10 @@ export function getPreviewKind(path: string): PreviewKind {
   if (dot <= 0) return 'text'
   const ext = fileName.slice(dot + 1).toLowerCase()
   if (MARKDOWN_EXTENSIONS.has(ext)) return 'markdown'
+  if (IMAGE_EXTENSIONS.has(ext)) return 'image'
+  if (ext === 'pdf') return 'pdf'
+  if (AUDIO_EXTENSIONS.has(ext)) return 'audio'
+  if (VIDEO_EXTENSIONS.has(ext)) return 'video'
   if (BINARY_EXTENSIONS.has(ext)) return 'binary'
   return 'text'
 }

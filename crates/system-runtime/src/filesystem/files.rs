@@ -15,6 +15,7 @@ use super::walk::walk_files;
 /// 整文件读取上限：按行分窗不减少加载量（读前需全量载入定位行边界），
 /// 因此限制的是文件总大小；返回给模型的窗口仍由行数与 TS 层字符预算约束。
 pub const MAX_READ_BYTES: u64 = 2 * 1024 * 1024;
+pub const MAX_BINARY_PREVIEW_BYTES: u64 = 20 * 1024 * 1024;
 pub const MAX_WRITE_BYTES: usize = 2 * 1024 * 1024;
 /// 单次列表分页默认/最大条目数：防止一次吃满上下文，超限可经 nextOffset 续读。
 pub const DEFAULT_LIST_LIMIT: usize = 200;
@@ -105,6 +106,22 @@ pub fn read(
         content_sha256: format!("{:x}", hasher.finalize()),
         read_complete,
     })
+}
+
+pub fn read_binary(workspace_root: &Path, relative: &str) -> Result<Vec<u8>, String> {
+    let path = resolve_in_workspace(workspace_root, relative)?;
+    if !path.is_file() {
+        return Err(format!("file not found or not regular: {relative}"));
+    }
+    let size = fs::metadata(&path)
+        .map_err(|error| error.to_string())?
+        .len();
+    if size > MAX_BINARY_PREVIEW_BYTES {
+        return Err(format!(
+            "binary preview exceeds {MAX_BINARY_PREVIEW_BYTES} bytes"
+        ));
+    }
+    fs::read(path).map_err(|error| error.to_string())
 }
 
 #[derive(Serialize)]
@@ -476,6 +493,18 @@ mod tests {
         assert!(!paged.read_complete);
         assert_eq!(paged.content_sha256, full.content_sha256);
         fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn binary_preview_reads_bytes_and_keeps_workspace_boundary() {
+        let root = temp_workspace("binary-preview");
+        fs::write(root.join("image.bin"), [0_u8, 1, 2, 255]).unwrap();
+        assert_eq!(
+            read_binary(&root, "image.bin").unwrap(),
+            vec![0_u8, 1, 2, 255]
+        );
+        assert!(read_binary(&root, "../outside.bin").is_err());
+        fs::remove_dir_all(root).ok();
     }
 
     #[test]

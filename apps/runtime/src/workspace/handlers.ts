@@ -133,6 +133,22 @@ export const workspaceCommandHandlers: Record<string, CommandHandler> = {
     }
     return result
   },
+  'workspace.read_binary': async (p, { store, system }) => {
+    const project = requireWorkspaceProject(
+      store,
+      requireString(p, 'projectId'),
+    )
+    const path = assertRelativePath(requireString(p, 'path'))
+    const result = (await requestSystem(system, 'file.read_binary', {
+      workspaceRoot: project.folderPath,
+      path,
+    })) as { dataBase64?: string; sizeBytes?: number }
+    return {
+      dataBase64: result.dataBase64 ?? '',
+      sizeBytes: result.sizeBytes ?? 0,
+      mimeType: previewMimeType(path),
+    }
+  },
   'workspace.write_file': async (p, { store, system }) => {
     const project = requireWorkspaceProject(
       store,
@@ -167,6 +183,31 @@ export const workspaceCommandHandlers: Record<string, CommandHandler> = {
   },
   // Git 域（只读查询 + 历史 + 写操作）在 handlers-git.ts，按域合并注册。
   ...workspaceGitCommandHandlers,
+}
+
+function previewMimeType(path: string): string {
+  const extension = path.split('.').pop()?.toLowerCase() ?? ''
+  return (
+    {
+      png: 'image/png',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      gif: 'image/gif',
+      webp: 'image/webp',
+      bmp: 'image/bmp',
+      avif: 'image/avif',
+      svg: 'image/svg+xml',
+      pdf: 'application/pdf',
+      mp3: 'audio/mpeg',
+      wav: 'audio/wav',
+      ogg: 'audio/ogg',
+      flac: 'audio/flac',
+      m4a: 'audio/mp4',
+      mp4: 'video/mp4',
+      mov: 'video/quicktime',
+      webm: 'video/webm',
+    }[extension] ?? 'application/octet-stream'
+  )
 }
 
 /** 文件名子串搜索的 glob 清洗：仅保留字母数字与 ._ -，收敛多点为单点。 */

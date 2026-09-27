@@ -749,6 +749,18 @@ export const CommandSchemaRegistry = {
     }),
     result: WorkspaceReadResultSchema,
   },
+  'workspace.read_binary': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+      path: z.string().min(1),
+    }),
+    result: z.object({
+      dataBase64: z.string(),
+      sizeBytes: z.number().int().nonnegative(),
+      mimeType: z.string().min(1),
+    }),
+  },
   'workspace.git_status': {
     params: z.object({
       requestId: RequestIdSchema,

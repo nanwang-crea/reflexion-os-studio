@@ -2,14 +2,16 @@
 //! 写/执行类操作先经 grant（审批凭据）校验；异步操作（shell）交给工作线程回包，
 //! 避免阻塞协议主循环。git 全部方法见 handlers_git。
 
+use base64::Engine;
 use serde_json::{json, Value};
 use std::path::PathBuf;
 
 use crate::filesystem::{files, mutate, paths, search, upload};
 use crate::grant::{normalize_relative, require_grant, require_network_approval};
 use crate::params::{
-    EditParams, GlobParams, GrantPathParams, GrepParams, ListParams, MoveParams, OperationSource,
-    ReadParams, ShellParams, StreamWriteParams, UnwatchParams, WatchParams, WriteParams,
+    BinaryReadParams, EditParams, GlobParams, GrantPathParams, GrepParams, ListParams, MoveParams,
+    OperationSource, ReadParams, ShellParams, StreamWriteParams, UnwatchParams, WatchParams,
+    WriteParams,
 };
 use crate::protocol::{emit, error_response, ok_response, running_shells, workspace_root, OpError};
 use crate::{sandbox, shell};
@@ -78,6 +80,17 @@ pub fn handle_file_read(params: Value) -> Result<Value, OpError> {
             "sizeBytes": result.size_bytes,
             "sha256": result.content_sha256,
         },
+    }))
+}
+
+pub fn handle_file_read_binary(params: Value) -> Result<Value, OpError> {
+    let params: BinaryReadParams = serde_json::from_value(params)
+        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
+    let root = workspace_root(&params.workspace_root)?;
+    let bytes = files::read_binary(&root, &params.path).map_err(file_error)?;
+    Ok(json!({
+        "dataBase64": base64::engine::general_purpose::STANDARD.encode(&bytes),
+        "sizeBytes": bytes.len(),
     }))
 }
 

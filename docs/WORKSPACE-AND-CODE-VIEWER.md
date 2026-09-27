@@ -14,6 +14,11 @@ Workspace Indexer 作为独立 worker/队列异步运行，不阻塞 Chat。首�
 常驻轮询。文件树徽章与 Git 面板通过同一个 repository refresh 入口读取状态，避免
 各自维护互相漂移的快照。
 
+预览读取分为文本与受限二进制两条契约。二进制预览同样必须经过 Rust workspace
+边界，单文件硬限制 20 MiB，只向前端返回 base64 与经白名单推导的 MIME；当前支持
+常见图片（SVG 以图片资源隔离渲染）、PDF、音频和视频。未知二进制仍显示占位提示，
+不得尝试按文本解释。媒体预览为所在目录建立临时 watcher，文件变化后重新读取。
+
 `WorkspaceStats` 至少包含文件数、目录数、总大小、按扩展名统计、Git changed/untracked 数量和更新时间。索引器失败不影响 Chat，UI 必须显示过期或错误状态。
 
 ## Code/Document Viewer

@@ -34,6 +34,7 @@ fn handle_request(request: &Value) -> (Value, bool) {
         Some("system.ping") => Ok((ok_response(id, json!({ "ok": true })), false)),
         Some("system.shutdown") => Ok((ok_response(id, json!({ "ok": true })), true)),
         Some("file.read") => finish(id, handlers::handle_file_read(params)),
+        Some("file.read_binary") => finish(id, handlers::handle_file_read_binary(params)),
         Some("file.list") => finish(id, handlers::handle_file_list(params)),
         Some("file.glob") => finish(id, handlers::handle_file_glob(params)),
         Some("file.grep") => finish(id, handlers::handle_file_grep(params)),

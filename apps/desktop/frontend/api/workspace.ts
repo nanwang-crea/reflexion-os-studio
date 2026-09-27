@@ -79,6 +79,13 @@ export function readFile(
   })
 }
 
+export function readBinary(
+  projectId: string,
+  path: string,
+): Promise<{ dataBase64: string; sizeBytes: number; mimeType: string }> {
+  return request('workspace.read_binary', { projectId, path })
+}
+
 /** 写入文本文件到工作区；覆盖保护（先读后写凭据）由 Runtime/ Rust 两层承担。 */
 export function writeFile(
   projectId: string,

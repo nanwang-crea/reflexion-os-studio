@@ -21,6 +21,13 @@ pub struct ReadParams {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BinaryReadParams {
+    pub workspace_root: String,
+    pub path: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ListParams {
     pub workspace_root: String,
     pub path: String,

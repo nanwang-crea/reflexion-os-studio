@@ -142,7 +142,7 @@ export function FileViewerPanel(
       {props.openTabs.map((tab) => {
         if (tab.mode === 'diff') return null
         const kind = getPreviewKind(tab.path)
-        if (kind === 'binary') return null
+        if (kind !== 'text' && kind !== 'markdown') return null
         const active = tabIdOf(tab) === props.activeTabId
         return (
           <div
@@ -193,8 +193,18 @@ export function FileViewerPanel(
 
       {activeTab !== null &&
         activeTab.mode !== 'diff' &&
-        getPreviewKind(activeTab.path) === 'binary' && (
-          <BinaryFilePreview key={activeTab.path} path={activeTab.path} />
+        !['text', 'markdown'].includes(getPreviewKind(activeTab.path)) && (
+          <BinaryFilePreview
+            key={activeTab.path}
+            projectId={project.id}
+            path={activeTab.path}
+            kind={
+              getPreviewKind(activeTab.path) as Exclude<
+                ReturnType<typeof getPreviewKind>,
+                'text' | 'markdown'
+              >
+            }
+          />
         )}
     </div>
   )
