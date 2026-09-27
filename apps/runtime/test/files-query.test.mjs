@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   createFileGlobTool,
+  createFileGrepTool,
   createFileListTool,
   createFileReadTool,
 } from '../dist/agent/tools/files-query.js'
@@ -249,4 +250,45 @@ test('file.glob forwards offset and exposes continuation in description', async 
 
   assert.ok(tool.description.includes('nextOffset'))
   assert.equal(tool.parameters.properties.offset.type, 'number')
+})
+
+test('file.grep exposes regex semantics and keeps legacy text calls compatible', async () => {
+  const calls = []
+  const system = fakeSystem(async (_method, params) => {
+    calls.push(params)
+    return { matches: [], truncated: false }
+  })
+  const tool = createFileGrepTool(system, '/ws')
+
+  await run(tool, {
+    pattern: 'foo|bar',
+    glob: '*.ts',
+    ignoreCase: true,
+    literal: true,
+  })
+  assert.deepEqual(calls[0], {
+    workspaceRoot: '/ws',
+    pattern: 'foo|bar',
+    glob: '*.ts',
+    ignoreCase: true,
+    literal: true,
+  })
+
+  await run(tool, { text: 'legacy text' })
+  assert.deepEqual(calls[1], {
+    workspaceRoot: '/ws',
+    pattern: 'legacy text',
+  })
+  assert.equal(tool.parameters.required, undefined)
+  assert.ok(tool.description.includes('正则表达式'))
+  assert.ok(tool.description.includes('*.rs'))
+
+  await assert.rejects(
+    () => run(tool, { pattern: 'new', text: 'old' }),
+    /pattern and text differ/,
+  )
+  await assert.rejects(
+    () => run(tool, {}),
+    /requires pattern or legacy text/,
+  )
 })

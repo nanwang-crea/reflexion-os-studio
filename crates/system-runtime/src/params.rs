@@ -66,8 +66,12 @@ pub struct GlobParams {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GrepParams {
     pub workspace_root: String,
-    /// 字面子串（非正则）；大小写策略由 ignore_case 控制。
-    pub text: String,
+    /// ripgrep 兼容方向的正则模式；新调用使用该字段。
+    pub pattern: Option<String>,
+    /// 旧调用兼容字段，语义与 pattern 相同。
+    pub text: Option<String>,
+    /// true 时把 pattern/text 作为字面文本搜索。
+    pub literal: Option<bool>,
     /// 仅扫描命中该 glob 的文件，如 `*.rs`。
     pub glob: Option<String>,
     pub ignore_case: Option<bool>,

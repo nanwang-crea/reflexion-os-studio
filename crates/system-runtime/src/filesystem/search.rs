@@ -1,10 +1,11 @@
-//! Workspace 搜索：glob 文件名匹配与字面文本 grep。
-//! grep 只做字面子串（非正则），过滤与定位用 glob；遍历边界由 walk 模块保证。
+//! Workspace 搜索：glob 文件名匹配与正则 grep。
+//! grep 默认按正则匹配，literal=true 时按字面文本；过滤与定位用 glob，遍历边界由 walk 模块保证。
 use std::collections::HashSet;
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
+use regex::{Regex, RegexBuilder};
 use serde::Serialize;
 
 use super::glob;
@@ -97,25 +98,52 @@ pub fn glob_search(
 
 pub fn grep_search(
     workspace_root: &Path,
-    text: &str,
+    pattern: &str,
     glob_filter: Option<&str>,
     ignore_case: bool,
     context: usize,
     limit: usize,
     offset: Option<usize>,
 ) -> Result<GrepOutcome, String> {
-    if text.trim().is_empty() {
-        return Err("search text must not be empty".to_string());
+    grep_search_with_mode(
+        workspace_root,
+        pattern,
+        glob_filter,
+        ignore_case,
+        false,
+        context,
+        limit,
+        offset,
+    )
+}
+
+pub fn grep_search_with_mode(
+    workspace_root: &Path,
+    pattern: &str,
+    glob_filter: Option<&str>,
+    ignore_case: bool,
+    literal: bool,
+    context: usize,
+    limit: usize,
+    offset: Option<usize>,
+) -> Result<GrepOutcome, String> {
+    if pattern.trim().is_empty() {
+        return Err("search pattern must not be empty".to_string());
     }
     let filter = match glob_filter {
         Some(value) => Some(glob::pattern_segments(value)?),
         None => None,
     };
-    let needle = if ignore_case {
-        text.to_lowercase()
+    let source = if literal {
+        regex::escape(pattern)
     } else {
-        text.to_string()
+        pattern.to_string()
     };
+    let matcher = RegexBuilder::new(&source)
+        .case_insensitive(ignore_case)
+        .unicode(true)
+        .build()
+        .map_err(|error| format!("invalid search regex: {error}"))?;
     let context = context.min(MAX_GREP_CONTEXT);
     let start = resolve_in_workspace(workspace_root, ".")?;
     let walked = walk_files(&start, "");
@@ -139,8 +167,8 @@ pub fn grep_search(
             let streamed = grep_large_file(
                 &start.join(&entry.path),
                 &entry.path,
-                &needle,
-                ignore_case,
+                &matcher,
+                context,
                 offset,
                 &mut seen,
                 remaining,
@@ -170,12 +198,7 @@ pub fn grep_search(
         let remaining = limit - total;
         let mut matched: Vec<usize> = Vec::new();
         for (index, line) in lines.iter().enumerate() {
-            let haystack = if ignore_case {
-                line.to_lowercase()
-            } else {
-                line.to_string()
-            };
-            if !haystack.contains(&needle) {
+            if !matcher.is_match(line) {
                 continue;
             }
             if seen < offset {
@@ -233,8 +256,8 @@ pub fn grep_search(
 fn grep_large_file(
     path: &Path,
     relative: &str,
-    needle: &str,
-    ignore_case: bool,
+    matcher: &Regex,
+    context: usize,
     offset: usize,
     seen: &mut usize,
     limit: usize,
@@ -242,32 +265,73 @@ fn grep_large_file(
     let Ok(file) = fs::File::open(path) else {
         return Vec::new();
     };
-    let mut matches = Vec::new();
+    let mut matches: Vec<GrepMatch> = Vec::new();
+    let mut recent: Vec<(usize, String)> = Vec::new();
+    let mut matched_lines: HashSet<usize> = HashSet::new();
+    // 已进入结果、但仍需补齐后文的命中下标。
+    let mut pending_after: Vec<(usize, usize)> = Vec::new();
     for (index, line) in BufReader::new(file).lines().enumerate() {
         let Ok(line) = line else { break };
         if line.contains('\0') {
             return Vec::new();
         }
-        let haystack = if ignore_case {
-            line.to_lowercase()
-        } else {
-            line.clone()
-        };
-        if !haystack.contains(needle) {
-            continue;
+        let matched = matcher.is_match(&line);
+        if matched {
+            matched_lines.insert(index);
         }
-        if *seen < offset {
-            *seen += 1;
-            continue;
+        if context > 0 && !matched {
+            for (remaining, match_index) in &mut pending_after {
+                if *remaining == 0 {
+                    continue;
+                }
+                matches[*match_index].context.push(GrepLine {
+                    line: index + 1,
+                    text: truncate_line(&line),
+                });
+                *remaining -= 1;
+            }
+            pending_after.retain(|(remaining, _)| *remaining > 0);
         }
-        *seen += 1;
-        matches.push(GrepMatch {
-            path: relative.to_string(),
-            line: index + 1,
-            text: truncate_line(&line),
-            context: Vec::new(),
-        });
-        if matches.len() >= limit {
+        if matched {
+            let page_full = *seen >= offset && matches.len() >= limit;
+            if page_full {
+                if pending_after.is_empty() {
+                    break;
+                }
+            } else if *seen < offset {
+                *seen += 1;
+            } else {
+                *seen += 1;
+                let mut context_lines = Vec::new();
+                if context > 0 {
+                    let first = index.saturating_sub(context);
+                    for (neighbour, text) in &recent {
+                        if *neighbour >= first && !matched_lines.contains(neighbour) {
+                            context_lines.push(GrepLine {
+                                line: neighbour + 1,
+                                text: text.clone(),
+                            });
+                        }
+                    }
+                }
+                matches.push(GrepMatch {
+                    path: relative.to_string(),
+                    line: index + 1,
+                    text: truncate_line(&line),
+                    context: context_lines,
+                });
+                if context > 0 {
+                    pending_after.push((context, matches.len() - 1));
+                }
+            }
+        }
+        if context > 0 {
+            recent.push((index, truncate_line(&line)));
+            if recent.len() > context {
+                recent.remove(0);
+            }
+        }
+        if matches.len() >= limit && pending_after.is_empty() {
             break;
         }
     }
@@ -347,6 +411,71 @@ mod tests {
     }
 
     #[test]
+    fn grep_supports_regex_literal_mode_and_invalid_pattern_errors() {
+        let root = temp_workspace("grep-regex");
+        fs::write(
+            root.join("code.txt"),
+            "createFileGlobTool\ncreateFileGrepTool\nfoo|bar\n",
+        )
+        .unwrap();
+
+        let regex = grep_search(
+            &root,
+            "createFile(Glob|Grep)Tool",
+            None,
+            false,
+            0,
+            DEFAULT_GREP_LIMIT,
+            None,
+        )
+        .unwrap();
+        assert_eq!(regex.matches.len(), 2);
+
+        let literal = grep_search_with_mode(
+            &root,
+            "foo|bar",
+            None,
+            false,
+            true,
+            0,
+            DEFAULT_GREP_LIMIT,
+            None,
+        )
+        .unwrap();
+        assert_eq!(literal.matches.len(), 1);
+        let metacharacters = grep_search_with_mode(
+            &root,
+            "a.+*",
+            None,
+            false,
+            true,
+            0,
+            DEFAULT_GREP_LIMIT,
+            None,
+        )
+        .unwrap();
+        assert!(metacharacters.matches.is_empty());
+        let invalid = grep_search(&root, "(", None, false, 0, DEFAULT_GREP_LIMIT, None)
+            .err()
+            .expect("unterminated group must fail");
+        assert!(invalid.contains("invalid search regex"));
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn grep_ignore_case_folds_unicode() {
+        let root = temp_workspace("grep-unicode-case");
+        // regex 1.13 uses Unicode simple case folding only. U+017F LATIN
+        // SMALL LETTER LONG S folds to ASCII `s`; U+0130 LATIN CAPITAL LETTER
+        // I WITH DOT ABOVE needs full case folding (`i` + combining dot) and
+        // does not match ASCII `i`.
+        fs::write(root.join("note.txt"), "\u{017f}tart\n").unwrap();
+        let found = grep_search(&root, "s", None, true, 0, DEFAULT_GREP_LIMIT, None).unwrap();
+        assert_eq!(found.matches.len(), 1);
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
     fn grep_context_includes_neighbours_and_skips_matched_lines() {
         let root = temp_workspace("grep-context");
         fs::write(
@@ -396,6 +525,20 @@ mod tests {
         )
         .unwrap();
         assert!(filtered.matches.is_empty());
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("src/nested.rs"), "needle nested").unwrap();
+        let basename_filtered = grep_search(
+            &root,
+            "needle",
+            Some("*.rs"),
+            false,
+            0,
+            DEFAULT_GREP_LIMIT,
+            None,
+        )
+        .unwrap();
+        assert_eq!(basename_filtered.matches.len(), 1);
+        assert_eq!(basename_filtered.matches[0].path, "src/nested.rs");
         fs::remove_dir_all(&root).ok();
     }
 
@@ -466,6 +609,27 @@ mod tests {
         .unwrap();
         assert_eq!(outcome.matches.len(), 1);
         assert_eq!(outcome.matches[0].line, 180_001);
+
+        let mut contextual = "padding line\n".repeat(180_000);
+        contextual.push_str("before\nunique streamed needle\nafter\n");
+        fs::write(root.join("large.txt"), contextual).unwrap();
+        let with_context = grep_search(
+            &root,
+            "unique streamed needle",
+            None,
+            false,
+            1,
+            DEFAULT_GREP_LIMIT,
+            None,
+        )
+        .unwrap();
+        assert_eq!(with_context.matches.len(), 1);
+        let context_lines: Vec<usize> = with_context.matches[0]
+            .context
+            .iter()
+            .map(|line| line.line)
+            .collect();
+        assert_eq!(context_lines, vec![180_001, 180_003]);
         fs::remove_dir_all(&root).ok();
     }
 

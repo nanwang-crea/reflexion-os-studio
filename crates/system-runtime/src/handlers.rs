@@ -148,11 +148,13 @@ pub fn handle_file_grep(params: Value) -> Result<Value, OpError> {
     let params: GrepParams = serde_json::from_value(params)
         .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
     let root = workspace_root(&params.workspace_root)?;
-    let outcome = search::grep_search(
+    let pattern = resolve_grep_pattern(params.pattern.as_deref(), params.text.as_deref())?;
+    let outcome = search::grep_search_with_mode(
         &root,
-        &params.text,
+        pattern,
         params.glob.as_deref(),
         params.ignore_case.unwrap_or(false),
+        params.literal.unwrap_or(false),
         params.context.unwrap_or(0),
         params.max_results.unwrap_or(search::DEFAULT_GREP_LIMIT),
         params.offset,
@@ -165,6 +167,26 @@ pub fn handle_file_grep(params: Value) -> Result<Value, OpError> {
         "scanTruncated": outcome.scan_truncated,
         "truncationReason": if outcome.scan_truncated { "workspace_walk_limit" } else if outcome.truncated { "page_limit" } else { "none" },
     }))
+}
+
+/// 新 pattern 与旧 text 至少一个非空；两者都非空且不相等时拒绝，避免静默选错搜索内容。
+fn resolve_grep_pattern<'a>(
+    pattern: Option<&'a str>,
+    text: Option<&'a str>,
+) -> Result<&'a str, OpError> {
+    let usable = |value: Option<&'a str>| value.filter(|item: &&str| !item.trim().is_empty());
+    match (usable(pattern), usable(text)) {
+        (Some(pattern), Some(text)) if pattern != text => Err(OpError::new(
+            "invalid_request",
+            "pattern and text differ; pass only one search expression".to_string(),
+        )),
+        (Some(pattern), _) => Ok(pattern),
+        (None, Some(text)) => Ok(text),
+        (None, None) => Err(OpError::new(
+            "invalid_request",
+            "pattern is required".to_string(),
+        )),
+    }
 }
 
 pub fn handle_file_write(params: Value) -> Result<Value, OpError> {
@@ -600,6 +622,24 @@ mod file_write_source_tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.root);
         }
+    }
+
+    #[test]
+    fn grep_rejects_conflicting_pattern_and_legacy_text() {
+        let sandbox = Sandbox::new("grep-conflict");
+        let conflict = handle_file_grep(json!({
+            "workspaceRoot": sandbox.root_str(),
+            "pattern": "new",
+            "text": "old",
+        }));
+        let error = conflict.unwrap_err();
+        assert_eq!(error.code, "invalid_request");
+        assert!(error.message.contains("pattern and text differ"));
+
+        let missing = handle_file_grep(json!({
+            "workspaceRoot": sandbox.root_str(),
+        }));
+        assert_eq!(missing.unwrap_err().code, "invalid_request");
     }
 
     #[test]

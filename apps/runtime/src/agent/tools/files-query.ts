@@ -249,11 +249,22 @@ export function createFileGrepTool(
   return {
     name: 'file.grep',
     description:
-      '在工作区文件内容中搜索字面子串（非正则），返回命中的 path/line/text。context>0 时每条命中附带前后上下文行（含行号，跳过本身命中的行），便于直接判断命中位置，减少后续 file.read。返回 truncated=true 时命中不完整，请使用更小的 glob 或缩小 maxResults 后分批搜索。可用 glob 参数缩小文件范围，ignoreCase 忽略大小写。二进制文件自动跳过。',
+      '在工作区文件内容中使用正则表达式搜索，返回命中的 path/line/text。支持 foo|bar、function\\s+\\w+ 等模式；搜索普通文本但包含正则符号时设置 literal=true。context>0 时附带上下文行。glob 可缩小文件范围，不含 / 的模式（如 *.rs）匹配任意目录下的文件名。返回 truncated=true 时用 cursor 续读或缩小范围。二进制文件自动跳过。',
     parameters: {
       type: 'object',
       properties: {
-        text: { type: 'string', description: '要搜索的字面文本' },
+        pattern: {
+          type: 'string',
+          description: '要搜索的正则表达式，如 foo|bar 或 function\\s+\\w+',
+        },
+        text: {
+          type: 'string',
+          description: '兼容旧调用；新调用请使用 pattern',
+        },
+        literal: {
+          type: 'boolean',
+          description: '将 pattern 作为普通文本而非正则表达式，缺省 false',
+        },
         glob: {
           type: 'string',
           description: '可选，仅扫描命中该 glob 的文件，如 *.rs',
@@ -272,14 +283,15 @@ export function createFileGrepTool(
           description: '上次结果返回的不透明续读 cursor',
         },
       },
-      required: ['text'],
     },
     execute: async ({ args, signal }) => {
+      const raw = args as Record<string, unknown>
+      const pattern = resolveGrepPattern(raw)
       const params: Record<string, unknown> = {
         workspaceRoot,
-        text: requireString(args, 'text'),
+        pattern,
       }
-      const raw = args as Record<string, unknown>
+      if (raw.literal === true) params.literal = true
       if (typeof raw.glob === 'string' && raw.glob.trim() !== '') {
         params.glob = raw.glob
       }
@@ -293,9 +305,10 @@ export function createFileGrepTool(
         params.maxResults = Math.max(1, Math.trunc(maxResults))
       }
       const fingerprint = JSON.stringify([
-        params.text,
+        pattern,
         params.glob ?? null,
         raw.ignoreCase === true,
+        raw.literal === true,
         params.context ?? 0,
       ])
       const offset = decodeSearchCursor(raw.cursor, 'grep', fingerprint)
@@ -304,6 +317,22 @@ export function createFileGrepTool(
       return withSearchCursor(result, 'grep', fingerprint)
     },
   }
+}
+
+/** pattern 与旧 text 至少一个非空；两者都非空且不相等时拒绝，避免静默搜错内容。 */
+function resolveGrepPattern(args: Record<string, unknown>): string {
+  const pattern = typeof args.pattern === 'string' ? args.pattern : undefined
+  const text = typeof args.text === 'string' ? args.text : undefined
+  const patternUsable = pattern !== undefined && pattern.trim() !== ''
+  const textUsable = text !== undefined && text.trim() !== ''
+  if (patternUsable && textUsable && pattern !== text) {
+    throw new Error(
+      'file.grep pattern and text differ; pass only one search expression',
+    )
+  }
+  if (patternUsable) return pattern
+  if (textUsable) return text
+  throw new Error('file.grep requires pattern or legacy text')
 }
 
 function withSearchCursor(

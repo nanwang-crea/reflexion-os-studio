@@ -35,20 +35,32 @@ pub fn pattern_segments(pattern: &str) -> Result<Vec<String>, String> {
 
 /// 判断相对路径（分段形式）是否命中 pattern。
 pub fn matches(pattern: &[String], segments: &[&str]) -> bool {
+    // 与常见 glob/ripgrep 语义保持一致：不含路径分隔符的 pattern 按
+    // basename 匹配，而不是只匹配工作区根目录文件。
+    if pattern.len() == 1 {
+        return segments
+            .last()
+            .is_some_and(|name| match_segment(&pattern[0], name));
+    }
+    matches_path(pattern, segments)
+}
+
+/** 已进入带路径 pattern 的递归匹配后，不再启用 basename 快捷语义。 */
+fn matches_path(pattern: &[String], segments: &[&str]) -> bool {
     let Some((first, rest)) = pattern.split_first() else {
         return segments.is_empty();
     };
     if first == "**" {
         // `**` 匹配零段或多段：先尝试吃掉零段，再逐段吃掉一层。
-        if matches(rest, segments) {
+        if matches_path(rest, segments) {
             return true;
         }
-        return !segments.is_empty() && matches(pattern, &segments[1..]);
+        return !segments.is_empty() && matches_path(pattern, &segments[1..]);
     }
     let Some((head, tail)) = segments.split_first() else {
         return false;
     };
-    match_segment(first, head) && matches(rest, tail)
+    match_segment(first, head) && matches_path(rest, tail)
 }
 
 /// 单段匹配：`*` 任意（不含 `/`，分段已保证）、`?` 单字符。
@@ -111,6 +123,15 @@ mod tests {
         assert!(!matches(&p, &["log-12.txt"]));
         assert!(matches(&pattern("README.md"), &["README.md"]));
         assert!(!matches(&pattern("readme.md"), &["README.md"]));
+    }
+
+    #[test]
+    fn pattern_without_separator_matches_basename_at_any_depth() {
+        let p = pattern("*.ts");
+        assert!(matches(&p, &["a.ts"]));
+        assert!(matches(&p, &["src", "a.ts"]));
+        assert!(matches(&p, &["src", "deep", "a.ts"]));
+        assert!(!matches(&p, &["src", "a.js"]));
     }
 
     #[test]
