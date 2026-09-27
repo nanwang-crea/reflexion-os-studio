@@ -19,6 +19,11 @@ Workspace Indexer 作为独立 worker/队列异步运行，不阻塞 Chat。首�
 常见图片（SVG 以图片资源隔离渲染）、PDF、音频和视频。未知二进制仍显示占位提示，
 不得尝试按文本解释。媒体预览为所在目录建立临时 watcher，文件变化后重新读取。
 
+Git 变更面提供“工作区”和“当前任务”两个来源。当前任务不重新推断磁盘差异，而是
+从 canonical `mutation_receipts` 按最新根 Run 汇总整棵 Agent 委派树的
+`ToolOutput.changedFiles`，同一路径以最后一次 mutation 为准。该视图只读，可定位文件
+和打开当前工作树 diff；暂存、提交等写操作仍只属于工作区来源。
+
 `WorkspaceStats` 至少包含文件数、目录数、总大小、按扩展名统计、Git changed/untracked 数量和更新时间。索引器失败不影响 Chat，UI 必须显示过期或错误状态。
 
 ## Code/Document Viewer

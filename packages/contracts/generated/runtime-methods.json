@@ -78,6 +78,7 @@
     "terminal.list",
     "terminal.resize",
     "terminal.write",
+    "workspace.agent_changes",
     "workspace.git_branch_create",
     "workspace.git_branch_switch",
     "workspace.git_branches",

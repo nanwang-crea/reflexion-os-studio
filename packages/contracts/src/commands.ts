@@ -15,6 +15,7 @@ import {
   WorkspaceReadResultSchema,
   GitChangeEntrySchema,
   GitChangeStatusSchema,
+  ChangedFileSchema,
   AssetRefSchema,
   QueueEntrySchema,
   AgentSettingsSchema,
@@ -776,6 +777,17 @@ export const CommandSchemaRegistry = {
       upstream: z.string().nullable(),
       ahead: z.number().int().nonnegative().nullable(),
       behind: z.number().int().nonnegative().nullable(),
+    }),
+  },
+  'workspace.agent_changes': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+      sessionId: z.string().min(1),
+    }),
+    result: z.object({
+      rootRunId: z.string().min(1).nullable(),
+      changes: z.array(ChangedFileSchema),
     }),
   },
   'workspace.git_diff': {

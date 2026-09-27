@@ -448,6 +448,25 @@
   overflow: hidden;
 }
 
+.git-source-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px 0;
+}
+
+.git-source-tabs button {
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 8px;
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.git-source-tabs button.active {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
 .git-list {
   list-style: none;
   margin: 0;

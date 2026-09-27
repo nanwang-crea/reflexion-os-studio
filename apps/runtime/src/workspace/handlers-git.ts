@@ -18,6 +18,31 @@ const GIT_LOCAL_WRITE_TIMEOUT_MS = 35_000
 const GIT_NETWORK_TIMEOUT_MS = 130_000
 
 export const workspaceGitCommandHandlers: Record<string, CommandHandler> = {
+  'workspace.agent_changes': (p, { store }) => {
+    const projectId = requireString(p, 'projectId')
+    requireWorkspaceProject(store, projectId)
+    const sessionId = requireString(p, 'sessionId')
+    const session = store.sessions.get(sessionId)
+    if (!session || session.projectId !== projectId) {
+      throw new CommandError('invalid_request', '会话不属于当前项目')
+    }
+    const rootRun = store.runs
+      .listBySession(sessionId)
+      .filter((run) => run.parentRunId === null)
+      .at(-1)
+    if (!rootRun) return { rootRunId: null, changes: [] }
+    const changes = new Map<
+      string,
+      ReturnType<
+        typeof store.mutationReceipts.listByRootRun
+      >[number]['changedFiles'][number]
+    >()
+    for (const receipt of store.mutationReceipts.listByRootRun(rootRun.id)) {
+      for (const change of receipt.changedFiles)
+        changes.set(change.path, change)
+    }
+    return { rootRunId: rootRun.id, changes: [...changes.values()] }
+  },
   'workspace.git_status': async (p, { store, system }) => {
     const project = requireWorkspaceProject(
       store,

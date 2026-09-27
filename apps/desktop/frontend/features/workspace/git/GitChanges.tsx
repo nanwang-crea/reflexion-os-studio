@@ -21,12 +21,15 @@ import { GitChangeList } from './GitChangeList'
 import { GitCommitBox } from './GitCommitBox'
 import type { OpenDiffHandler } from '../types'
 import type { WorkspaceGitStatus } from '../../../hooks/workspace/useWorkspaceGitStatus'
+import { GitSourceTabs } from './GitSourceTabs'
+import { useAgentChanges } from './useAgentChanges'
 
 type GitAction = 'commit' | 'push' | 'pull' | 'stage' | 'unstage' | 'branch'
 type Busy = GitAction | 'refresh'
 
 interface GitChangesProps {
   projectId: string
+  activeSessionId: string | null
   systemReady: boolean
   /** 点击变更文件时直接交给右侧只读文件查看器。 */
   onOpenFile: (path: string) => void
@@ -66,6 +69,12 @@ export function GitChanges(props: GitChangesProps): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<Busy | null>(null)
   const [message, setMessage] = useState('')
+  const [source, setSource] = useState<'workspace' | 'agent'>('workspace')
+  const agentChangesState = useAgentChanges(
+    props.projectId,
+    props.activeSessionId,
+    entries,
+  )
   // latest-ref：onAfterMutation 多为行内箭头（每次渲染新身份），不进任何依赖数组。
   const onAfterMutationRef = useRef(props.onAfterMutation)
   useEffect(() => {
@@ -313,61 +322,87 @@ export function GitChanges(props: GitChangesProps): React.JSX.Element {
 
   return (
     <div className="git-changes">
-      <div className="git-changes-head">
-        <BranchPicker
-          branch={branch}
-          ahead={ahead}
-          behind={behind}
-          branches={branches}
-          remoteBranches={remoteBranches}
-          remotes={remotes}
-          busy={busy !== null}
-          onSwitch={switchBranch}
-          onCreate={createBranch}
-          onRemoteAdd={addRemote}
-          onRemoteRemove={removeRemote}
-          onRefresh={() => void refresh()}
+      <GitSourceTabs
+        source={source}
+        workspaceCount={entries.length}
+        agentCount={agentChangesState.entries.length}
+        agentAvailable={props.activeSessionId !== null}
+        onChange={setSource}
+      />
+      {source === 'agent' ? (
+        <GitChangeList
+          entries={agentChangesState.entries}
+          truncated={false}
+          busy={false}
+          busyLabel={null}
+          readOnly
+          emptyLabel="当前任务还没有记录文件变更。"
+          onOpen={openEntry}
+          onStagePaths={() => {}}
+          onUnstagePaths={() => {}}
+          onRefresh={() => {
+            void agentChangesState.refresh().catch(() => {})
+          }}
         />
-        <div className="git-head-actions">
-          <button
-            className="ghost"
-            disabled={busy !== null}
-            title="拉取并合并远端更新"
-            onClick={runActionWith('pull', () => gitPull(props.projectId), {
-              guard: true,
-              reloadTabs: true,
-            })}
-          >
-            ↓ 更新
-          </button>
-          <button
-            className="ghost"
-            disabled={busy !== null}
-            title="推送本地提交到远端"
-            onClick={runActionWith('push', () => gitPush(props.projectId))}
-          >
-            ↑ 推送
-          </button>
-        </div>
-      </div>
-      <GitCommitBox
-        message={message}
-        canCommit={canCommit}
-        busy={busy !== null}
-        onMessage={setMessage}
-        onCommit={runCommit}
-      />
-      {error !== null && errorBanner(error)}
-      <GitChangeList
-        entries={entries}
-        truncated={truncated}
-        busy={busy !== null}
-        busyLabel={busy === null ? null : BUSY_LABELS[busy]}
-        onOpen={openEntry}
-        onStagePaths={(paths) => runPaths('stage', paths)}
-        onUnstagePaths={(paths) => runPaths('unstage', paths)}
-        onRefresh={busyRefresh}
-      />
+      ) : (
+        <>
+          <div className="git-changes-head">
+            <BranchPicker
+              branch={branch}
+              ahead={ahead}
+              behind={behind}
+              branches={branches}
+              remoteBranches={remoteBranches}
+              remotes={remotes}
+              busy={busy !== null}
+              onSwitch={switchBranch}
+              onCreate={createBranch}
+              onRemoteAdd={addRemote}
+              onRemoteRemove={removeRemote}
+              onRefresh={() => void refresh()}
+            />
+            <div className="git-head-actions">
+              <button
+                className="ghost"
+                disabled={busy !== null}
+                title="拉取并合并远端更新"
+                onClick={runActionWith('pull', () => gitPull(props.projectId), {
+                  guard: true,
+                  reloadTabs: true,
+                })}
+              >
+                ↓ 更新
+              </button>
+              <button
+                className="ghost"
+                disabled={busy !== null}
+                title="推送本地提交到远端"
+                onClick={runActionWith('push', () => gitPush(props.projectId))}
+              >
+                ↑ 推送
+              </button>
+            </div>
+          </div>
+          <GitCommitBox
+            message={message}
+            canCommit={canCommit}
+            busy={busy !== null}
+            onMessage={setMessage}
+            onCommit={runCommit}
+          />
+          {error !== null && errorBanner(error)}
+          <GitChangeList
+            entries={entries}
+            truncated={truncated}
+            busy={busy !== null}
+            busyLabel={busy === null ? null : BUSY_LABELS[busy]}
+            onOpen={openEntry}
+            onStagePaths={(paths) => runPaths('stage', paths)}
+            onUnstagePaths={(paths) => runPaths('unstage', paths)}
+            onRefresh={busyRefresh}
+          />
+        </>
+      )}
     </div>
   )
 }

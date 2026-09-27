@@ -1,4 +1,5 @@
 import type {
+  ChangedFile,
   GitChangeEntry,
   GitChangeStatus,
   RuntimeEvent,
@@ -129,6 +130,13 @@ export function gitStatus(projectId: string): Promise<{
     ahead: number | null
     behind: number | null
   }>('workspace.git_status', { projectId })
+}
+
+export function agentChanges(
+  projectId: string,
+  sessionId: string,
+): Promise<{ rootRunId: string | null; changes: ChangedFile[] }> {
+  return request('workspace.agent_changes', { projectId, sessionId })
 }
 
 /**

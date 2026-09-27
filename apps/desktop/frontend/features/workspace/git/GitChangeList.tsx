@@ -11,6 +11,8 @@ interface GitChangeListProps {
   onStagePaths: (paths: string[]) => void
   onUnstagePaths: (paths: string[]) => void
   onRefresh: () => void
+  readOnly?: boolean
+  emptyLabel?: string
 }
 
 /** 变更状态 → 中文徽章文案；Git 变更与提交历史两个面板共用。 */
@@ -68,7 +70,7 @@ export function GitChangeList(props: GitChangeListProps): React.JSX.Element {
                 <span className="git-old-path">{entry.oldPath} →</span>
               )}
             </button>
-            {entry.status !== 'conflicted' && (
+            {!props.readOnly && entry.status !== 'conflicted' && (
               <button
                 type="button"
                 className="git-row-action"
@@ -99,7 +101,7 @@ export function GitChangeList(props: GitChangeListProps): React.JSX.Element {
           {props.busyLabel ? ` · ${props.busyLabel}…` : ''}
         </span>
         <span className="git-bar-actions">
-          {unstagedPaths.length > 0 && (
+          {!props.readOnly && unstagedPaths.length > 0 && (
             <button
               className="ghost"
               disabled={props.busy}
@@ -108,7 +110,7 @@ export function GitChangeList(props: GitChangeListProps): React.JSX.Element {
               全部暂存
             </button>
           )}
-          {stagedPaths.length > 0 && (
+          {!props.readOnly && stagedPaths.length > 0 && (
             <button
               className="ghost"
               disabled={props.busy}
@@ -128,7 +130,9 @@ export function GitChangeList(props: GitChangeListProps): React.JSX.Element {
         </span>
       </div>
       {props.entries.length === 0 ? (
-        <div className="git-hint">工作树干净，没有未提交的变更。</div>
+        <div className="git-hint">
+          {props.emptyLabel ?? '工作树干净，没有未提交的变更。'}
+        </div>
       ) : (
         <div className="git-groups">
           {staged.length > 0 && renderGroup('已暂存', staged, 'staged')}

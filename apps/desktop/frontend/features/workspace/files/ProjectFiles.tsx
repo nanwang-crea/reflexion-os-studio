@@ -17,6 +17,7 @@ interface ProjectFilesProps {
   project: Project | null
   /** Rust System Runtime 可用性：文件树/查看器依赖它，索引器不依赖。 */
   systemReady: boolean
+  activeSessionId: string | null
   /** 右侧查看器当前激活文件；用于文件树高亮。 */
   activePath: string | null
   /** 点击文件/Git 变更"打开文件"：交给右侧查看器打开标签。 */
@@ -194,6 +195,7 @@ export function ProjectFiles(props: ProjectFilesProps): React.JSX.Element {
         ) : view === 'git' ? (
           <GitChanges
             projectId={project.id}
+            activeSessionId={props.activeSessionId}
             systemReady={props.systemReady}
             onOpenFile={props.onOpenFile}
             onOpenDiff={props.onOpenDiff}

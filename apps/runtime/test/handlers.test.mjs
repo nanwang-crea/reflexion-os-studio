@@ -1077,6 +1077,59 @@ test('workspace.git_status passes through branch context and defaults to null', 
   })
 })
 
+test('workspace.agent_changes returns deduplicated latest root task changes', async () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/workspace' })
+  const session = store.sessions.create(project.id)
+  const run = store.runs.create({
+    sessionId: session.id,
+    providerId: null,
+    model: null,
+  })
+  const message = store.messages.create({
+    sessionId: session.id,
+    runId: run.id,
+    role: 'assistant',
+    content: '',
+    status: 'completed',
+  })
+  const tool = store.toolCalls.create({
+    runId: run.id,
+    messageId: message.id,
+    toolName: 'file.write',
+    args: {},
+  })
+  store.mutationReceipts.record({
+    rootRunId: run.id,
+    runId: run.id,
+    delegationId: null,
+    agentInstanceId: null,
+    toolCallId: tool.id,
+    toolName: 'file.write',
+    output: {
+      type: 'tool_output',
+      version: 1,
+      content: 'ok',
+      data: null,
+      resourceLinks: [],
+      changedFiles: [
+        { path: 'src/a.ts', action: 'created' },
+        { path: 'src/a.ts', action: 'modified' },
+      ],
+      provenance: null,
+    },
+  })
+  const result = await dispatchCommand(
+    'workspace.agent_changes',
+    { projectId: project.id, sessionId: session.id },
+    { store },
+  )
+  assert.deepEqual(result, {
+    rootRunId: run.id,
+    changes: [{ path: 'src/a.ts', action: 'modified' }],
+  })
+})
+
 test('workspace.git_log forwards clamped paging and defaults empty fields', async () => {
   const store = freshStore()
   const project = store.projects.create({ name: 'p', folderPath: '/workspace' })

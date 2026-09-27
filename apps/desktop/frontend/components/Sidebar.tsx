@@ -138,6 +138,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
         <ProjectFiles
           project={activeProject}
           systemReady={props.systemReady}
+          activeSessionId={props.activeSessionId}
           activePath={props.activeFilePath}
           focusAssetId={props.focusAssetId}
           onFocusConsumed={props.onFocusConsumed}
