@@ -71,6 +71,7 @@ export interface LaunchOptions {
   permissionDomainId?: string
   rootRunId?: string
   mutationCoordinator?: RootMutationCoordinator
+  defaultChildTemplateId?: string
 }
 
 /** launch 依赖：跨 Run 共享的服务集合（由 ChatAgent 注入）。 */

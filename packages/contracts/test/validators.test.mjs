@@ -182,6 +182,7 @@ test('RunSchema carries agent delegation fields and awaiting_approval', () => {
     parentRunId: null,
     delegationId: null,
     skillId: null,
+    agentTemplateId: null,
     usage: null,
   }
   assert.equal(RunSchema.safeParse(run).success, true)
@@ -337,6 +338,15 @@ test('message.send params require requestId, sessionId and content', () => {
     false,
   )
   assert.equal(params.safeParse({ requestId: 'r1' }).success, false)
+  assert.equal(
+    params.safeParse({
+      requestId: 'r1',
+      sessionId: 's1',
+      content: 'hi',
+      agentTemplateId: 'reviewer',
+    }).success,
+    true,
+  )
 })
 
 test('message.edit_resend requires the replaced message id', () => {
@@ -1060,6 +1070,13 @@ test('ApprovalChoice/Runtime 下发协议：presentation 不携带授权语义',
       network: false,
       escalation: true,
       justification: 'read git config',
+      agent: {
+        instanceId: 'agent-1',
+        displayName: 'Reviewer',
+        depth: 2,
+        rootRunId: 'run-root',
+        rootTask: 'review the workspace',
+      },
     }).success,
     true,
   )
@@ -1216,11 +1233,13 @@ test('QueueEntry 快照 permissionPreset', () => {
     model: null,
     permissionPreset: 'workspace-full',
     skillId: null,
+    agentTemplateId: 'reviewer',
     position: 0,
   }
   const parsed = QueueEntrySchema.safeParse(entry)
   assert.equal(parsed.success, true)
   assert.equal(parsed.data.permissionPreset, 'workspace-full')
+  assert.equal(parsed.data.agentTemplateId, 'reviewer')
   assert.equal(
     QueueEntrySchema.safeParse({ ...entry, permissionPreset: undefined })
       .success,

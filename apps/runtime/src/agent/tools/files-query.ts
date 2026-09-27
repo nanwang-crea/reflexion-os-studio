@@ -2,6 +2,7 @@ import type { ToolDefinition } from '@reflexion-os-studio/agent-core'
 import type { SystemRuntimeClient } from '../../system.js'
 import { callSystem, optionalNumber, requireString } from './shared.js'
 import { extractRevision, type FileReadState } from './read-state.js'
+import { decodeSearchCursor, encodeSearchCursor } from './search-cursor.js'
 
 /**
  * 单次回填的带行号内容字符预算：给元数据与截断提示留出余量（模型上限 16K）。
@@ -112,10 +113,12 @@ export function createFileReadTool(
         typeof record.modifiedMs === 'number' ? record.modifiedMs : undefined
       const revision = extractRevision(record)
       const readComplete = record.readComplete === true
-      if (modifiedMs !== undefined && revision !== undefined) {
-        readState.record(path, { revision, complete: readComplete })
-      }
       const window = buildNumberedWindow(content, startLine)
+      const complete =
+        startLine === 0 && readComplete && !window.contentTruncated
+      if (modifiedMs !== undefined && revision !== undefined) {
+        readState.record(path, { revision, complete })
+      }
       const result: Record<string, unknown> = {
         path,
         sizeBytes,
@@ -135,7 +138,7 @@ export function createFileReadTool(
               revision,
               // 覆盖文件（file.write）必须基于未截断的完整读取：
               // 分页窗口发出的凭据只满足 file.edit 的先读要求。
-              ...(readComplete
+              ...(complete
                 ? {}
                 : {
                     revisionHint:
@@ -213,19 +216,28 @@ export function createFileGlobTool(
           description: '起始偏移量（0 起），缺省从头开始',
         },
         limit: { type: 'number', description: '最多返回条数，缺省 500' },
+        cursor: {
+          type: 'string',
+          description: '上次结果返回的不透明续读 cursor',
+        },
       },
       required: ['pattern'],
     },
-    execute: ({ args, signal }) => {
+    execute: async ({ args, signal }) => {
+      const pattern = requireString(args, 'pattern')
       const params: Record<string, unknown> = {
         workspaceRoot,
-        pattern: requireString(args, 'pattern'),
+        pattern,
       }
-      const offset = optionalNumber(args, 'offset')
+      const raw = args as Record<string, unknown>
+      const offset =
+        decodeSearchCursor(raw.cursor, 'glob', pattern) ??
+        optionalNumber(args, 'offset')
       if (offset !== undefined) params.offset = Math.max(0, Math.trunc(offset))
       const limit = optionalNumber(args, 'limit')
       if (limit !== undefined) params.limit = Math.max(1, Math.trunc(limit))
-      return callSystem(system, 'file.glob', params, signal)
+      const result = await callSystem(system, 'file.glob', params, signal)
+      return withSearchCursor(result, 'glob', pattern)
     },
   }
 }
@@ -255,10 +267,14 @@ export function createFileGrepTool(
           type: 'number',
           description: '最多返回命中条数，缺省 200',
         },
+        cursor: {
+          type: 'string',
+          description: '上次结果返回的不透明续读 cursor',
+        },
       },
       required: ['text'],
     },
-    execute: ({ args, signal }) => {
+    execute: async ({ args, signal }) => {
       const params: Record<string, unknown> = {
         workspaceRoot,
         text: requireString(args, 'text'),
@@ -276,7 +292,32 @@ export function createFileGrepTool(
       if (maxResults !== undefined) {
         params.maxResults = Math.max(1, Math.trunc(maxResults))
       }
-      return callSystem(system, 'file.grep', params, signal)
+      const fingerprint = JSON.stringify([
+        params.text,
+        params.glob ?? null,
+        raw.ignoreCase === true,
+        params.context ?? 0,
+      ])
+      const offset = decodeSearchCursor(raw.cursor, 'grep', fingerprint)
+      if (offset !== undefined) params.offset = offset
+      const result = await callSystem(system, 'file.grep', params, signal)
+      return withSearchCursor(result, 'grep', fingerprint)
     },
+  }
+}
+
+function withSearchCursor(
+  result: Awaited<ReturnType<typeof callSystem>>,
+  tool: 'glob' | 'grep',
+  fingerprint: string,
+) {
+  if (result.isError) return result
+  try {
+    const data = JSON.parse(result.content) as Record<string, unknown>
+    if (typeof data.nextOffset === 'number')
+      data.nextCursor = encodeSearchCursor(tool, fingerprint, data.nextOffset)
+    return { ...result, content: JSON.stringify(data) }
+  } catch {
+    return result
   }
 }

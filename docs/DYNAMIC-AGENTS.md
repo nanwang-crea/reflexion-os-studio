@@ -12,6 +12,12 @@ Template selection order is:
 2. a template selected by the parent model from the advertised catalogue;
 3. no template, using only the task and the runtime child prompt.
 
+The Composer exposes the first option as a per-message default. That choice is
+stored on the root Run, survives queued send/retry/resume, and overrides every
+template suggestion made by the model in that delegation tree. Returning from
+the Agent settings page refreshes the catalogue so disabled or edited templates
+are not offered from stale UI state.
+
 Templates cannot elevate authority. The effective child boundary is the
 intersection of the parent Run boundary, the template restrictions, and Runtime
 hard-deny policy. One-time approvals, Danger leases, approval overrides and
@@ -32,6 +38,15 @@ credential access are never inherited.
 - `RootMutationCoordinator`: serializes mutating tool calls across one Agent
   tree. Completed mutations produce attribution receipts from canonical
   `ToolOutput.changedFiles`.
+
+Serial execution is paired with exact file revisions (`mtime + size + sha256`).
+A sibling write based on an older read is rejected as
+`file_revision_conflict`; the Agent must read the latest file and re-apply its
+intent. Runtime does not silently auto-merge because textual success does not
+prove semantic ownership. Mutation receipts identify the responsible dynamic
+instance, but are not advertised as universal undo records: destructive and
+whole-file operations need bounded preimage snapshots before safe one-click
+rollback can be offered.
 
 The maximum recursion depth remains four. Runtime management tools, Provider
 secrets, plugin administration, Agent settings and Danger controls are excluded

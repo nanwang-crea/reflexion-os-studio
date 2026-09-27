@@ -15,6 +15,7 @@ import {
   createFileMkdirTool,
   createFileMoveTool,
   createFileWriteTool,
+  createFileWriteStreamTool,
 } from './files-mutate.js'
 import {
   createFileGlobTool,
@@ -23,6 +24,7 @@ import {
   createFileReadTool,
 } from './files-query.js'
 import { createShellExecuteTool } from './shell.js'
+import { createShellOutputReadTool, ShellOutputStore } from './shell-output.js'
 import { createSkillUseTool } from './skills.js'
 import { createMemoryRememberTool } from './instructions.js'
 import type { ToolContext } from './shared.js'
@@ -46,18 +48,55 @@ export type { ToolContext } from './shared.js'
 export function createToolRegistry(ctx: ToolContext): ToolRegistry {
   const registry = new ToolRegistry()
   // 先读后写凭据状态：file.read 记录，file.write/edit 消费，随 Run 生命周期。
-  const readState = new FileReadState()
+  const turnExecutions = ctx.store.turnExecutions
+  const latest = turnExecutions?.latestForRun(ctx.runId)
+  const runtimeState = latest?.runtimeState
+  const initial =
+    typeof runtimeState === 'object' &&
+    runtimeState !== null &&
+    !Array.isArray(runtimeState) &&
+    typeof runtimeState.fileReads === 'object' &&
+    runtimeState.fileReads !== null &&
+    !Array.isArray(runtimeState.fileReads)
+      ? (runtimeState.fileReads as unknown as Record<
+          string,
+          import('./read-state.js').FileReadRecord
+        >)
+      : undefined
+  const readState = new FileReadState(initial, (fileReads) => {
+    if (!turnExecutions) return
+    const turn = turnExecutions.latestForRun(ctx.runId)
+    if (turn && turn.completedAt === null) {
+      turnExecutions.transition(turn.id, turn.phase, {
+        runtimeState: JSON.parse(JSON.stringify({ fileReads })),
+      })
+    }
+  })
+  const shellOutputStore = new ShellOutputStore()
   const tools = [
     ...alwaysAvailableTools(ctx),
     ...mcpTools(ctx),
     ...(ctx.system !== null &&
     ctx.system.available &&
     ctx.workspaceRoot !== null
-      ? workspaceTools(ctx.system, ctx.workspaceRoot, readState)
+      ? workspaceTools(
+          ctx.system,
+          ctx.workspaceRoot,
+          readState,
+          shellOutputStore,
+        )
       : []),
   ]
   for (let tool of tools) {
-    if (ctx.allowedTools != null && !ctx.allowedTools.has(tool.name)) {
+    if (
+      ctx.allowedTools != null &&
+      !ctx.allowedTools.has(tool.name) &&
+      !(
+        tool.name === 'shell.output.read' &&
+        ctx.allowedTools.has('shell.execute')
+      ) &&
+      !(tool.name === 'file.write_stream' && ctx.allowedTools.has('file.write'))
+    ) {
       continue
     }
     tool = withExecutionPolicy(tool)
@@ -94,11 +133,13 @@ const BUILTIN_POLICIES: Record<string, ToolDefinition['execution']> = {
   'file.glob': READ_POLICY(false),
   'file.grep': READ_POLICY(false),
   'file.write': WRITE_POLICY,
+  'file.write_stream': WRITE_POLICY,
   'file.edit': WRITE_POLICY,
   'file.delete': WRITE_POLICY,
   'file.move': WRITE_POLICY,
   'file.mkdir': WRITE_POLICY,
   'shell.execute': SHELL_POLICY,
+  'shell.output.read': READ_POLICY(false),
 }
 
 function alwaysAvailableTools(ctx: ToolContext): ToolDefinition[] {
@@ -134,6 +175,7 @@ function workspaceTools(
   system: NonNullable<ToolContext['system']>,
   workspaceRoot: string,
   readState: FileReadState,
+  shellOutputStore: ShellOutputStore,
 ): ToolDefinition[] {
   return [
     createFileReadTool(system, workspaceRoot, readState),
@@ -141,10 +183,12 @@ function workspaceTools(
     createFileGlobTool(system, workspaceRoot),
     createFileGrepTool(system, workspaceRoot),
     createFileWriteTool(system, workspaceRoot, readState),
+    createFileWriteStreamTool(system, workspaceRoot, readState),
     createFileEditTool(system, workspaceRoot, readState),
     createFileDeleteTool(system, workspaceRoot, readState),
     createFileMoveTool(system, workspaceRoot, readState),
     createFileMkdirTool(system, workspaceRoot),
-    createShellExecuteTool(system, workspaceRoot),
+    createShellExecuteTool(system, workspaceRoot, shellOutputStore),
+    createShellOutputReadTool(shellOutputStore),
   ]
 }

@@ -96,6 +96,7 @@ export function packageManifestForBuiltin(
   const writesWorkspace = tools.some((tool) =>
     [
       'file.write',
+      'file.write_stream',
       'file.edit',
       'file.delete',
       'file.move',

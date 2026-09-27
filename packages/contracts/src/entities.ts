@@ -36,12 +36,14 @@ export {
   ChangedFileActionSchema,
   ChangedFileSchema,
   ToolOutputSchema,
+  ToolProvenanceSchema,
   coerceToolOutput,
 } from './tool-output.js'
 export type {
   ChangedFile,
   ChangedFileAction,
   ToolOutput,
+  ToolProvenance,
 } from './tool-output.js'
 
 export const IsoDateTimeSchema = z.iso.datetime()
@@ -214,6 +216,7 @@ export const RunSchema = z.object({
   delegationId: z.string().min(1).nullable(),
   // 本次 Run 激活的 Skill（斜杠命令或显式传入）；未激活为 null。
   skillId: z.string().min(1).nullable(),
+  agentTemplateId: z.string().min(1).nullable(),
   // 全轮合计 token 用量（各模型轮累加）；进行中/旧数据为 null。
   usage: UsageSchema.nullable(),
 })
@@ -251,6 +254,7 @@ export const TurnExecutionSchema = z.object({
   pendingInteractionId: z.string().min(1).nullable(),
   pendingApprovalId: z.string().min(1).nullable(),
   continuationReason: z.string().nullable(),
+  runtimeState: JsonValueSchema.nullable().default(null),
   checkpointVersion: z.number().int().positive(),
   createdAt: IsoDateTimeSchema,
   updatedAt: IsoDateTimeSchema,
@@ -302,6 +306,7 @@ export const ToolOperationSchema = z.enum([
   'file.glob',
   'file.grep',
   'file.write',
+  'file.write_stream',
   'file.edit',
   'file.delete',
   'file.move',
@@ -648,10 +653,20 @@ export const FileWriteResultSchema = z.object({
 })
 export type FileWriteResult = z.infer<typeof FileWriteResultSchema>
 
+export const StructuredPatchChangeSchema = z.object({
+  kind: z.enum(['replace', 'insert_before', 'insert_after', 'replace_range']),
+  startLine: z.number().int().positive(),
+  endLine: z.number().int().positive(),
+  before: z.string(),
+  after: z.string(),
+})
+export type StructuredPatchChange = z.infer<typeof StructuredPatchChangeSchema>
+
 export const FileEditResultSchema = z.object({
   replacedCount: z.number().int().nonnegative(),
   sizeBytes: z.number().int().nonnegative(),
   changedFiles: z.array(ChangedFileSchema).optional(),
+  structuredPatch: z.array(StructuredPatchChangeSchema),
 })
 export type FileEditResult = z.infer<typeof FileEditResultSchema>
 
@@ -749,6 +764,7 @@ export const QueueEntrySchema = z.object({
   // 发送时捕获的权限预设快照；UI badge 与实际执行档位一致。
   permissionPreset: PermissionPresetSchema.nullable(),
   skillId: z.string().min(1).nullable(),
+  agentTemplateId: z.string().min(1).nullable(),
   /** 0 起位置；出队发送时该项即消失。 */
   position: z.number().int().nonnegative(),
 })

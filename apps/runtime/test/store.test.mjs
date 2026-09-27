@@ -398,7 +398,9 @@ test('user agent templates and mutation receipts round-trip', () => {
     sessionId: session.id,
     providerId: null,
     model: null,
+    agentTemplateId: template.id,
   })
+  assert.equal(store.runs.get(run.id).agentTemplateId, template.id)
   const toolCall = store.toolCalls.create({
     runId: run.id,
     messageId: null,
@@ -1080,12 +1082,12 @@ test('v23 migration drops legacy memories/FTS/memory_jobs tables', () => {
     .map((row) => row.name)
   assert.deepEqual(names, [])
   const version = after.prepare('PRAGMA user_version').get()
-  assert.equal(Number(version.user_version), 33)
+  assert.equal(Number(version.user_version), 34)
   after.close()
   store.close()
 })
 
-test('fresh store schema has dynamic agent governance and version 33', () => {
+test('fresh store schema has dynamic agent governance and version 34', () => {
   const dir = mkdtempSync(join(tmpdir(), 'reflexion-v23-fresh-'))
   const store = new Store(dir)
   store.close()
@@ -1098,7 +1100,7 @@ test('fresh store schema has dynamic agent governance and version 33', () => {
     .map((row) => row.name)
   assert.deepEqual(names, [])
   const version = db.prepare('PRAGMA user_version').get()
-  assert.equal(Number(version.user_version), 33)
+  assert.equal(Number(version.user_version), 34)
   const plugins = db
     .prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'plugins'",

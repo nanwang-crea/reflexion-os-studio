@@ -163,6 +163,11 @@ export function QueueBar(props: QueueBarProps): React.JSX.Element {
                   读写
                 </span>
               )}
+            {entry.agentTemplateId && editingId !== entry.id && (
+              <span className="queue-trusted-badge">
+                模板 {entry.agentTemplateId}
+              </span>
+            )}
             <span className="queue-actions">
               {editingId === entry.id ? (
                 <>

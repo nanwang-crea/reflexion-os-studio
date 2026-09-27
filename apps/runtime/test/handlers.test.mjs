@@ -370,6 +370,64 @@ test('child task starter launches an isolated read-only child and persists its r
   )
 })
 
+test('an explicit default template overrides the parent model selection', async () => {
+  const store = freshStore()
+  const explicit = store.agents.saveUser({
+    name: 'Explicit Reviewer',
+    description: 'Chosen by the user',
+    systemPrompt: 'Use the explicit review policy.',
+    enabled: true,
+    allowedTools: ['file.read'],
+    canDelegate: false,
+  })
+  const modelChoice = store.agents.saveUser({
+    name: 'Model Choice',
+    description: 'Chosen by the parent model',
+    systemPrompt: 'Use the model-selected policy.',
+    enabled: true,
+    allowedTools: ['file.read'],
+    canDelegate: false,
+  })
+  const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
+  const session = store.sessions.create(project.id)
+  const parentRun = store.runs.create({
+    sessionId: session.id,
+    providerId: 'provider',
+    model: 'model',
+  })
+  let launchInput
+  const starter = createChildRunStarter(
+    {
+      store,
+      notifier: () => {},
+      launcher: {
+        depthOf: () => 0,
+        launch: (input) => {
+          launchInput = input
+          input.onResult('done')
+        },
+      },
+      profile: { id: 'provider', models: ['model'] },
+      apiKey: 'unused',
+      model: 'model',
+      sampling: {},
+      defaultTemplateId: explicit.id,
+    },
+    parentRun,
+    session,
+  )
+
+  await starter({
+    task: 'review this change',
+    agent: { templateId: modelChoice.id },
+    signal: new AbortController().signal,
+  })
+
+  const [delegation] = store.delegations.listByParentRun(parentRun.id)
+  assert.equal(delegation.agentInstance.templateId, explicit.id)
+  assert.match(launchInput.systemPrompt, /explicit review policy/)
+})
+
 test('parent cancellation propagates to the active child delegation', async () => {
   const store = freshStore()
   const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })

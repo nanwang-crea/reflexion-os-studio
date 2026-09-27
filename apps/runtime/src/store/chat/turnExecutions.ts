@@ -21,6 +21,7 @@ export interface TurnExecutionPatch {
   pendingInteractionId?: string | null
   pendingApprovalId?: string | null
   continuationReason?: string | null
+  runtimeState?: JsonValue | null
 }
 
 export interface TurnRecoveryDecision {
@@ -52,6 +53,7 @@ export class TurnExecutionStore {
       pendingInteractionId: null,
       pendingApprovalId: null,
       continuationReason: null,
+      runtimeState: null,
       checkpointVersion: 1,
       createdAt: now,
       updatedAt: now,
@@ -62,8 +64,8 @@ export class TurnExecutionStore {
         `INSERT INTO turn_executions
          (id, run_id, phase, attempt, model_request_json, assistant_message_id,
           tool_batch_json, pending_interaction_id, pending_approval_id,
-          continuation_reason, checkpoint_version, created_at, updated_at, completed_at)
-         VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 1, ?, ?, NULL)`,
+          continuation_reason, runtime_state_json, checkpoint_version, created_at, updated_at, completed_at)
+         VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, 1, ?, ?, NULL)`,
       )
       .run(
         turn.id,
@@ -128,13 +130,17 @@ export class TurnExecutionStore {
         patch.continuationReason === undefined
           ? current.continuationReason
           : patch.continuationReason,
+      runtimeState:
+        patch.runtimeState === undefined
+          ? current.runtimeState
+          : patch.runtimeState,
     }
     this.db
       .prepare(
         `UPDATE turn_executions
          SET phase = ?, model_request_json = ?, assistant_message_id = ?,
              tool_batch_json = ?, pending_interaction_id = ?,
-             pending_approval_id = ?, continuation_reason = ?,
+             pending_approval_id = ?, continuation_reason = ?, runtime_state_json = ?,
              updated_at = ?, completed_at = ?
          WHERE id = ?`,
       )
@@ -146,6 +152,7 @@ export class TurnExecutionStore {
         next.pendingInteractionId,
         next.pendingApprovalId,
         next.continuationReason,
+        stringifyNullable(next.runtimeState),
         updatedAt,
         completedAt,
         id,
@@ -219,6 +226,7 @@ export class TurnExecutionStore {
         row.continuation_reason == null
           ? null
           : String(row.continuation_reason),
+      runtimeState: parseNullable(row.runtime_state_json),
       checkpointVersion: Number(row.checkpoint_version),
       createdAt: String(row.created_at),
       updatedAt: String(row.updated_at),

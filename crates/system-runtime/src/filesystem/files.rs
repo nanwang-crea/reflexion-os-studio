@@ -1,10 +1,13 @@
 //! File Service：workspace 内的读取/列表/写入。
 //! 路径边界由 paths::resolve_in_workspace 强制；本模块只做能力与体量限制。
 use std::fs;
+use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use super::paths::resolve_in_workspace;
 use super::walk::walk_files;
@@ -51,28 +54,46 @@ pub fn read(
         return Err(format!("not a regular file: {relative}"));
     }
     let size = fs::metadata(&path).map_err(|e| e.to_string())?.len();
-    if size > MAX_READ_BYTES {
-        return Err(format!(
-            "file too large for read: {size} bytes (whole-file limit {MAX_READ_BYTES} bytes); \
-             line-windowed reads still load the entire file — use file.grep to locate content \
-             in larger files, or file.list to check sizes"
-        ));
-    }
-    let bytes = fs::read(&path).map_err(|e| e.to_string())?;
-    let content = String::from_utf8(bytes).map_err(|_| {
-        "file is not valid UTF-8 text (binary file?); file.grep skips binary files \
-         automatically, and file.list shows file sizes"
-            .to_string()
-    })?;
-    let total_lines = content.lines().count();
     let start = offset.unwrap_or(0);
+    let max_lines = limit.unwrap_or(DEFAULT_READ_LIMIT).min(MAX_READ_LIMIT);
+    let file = fs::File::open(&path).map_err(|error| error.to_string())?;
+    let mut reader = BufReader::new(file);
+    let mut hasher = Sha256::new();
+    let mut selected = Vec::new();
+    let mut total_lines = 0usize;
+    let mut selected_bytes = 0u64;
+    let mut buffer = Vec::new();
+    loop {
+        buffer.clear();
+        let read = reader
+            .read_until(b'\n', &mut buffer)
+            .map_err(|error| error.to_string())?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer);
+        let line_index = total_lines;
+        total_lines += 1;
+        if line_index < start || selected.len() >= max_lines {
+            continue;
+        }
+        while matches!(buffer.last(), Some(b'\n' | b'\r')) {
+            buffer.pop();
+        }
+        selected_bytes += buffer.len() as u64;
+        if selected_bytes > MAX_READ_BYTES {
+            return Err(format!("requested line window exceeds {MAX_READ_BYTES} bytes; reduce limit or use file.grep"));
+        }
+        selected.push(
+            String::from_utf8(buffer.clone())
+                .map_err(|_| "file is not valid UTF-8 text (binary file?)".to_string())?,
+        );
+    }
     if start > total_lines {
         return Err(format!(
             "offset {start} beyond end of file ({total_lines} lines)"
         ));
     }
-    let max_lines = limit.unwrap_or(DEFAULT_READ_LIMIT).min(MAX_READ_LIMIT);
-    let selected: Vec<&str> = content.lines().skip(start).take(max_lines).collect();
     let modified_ms = mtime_ms(&path)?;
     let read_complete = start + selected.len() >= total_lines;
     Ok(ReadResult {
@@ -81,7 +102,7 @@ pub fn read(
         total_lines,
         offset: start,
         modified_ms,
-        content_sha256: super::sha256::hex_digest(content.as_bytes()),
+        content_sha256: format!("{:x}", hasher.finalize()),
         read_complete,
     })
 }
@@ -131,6 +152,9 @@ pub fn list(
                 "other"
             };
             let name = entry.file_name().to_string_lossy().into_owned();
+            if super::upload::is_upload_artifact_name(&name) {
+                continue;
+            }
             entries.push(super::walk::FileEntry {
                 path: if prefix.is_empty() {
                     name.clone()
@@ -200,42 +224,7 @@ pub fn write(
         ));
     }
     let path = resolve_in_workspace(workspace_root, relative)?;
-    let existed = path.exists();
-    if existed {
-        if !path.is_file() {
-            return Err(format!("not a regular file: {relative}"));
-        }
-        let token = revision.ok_or_else(|| {
-            format!(
-                "refusing to overwrite existing file '{relative}' without a fresh full read: \
-                 run file.read on it first (until no truncation), then retry this write"
-            )
-        })?;
-        let current_ms = mtime_ms(&path)?;
-        let current_size = fs::metadata(&path).map_err(|e| e.to_string())?.len();
-        if current_ms != token.modified_ms {
-            return Err(format!(
-                "file changed since last read (mtime {current_ms} != revision {}); \
-                 re-run file.read on '{relative}' before writing",
-                token.modified_ms
-            ));
-        }
-        if current_size != token.size_bytes {
-            return Err(format!(
-                "file changed since last read (size {current_size} != revision {}); \
-                 re-run file.read on '{relative}' before writing",
-                token.size_bytes
-            ));
-        }
-        let current_sha256 =
-            super::sha256::hex_digest(&fs::read(&path).map_err(|e| e.to_string())?);
-        if current_sha256 != token.sha256 {
-            return Err(format!(
-                "file content changed since last read (same mtime but sha256 mismatch); \
-                 re-run file.read on '{relative}' before writing"
-            ));
-        }
-    }
+    let existed = validate_write_target(&path, relative, revision.as_ref())?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -254,6 +243,49 @@ pub fn write(
     })
 }
 
+pub(crate) fn validate_write_target(
+    path: &Path,
+    relative: &str,
+    revision: Option<&Revision>,
+) -> Result<bool, String> {
+    if !path.exists() {
+        return Ok(false);
+    }
+    if !path.is_file() {
+        return Err(format!("not a regular file: {relative}"));
+    }
+    let token = revision.ok_or_else(|| {
+        format!(
+            "refusing to overwrite existing file '{relative}' without a fresh full read: \
+             run file.read on it first (until no truncation), then retry this write"
+        )
+    })?;
+    let current_ms = mtime_ms(path)?;
+    let current_size = fs::metadata(path).map_err(|e| e.to_string())?.len();
+    if current_ms != token.modified_ms {
+        return Err(format!(
+            "file changed since last read (mtime {current_ms} != revision {}); \
+             re-run file.read on '{relative}' before writing",
+            token.modified_ms
+        ));
+    }
+    if current_size != token.size_bytes {
+        return Err(format!(
+            "file changed since last read (size {current_size} != revision {}); \
+             re-run file.read on '{relative}' before writing",
+            token.size_bytes
+        ));
+    }
+    let current_sha256 = super::sha256::hex_digest(&fs::read(path).map_err(|e| e.to_string())?);
+    if current_sha256 != token.sha256 {
+        return Err(format!(
+            "file content changed since last read (same mtime but sha256 mismatch); \
+             re-run file.read on '{relative}' before writing"
+        ));
+    }
+    Ok(true)
+}
+
 /// 文件 mtime（毫秒）；作为先读后写的凭据与陈旧检测依据。
 /// 文件系统时间戳精度低于毫秒时，同毫秒内的外部修改无法检出（尽力而为）。
 pub(crate) fn mtime_ms(path: &Path) -> Result<u64, String> {
@@ -269,8 +301,9 @@ pub(crate) fn mtime_ms(path: &Path) -> Result<u64, String> {
 
 /// 原子写：先写同目录临时文件再 rename 覆盖，进程中断不会留下截断文件。
 /// Unix 上保留原文件权限（临时文件默认权限受 umask 影响）；rename 在
-/// Windows 上等价于 MoveFileExW(REPLACE_EXISTING)，可覆盖已存在目标。
+/// Windows 使用 MoveFileExW(REPLACE_EXISTING | WRITE_THROUGH) 覆盖已有目标。
 pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
     let dir = path
         .parent()
         .ok_or_else(|| "path has no parent directory".to_string())?;
@@ -282,16 +315,57 @@ pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.subsec_nanos())
         .unwrap_or(0);
-    let temp = dir.join(format!(".{name}.tmp{nanos}"));
-    fs::write(&temp, bytes).map_err(|e| e.to_string())?;
+    let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let temp = dir.join(format!(
+        ".{name}.tmp-{}-{nanos}-{sequence}",
+        std::process::id()
+    ));
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp)
+        .map_err(|error| error.to_string())?;
+    file.write_all(bytes).map_err(|error| error.to_string())?;
+    file.sync_all().map_err(|error| error.to_string())?;
+    drop(file);
     #[cfg(unix)]
     if let Ok(metadata) = fs::metadata(path) {
         let _ = fs::set_permissions(&temp, metadata.permissions());
     }
-    fs::rename(&temp, path).map_err(|e| {
+    replace_file(&temp, path).map_err(|e| {
         let _ = fs::remove_file(&temp);
-        e.to_string()
-    })
+        e
+    })?;
+    #[cfg(unix)]
+    fs::File::open(dir)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[cfg(not(windows))]
+pub(crate) fn replace_file(source: &Path, target: &Path) -> Result<(), String> {
+    fs::rename(source, target).map_err(|error| error.to_string())
+}
+
+#[cfg(windows)]
+pub(crate) fn replace_file(source: &Path, target: &Path) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::core::PCWSTR;
+    use windows::Win32::Storage::FileSystem::{
+        MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
+    };
+
+    let source: Vec<u16> = source.as_os_str().encode_wide().chain(Some(0)).collect();
+    let target: Vec<u16> = target.as_os_str().encode_wide().chain(Some(0)).collect();
+    unsafe {
+        MoveFileExW(
+            PCWSTR(source.as_ptr()),
+            PCWSTR(target.as_ptr()),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+        .map_err(|error| error.to_string())
+    }
 }
 
 #[cfg(test)]
@@ -424,6 +498,35 @@ mod tests {
         let tail = read(&root, "w.txt", Some(3), Some(10)).unwrap();
         assert_eq!(tail.content, "l3");
         assert!(read(&root, "w.txt", Some(9), None).is_err());
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn read_streams_windows_from_files_larger_than_memory_window_limit() {
+        let root = temp_workspace("large-window");
+        let line = format!("{}\n", "x".repeat(1023));
+        let body = line.repeat(2_100);
+        fs::write(root.join("large.txt"), body.as_bytes()).unwrap();
+        let outcome = read(&root, "large.txt", Some(2_050), Some(2)).unwrap();
+        assert_eq!(outcome.total_lines, 2_100);
+        assert_eq!(outcome.content.lines().count(), 2);
+        assert!(!outcome.read_complete);
+        assert_eq!(outcome.size_bytes, body.len() as u64);
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn atomic_write_replaces_and_leaves_no_temporary_file() {
+        let root = temp_workspace("atomic");
+        let path = root.join("a.txt");
+        fs::write(&path, "old").unwrap();
+        atomic_write(&path, b"new").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "new");
+        let names: Vec<_> = fs::read_dir(&root)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(names, vec![std::ffi::OsString::from("a.txt")]);
         fs::remove_dir_all(&root).ok();
     }
 

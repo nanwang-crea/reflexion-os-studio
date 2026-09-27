@@ -10,7 +10,7 @@ use serde::Serialize;
 
 pub const DEFAULT_TIMEOUT_MS: u64 = 30_000;
 pub const MAX_TIMEOUT_MS: u64 = 120_000;
-const MAX_OUTPUT_BYTES: usize = 256 * 1024;
+const MAX_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

@@ -9,6 +9,7 @@ const TOOL_LABELS: Record<string, string> = {
   'file.glob': '查找文件',
   'file.grep': '搜索内容',
   'file.write': '写入文件',
+  'file.write_stream': '分块写入文件',
   'file.edit': '编辑文件',
   'file.delete': '删除文件',
   'file.move': '移动文件',

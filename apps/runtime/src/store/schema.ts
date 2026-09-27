@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS runs (
   parent_run_id TEXT,
   delegation_id TEXT,
   skill_id TEXT,
+  agent_template_id TEXT,
   usage_json TEXT,
   plan_id TEXT REFERENCES plans(id) ON DELETE SET NULL,
   plan_step_id TEXT REFERENCES plan_steps(id) ON DELETE SET NULL
@@ -60,6 +61,7 @@ CREATE TABLE IF NOT EXISTS turn_executions (
   pending_interaction_id TEXT,
   pending_approval_id TEXT,
   continuation_reason TEXT,
+  runtime_state_json TEXT,
   checkpoint_version INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
@@ -279,4 +281,4 @@ CREATE TABLE IF NOT EXISTS context_checkpoints (
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 33
+export const LATEST_SCHEMA_VERSION = 35

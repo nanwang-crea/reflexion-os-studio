@@ -45,6 +45,7 @@ export function buildApprovalContext(input: {
   network: boolean
   escalation: boolean
   justification?: string
+  agent?: ApprovalContextView['agent']
 }): ApprovalContextView {
   const root = input.workspaceRoot
   const basename =
@@ -61,5 +62,6 @@ export function buildApprovalContext(input: {
     justification: input.justification
       ? displayCommand(input.justification)
       : null,
+    ...(input.agent ? { agent: input.agent } : {}),
   }
 }

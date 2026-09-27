@@ -5,14 +5,43 @@
 use serde_json::{json, Value};
 use std::path::PathBuf;
 
-use crate::filesystem::{files, mutate, paths, search};
+use crate::filesystem::{files, mutate, paths, search, upload};
 use crate::grant::{normalize_relative, require_grant, require_network_approval};
 use crate::params::{
     EditParams, GlobParams, GrantPathParams, GrepParams, ListParams, MoveParams, OperationSource,
-    ReadParams, ShellParams, WriteParams,
+    ReadParams, ShellParams, StreamWriteParams, WriteParams,
 };
 use crate::protocol::{emit, error_response, ok_response, running_shells, workspace_root, OpError};
 use crate::{sandbox, shell};
+
+fn file_error(message: String) -> OpError {
+    let code = if message.contains("changed since last read")
+        || message.contains("changed since upload began")
+    {
+        "stale_revision"
+    } else if message.contains("upload offset mismatch") {
+        "upload_offset_mismatch"
+    } else if message.contains("sha256 mismatch") {
+        "upload_integrity_error"
+    } else if message.contains("upload not found") || message.contains("staging file not found") {
+        "upload_not_found"
+    } else if message.contains("upload checkpoint") || message.contains("staging length") {
+        "upload_checkpoint_error"
+    } else if message.contains("not found") {
+        "file_not_found"
+    } else if message.contains("not valid UTF-8") {
+        "not_utf8"
+    } else if message.contains("too large") || message.contains("exceeds") {
+        "file_too_large"
+    } else if message.contains("overlap") {
+        "overlapping_edits"
+    } else if message.contains("expectedCount") || message.contains("expectedText") {
+        "edit_mismatch"
+    } else {
+        "file_error"
+    };
+    OpError::new(code, message)
+}
 
 /// digest 资源部分：与 TS Runtime 审批前同一规范化算法；非法路径（绝对/`..`）
 /// 不可能有匹配 digest——按工作区边界违规拒绝。
@@ -29,8 +58,8 @@ pub fn handle_file_read(params: Value) -> Result<Value, OpError> {
     let params: ReadParams = serde_json::from_value(params)
         .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
     let root = workspace_root(&params.workspace_root)?;
-    let result = files::read(&root, &params.path, params.offset, params.limit)
-        .map_err(|message| OpError::new("file_error", message))?;
+    let result =
+        files::read(&root, &params.path, params.offset, params.limit).map_err(file_error)?;
     Ok(json!({
         "content": result.content,
         "sizeBytes": result.size_bytes,
@@ -63,7 +92,7 @@ pub fn handle_file_list(params: Value) -> Result<Value, OpError> {
         params.offset,
         params.limit,
     )
-    .map_err(|message| OpError::new("file_error", message))?;
+    .map_err(file_error)?;
     serde_json::to_value(result).map_err(|error| OpError::new("internal", error.to_string()))
 }
 
@@ -77,10 +106,13 @@ pub fn handle_file_glob(params: Value) -> Result<Value, OpError> {
         params.offset,
         params.limit.unwrap_or(search::DEFAULT_GLOB_LIMIT),
     )
-    .map_err(|message| OpError::new("file_error", message))?;
+    .map_err(file_error)?;
     Ok(json!({
         "matches": outcome.matches,
         "truncated": outcome.truncated,
+        "nextOffset": outcome.next_offset,
+        "scanTruncated": outcome.scan_truncated,
+        "truncationReason": if outcome.scan_truncated { "workspace_walk_limit" } else if outcome.truncated { "page_limit" } else { "none" },
     }))
 }
 
@@ -95,11 +127,15 @@ pub fn handle_file_grep(params: Value) -> Result<Value, OpError> {
         params.ignore_case.unwrap_or(false),
         params.context.unwrap_or(0),
         params.max_results.unwrap_or(search::DEFAULT_GREP_LIMIT),
+        params.offset,
     )
-    .map_err(|message| OpError::new("file_error", message))?;
+    .map_err(file_error)?;
     Ok(json!({
         "matches": outcome.matches,
         "truncated": outcome.truncated,
+        "nextOffset": outcome.next_offset,
+        "scanTruncated": outcome.scan_truncated,
+        "truncationReason": if outcome.scan_truncated { "workspace_walk_limit" } else if outcome.truncated { "page_limit" } else { "none" },
     }))
 }
 
@@ -123,8 +159,8 @@ pub fn handle_file_write(params: Value) -> Result<Value, OpError> {
         )?;
     }
     let root = workspace_root(&params.workspace_root)?;
-    let outcome = files::write(&root, &params.path, &params.content, params.revision)
-        .map_err(|message| OpError::new("file_error", message))?;
+    let outcome =
+        files::write(&root, &params.path, &params.content, params.revision).map_err(file_error)?;
     Ok(json!({
         "writtenBytes": outcome.written_bytes,
         "modifiedMs": outcome.modified_ms,
@@ -137,6 +173,82 @@ pub fn handle_file_write(params: Value) -> Result<Value, OpError> {
     }))
 }
 
+pub fn handle_file_write_stream(params: Value) -> Result<Value, OpError> {
+    let params: StreamWriteParams = serde_json::from_value(params)
+        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
+    require_grant(
+        &params.grant,
+        &params.workspace_root,
+        "file.write_stream",
+        &[digest_path(&params.path)?],
+    )?;
+    let root = workspace_root(&params.workspace_root)?;
+    match params.action.as_str() {
+        "begin" => serde_json::to_value(
+            upload::begin(&root, &params.path, params.revision).map_err(file_error)?,
+        )
+        .map_err(|error| OpError::new("internal", error.to_string())),
+        "append" => {
+            let upload_id = required_upload_field(params.upload_id, "uploadId")?;
+            let content = required_upload_field(params.content, "content")?;
+            let chunk_sha256 = required_upload_field(params.chunk_sha256, "chunkSha256")?;
+            let offset = params.offset.ok_or_else(|| {
+                OpError::new(
+                    "invalid_request",
+                    "offset is required for append".to_string(),
+                )
+            })?;
+            serde_json::to_value(
+                upload::append(
+                    &root,
+                    &params.path,
+                    &upload_id,
+                    offset,
+                    content.as_bytes(),
+                    &chunk_sha256,
+                )
+                .map_err(file_error)?,
+            )
+            .map_err(|error| OpError::new("internal", error.to_string()))
+        }
+        "commit" => {
+            let upload_id = required_upload_field(params.upload_id, "uploadId")?;
+            let outcome = upload::commit(
+                &root,
+                &params.path,
+                &upload_id,
+                params.expected_size,
+                params.expected_sha256.as_deref(),
+            )
+            .map_err(file_error)?;
+            Ok(json!({
+                "writtenBytes": outcome.written_bytes,
+                "modifiedMs": outcome.modified_ms,
+                "revision": outcome.revision,
+                "changedFiles": [{ "path": params.path, "action": if outcome.created { "created" } else { "modified" } }],
+            }))
+        }
+        "abort" => {
+            let upload_id = required_upload_field(params.upload_id, "uploadId")?;
+            upload::abort(&root, &params.path, &upload_id).map_err(file_error)?;
+            Ok(json!({ "aborted": true }))
+        }
+        _ => Err(OpError::new(
+            "invalid_request",
+            "action must be begin, append, commit, or abort".to_string(),
+        )),
+    }
+}
+
+fn required_upload_field(value: Option<String>, name: &str) -> Result<String, OpError> {
+    value.filter(|item| !item.is_empty()).ok_or_else(|| {
+        OpError::new(
+            "invalid_request",
+            format!("{name} is required for this action"),
+        )
+    })
+}
+
 pub fn handle_file_edit(params: Value) -> Result<Value, OpError> {
     let params: EditParams = serde_json::from_value(params)
         .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
@@ -147,15 +259,22 @@ pub fn handle_file_edit(params: Value) -> Result<Value, OpError> {
         &[digest_path(&params.path)?],
     )?;
     let root = workspace_root(&params.workspace_root)?;
-    let outcome = mutate::edit(
-        &root,
-        &params.path,
-        &params.old_text,
-        &params.new_text,
-        params.expected_count,
-        params.revision,
-    )
-    .map_err(|message| OpError::new("file_error", message))?;
+    let edits = match (params.edits, params.old_text, params.new_text) {
+        (Some(edits), None, None) if !edits.is_empty() => edits,
+        (None, Some(old_text), Some(new_text)) => vec![crate::params::FileEditOperation::Replace {
+            old_text,
+            new_text,
+            expected_count: params.expected_count,
+        }],
+        _ => {
+            return Err(OpError::new(
+                "invalid_request",
+                "provide either a non-empty edits array or legacy oldText/newText".to_string(),
+            ));
+        }
+    };
+    let outcome = crate::filesystem::edit::edit(&root, &params.path, &edits, params.revision)
+        .map_err(file_error)?;
     Ok(json!({
         "replacedCount": outcome.replaced_count,
         "sizeBytes": outcome.size_bytes,
@@ -166,6 +285,7 @@ pub fn handle_file_edit(params: Value) -> Result<Value, OpError> {
             "sha256": outcome.revision.sha256,
         },
         "changedFiles": outcome.changed_files,
+        "structuredPatch": outcome.structured_patch,
     }))
 }
 
@@ -179,8 +299,7 @@ pub fn handle_file_delete(params: Value) -> Result<Value, OpError> {
         &[digest_path(&params.path)?],
     )?;
     let root = workspace_root(&params.workspace_root)?;
-    let outcome = mutate::delete(&root, &params.path)
-        .map_err(|message| OpError::new("file_error", message))?;
+    let outcome = mutate::delete(&root, &params.path).map_err(file_error)?;
     Ok(json!({ "kind": outcome.kind, "changedFiles": outcome.changed_files }))
 }
 
@@ -194,8 +313,7 @@ pub fn handle_file_move(params: Value) -> Result<Value, OpError> {
         &[digest_path(&params.from)?, digest_path(&params.to)?],
     )?;
     let root = workspace_root(&params.workspace_root)?;
-    let outcome = mutate::move_path(&root, &params.from, &params.to)
-        .map_err(|message| OpError::new("file_error", message))?;
+    let outcome = mutate::move_path(&root, &params.from, &params.to).map_err(file_error)?;
     Ok(json!({ "from": outcome.from, "to": outcome.to, "changedFiles": outcome.changed_files }))
 }
 
@@ -209,8 +327,7 @@ pub fn handle_file_mkdir(params: Value) -> Result<Value, OpError> {
         &[digest_path(&params.path)?],
     )?;
     let root = workspace_root(&params.workspace_root)?;
-    let outcome = mutate::mkdir(&root, &params.path)
-        .map_err(|message| OpError::new("file_error", message))?;
+    let outcome = mutate::mkdir(&root, &params.path).map_err(file_error)?;
     Ok(json!({ "path": outcome.path, "changedFiles": outcome.changed_files }))
 }
 

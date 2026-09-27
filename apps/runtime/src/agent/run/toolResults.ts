@@ -44,6 +44,7 @@ const ARRAY_FLOOR_TAIL = 2
 const MAX_SHRINK_STEPS = 5
 const FILE_MUTATION_TOOLS = new Set([
   'file.write',
+  'file.write_stream',
   'file.edit',
   'file.delete',
   'file.move',
@@ -196,6 +197,7 @@ export function normalizeToolOutput(
     data,
     resourceLinks,
     changedFiles,
+    provenance: result.provenance ?? null,
   }
 }
 

@@ -5,6 +5,7 @@ import {
 } from '@reflexion-os-studio/agent-core'
 import {
   JsonValueSchema,
+  type ApprovalContextView,
   type ApprovalRisk,
   type ApprovalSubject,
   type JsonValue,
@@ -59,6 +60,30 @@ export interface ToolExecutorInput {
   permissionDomainId: string
   rootRunId: string
   mutationCoordinator?: RootMutationCoordinator
+}
+
+function approvalAgentContext(
+  store: Store,
+  run: Run,
+  rootRunId: string,
+): NonNullable<ApprovalContextView['agent']> {
+  const delegation =
+    run.delegationId === null ? null : store.delegations.get(run.delegationId)
+  const rootRun = store.runs.get(rootRunId)
+  const rootTask = rootRun
+    ? store.messages
+        .listBySession(rootRun.sessionId)
+        .find(
+          (message) => message.runId === rootRunId && message.role === 'user',
+        )?.content
+    : undefined
+  return {
+    instanceId: run.agentId,
+    displayName: delegation?.agentInstance?.name ?? 'Primary Agent',
+    depth: delegation?.execution?.depth ?? 0,
+    rootRunId,
+    rootTask: (rootTask?.trim() || '当前任务').slice(0, 160),
+  }
 }
 
 /**
@@ -293,6 +318,7 @@ export async function executeToolCall(
       typeof record.justification === 'string'
         ? record.justification
         : undefined,
+    agent: approvalAgentContext(store, run, input.rootRunId),
   })
 
   /** 发审批卡并等待用户 choice；Abort 时异常上抛（取消路径统一处理）。 */

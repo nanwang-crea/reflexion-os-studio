@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { SkillManifest } from '@reflexion-os-studio/runtime-client'
+import type {
+  AgentTemplate,
+  SkillManifest,
+} from '@reflexion-os-studio/runtime-client'
 import type {
   ApprovalOverride,
   PermissionPreset,
@@ -45,12 +48,13 @@ interface ComposerProps {
   onModelChange?: (key: string) => void
   /** 可用技能清单：输入 / 时弹出斜杠补全；缺省不启用。 */
   skills?: SkillManifest[]
+  agentTemplates?: AgentTemplate[]
   /**
    * 受控的预填：值变化时把 Composer 内容设为 `/${skillId} ` 并聚焦。
    * 主要给 SkillsView 的"在对话中使用"按钮触发，回到 chat 时把斜杠带上。
    */
   prefill?: { skillId: string; nonce: number } | null
-  onSend: (content: string) => Promise<void> | void
+  onSend: (content: string, agentTemplateId?: string) => Promise<void> | void
   onStop?: () => Promise<void> | void
 }
 
@@ -62,6 +66,7 @@ export function Composer(props: ComposerProps): React.JSX.Element {
   const [sending, setSending] = useState(false)
   const [slashIndex, setSlashIndex] = useState(0)
   const [slashDismissed, setSlashDismissed] = useState(false)
+  const [agentTemplateId, setAgentTemplateId] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const busy = props.busy ?? false
@@ -118,7 +123,7 @@ export function Composer(props: ComposerProps): React.JSX.Element {
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
     setSending(true)
     try {
-      await props.onSend(content)
+      await props.onSend(content, agentTemplateId || undefined)
     } finally {
       setSending(false)
     }
@@ -245,6 +250,28 @@ export function Composer(props: ComposerProps): React.JSX.Element {
           </label>
         )}
         {props.advanced && <AdvancedPermissionMenu advanced={props.advanced} />}
+        {props.agentTemplates && props.agentTemplates.length > 0 && (
+          <label
+            className="composer-select"
+            title="本次发送的默认子 Agent 模板"
+          >
+            <span>子 Agent</span>
+            <select
+              value={agentTemplateId}
+              onChange={(event) => setAgentTemplateId(event.target.value)}
+            >
+              <option value="">动态选择</option>
+              {props.agentTemplates
+                .filter((template) => template.enabled)
+                .map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name}
+                  </option>
+                ))}
+            </select>
+            <ChevronIcon />
+          </label>
+        )}
         <span className="bar-spacer" />
         {showModelSelect && (
           <label className="composer-select model" title="对话使用的模型">

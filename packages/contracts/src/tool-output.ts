@@ -21,6 +21,13 @@ export const ChangedFileSchema = z.object({
 })
 export type ChangedFile = z.infer<typeof ChangedFileSchema>
 
+export const ToolProvenanceSchema = z.object({
+  kind: z.enum(['web', 'mcp', 'shell', 'workspace', 'internal']),
+  trust: z.enum(['trusted_internal', 'untrusted_external', 'untrusted_local']),
+  source: z.string().optional(),
+})
+export type ToolProvenance = z.infer<typeof ToolProvenanceSchema>
+
 /** Canonical persisted/UI envelope for every terminal tool execution. */
 export const ToolOutputSchema = z.object({
   type: z.literal('tool_output'),
@@ -29,6 +36,7 @@ export const ToolOutputSchema = z.object({
   data: JsonValueSchema.nullable(),
   resourceLinks: z.array(ResourceLinkSchema),
   changedFiles: z.array(ChangedFileSchema),
+  provenance: ToolProvenanceSchema.nullable().default(null),
 })
 export type ToolOutput = z.infer<typeof ToolOutputSchema>
 
@@ -55,5 +63,6 @@ export function coerceToolOutput(value: JsonValue): ToolOutput {
     data: value,
     resourceLinks: resourceLinks?.success ? resourceLinks.data : [],
     changedFiles: changedFiles?.success ? changedFiles.data : [],
+    provenance: null,
   }
 }

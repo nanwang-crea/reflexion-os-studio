@@ -16,6 +16,7 @@ export const INHERITABLE_CHILD_TOOLS = [
   'file.glob',
   'file.grep',
   'file.write',
+  'file.write_stream',
   'file.edit',
   'file.delete',
   'file.move',

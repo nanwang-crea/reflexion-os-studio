@@ -17,6 +17,7 @@ export function sendMessage(input: {
   model?: string
   /** 本次发送的权限预设快照；缺省 workspace-read（Runtime 侧默认）。 */
   permissionPreset?: 'workspace-read' | 'workspace-write' | 'workspace-full'
+  agentTemplateId?: string
 }): Promise<SendMessageResult> {
   return request<SendMessageResult>('message.send', input)
 }

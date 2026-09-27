@@ -165,7 +165,10 @@ export function useSessionActions(deps: SessionActionsDeps): {
     }
   }
 
-  const sendMessage = async (content: string): Promise<void> => {
+  const sendMessage = async (
+    content: string,
+    agentTemplateId?: string,
+  ): Promise<void> => {
     deps.setNotice(null)
     // 模型选择形如 `${providerId}::${model}`；未选择时由 Runtime 回退默认。
     const modelKey = deps.selectedModelKey
@@ -187,6 +190,7 @@ export function useSessionActions(deps: SessionActionsDeps): {
           providerId,
           model,
           permissionPreset,
+          agentTemplateId,
         })
         sessionId = created.session.id
         deps.setActiveSessionId(sessionId)
@@ -197,6 +201,7 @@ export function useSessionActions(deps: SessionActionsDeps): {
           providerId,
           model,
           permissionPreset,
+          agentTemplateId,
         })
       }
       await deps.refreshSessionData(sessionId)

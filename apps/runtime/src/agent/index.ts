@@ -121,6 +121,7 @@ export class ChatAgent {
       maxTokens: params.maxTokens,
       // 入队即固化解析后的档位快照（legacy 字段不再入队）。
       permissionPreset: resolveInputPreset(params),
+      agentTemplateId: params.agentTemplateId,
       skillId: params.skillId,
     }
     const entry = this.queues.enqueue(params.sessionId, rest)
@@ -238,6 +239,7 @@ export class ChatAgent {
       providerId: profile.id,
       model,
       skillId: skill?.manifest.id ?? null,
+      agentTemplateId: params.agentTemplateId ?? null,
     })
     const userMessage = this.store.messages.create({
       sessionId: params.sessionId,
@@ -274,6 +276,7 @@ export class ChatAgent {
       model,
       sampling,
       permissionPreset: resolveInputPreset(params),
+      defaultChildTemplateId: params.agentTemplateId,
       skill,
       assistantMessage,
       emitter,
@@ -401,6 +404,7 @@ export class ChatAgent {
       model,
       sampling: resolveSampling(profile, {}),
       permissionPreset: DEFAULT_PRESET,
+      defaultChildTemplateId: run.agentTemplateId ?? undefined,
       skill: run.skillId === null ? null : this.skills.get(run.skillId),
       assistantMessage,
       emitter,
@@ -439,6 +443,7 @@ export class ChatAgent {
           providerId: profile.id,
           model,
           skillId: original.skillId,
+          agentTemplateId: original.agentTemplateId,
           planId: original.planId,
           planStepId: original.planStepId,
         },
@@ -466,6 +471,7 @@ export class ChatAgent {
       // 重试不继承高权限档：回落默认预设（workspace-read）重跑；
       // 会话级 ask-everything 覆盖项仍生效（只会更严，不构成提权）。
       permissionPreset: DEFAULT_PRESET,
+      defaultChildTemplateId: original.agentTemplateId ?? undefined,
       skill:
         original.skillId === null ? null : this.skills.get(original.skillId),
       assistantMessage,
@@ -527,6 +533,7 @@ export class ChatAgent {
           providerId: profile.id,
           model,
           skillId: skill?.manifest.id ?? null,
+          agentTemplateId: params.agentTemplateId ?? null,
         })
         if (replacedRunIds.length > 0) {
           const visibleRunId = replacedRunIds.at(-1)
@@ -567,6 +574,7 @@ export class ChatAgent {
       model,
       sampling,
       permissionPreset: resolveInputPreset(params),
+      defaultChildTemplateId: params.agentTemplateId,
       skill,
       assistantMessage: newAssistantMessage,
       emitter,
@@ -641,6 +649,7 @@ export class ChatAgent {
             permissionDomainId,
             inheritedTools,
             mutationCoordinator,
+            defaultTemplateId: input.defaultChildTemplateId,
           },
           input.run,
           input.session,

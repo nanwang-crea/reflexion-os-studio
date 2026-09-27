@@ -69,3 +69,21 @@ test('FileReadState read records keep completeness flag and invalidate clears', 
   assert.equal(state.entry('partial.ts'), undefined)
   assert.equal(state.entry('whole.ts').complete, true)
 })
+
+test('FileReadState restores and checkpoints serializable read credentials', () => {
+  const snapshots = []
+  const state = new FileReadState(
+    { 'restored.ts': { revision: REVISION, complete: false } },
+    (snapshot) => snapshots.push(snapshot),
+  )
+  assert.deepEqual(state.entry('restored.ts'), {
+    revision: REVISION,
+    complete: false,
+  })
+  state.record('new.ts', { revision: REVISION, complete: true })
+  assert.equal(snapshots.length, 1)
+  assert.deepEqual(snapshots[0]['new.ts'], {
+    revision: REVISION,
+    complete: true,
+  })
+})

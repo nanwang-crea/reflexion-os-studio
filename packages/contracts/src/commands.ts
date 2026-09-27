@@ -83,6 +83,8 @@ export const MessageSendParamsSchema = z.object({
   trusted: z.boolean().optional(),
   // 显式激活的 Skill；内容以 /<skillId> 开头时也可隐式激活（显式优先）。
   skillId: z.string().min(1).optional(),
+  // 用户显式指定本次根 Run 的默认子 Agent 模板；优先于模型在 task 中的选择。
+  agentTemplateId: z.string().min(1).optional(),
 })
 export type ChatCommand = z.infer<typeof MessageSendParamsSchema>
 
@@ -99,6 +101,7 @@ export const MessageEditResendParamsSchema = z.object({
   maxTokens: z.number().int().positive().optional(),
   permissionPreset: PermissionPresetSchema.optional(),
   skillId: z.string().min(1).optional(),
+  agentTemplateId: z.string().min(1).optional(),
 })
 export type MessageEditResendParams = z.infer<
   typeof MessageEditResendParamsSchema

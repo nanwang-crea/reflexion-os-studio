@@ -6,7 +6,7 @@ import type {
 } from '@reflexion-os-studio/contracts'
 import type { SkillRegistry } from '../../skills/index.js'
 import type { McpManager } from '../../mcp/manager.js'
-import type { SystemRuntimeClient } from '../../system.js'
+import { SystemRuntimeError, type SystemRuntimeClient } from '../../system.js'
 import type { Store } from '../../store/index.js'
 import type { RunEventEmitter } from '../../events.js'
 import type { InteractionGateway } from '../interactions/index.js'
@@ -52,10 +52,24 @@ export async function callSystem(
     return { content: JSON.stringify(result), isError: false }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') throw error
+    const message = error instanceof Error ? error.message : String(error)
+    const revisionConflict =
+      (method === 'file.write' ||
+        method === 'file.write_stream' ||
+        method === 'file.edit') &&
+      (message.includes('file changed since last read') ||
+        message.includes('file changed since upload began') ||
+        message.includes('requires readToken'))
     return {
-      content: `工具执行失败：${error instanceof Error ? error.message : String(error)}`,
+      content: revisionConflict
+        ? `文件 revision 冲突：${message}。请重新 file.read 获取最新内容，基于新内容重新合并变更后再提交；禁止原样重试。`
+        : `工具执行失败：${message}`,
       isError: true,
-      code: 'tool_error',
+      code: revisionConflict
+        ? 'file_revision_conflict'
+        : error instanceof SystemRuntimeError && error.code
+          ? error.code
+          : 'tool_error',
     }
   }
 }
@@ -70,6 +84,15 @@ export function argsRecord(args: JsonValue): Record<string, unknown> {
 export function requireString(args: JsonValue, key: string): string {
   const value = argsRecord(args)[key]
   if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error(`missing or invalid tool argument: ${key}`)
+  }
+  return value
+}
+
+/** 文本参数允许空串（例如清空文件或删除匹配片段），但仍拒绝非字符串。 */
+export function requireText(args: JsonValue, key: string): string {
+  const value = argsRecord(args)[key]
+  if (typeof value !== 'string') {
     throw new Error(`missing or invalid tool argument: ${key}`)
   }
   return value

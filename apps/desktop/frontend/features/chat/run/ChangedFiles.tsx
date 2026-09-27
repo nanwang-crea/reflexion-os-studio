@@ -9,6 +9,7 @@ import type { ProcessItem } from './RunProcess'
 
 const MUTATION_TOOLS = new Set([
   'file.write',
+  'file.write_stream',
   'file.edit',
   'file.delete',
   'file.move',
@@ -50,7 +51,8 @@ export function aggregateChangedFiles(
             {
               path: fallbackPath,
               action:
-                call.toolName === 'file.write'
+                call.toolName === 'file.write' ||
+                call.toolName === 'file.write_stream'
                   ? 'modified'
                   : call.toolName === 'file.edit'
                     ? 'modified'

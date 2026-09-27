@@ -1,4 +1,5 @@
 import type { JsonValue, ToolSpec } from '@reflexion-os-studio/contracts'
+import { Ajv2020, type ValidateFunction } from 'ajv/dist/2020.js'
 import type {
   ToolCallRequest,
   ToolDefinition,
@@ -15,11 +16,17 @@ import type {
  */
 export class ToolRegistry {
   private readonly tools = new Map<string, ToolDefinition>()
+  private readonly validators = new Map<string, ValidateFunction>()
+  private readonly ajv = new Ajv2020({ allErrors: true, strict: false })
 
   register(definition: ToolDefinition): void {
     if (this.tools.has(definition.name)) {
       throw new Error(`tool already registered: ${definition.name}`)
     }
+    this.validators.set(
+      definition.name,
+      this.ajv.compile(definition.parameters as object),
+    )
     this.tools.set(definition.name, definition)
   }
 
@@ -68,8 +75,18 @@ export class ToolRegistry {
         },
       }
     }
-    const issues = validateSchema(tool.parameters, args, '$')
-    if (issues.length > 0) {
+    const validator = this.validators.get(request.name)!
+    if (!validator(args)) {
+      const issues = (validator.errors ?? []).map((error) => {
+        const path = error.instancePath
+          ? `$${error.instancePath.replaceAll('/', '.')}`
+          : '$'
+        const message = (error.message ?? 'is invalid').replace(
+          /^must be (string|number|integer|object|array|boolean|null)$/,
+          'must be a $1',
+        )
+        return `${path} ${message}`
+      })
       return {
         ok: false,
         result: {
@@ -107,86 +124,6 @@ export class ToolRegistry {
       }
     }
   }
-}
-
-function validateSchema(
-  schema: JsonValue,
-  value: JsonValue,
-  path: string,
-): string[] {
-  if (typeof schema !== 'object' || schema === null || Array.isArray(schema))
-    return []
-  const spec = schema as Record<string, JsonValue>
-  if (
-    Array.isArray(spec.enum) &&
-    !spec.enum.some((item) => Object.is(item, value))
-  ) {
-    return [`${path} must be one of ${spec.enum.map(String).join(', ')}`]
-  }
-  const type = typeof spec.type === 'string' ? spec.type : null
-  if (type === 'object') {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-      return [`${path} must be an object`]
-    }
-    const record = value as Record<string, JsonValue>
-    const properties =
-      typeof spec.properties === 'object' &&
-      spec.properties !== null &&
-      !Array.isArray(spec.properties)
-        ? (spec.properties as Record<string, JsonValue>)
-        : {}
-    const issues: string[] = []
-    const required = Array.isArray(spec.required) ? spec.required : []
-    for (const key of required) {
-      if (typeof key === 'string' && !(key in record))
-        issues.push(`${path}.${key} is required`)
-    }
-    if (spec.additionalProperties === false) {
-      for (const key of Object.keys(record)) {
-        if (!(key in properties)) issues.push(`${path}.${key} is not allowed`)
-      }
-    }
-    for (const [key, child] of Object.entries(record)) {
-      if (properties[key] !== undefined) {
-        issues.push(...validateSchema(properties[key], child, `${path}.${key}`))
-      }
-    }
-    return issues
-  }
-  if (type === 'array') {
-    if (!Array.isArray(value)) return [`${path} must be an array`]
-    const issues: string[] = []
-    if (typeof spec.minItems === 'number' && value.length < spec.minItems) {
-      issues.push(`${path} must contain at least ${spec.minItems} item(s)`)
-    }
-    if (spec.items !== undefined) {
-      value.forEach((item, index) => {
-        issues.push(...validateSchema(spec.items!, item, `${path}[${index}]`))
-      })
-    }
-    return issues
-  }
-  if (type === 'string' && typeof value !== 'string')
-    return [`${path} must be a string`]
-  if (type === 'number' && typeof value !== 'number')
-    return [`${path} must be a number`]
-  if (
-    type === 'integer' &&
-    (typeof value !== 'number' || !Number.isInteger(value))
-  ) {
-    return [`${path} must be an integer`]
-  }
-  if (type === 'boolean' && typeof value !== 'boolean')
-    return [`${path} must be a boolean`]
-  if (type === 'null' && value !== null) return [`${path} must be null`]
-  if (
-    typeof value === 'string' &&
-    typeof spec.minLength === 'number' &&
-    value.length < spec.minLength
-  ) {
-    return [`${path} must not be empty`]
-  }
-  return []
 }
 
 function parseJsonArgs(arguments_: string): JsonValue {

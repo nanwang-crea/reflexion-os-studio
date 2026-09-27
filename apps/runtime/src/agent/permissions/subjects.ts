@@ -119,6 +119,7 @@ export function buildApprovalSubject(
     case 'file.read':
     case 'file.list':
     case 'file.write':
+    case 'file.write_stream':
     case 'file.edit':
     case 'file.delete':
     case 'file.mkdir': {

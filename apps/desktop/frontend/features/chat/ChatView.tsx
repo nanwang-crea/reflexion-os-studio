@@ -5,6 +5,7 @@ import type {
   SkillManifest,
   ToolCall,
   Delegation,
+  AgentTemplate,
   RunEvent,
 } from '@reflexion-os-studio/runtime-client'
 import { Composer, type ComposerModelOption } from '../../components/Composer'
@@ -53,9 +54,10 @@ interface ChatViewProps {
   selectedModelKey: string | null
   onModelChange: (key: string) => void
   skills: SkillManifest[]
+  agentTemplates: AgentTemplate[]
   composerPrefill?: { skillId: string; nonce: number } | null
   onPrefillConsumed?: () => void
-  onSend: (content: string) => Promise<void>
+  onSend: (content: string, agentTemplateId?: string) => Promise<void>
   onStop: () => Promise<void>
   onRetry: () => Promise<void>
   onGoSettings: () => void
@@ -524,6 +526,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
           selectedModelKey={props.selectedModelKey}
           onModelChange={props.onModelChange}
           skills={props.skills}
+          agentTemplates={props.agentTemplates}
           prefill={props.composerPrefill ?? null}
           onSend={props.onSend}
           onStop={props.onStop}

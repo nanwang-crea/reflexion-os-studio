@@ -107,6 +107,9 @@ fn walk_dir(
             continue;
         }
         let file_name = entry.file_name().to_string_lossy().into_owned();
+        if super::upload::is_upload_artifact_name(&file_name) {
+            continue;
+        }
         // 隐藏目录内的文件（.git/依赖/构建产物）不入索引，预算留给真实源码。
         if file_type.is_dir() && IGNORED_DIR_NAMES.contains(&file_name.as_str()) {
             continue;

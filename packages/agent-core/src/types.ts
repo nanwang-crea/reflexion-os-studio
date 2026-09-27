@@ -2,6 +2,7 @@ import type {
   ChangedFile,
   JsonValue,
   ResourceLink,
+  ToolProvenance,
 } from '@reflexion-os-studio/contracts'
 
 /**
@@ -72,6 +73,8 @@ export interface ToolResult {
   resourceLinks?: ResourceLink[]
   /** 文件类工具产生的副作用；与普通 data 分离以便统一聚合。 */
   changedFiles?: ChangedFile[]
+  /** 数据来源与信任等级；外部内容必须显式标记为不可信。 */
+  provenance?: ToolProvenance
 }
 
 export interface ToolDefinition {

@@ -27,6 +27,7 @@ export interface ChildRunDependencies {
   permissionDomainId?: string
   inheritedTools?: ReadonlySet<string>
   mutationCoordinator?: RootMutationCoordinator
+  defaultTemplateId?: string
 }
 
 export function createChildRunStarter(
@@ -48,8 +49,12 @@ export function createChildRunStarter(
   return async (input) => {
     const { task, signal } = input
     const legacyAgentId = (input as unknown as { agentId?: string }).agentId
-    const spawn = input.agent ?? {
+    const requestedSpawn = input.agent ?? {
       templateId: legacyAgentId,
+    }
+    const spawn = {
+      ...requestedSpawn,
+      templateId: deps.defaultTemplateId ?? requestedSpawn.templateId,
     }
     const permissionDomainId = deps.permissionDomainId ?? parentSession.id
     const mutationCoordinator =

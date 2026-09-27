@@ -116,6 +116,8 @@ function tableColumns(db: DatabaseSync, table: string): TableColumn[] {
  * v30 → v31：Agent Policy、Delegation 根 Run 与结构化结果。
  * v31 → v32：新增 turn_executions 表（由 SCHEMA 创建），作为统一恢复检查点。
  * v32 → v33：Agent 模板来源、动态实例快照与 mutation receipts。
+ * v33 → v34：Run 持久化用户显式选择的默认子 Agent 模板。
+ * v34 → v35：TurnExecution 增加版本化 Runtime 状态（首批持久化文件读取凭据）。
  * 各步骤带形状检测：SCHEMA 刚建好的新库不会空跑重建。
  */
 export function runMigrations(db: DatabaseSync, dir: string): void {
@@ -529,6 +531,22 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
       db.exec(
         'CREATE INDEX IF NOT EXISTS idx_delegations_session ON delegations(session_id, created_at)',
       )
+    }
+    if (
+      version < 34 &&
+      !tableColumns(db, 'runs').some(
+        (column) => column.name === 'agent_template_id',
+      )
+    ) {
+      db.exec('ALTER TABLE runs ADD COLUMN agent_template_id TEXT')
+    }
+    if (
+      version < 35 &&
+      !tableColumns(db, 'turn_executions').some(
+        (column) => column.name === 'runtime_state_json',
+      )
+    ) {
+      db.exec('ALTER TABLE turn_executions ADD COLUMN runtime_state_json TEXT')
     }
     db.exec('COMMIT')
     // 迁移全部执行完毕才推进版本号；否则下次启动会重复进入迁移分支。

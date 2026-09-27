@@ -19,7 +19,8 @@
     "test": "tsc -p tsconfig.json && node --test test/*.test.mjs"
   },
   "dependencies": {
-    "@reflexion-os-studio/contracts": "workspace:*"
+    "@reflexion-os-studio/contracts": "workspace:*",
+    "ajv": "8.17.1"
   },
   "devDependencies": {
     "typescript": "^5.7.3"

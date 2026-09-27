@@ -176,6 +176,40 @@ test('registry folds unknown tool, bad JSON and tool errors into results', async
   )
 })
 
+test('registry validates full JSON Schema constraints with Ajv', async () => {
+  const registry = new ToolRegistry()
+  registry.register({
+    name: 'strict',
+    description: 'schema exercise',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        mode: { enum: ['one', 'many'] },
+        values: {
+          type: 'array',
+          minItems: 2,
+          items: { type: 'integer', minimum: 1 },
+        },
+      },
+      required: ['mode', 'values'],
+    },
+    execute: () => ({ content: 'ok', isError: false }),
+  })
+  const signal = new AbortController().signal
+  const invalid = await registry.call(
+    {
+      id: 'schema',
+      name: 'strict',
+      arguments: '{"mode":"other","values":[0],"extra":true}',
+    },
+    signal,
+  )
+  assert.equal(invalid.isError, true)
+  assert.equal(invalid.code, 'invalid_request')
+  assert.match(invalid.content, /additional properties|minItems|allowed values/)
+})
+
 test('estimateTokens counts CJK and ascii differently', () => {
   assert.equal(estimateTokens('一二三四'), 4)
   assert.equal(estimateTokens('abcdefgh'), 2)

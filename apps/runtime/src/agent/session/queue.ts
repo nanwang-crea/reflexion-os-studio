@@ -135,6 +135,7 @@ export class QueueService {
       // 发送时固化的档位快照（入队即解析；badge 与实际执行一致）。
       permissionPreset: resolveInputPreset(entry.params),
       skillId: entry.params.skillId ?? null,
+      agentTemplateId: entry.params.agentTemplateId ?? null,
       position,
     }
   }

@@ -38,6 +38,7 @@ const OPERATION_LABELS: Record<string, string> = {
   'file.glob': '查找文件',
   'file.grep': '搜索内容',
   'file.write': '写入文件',
+  'file.write_stream': '分块写入文件',
   'file.edit': '编辑文件',
   'file.delete': '删除文件',
   'file.move': '移动文件',
@@ -63,6 +64,13 @@ function chipsFor(
 ): string[] {
   const chips: string[] = []
   if (context === null) return chips
+  if (context.agent) {
+    chips.push(
+      context.agent.depth === 0
+        ? 'Primary Agent'
+        : `${context.agent.displayName} · 第 ${context.agent.depth} 层`,
+    )
+  }
   if (context.displayCwd !== null) chips.push(`工作目录 ${context.displayCwd}`)
   if (operation.startsWith('file.')) {
     chips.push(context.workspaceScope === 'inside' ? '工作区内' : '无工作区')
@@ -146,6 +154,16 @@ export function presentApproval(approval: PendingApproval): ApprovalDisplay {
   const risk: ApprovalRisk = approval.risk ?? 'normal'
   const details: ApprovalDisplay['details'] = []
   if (approval.context) {
+    if (approval.context.agent) {
+      details.push({
+        label: '执行 Agent',
+        value: `${approval.context.agent.displayName} · 第 ${approval.context.agent.depth} 层`,
+      })
+      details.push({
+        label: '根任务',
+        value: approval.context.agent.rootTask,
+      })
+    }
     if (approval.context.justification) {
       details.push({ label: '理由', value: approval.context.justification })
     }

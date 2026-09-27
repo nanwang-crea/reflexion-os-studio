@@ -26,6 +26,7 @@ export class RunStore {
     parentRunId?: string | null
     delegationId?: string | null
     skillId?: string | null
+    agentTemplateId?: string | null
     planId?: string | null
     planStepId?: string | null
   }): Run {
@@ -44,13 +45,14 @@ export class RunStore {
       parentRunId: input.parentRunId ?? null,
       delegationId: input.delegationId ?? null,
       skillId: input.skillId ?? null,
+      agentTemplateId: input.agentTemplateId ?? null,
       planId: input.planId ?? null,
       planStepId: input.planStepId ?? null,
       usage: null,
     }
     this.db
       .prepare(
-        'INSERT INTO runs (id, session_id, status, provider_id, model, started_at, completed_at, error_code, retry_of_run_id, superseded_by_run_id, agent_id, parent_run_id, delegation_id, skill_id, plan_id, plan_step_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO runs (id, session_id, status, provider_id, model, started_at, completed_at, error_code, retry_of_run_id, superseded_by_run_id, agent_id, parent_run_id, delegation_id, skill_id, agent_template_id, plan_id, plan_step_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .run(
         run.id,
@@ -67,6 +69,7 @@ export class RunStore {
         run.parentRunId,
         run.delegationId,
         run.skillId,
+        run.agentTemplateId,
         run.planId,
         run.planStepId,
       )
@@ -184,6 +187,7 @@ export class RunStore {
       providerId: string | null
       model: string | null
       skillId: string | null
+      agentTemplateId: string | null
       planId: string | null
       planStepId: string | null
     },
@@ -207,6 +211,7 @@ export class RunStore {
       model: input.model,
       retryOfRunId: originalId,
       skillId: input.skillId,
+      agentTemplateId: input.agentTemplateId,
       planId: input.planId,
       planStepId: input.planStepId,
     })
@@ -238,6 +243,8 @@ export class RunStore {
       delegationId:
         row.delegation_id == null ? null : String(row.delegation_id),
       skillId: row.skill_id == null ? null : String(row.skill_id),
+      agentTemplateId:
+        row.agent_template_id == null ? null : String(row.agent_template_id),
       planId: row.plan_id == null ? null : String(row.plan_id),
       planStepId: row.plan_step_id == null ? null : String(row.plan_step_id),
       usage: parseUsage(row.usage_json),

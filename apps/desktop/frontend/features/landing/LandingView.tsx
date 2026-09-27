@@ -2,6 +2,7 @@ import type {
   Project,
   Session,
   SkillManifest,
+  AgentTemplate,
 } from '@reflexion-os-studio/runtime-client'
 import { Composer, type ComposerModelOption } from '../../components/Composer'
 import { SessionRow } from '../../components/SessionRow'
@@ -23,9 +24,10 @@ interface LandingViewProps {
   onModelChange: (key: string) => void
   /** 可用技能清单：落地页斜杠补全与聊天页共用。 */
   skills: SkillManifest[]
+  agentTemplates: AgentTemplate[]
   composerPrefill?: { skillId: string; nonce: number } | null
   onPrefillConsumed?: () => void
-  onSend: (content: string) => Promise<void>
+  onSend: (content: string, agentTemplateId?: string) => Promise<void>
   onSelectSession: (sessionId: string) => void
   onRenameSession: (sessionId: string, title: string) => Promise<void>
   onDeleteSession: (sessionId: string) => Promise<void>
@@ -120,6 +122,7 @@ export function LandingView(props: LandingViewProps): React.JSX.Element {
             selectedModelKey={props.selectedModelKey}
             onModelChange={props.onModelChange}
             skills={props.skills}
+            agentTemplates={props.agentTemplates}
             prefill={props.composerPrefill ?? null}
             onSend={props.onSend}
           />

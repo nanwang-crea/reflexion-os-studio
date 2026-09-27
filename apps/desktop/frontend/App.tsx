@@ -32,7 +32,11 @@ import { useWorkspaceTabGuard } from './hooks/workspace/useWorkspaceTabGuard'
 import { useAppHotkeys } from './hooks/useAppHotkeys'
 import { useSessionActions } from './hooks/session/useSessionActions'
 import { useResourceRouter } from './hooks/useResourceRouter'
-import { useSkillCatalog, useTerminalSurface } from './hooks/useAppSurfaces'
+import {
+  useAgentTemplateCatalog,
+  useSkillCatalog,
+  useTerminalSurface,
+} from './hooks/useAppSurfaces'
 import { BootstrapScreen } from './components/BootstrapScreen'
 import { respondToInteraction } from './api/chat'
 import { setSessionExecutionMode } from './api/sessions'
@@ -285,6 +289,7 @@ export default function App() {
     : '启动中…'
   const runtimeReady = bootstrap?.runtimeReady ?? false
   const skills = useSkillCatalog(runtimeReady)
+  const agentTemplates = useAgentTemplateCatalog(runtimeReady, view)
   const activeProject =
     projects.find((project) => project.id === activeProjectId) ?? null
 
@@ -421,6 +426,7 @@ export default function App() {
           selectedModelKey,
           onModelChange: setSelectedModelKey,
           skills,
+          agentTemplates,
           composerPrefill,
           onPrefillConsumed: () => setComposerPrefill(null),
           onSend: sendMessage,
@@ -464,6 +470,7 @@ export default function App() {
           selectedModelKey,
           onModelChange: setSelectedModelKey,
           skills,
+          agentTemplates,
           composerPrefill,
           onPrefillConsumed: () => setComposerPrefill(null),
           onSend: sendMessage,

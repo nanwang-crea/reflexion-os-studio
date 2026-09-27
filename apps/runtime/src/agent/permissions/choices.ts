@@ -15,6 +15,7 @@ const PATH_RULE_LABELS: Partial<Record<ToolOperation, string>> = {
   'file.glob': '本会话允许本次 pattern',
   'file.grep': '本会话允许本次搜索范围',
   'file.write': '本会话允许写入此文件',
+  'file.write_stream': '本会话允许分块写入此文件',
   'file.mkdir': '本会话允许创建此目录',
 }
 

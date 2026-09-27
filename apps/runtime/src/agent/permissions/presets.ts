@@ -20,6 +20,7 @@ const POLICY: Record<PermissionPreset, Record<ToolOperation, DecisionMode>> = {
     'file.glob': 'automatic',
     'file.grep': 'automatic',
     'file.write': 'ask',
+    'file.write_stream': 'ask',
     'file.edit': 'ask',
     'file.mkdir': 'ask',
     'file.move': 'ask',
@@ -32,6 +33,7 @@ const POLICY: Record<PermissionPreset, Record<ToolOperation, DecisionMode>> = {
     'file.glob': 'automatic',
     'file.grep': 'automatic',
     'file.write': 'automatic',
+    'file.write_stream': 'automatic',
     'file.edit': 'automatic',
     'file.mkdir': 'automatic',
     'file.move': 'automatic',
@@ -44,6 +46,7 @@ const POLICY: Record<PermissionPreset, Record<ToolOperation, DecisionMode>> = {
     'file.glob': 'automatic',
     'file.grep': 'automatic',
     'file.write': 'automatic',
+    'file.write_stream': 'automatic',
     'file.edit': 'automatic',
     'file.mkdir': 'automatic',
     'file.move': 'automatic',
@@ -75,11 +78,13 @@ const AUTOMATIC_OTHER_TOOLS = new Set([
   'memory.remember',
   // 委派只创建 Runtime 管理的受限 child Run；工具/深度/并发预算由 starter 强制。
   'task',
+  'shell.output.read',
 ])
 
 /** Rust 侧 require_grant 强制校验凭据的操作（写类 + Shell）；读取类不受约束。 */
 const RUST_GRANT_OPERATIONS = new Set<ToolOperation>([
   'file.write',
+  'file.write_stream',
   'file.edit',
   'file.delete',
   'file.move',
@@ -152,6 +157,7 @@ const PLAN_MODE_ALLOWED_TOOLS = new Set([
   'file.list',
   'file.glob',
   'file.grep',
+  'shell.output.read',
 ])
 
 /**

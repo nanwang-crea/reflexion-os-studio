@@ -1,10 +1,17 @@
 import type { ToolDefinition } from '@reflexion-os-studio/agent-core'
 import type { SystemRuntimeClient } from '../../system.js'
-import { callSystem, optionalString, requireString } from './shared.js'
+import {
+  callSystem,
+  optionalNumber,
+  optionalString,
+  requireString,
+} from './shared.js'
+import type { ShellOutputStore } from './shell-output.js'
 
 export function createShellExecuteTool(
   system: SystemRuntimeClient,
   workspaceRoot: string,
+  outputStore: ShellOutputStore,
 ): ToolDefinition {
   return {
     name: 'shell.execute',
@@ -43,6 +50,12 @@ export function createShellExecuteTool(
           description:
             '可选：提议一个可复用命令前缀（如 ["git","status"]）供审批卡作为"本会话允许"候选。Runtime 会校验它与实际命令逐 token 匹配且命令为简单单命令；校验失败仅退化为一次性授权，绝不据此自行扩权。',
         },
+        timeoutMs: {
+          type: 'integer',
+          minimum: 1000,
+          maximum: 120000,
+          description: '超时毫秒数，默认 30000，最大 120000',
+        },
       },
       required: ['command'],
     },
@@ -54,6 +67,8 @@ export function createShellExecuteTool(
       }
       const cwd = optionalString(args, 'cwd')
       if (cwd !== undefined) params.cwd = cwd
+      const timeoutMs = optionalNumber(args, 'timeoutMs')
+      if (timeoutMs !== undefined) params.timeoutMs = Math.trunc(timeoutMs)
       if (
         typeof args === 'object' &&
         args !== null &&
@@ -62,7 +77,9 @@ export function createShellExecuteTool(
       ) {
         params.allowNetwork = true
       }
-      return callSystem(system, 'shell.execute', params, signal)
+      return callSystem(system, 'shell.execute', params, signal).then(
+        (result) => outputStore.capture(result),
+      )
     },
   }
 }

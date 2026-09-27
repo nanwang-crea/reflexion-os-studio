@@ -53,6 +53,7 @@ pub struct GrepParams {
     /// 命中行前后附带的上下文行数（0-5），缺省 0。
     pub context: Option<usize>,
     pub max_results: Option<usize>,
+    pub offset: Option<usize>,
 }
 
 /// 写操作授权来源：agent = 审批网关签发的凭据（默认）；ui = 用户直接动作，
@@ -81,17 +82,70 @@ pub struct WriteParams {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StreamWriteParams {
+    pub workspace_root: String,
+    pub path: String,
+    pub action: String,
+    pub upload_id: Option<String>,
+    pub offset: Option<u64>,
+    pub content: Option<String>,
+    pub chunk_sha256: Option<String>,
+    pub expected_size: Option<u64>,
+    pub expected_sha256: Option<String>,
+    pub revision: Option<crate::filesystem::files::Revision>,
+    pub grant: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditParams {
     pub workspace_root: String,
     pub path: String,
-    pub old_text: String,
-    pub new_text: String,
+    /// 新版原子批量编辑。与 legacy oldText/newText 二选一。
+    pub edits: Option<Vec<FileEditOperation>>,
+    pub old_text: Option<String>,
+    pub new_text: Option<String>,
     /// 要求 oldText 恰好出现的次数（默认 1），不匹配则拒绝写入。
     pub expected_count: Option<usize>,
     /// 必填：一次读取/写入发放的 revision 凭据（mtime+size+sha256），
     /// 编辑侧用于先读后写强制与陈旧检测（任一字段不一致即拒绝）。
     pub revision: Option<crate::filesystem::files::Revision>,
     pub grant: String,
+}
+
+#[derive(Deserialize, Clone)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum FileEditOperation {
+    Replace {
+        #[serde(rename = "oldText")]
+        old_text: String,
+        #[serde(rename = "newText")]
+        new_text: String,
+        #[serde(rename = "expectedCount")]
+        expected_count: Option<usize>,
+    },
+    InsertBefore {
+        anchor: String,
+        content: String,
+        #[serde(rename = "expectedCount")]
+        expected_count: Option<usize>,
+    },
+    InsertAfter {
+        anchor: String,
+        content: String,
+        #[serde(rename = "expectedCount")]
+        expected_count: Option<usize>,
+    },
+    ReplaceRange {
+        #[serde(rename = "startLine")]
+        start_line: usize,
+        #[serde(rename = "endLine")]
+        end_line: usize,
+        #[serde(rename = "expectedText")]
+        expected_text: String,
+        #[serde(rename = "newText")]
+        new_text: String,
+    },
 }
 
 #[derive(Deserialize)]

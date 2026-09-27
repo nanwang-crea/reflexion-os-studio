@@ -37,6 +37,7 @@ fn handle_request(request: &Value) -> (Value, bool) {
         Some("file.glob") => finish(id, handlers::handle_file_glob(params)),
         Some("file.grep") => finish(id, handlers::handle_file_grep(params)),
         Some("file.write") => finish(id, handlers::handle_file_write(params)),
+        Some("file.write_stream") => finish(id, handlers::handle_file_write_stream(params)),
         Some("file.edit") => finish(id, handlers::handle_file_edit(params)),
         Some("file.delete") => finish(id, handlers::handle_file_delete(params)),
         Some("file.move") => finish(id, handlers::handle_file_move(params)),

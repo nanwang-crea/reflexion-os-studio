@@ -187,6 +187,43 @@ test('file.read forwards system errors untouched and records read state on succe
   assert.equal(readState.token('a.txt'), 99)
 })
 
+test('file.read denies full overwrite coverage to tail pages and TS-truncated windows', async () => {
+  const revision = { modifiedMs: 1, sizeBytes: 10, sha256: 'b'.repeat(64) }
+  const tailState = new FileReadState()
+  const tailTool = createFileReadTool(
+    fakeSystem(async () => ({
+      content: 'tail',
+      sizeBytes: 10,
+      totalLines: 2,
+      offset: 1,
+      modifiedMs: 1,
+      readComplete: true,
+      revision,
+    })),
+    '/ws',
+    tailState,
+  )
+  await run(tailTool, { path: './a.txt', offset: 1 })
+  assert.equal(tailState.entry('a.txt').complete, false)
+
+  const truncatedState = new FileReadState()
+  const truncatedTool = createFileReadTool(
+    fakeSystem(async () => ({
+      content: 'x'.repeat(13_000),
+      sizeBytes: 13_000,
+      totalLines: 1,
+      offset: 0,
+      modifiedMs: 1,
+      readComplete: true,
+      revision,
+    })),
+    '/ws',
+    truncatedState,
+  )
+  await run(truncatedTool, { path: 'a.txt' })
+  assert.equal(truncatedState.entry('a.txt').complete, false)
+})
+
 test('file.glob forwards offset and exposes continuation in description', async () => {
   const calls = []
   const system = fakeSystem(async (_method, params) => {

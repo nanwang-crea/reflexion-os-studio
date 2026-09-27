@@ -2,6 +2,7 @@
 //! grep 只做字面子串（非正则），过滤与定位用 glob；遍历边界由 walk 模块保证。
 use std::collections::HashSet;
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 use serde::Serialize;
@@ -29,6 +30,7 @@ pub struct GlobOutcome {
     /// 仍有后续页时指向下一次请求的 offset；与 file.list 同构。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_offset: Option<usize>,
+    pub scan_truncated: bool,
 }
 
 #[derive(Serialize)]
@@ -57,6 +59,8 @@ pub struct GrepMatch {
 pub struct GrepOutcome {
     pub matches: Vec<GrepMatch>,
     pub truncated: bool,
+    pub next_offset: Option<usize>,
+    pub scan_truncated: bool,
 }
 
 pub fn glob_search(
@@ -87,6 +91,7 @@ pub fn glob_search(
         matches: page,
         truncated: walked.truncated || more,
         next_offset: if more { Some(page_end) } else { None },
+        scan_truncated: walked.truncated,
     })
 }
 
@@ -97,6 +102,7 @@ pub fn grep_search(
     ignore_case: bool,
     context: usize,
     limit: usize,
+    offset: Option<usize>,
 ) -> Result<GrepOutcome, String> {
     if text.trim().is_empty() {
         return Err("search text must not be empty".to_string());
@@ -117,6 +123,8 @@ pub fn grep_search(
     let mut matches: Vec<GrepMatch> = Vec::new();
     // W3：limit 是全工作区累计上限——旧实现按文件各自计数，
     // 多文件各命中少量行时总量可静默远超 limit。
+    let offset = offset.unwrap_or(0);
+    let mut seen: usize = 0;
     let mut total: usize = 0;
     let mut hit_limit = false;
     'files: for entry in &walked.files {
@@ -127,6 +135,22 @@ pub fn grep_search(
             }
         }
         if entry.size_bytes > MAX_GREP_FILE_BYTES {
+            let remaining = limit - total;
+            let streamed = grep_large_file(
+                &start.join(&entry.path),
+                &entry.path,
+                &needle,
+                ignore_case,
+                offset,
+                &mut seen,
+                remaining,
+            );
+            total += streamed.len();
+            matches.extend(streamed);
+            if total >= limit {
+                hit_limit = true;
+                break 'files;
+            }
             continue;
         }
         let bytes = match fs::read(start.join(&entry.path)) {
@@ -152,6 +176,10 @@ pub fn grep_search(
                 line.to_string()
             };
             if !haystack.contains(&needle) {
+                continue;
+            }
+            if seen < offset {
+                seen += 1;
                 continue;
             }
             matched.push(index);
@@ -183,6 +211,7 @@ pub fn grep_search(
             });
         }
         total += matched.len();
+        seen += matched.len();
         if total >= limit {
             // 已达全局累计上限：停止扫描后续文件，调用方可按 glob 收窄后重试。
             hit_limit = true;
@@ -192,7 +221,57 @@ pub fn grep_search(
     Ok(GrepOutcome {
         matches,
         truncated: hit_limit || walked.truncated,
+        next_offset: if hit_limit {
+            Some(offset + total)
+        } else {
+            None
+        },
+        scan_truncated: walked.truncated,
     })
+}
+
+fn grep_large_file(
+    path: &Path,
+    relative: &str,
+    needle: &str,
+    ignore_case: bool,
+    offset: usize,
+    seen: &mut usize,
+    limit: usize,
+) -> Vec<GrepMatch> {
+    let Ok(file) = fs::File::open(path) else {
+        return Vec::new();
+    };
+    let mut matches = Vec::new();
+    for (index, line) in BufReader::new(file).lines().enumerate() {
+        let Ok(line) = line else { break };
+        if line.contains('\0') {
+            return Vec::new();
+        }
+        let haystack = if ignore_case {
+            line.to_lowercase()
+        } else {
+            line.clone()
+        };
+        if !haystack.contains(needle) {
+            continue;
+        }
+        if *seen < offset {
+            *seen += 1;
+            continue;
+        }
+        *seen += 1;
+        matches.push(GrepMatch {
+            path: relative.to_string(),
+            line: index + 1,
+            text: truncate_line(&line),
+            context: Vec::new(),
+        });
+        if matches.len() >= limit {
+            break;
+        }
+    }
+    matches
 }
 
 fn truncate_line(line: &str) -> String {
@@ -256,12 +335,13 @@ mod tests {
     fn grep_finds_lines_and_respects_case_flag() {
         let root = temp_workspace("grep");
         fs::write(root.join("note.txt"), "hello World\nsecond line\n").unwrap();
-        let found = grep_search(&root, "World", None, false, 0, DEFAULT_GREP_LIMIT).unwrap();
+        let found = grep_search(&root, "World", None, false, 0, DEFAULT_GREP_LIMIT, None).unwrap();
         assert_eq!(found.matches.len(), 1);
         assert_eq!(found.matches[0].line, 1);
-        let insensitive = grep_search(&root, "world", None, true, 0, DEFAULT_GREP_LIMIT).unwrap();
+        let insensitive =
+            grep_search(&root, "world", None, true, 0, DEFAULT_GREP_LIMIT, None).unwrap();
         assert_eq!(insensitive.matches.len(), 1);
-        let missing = grep_search(&root, "nope", None, false, 0, DEFAULT_GREP_LIMIT).unwrap();
+        let missing = grep_search(&root, "nope", None, false, 0, DEFAULT_GREP_LIMIT, None).unwrap();
         assert!(missing.matches.is_empty());
         fs::remove_dir_all(&root).ok();
     }
@@ -274,7 +354,8 @@ mod tests {
             "l0\nl1 needle\nl2\nl3\nl4 needle\nl5\n",
         )
         .unwrap();
-        let outcome = grep_search(&root, "needle", None, false, 2, DEFAULT_GREP_LIMIT).unwrap();
+        let outcome =
+            grep_search(&root, "needle", None, false, 2, DEFAULT_GREP_LIMIT, None).unwrap();
         assert_eq!(outcome.matches.len(), 2);
         assert_eq!(outcome.matches[0].line, 2);
         let lines_of = |m: &GrepMatch| -> Vec<usize> {
@@ -288,7 +369,7 @@ mod tests {
         assert_eq!(outcome.matches[1].line, 5);
         assert_eq!(lines_of(&outcome.matches[1]), vec![3, 4, 6]);
         // context=0 时字段整体省略（与既有 JSON 形状一致）。
-        let plain = grep_search(&root, "l0", None, false, 0, DEFAULT_GREP_LIMIT).unwrap();
+        let plain = grep_search(&root, "l0", None, false, 0, DEFAULT_GREP_LIMIT, None).unwrap();
         assert!(plain.matches[0].context.is_empty());
         let serialized = serde_json::to_value(&plain.matches[0]).unwrap();
         assert!(serialized.get("context").is_none());
@@ -300,11 +381,20 @@ mod tests {
         let root = temp_workspace("grep-binary");
         fs::write(root.join("text.txt"), "needle here").unwrap();
         fs::write(root.join("data.bin"), [0u8, 1, 2]).unwrap();
-        let outcome = grep_search(&root, "needle", None, false, 0, DEFAULT_GREP_LIMIT).unwrap();
+        let outcome =
+            grep_search(&root, "needle", None, false, 0, DEFAULT_GREP_LIMIT, None).unwrap();
         assert_eq!(outcome.matches.len(), 1);
         assert_eq!(outcome.matches[0].path, "text.txt");
-        let filtered =
-            grep_search(&root, "needle", Some("*.bin"), false, 0, DEFAULT_GREP_LIMIT).unwrap();
+        let filtered = grep_search(
+            &root,
+            "needle",
+            Some("*.bin"),
+            false,
+            0,
+            DEFAULT_GREP_LIMIT,
+            None,
+        )
+        .unwrap();
         assert!(filtered.matches.is_empty());
         fs::remove_dir_all(&root).ok();
     }
@@ -320,7 +410,7 @@ mod tests {
         assert_eq!(glob.matches.len(), 1);
         assert!(glob.truncated);
 
-        let grep = grep_search(&root, "needle", None, false, 0, 0).unwrap();
+        let grep = grep_search(&root, "needle", None, false, 0, 0, None).unwrap();
         assert_eq!(grep.matches.len(), 1);
         assert!(grep.truncated);
 
@@ -335,7 +425,7 @@ mod tests {
         }
         // 旧实现按文件计数：每文件 2 命中均不触达 limit=5，会静默返回 6 条。
         // 新实现跨文件累计：恰好 5 条即停扫并标记截断。
-        let outcome = grep_search(&root, "needle", None, false, 0, 5).unwrap();
+        let outcome = grep_search(&root, "needle", None, false, 0, 5, None).unwrap();
         assert_eq!(outcome.matches.len(), 5);
         assert!(outcome.truncated);
         let by_file: HashSet<&str> = outcome.matches.iter().map(|m| m.path.as_str()).collect();
@@ -346,9 +436,43 @@ mod tests {
     }
 
     #[test]
+    fn grep_resumes_from_offset() {
+        let root = temp_workspace("grep-offset");
+        fs::write(root.join("a.txt"), "needle one\nneedle two\nneedle three\n").unwrap();
+        let first = grep_search(&root, "needle", None, false, 0, 2, None).unwrap();
+        assert_eq!(first.matches.len(), 2);
+        assert_eq!(first.next_offset, Some(2));
+        let second = grep_search(&root, "needle", None, false, 0, 2, first.next_offset).unwrap();
+        assert_eq!(second.matches.len(), 1);
+        assert_eq!(second.matches[0].line, 3);
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn grep_streams_files_larger_than_eager_read_limit() {
+        let root = temp_workspace("grep-large");
+        let mut body = "padding line\n".repeat(180_000);
+        body.push_str("unique streamed needle\n");
+        fs::write(root.join("large.txt"), body).unwrap();
+        let outcome = grep_search(
+            &root,
+            "unique streamed needle",
+            None,
+            false,
+            0,
+            DEFAULT_GREP_LIMIT,
+            None,
+        )
+        .unwrap();
+        assert_eq!(outcome.matches.len(), 1);
+        assert_eq!(outcome.matches[0].line, 180_001);
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
     fn grep_rejects_empty_text() {
         let root = temp_workspace("grep-empty");
-        assert!(grep_search(&root, "  ", None, false, 0, DEFAULT_GREP_LIMIT).is_err());
+        assert!(grep_search(&root, "  ", None, false, 0, DEFAULT_GREP_LIMIT, None).is_err());
         fs::remove_dir_all(&root).ok();
     }
 
@@ -365,7 +489,7 @@ mod tests {
         assert_eq!(glob.matches[0].path, "src/main.ts");
         assert!(!glob.truncated);
 
-        let grep = grep_search(&root, "needle", None, false, 0, DEFAULT_GREP_LIMIT).unwrap();
+        let grep = grep_search(&root, "needle", None, false, 0, DEFAULT_GREP_LIMIT, None).unwrap();
         assert_eq!(grep.matches.len(), 1);
         assert_eq!(grep.matches[0].path, "src/main.ts");
         assert!(!grep.truncated);

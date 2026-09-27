@@ -1,4 +1,13 @@
 import type { ToolResult } from '@reflexion-os-studio/agent-core'
+import path from 'node:path'
+
+function normalizedPathKey(value: string): string {
+  const normalized = path.posix.normalize(value.replaceAll('\\', '/'))
+  const relative = normalized.startsWith('./')
+    ? normalized.slice(2)
+    : normalized
+  return process.platform === 'win32' ? relative.toLocaleLowerCase() : relative
+}
 
 /** 与 Rust 侧 files::Revision 对齐的三字段读取凭据（mtime + size + sha256）。 */
 export interface FileRevision {
@@ -26,23 +35,39 @@ export interface FileReadRecord {
 export class FileReadState {
   private readonly entries = new Map<string, FileReadRecord>()
 
+  constructor(
+    initial?: Record<string, FileReadRecord>,
+    private readonly onChange?: (
+      snapshot: Record<string, FileReadRecord>,
+    ) => void,
+  ) {
+    for (const [path, record] of Object.entries(initial ?? {}))
+      this.entries.set(normalizedPathKey(path), record)
+  }
+
   record(path: string, record: FileReadRecord): void {
-    this.entries.set(path, record)
+    this.entries.set(normalizedPathKey(path), record)
+    this.onChange?.(this.snapshot())
   }
 
   entry(path: string): FileReadRecord | undefined {
-    return this.entries.get(path)
+    return this.entries.get(normalizedPathKey(path))
   }
 
   /** 兼容别名：旧式 mtime 凭据（读取时刻的修改时间）。 */
   token(path: string): number | undefined {
-    return this.entries.get(path)?.revision.modifiedMs
+    return this.entries.get(normalizedPathKey(path))?.revision.modifiedMs
   }
 
   invalidate(paths: string[]): void {
     for (const path of paths) {
-      this.entries.delete(path)
+      this.entries.delete(normalizedPathKey(path))
     }
+    this.onChange?.(this.snapshot())
+  }
+
+  snapshot(): Record<string, FileReadRecord> {
+    return Object.fromEntries(this.entries)
   }
 }
 

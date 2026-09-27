@@ -21,6 +21,7 @@ export function isMutatingTool(toolName: string): boolean {
   return (
     toolName === 'shell.execute' ||
     toolName === 'file.write' ||
+    toolName === 'file.write_stream' ||
     toolName === 'file.edit' ||
     toolName === 'file.delete' ||
     toolName === 'file.move' ||
