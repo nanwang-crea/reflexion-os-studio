@@ -8,6 +8,7 @@ import type { Store } from './store/index.js'
 import type { SystemRuntimeClient } from './system.js'
 import type { McpManager } from './mcp/manager.js'
 import type { WorkspaceIndexer } from './workspace/indexer.js'
+import type { WorkspaceWatchService } from './workspace/watch-service.js'
 import type { AssetService } from './assets/service.js'
 import type { TerminalService } from './terminal/service.js'
 import type { SkillPluginService } from './skills/service.js'
@@ -24,6 +25,7 @@ export interface CommandContext {
   danger: DangerLeaseService
   /** Phase 1B Workspace 索引器（仅 workspace.* 命令使用）。 */
   workspace: WorkspaceIndexer
+  workspaceWatch: WorkspaceWatchService
   /** Rust System Runtime 通道（文件树/查看器的执行后端）。 */
   system: SystemRuntimeClient
   /** MCP 管理服务(mcp.* 命令与工具桥)。 */

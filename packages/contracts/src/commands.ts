@@ -713,6 +713,21 @@ export const CommandSchemaRegistry = {
       nextOffset: z.number().int().nonnegative().optional(),
     }),
   },
+  'workspace.watch_dir': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1),
+      path: z.string().min(1),
+    }),
+    result: z.object({ watchId: z.string().min(1) }),
+  },
+  'workspace.unwatch_dir': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      watchId: z.string().min(1),
+    }),
+    result: z.object({ removed: z.boolean() }),
+  },
   'workspace.search_files': {
     params: z.object({
       requestId: RequestIdSchema,

@@ -101,6 +101,8 @@
     "workspace.list_dir",
     "workspace.read_file",
     "workspace.search_files",
+    "workspace.unwatch_dir",
+    "workspace.watch_dir",
     "workspace.write_file"
   ]
 }

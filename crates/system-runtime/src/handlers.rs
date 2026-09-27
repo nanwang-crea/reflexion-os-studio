@@ -9,7 +9,7 @@ use crate::filesystem::{files, mutate, paths, search, upload};
 use crate::grant::{normalize_relative, require_grant, require_network_approval};
 use crate::params::{
     EditParams, GlobParams, GrantPathParams, GrepParams, ListParams, MoveParams, OperationSource,
-    ReadParams, ShellParams, StreamWriteParams, WriteParams,
+    ReadParams, ShellParams, StreamWriteParams, UnwatchParams, WatchParams, WriteParams,
 };
 use crate::protocol::{emit, error_response, ok_response, running_shells, workspace_root, OpError};
 use crate::{sandbox, shell};
@@ -94,6 +94,21 @@ pub fn handle_file_list(params: Value) -> Result<Value, OpError> {
     )
     .map_err(file_error)?;
     serde_json::to_value(result).map_err(|error| OpError::new("internal", error.to_string()))
+}
+
+pub fn handle_file_watch(params: Value) -> Result<Value, OpError> {
+    let params: WatchParams = serde_json::from_value(params)
+        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
+    let root = workspace_root(&params.workspace_root)?;
+    crate::watcher::watch(&root, &params.path, &params.watch_id)
+        .map_err(|message| OpError::new("watch_error", message))?;
+    Ok(json!({ "watchId": params.watch_id }))
+}
+
+pub fn handle_file_unwatch(params: Value) -> Result<Value, OpError> {
+    let params: UnwatchParams = serde_json::from_value(params)
+        .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
+    Ok(json!({ "removed": crate::watcher::unwatch(&params.watch_id) }))
 }
 
 pub fn handle_file_glob(params: Value) -> Result<Value, OpError> {

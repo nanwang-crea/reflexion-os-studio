@@ -17,6 +17,7 @@ mod protocol;
 mod sandbox;
 mod shell;
 mod terminal;
+mod watcher;
 
 use serde_json::{json, Value};
 use std::io::{self, BufRead};
@@ -42,6 +43,8 @@ fn handle_request(request: &Value) -> (Value, bool) {
         Some("file.delete") => finish(id, handlers::handle_file_delete(params)),
         Some("file.move") => finish(id, handlers::handle_file_move(params)),
         Some("file.mkdir") => finish(id, handlers::handle_file_mkdir(params)),
+        Some("file.watch") => finish(id, handlers::handle_file_watch(params)),
+        Some("file.unwatch") => finish(id, handlers::handle_file_unwatch(params)),
         Some("shell.execute") => handlers::handle_shell_execute(id, params),
         Some("git.status") => handlers_git::handle_git_status(id, params),
         Some("git.diff") => handlers_git::handle_git_diff(id, params),
@@ -238,6 +241,7 @@ fn main() {
     // 关停统一回收（shutdown 与 stdin EOF 两条路径都收敛到这里）：
     // 所有活跃终端会话并行 close，不留孤儿 PTY 子进程。
     let reaped = terminal::service::close_all();
+    watcher::stop_all();
     eprintln!("terminal sessions reaped: {reaped}");
 
     eprintln!("system runtime stopped");

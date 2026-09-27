@@ -12,7 +12,6 @@ import {
   gitRemotes,
   gitRemoteRemove,
   gitStage,
-  gitStatus,
   gitUnstage,
   type GitRemote,
 } from '../../../api/workspace'
@@ -21,6 +20,7 @@ import { BranchPicker } from './BranchPicker'
 import { GitChangeList } from './GitChangeList'
 import { GitCommitBox } from './GitCommitBox'
 import type { OpenDiffHandler } from '../types'
+import type { WorkspaceGitStatus } from '../../../hooks/workspace/useWorkspaceGitStatus'
 
 type GitAction = 'commit' | 'push' | 'pull' | 'stage' | 'unstage' | 'branch'
 type Busy = GitAction | 'refresh'
@@ -37,6 +37,7 @@ interface GitChangesProps {
   reloadAllTextTabs?: () => void
   /** Git 面板每次完成刷新后的回调：文件树 git 徽章随变更联动刷新。 */
   onAfterMutation?: () => void
+  loadGitStatus: () => Promise<WorkspaceGitStatus>
 }
 
 const BUSY_LABELS: Record<Busy, string> = {
@@ -51,6 +52,7 @@ const BUSY_LABELS: Record<Busy, string> = {
 
 /** Git SCM 面板：分支芯片 + 提交框 + 暂存区分组列表（VS Code 布局）。 */
 export function GitChanges(props: GitChangesProps): React.JSX.Element {
+  const { loadGitStatus } = props
   const [repo, setRepo] = useState<boolean | null>(null)
   const [entries, setEntries] = useState<GitChangeEntry[]>([])
   const [truncated, setTruncated] = useState(false)
@@ -72,7 +74,7 @@ export function GitChanges(props: GitChangesProps): React.JSX.Element {
 
   const loadStatus = useCallback(async (): Promise<void> => {
     const [status, branchList, remoteList] = await Promise.all([
-      gitStatus(props.projectId),
+      loadGitStatus(),
       gitBranches(props.projectId).catch(() => ({
         repo: false,
         current: null,
@@ -93,7 +95,7 @@ export function GitChanges(props: GitChangesProps): React.JSX.Element {
     setBranches(branchList.branches)
     setRemoteBranches(branchList.remoteBranches)
     setRemotes(remoteList.remotes)
-  }, [props.projectId])
+  }, [loadGitStatus, props.projectId])
 
   // 远端增删只动本地 config/refs：branches（remote remove 会删 refs/remotes/*）+
   // remotes 轻量重载即可；工作树与 status 不变，不走全量 refresh、不联动徽章。

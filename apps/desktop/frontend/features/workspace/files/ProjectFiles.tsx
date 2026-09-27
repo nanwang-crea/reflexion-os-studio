@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type {
-  GitChangeEntry,
   Project,
   WorkspaceEntry,
 } from '@reflexion-os-studio/runtime-client'
-import { gitStatus, searchFiles, startIndex } from '../../../api/workspace'
+import { searchFiles, startIndex } from '../../../api/workspace'
+import { useWorkspaceGitStatus } from '../../../hooks/workspace/useWorkspaceGitStatus'
 import { ChevronIcon, FolderIcon } from '../../../ui/icons'
 import { AssetsPanel } from '../assets/AssetsPanel'
 import { FileTree } from './FileTree'
@@ -50,9 +50,7 @@ export function ProjectFiles(props: ProjectFilesProps): React.JSX.Element {
   const [searching, setSearching] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
   const [treeEpoch, setTreeEpoch] = useState(0)
-  const [gitStatusMap, setGitStatusMap] = useState<
-    Map<string, GitChangeEntry['status']>
-  >(new Map())
+  const repository = useWorkspaceGitStatus(projectId, props.systemReady)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchGeneration = useRef(0)
 
@@ -62,31 +60,13 @@ export function ProjectFiles(props: ProjectFilesProps): React.JSX.Element {
     setQuery('')
     setSearchResults(null)
     setSearchError(null)
-    setGitStatusMap(new Map())
     if (projectId !== null) void startIndex(projectId).catch(() => {})
   }, [projectId])
 
-  // 每个项目拉一次 Git 状态，用于文件树行内标记（只读）；Git 面板变更后复用同一函数。
-  const badgeGeneration = useRef(0)
-  const refreshBadges = useCallback(async (): Promise<void> => {
-    if (projectId === null || !props.systemReady) return
-    const generation = ++badgeGeneration.current
-    try {
-      const result = await gitStatus(projectId)
-      if (generation !== badgeGeneration.current) return
-      const map = new Map<string, GitChangeEntry['status']>()
-      for (const entry of result.entries) {
-        map.set(entry.path, entry.status)
-      }
-      setGitStatusMap(map)
-    } catch {
-      // 静默：徽章是尽力而为的指示器，不拦截文件树。
-    }
-  }, [projectId, props.systemReady])
-
-  useEffect(() => {
-    void refreshBadges()
-  }, [refreshBadges])
+  const gitStatusMap = new Map(
+    repository.snapshot?.entries.map((entry) => [entry.path, entry.status]) ??
+      [],
+  )
 
   // 文件名搜索：防抖 250ms；清空时回到文件树。
   useEffect(() => {
@@ -219,7 +199,8 @@ export function ProjectFiles(props: ProjectFilesProps): React.JSX.Element {
             onOpenDiff={props.onOpenDiff}
             guardDirtyBuffersThen={props.guardDirtyBuffersThen}
             reloadAllTextTabs={props.reloadAllTextTabs}
-            onAfterMutation={() => void refreshBadges()}
+            loadGitStatus={repository.refresh}
+            onAfterMutation={() => void repository.refresh().catch(() => {})}
           />
         ) : view === 'history' ? (
           <GitHistory
@@ -228,7 +209,7 @@ export function ProjectFiles(props: ProjectFilesProps): React.JSX.Element {
             onOpenDiff={props.onOpenDiff}
             guardDirtyBuffersThen={props.guardDirtyBuffersThen}
             reloadAllTextTabs={props.reloadAllTextTabs}
-            onAfterMutation={() => void refreshBadges()}
+            onAfterMutation={() => void repository.refresh().catch(() => {})}
           />
         ) : (
           <AssetsPanel

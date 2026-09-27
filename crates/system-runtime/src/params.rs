@@ -33,6 +33,20 @@ pub struct ListParams {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WatchParams {
+    pub workspace_root: String,
+    pub path: String,
+    pub watch_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UnwatchParams {
+    pub watch_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GlobParams {
     pub workspace_root: String,
     pub pattern: String,

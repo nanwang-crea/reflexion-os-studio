@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { WorkspaceEntry } from '@reflexion-os-studio/runtime-client'
-import { listDir } from '../../../api/workspace'
+import type { RuntimeEvent } from '@reflexion-os-studio/runtime-client'
+import { listDir, unwatchDir, watchDir } from '../../../api/workspace'
+import { transport } from '../../../lib/transport'
 import { ChevronIcon, FolderIcon, RefreshIcon } from '../../../ui/icons'
 
 interface FileTreeProps {
@@ -40,6 +42,11 @@ export function FileTree(props: FileTreeProps): React.JSX.Element {
   const [expanded, setExpanded] = useState<Set<string>>(new Set(['.']))
   const [rootError, setRootError] = useState<string | null>(null)
   const inFlight = useRef(new Set<string>())
+  const watchesRef = useRef(new Map<string, string>())
+  const pendingWatchesRef = useRef(new Set<string>())
+  const refreshTimersRef = useRef(
+    new Map<string, ReturnType<typeof setTimeout>>(),
+  )
   // 项目代次：切项目/刷新时自增，旧的异步响应据此丢弃，避免污染新项目。
   const generationRef = useRef(0)
 
@@ -105,6 +112,73 @@ export function FileTree(props: FileTreeProps): React.JSX.Element {
       }
     },
     [props.projectId, props.systemReady],
+  )
+
+  useEffect(() => {
+    if (!props.systemReady) {
+      watchesRef.current.clear()
+      pendingWatchesRef.current.clear()
+      return
+    }
+    let disposed = false
+    for (const path of expanded) {
+      if (watchesRef.current.has(path) || pendingWatchesRef.current.has(path)) {
+        continue
+      }
+      pendingWatchesRef.current.add(path)
+      void watchDir(props.projectId, path)
+        .then(({ watchId }) => {
+          pendingWatchesRef.current.delete(path)
+          if (disposed || !expanded.has(path)) {
+            void unwatchDir(watchId).catch(() => {})
+            return
+          }
+          watchesRef.current.set(path, watchId)
+        })
+        .catch(() => pendingWatchesRef.current.delete(path))
+    }
+    for (const [path, watchId] of watchesRef.current) {
+      if (expanded.has(path)) continue
+      watchesRef.current.delete(path)
+      void unwatchDir(watchId).catch(() => {})
+    }
+    return () => {
+      disposed = true
+    }
+  }, [expanded, props.projectId, props.systemReady])
+
+  useEffect(() => {
+    return transport.onEvent((event: RuntimeEvent) => {
+      if (
+        event.type !== 'workspace.changed' ||
+        event.projectId !== props.projectId ||
+        !expanded.has(event.path)
+      ) {
+        return
+      }
+      const current = refreshTimersRef.current.get(event.path)
+      if (current !== undefined) clearTimeout(current)
+      refreshTimersRef.current.set(
+        event.path,
+        setTimeout(() => {
+          refreshTimersRef.current.delete(event.path)
+          void loadOnce(event.path)
+        }, 120),
+      )
+    })
+  }, [expanded, loadOnce, props.projectId])
+
+  useEffect(
+    () => () => {
+      for (const watchId of watchesRef.current.values()) {
+        void unwatchDir(watchId).catch(() => {})
+      }
+      watchesRef.current.clear()
+      pendingWatchesRef.current.clear()
+      for (const timer of refreshTimersRef.current.values()) clearTimeout(timer)
+      refreshTimersRef.current.clear()
+    },
+    [],
   )
 
   const loadMore = useCallback(

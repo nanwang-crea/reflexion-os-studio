@@ -77,6 +77,15 @@ export const workspaceCommandHandlers: Record<string, CommandHandler> = {
         : {}),
     }
   },
+  'workspace.watch_dir': async (p, { store, workspaceWatch }) => {
+    const projectId = requireString(p, 'projectId')
+    const project = requireWorkspaceProject(store, projectId)
+    const path = assertRelativePath(requireString(p, 'path'))
+    return workspaceWatch.watch(projectId, project.folderPath, path)
+  },
+  'workspace.unwatch_dir': async (p, { workspaceWatch }) => ({
+    removed: await workspaceWatch.unwatch(requireString(p, 'watchId')),
+  }),
   'workspace.search_files': async (p, { store, system }) => {
     const project = requireWorkspaceProject(
       store,

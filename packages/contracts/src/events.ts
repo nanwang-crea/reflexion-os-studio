@@ -229,6 +229,13 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     projectId: z.string().min(1),
     error: z.string(),
   }),
+  RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('workspace.changed'),
+    scope: z.literal('project'),
+    projectId: z.string().min(1),
+    path: z.string().min(1),
+    kind: z.string().min(1),
+  }),
   // 会话发送队列快照：session 作用域，sessionId 为真实身份。
   // paused：队列是否处于"用户停止后暂停待确认"状态；可选：旧版 runtime 不含该字段。
   RuntimeEventEnvelopeSchema.extend({

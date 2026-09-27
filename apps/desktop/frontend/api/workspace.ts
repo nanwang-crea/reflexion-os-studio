@@ -51,6 +51,20 @@ export function listDir(
   })
 }
 
+export function watchDir(
+  projectId: string,
+  path: string,
+): Promise<{ watchId: string }> {
+  return request<{ watchId: string }>('workspace.watch_dir', {
+    projectId,
+    path,
+  })
+}
+
+export function unwatchDir(watchId: string): Promise<{ removed: boolean }> {
+  return request<{ removed: boolean }>('workspace.unwatch_dir', { watchId })
+}
+
 /** 分段读取文本文件；大文件用 offset（行号）+ limit 翻页。 */
 export function readFile(
   projectId: string,

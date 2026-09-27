@@ -19,6 +19,7 @@ import { resolveSystemRuntimeBinary, SystemRuntimeClient } from './system.js'
 import { applyUserShellEnv } from './user-shell-env.js'
 import { McpManager } from './mcp/manager.js'
 import { WorkspaceIndexer } from './workspace/indexer.js'
+import { WorkspaceWatchService } from './workspace/watch-service.js'
 import { AssetService } from './assets/service.js'
 import { TerminalService } from './terminal/service.js'
 import { SkillPluginService } from './skills/service.js'
@@ -30,7 +31,12 @@ const RUNTIME_VERSION = '0.1.0'
  * terminalService 在其后构造（依赖 store），用可变盒子闭包延迟绑定；通知只在 start() 后到达。
  */
 const terminalServiceBox: { current?: TerminalService } = {}
+const workspaceWatchBox: { current?: WorkspaceWatchService } = {}
 function routeSystemNotification(method: string, params: unknown): void {
+  if (method === 'file.changed') {
+    workspaceWatchBox.current?.handleNotification(method, params)
+    return
+  }
   if (method.startsWith('terminal.')) {
     const service = terminalServiceBox.current
     if (!service) {
@@ -95,6 +101,7 @@ const systemRuntime = new SystemRuntimeClient(
     // sidecar 离开 ready：其上的 PTY 已死，把活动终端标记 disconnected（不自动重跑）。
     if (status !== 'ready') {
       terminalServiceBox.current?.markAllDisconnected(String(status))
+      workspaceWatchBox.current?.clear()
       // Danger 硬边界随 provider 失效：租约必须立即撤销（fail-closed），
       // 绝不在无沙箱兜底时维持系统范围访问。
       agentBox.current?.danger.onProviderDegraded()
@@ -127,6 +134,8 @@ const agent = new ChatAgent(
 )
 agentBox.current = agent
 const workspaceIndexer = new WorkspaceIndexer(store, notify)
+const workspaceWatch = new WorkspaceWatchService(systemRuntime, notify)
+workspaceWatchBox.current = workspaceWatch
 const assetService = new AssetService(store, resolveDataDir())
 const terminalService = new TerminalService({
   getProject: (id) => {
@@ -144,6 +153,7 @@ const commandContext = {
   interactions: agent.interactions,
   danger: agent.danger,
   workspace: workspaceIndexer,
+  workspaceWatch,
   system: systemRuntime,
   mcp: mcpManager,
   assets: assetService,
@@ -210,6 +220,7 @@ async function handleRequestAsync(request: JsonRpcRequest): Promise<void> {
         .finally(() => {
           void systemRuntime.shutdown().finally(() => {
             agent.dispose()
+            workspaceWatch.clear()
             mcpManager.dispose()
             process.exit(0)
           })

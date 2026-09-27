@@ -8,6 +8,12 @@ Chat 不依赖全量 Workspace 索引。Agent 只通过 Rust File Service 按需
 
 Workspace Indexer 作为独立 worker/队列异步运行，不阻塞 Chat。首次扫描和增量更新都提供 `progress`、`cancel`、`retry`、`stale`、`error` 状态。默认忽略 `.git`、`node_modules`、`dist` 和缓存目录；文件树按需加载，符号链接默认不跨 Workspace。索引快照带 version、startedAt、completedAt 和 staleAt。
 
+文件树只为当前已展开目录建立非递归原生 watcher。事件由 Rust 在 workspace
+边界内产生，经 Runtime 投影成 project-scoped `workspace.changed`；前端合并短时间内
+的重复事件后刷新受影响目录和共享 Git 状态。Watcher 失败时保留手动刷新，禁止退化成
+常驻轮询。文件树徽章与 Git 面板通过同一个 repository refresh 入口读取状态，避免
+各自维护互相漂移的快照。
+
 `WorkspaceStats` 至少包含文件数、目录数、总大小、按扩展名统计、Git changed/untracked 数量和更新时间。索引器失败不影响 Chat，UI 必须显示过期或错误状态。
 
 ## Code/Document Viewer
