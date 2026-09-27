@@ -20,6 +20,11 @@ import { RuntimeErrorSchema } from './errors.js'
 import { PluginTaskSchema } from './plugins.js'
 import { RuntimeStatusSchema } from './handshake.js'
 import {
+  InteractionKindSchema,
+  UserQuestionAnswerSchema,
+  UserQuestionSchema,
+} from './interactions.js'
+import {
   ApprovalChoiceSchema,
   ApprovalContextSchema,
   ApprovalRiskSchema,
@@ -186,6 +191,20 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     grantScope: z.enum(['once', 'session']),
     // 实际消费的 choice（审计对账用）。可选：历史事件不含该字段。
     choiceId: z.string().min(1).optional(),
+  }),
+  RunEnvelopeSchema.extend({
+    type: z.literal('interaction.required'),
+    interactionId: z.string().min(1),
+    toolCallId: z.string().min(1),
+    sessionId: z.string().min(1),
+    kind: InteractionKindSchema,
+    questions: z.array(UserQuestionSchema).min(1).max(3),
+  }),
+  RunEnvelopeSchema.extend({
+    type: z.literal('interaction.resolved'),
+    interactionId: z.string().min(1),
+    toolCallId: z.string().min(1),
+    answers: z.array(UserQuestionAnswerSchema).max(3),
   }),
   // Phase 1B Workspace 索引事件：project 作用域，projectId 为真实身份。
   RuntimeEventEnvelopeSchema.extend({

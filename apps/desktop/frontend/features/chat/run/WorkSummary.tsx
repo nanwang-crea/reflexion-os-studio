@@ -22,6 +22,7 @@ const TOOL_LABELS: Record<string, string> = {
 const STATUS_LABELS: Record<string, string> = {
   pending: '等待中',
   awaiting_approval: '等待审批',
+  awaiting_user_input: '等待回答',
   running: '执行中',
   completed: '已完成',
   failed: '失败',
@@ -171,6 +172,7 @@ function isInFlight(call: ToolCall): boolean {
   return (
     call.status === 'pending' ||
     call.status === 'awaiting_approval' ||
+    call.status === 'awaiting_user_input' ||
     call.status === 'running'
   )
 }

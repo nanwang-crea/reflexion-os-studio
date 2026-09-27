@@ -5,6 +5,7 @@ import type { McpManager } from '../../mcp/manager.js'
 import type { SystemRuntimeClient } from '../../system.js'
 import type { Store } from '../../store/index.js'
 import type { RunEventEmitter } from '../../events.js'
+import type { InteractionGateway } from '../interactions/index.js'
 
 export interface ToolContext {
   store: Store
@@ -12,6 +13,7 @@ export interface ToolContext {
   messageId: string
   runId: string
   emitter: RunEventEmitter
+  interactions: InteractionGateway
   system: SystemRuntimeClient | null
   /** 会话关联项目的 folderPath；独立会话为 null（文件/Shell 工具不注册）。 */
   workspaceRoot: string | null

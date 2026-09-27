@@ -96,10 +96,10 @@ export class ToolCallStore {
       .map((row) => this.toToolCall(row as Row))
   }
 
-  /** 状态推进：进入 running 或 awaiting_approval（可携带审批授权引用）。 */
+  /** 状态推进：进入运行、权限等待或用户输入等待。 */
   markStatus(
     id: string,
-    status: 'running' | 'awaiting_approval',
+    status: 'running' | 'awaiting_approval' | 'awaiting_user_input',
     approvalGrantId?: string | null,
   ): void {
     this.db
@@ -129,12 +129,16 @@ export class ToolCallStore {
       )
   }
 
-  /** 启动恢复：宿主崩溃后未完结的调用一律 cancelled（对应 Run 已 interrupted）。 */
+  /** 启动恢复：用户输入等待可恢复；其余未完结调用取消。 */
   recoverUnfinished(): void {
     this.db
       .prepare(
         `UPDATE tool_calls SET status = 'cancelled', completed_at = ?
-         WHERE status IN ('pending', 'awaiting_approval', 'running')`,
+         WHERE status IN ('pending', 'awaiting_approval', 'running')
+            OR (status = 'awaiting_user_input' AND NOT EXISTS (
+              SELECT 1 FROM user_interactions ui
+              WHERE ui.tool_call_id = tool_calls.id AND ui.status = 'pending'
+            ))`,
       )
       .run(nowIso())
   }

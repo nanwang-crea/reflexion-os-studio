@@ -89,6 +89,8 @@ function tableColumns(db: DatabaseSync, table: string): TableColumn[] {
  * v24 → v25：新增 plugins 表（由 SCHEMA 创建），无历史数据回填。
  * v25 → v26：plugins 增加 manifest_json；旧记录由启动重扫按安装目录回填。
  * v27 → v28：delegations 增加父 Agent、子 Session 与版本化执行快照。
+ * v28 → v29：sessions 增加 execution_mode，默认 execute。
+ * v29 → v30：新增 user_interactions 表（由 SCHEMA 创建），持久化待回答问题。
  * 各步骤带形状检测：SCHEMA 刚建好的新库不会空跑重建。
  */
 export function runMigrations(db: DatabaseSync, dir: string): void {
@@ -423,6 +425,16 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
            WHERE runs.id = delegations.parent_run_id
          )
          WHERE parent_agent_id IS NULL`,
+      )
+    }
+    if (
+      version < 29 &&
+      !tableColumns(db, 'sessions').some(
+        (column) => column.name === 'execution_mode',
+      )
+    ) {
+      db.exec(
+        "ALTER TABLE sessions ADD COLUMN execution_mode TEXT NOT NULL DEFAULT 'execute'",
       )
     }
     db.exec('COMMIT')

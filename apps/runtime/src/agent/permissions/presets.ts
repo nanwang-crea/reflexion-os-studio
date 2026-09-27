@@ -67,6 +67,10 @@ const AUTOMATIC_OTHER_TOOLS = new Set([
   // manage_plan 为新名；update_plan 保留兼容别名映射到同一实现。
   'manage_plan',
   'update_plan',
+  // 用户问答走独立 InteractionGateway，不属于权限审批。
+  'ask_user',
+  'enter_plan_mode',
+  'exit_plan_mode',
   // 记忆只写数据目录内应用自管的 MEMORY.md，不触用户工作区，免审批。
   'memory.remember',
   // 委派只创建 Runtime 管理的受限 child Run；工具/深度/并发预算由 starter 强制。
@@ -131,7 +135,24 @@ export interface PermissionGateOptions {
   approvalOverride: 'default' | 'ask-everything'
   /** Danger lease 活跃查询：每次决策实时读取（租约可随时撤销）。 */
   dangerActive: () => boolean
+  /** 会话执行模式实时查询；plan 模式优先于 preset/Danger 强制只读。 */
+  executionMode?: () => 'execute' | 'plan'
 }
+
+const PLAN_MODE_ALLOWED_TOOLS = new Set([
+  'get_current_time',
+  'web.fetch',
+  'skill.use',
+  'manage_plan',
+  'update_plan',
+  'ask_user',
+  'enter_plan_mode',
+  'exit_plan_mode',
+  'file.read',
+  'file.list',
+  'file.glob',
+  'file.grep',
+])
 
 /**
  * 单次 Run 的策略闸门：preset 矩阵 + ask-everything 覆盖 + Danger 旁路 +
@@ -151,6 +172,12 @@ export class PermissionGate {
   }
 
   decisionFor(request: PermissionRequest): DecisionMode {
+    if (
+      this.opts.executionMode?.() === 'plan' &&
+      !PLAN_MODE_ALLOWED_TOOLS.has(request.toolName)
+    ) {
+      return 'denied'
+    }
     if (!isToolOperation(request.toolName)) {
       // MCP 与其它未知工具默认 ask（需用户审批），内置纯计算工具白名单放行。
       // Danger lease 不旁路 MCP：系统范围访问经 shell 承担，工具审批语义不变。

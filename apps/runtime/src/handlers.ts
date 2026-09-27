@@ -210,6 +210,30 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
       requireString(p, 'choiceId'),
     ),
   }),
+  'session.execution_mode.set': (p, { store }) => {
+    const sessionId = requireString(p, 'sessionId')
+    if (store.runs.activeForSession(sessionId) !== null) {
+      throw new CommandError(
+        'invalid_state',
+        '运行中的会话只能通过计划审批切换执行模式',
+      )
+    }
+    return {
+      session: store.sessions.setExecutionMode(
+        sessionId,
+        p.mode === 'plan' ? 'plan' : 'execute',
+      ),
+    }
+  },
+  'interaction.respond': (p, { agent }) =>
+    agent.respondToInteraction(
+      requireString(p, 'interactionId'),
+      Array.isArray(p.answers)
+        ? (p.answers as import('@reflexion-os-studio/contracts').UserQuestionAnswer[])
+        : [],
+    ),
+  'interaction.list_pending': (_p, { agent }) =>
+    agent.listPendingInteractions(),
   'permission.approval_override.set': (p, { approvals }) => ({
     override: approvals.setApprovalOverride(
       requireString(p, 'sessionId'),

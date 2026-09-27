@@ -26,6 +26,7 @@ import {
   TerminalSchema,
   PermissionPresetSchema,
   ApprovalOverrideSchema,
+  ExecutionModeSchema,
   ApiFormatSchema,
 } from './entities.js'
 import { PluginTaskSchema } from './plugins.js'
@@ -34,6 +35,10 @@ import {
   DangerCapabilitySchema,
 } from './permissions.js'
 import { RuntimeStatusSchema } from './handshake.js'
+import {
+  UserInteractionResponseSchema,
+  UserInteractionSchema,
+} from './interactions.js'
 
 export const RequestIdSchema = z.string().min(1)
 export type RequestId = z.infer<typeof RequestIdSchema>
@@ -175,6 +180,14 @@ export const CommandSchemaRegistry = {
       requestId: RequestIdSchema,
       sessionId: z.string().min(1),
       title: z.string().min(1),
+    }),
+    result: z.object({ session: SessionSchema }),
+  },
+  'session.execution_mode.set': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      sessionId: z.string().min(1),
+      mode: ExecutionModeSchema,
     }),
     result: z.object({ session: SessionSchema }),
   },
@@ -425,6 +438,16 @@ export const CommandSchemaRegistry = {
     params: ApprovalResolveParamsSchema,
     // accepted=false 表示该调用不在等待审批（已解决/已取消）。
     result: z.object({ accepted: z.boolean() }),
+  },
+  'interaction.respond': {
+    params: UserInteractionResponseSchema.extend({
+      requestId: RequestIdSchema,
+    }),
+    result: z.object({ accepted: z.boolean() }),
+  },
+  'interaction.list_pending': {
+    params: z.object({ requestId: RequestIdSchema }),
+    result: z.object({ interactions: z.array(UserInteractionSchema) }),
   },
   // ---------- 权限模型 V2：高级审批覆盖项与 Danger 会话租约 ----------
   // 覆盖项仅当前会话内存生效、不持久化；Runtime 是唯一真源。

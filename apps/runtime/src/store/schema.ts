@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   git_branch TEXT,
   title TEXT NOT NULL,
   status TEXT NOT NULL,
+  execution_mode TEXT NOT NULL DEFAULT 'execute',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -98,6 +99,20 @@ CREATE TABLE IF NOT EXISTS tool_calls (
   created_at TEXT NOT NULL,
   completed_at TEXT
 );
+CREATE TABLE IF NOT EXISTS user_interactions (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  tool_call_id TEXT NOT NULL UNIQUE REFERENCES tool_calls(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  questions_json TEXT NOT NULL,
+  answers_json TEXT,
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  resolved_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_user_interactions_pending
+  ON user_interactions(status, created_at);
 CREATE TABLE IF NOT EXISTS provider_profiles (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -226,4 +241,4 @@ CREATE TABLE IF NOT EXISTS context_checkpoints (
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 28
+export const LATEST_SCHEMA_VERSION = 30

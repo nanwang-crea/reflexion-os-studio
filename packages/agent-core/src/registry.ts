@@ -92,6 +92,7 @@ export class ToolRegistry {
     if (!validated.ok) return validated.result
     const executionArgs: ToolExecutionArgs = {
       args: validated.args,
+      toolCallId: request.id,
       signal,
       grant,
     }

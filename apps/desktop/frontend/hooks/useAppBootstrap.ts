@@ -13,6 +13,11 @@ import {
 } from './permissions/usePendingApprovals'
 import { useRunSessionTracking } from './session/useRunSessionTracking'
 import { useStreamingCache } from './session/useStreamingCache'
+import {
+  usePendingInteractions,
+  type PendingInteraction,
+} from './interactions/usePendingInteractions'
+import { listPendingInteractions } from '../api/chat'
 
 export interface BootstrapSnapshot {
   state: string
@@ -22,6 +27,7 @@ export interface BootstrapSnapshot {
 }
 
 export type { PendingApproval }
+export type { PendingInteraction }
 
 /** Run 结束类事件：触发会话数据与列表刷新（标题可能已被自动命名）。 */
 const EVENT_TYPES_TRIGGERING_REFRESH = new Set([
@@ -61,6 +67,7 @@ interface LatestBootstrapRefs {
   cache: ReturnType<typeof useStreamingCache>
   activity: ReturnType<typeof useRunActivity>
   approvals: ReturnType<typeof usePendingApprovals>
+  interactions: ReturnType<typeof usePendingInteractions>
   sessionTracking: ReturnType<typeof useRunSessionTracking>
   loadInitialData: () => void
   refreshAndPrune: (runId: string, messageId?: string) => void
@@ -80,11 +87,13 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
   runActivities: Record<string, RunActivity>
   resetStreaming: () => void
   pendingApprovals: PendingApproval[]
+  pendingInteractions: PendingInteraction[]
   clearPendingApprovals: (runId: string) => void
   /** 审批决策乐观摘卡：命令发出即移除等待卡；approval.resolved 事件幂等对账。 */
   clearPendingApproval: (toolCallId: string) => void
   /** 审批命令失败时恢复等待卡（保留可重试入口，不丢审批上下文）。 */
   restorePendingApproval: (entry: PendingApproval) => void
+  removePendingInteraction: (interactionId: string) => void
   runningSessionIds: string[]
   completedSessionIds: string[]
   failedSessionIds: string[]
@@ -103,6 +112,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     setNotice: deps.setNotice,
   })
   const approvals = usePendingApprovals()
+  const interactions = usePendingInteractions()
   const sessionTracking = useRunSessionTracking()
 
   const toolRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -167,6 +177,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     cache,
     activity,
     approvals,
+    interactions,
     sessionTracking,
     loadInitialData,
     refreshAndPrune,
@@ -180,6 +191,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
       cache,
       activity,
       approvals,
+      interactions,
       sessionTracking,
       loadInitialData,
       refreshAndPrune,
@@ -210,6 +222,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           cache,
           activity,
           approvals,
+          interactions,
           sessionTracking,
           refreshAndPrune,
           scheduleToolRefresh,
@@ -298,6 +311,22 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           approvals.onApprovalResolved(event.toolCallId)
           return
         }
+        if (event.type === 'interaction.required') {
+          interactions.onRequired({
+            interactionId: event.interactionId,
+            toolCallId: event.toolCallId,
+            sessionId: event.sessionId,
+            kind: event.kind,
+            questions: event.questions,
+            runId: event.runId,
+          })
+          scheduleToolRefresh()
+          return
+        }
+        if (event.type === 'interaction.resolved') {
+          interactions.onResolved(event.interactionId)
+          return
+        }
         if (event.type === 'danger.changed') {
           deps.onDangerChanged(event)
           return
@@ -347,6 +376,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           const projectId = deps.activeProjectRef.current
           if (projectId) void deps.refreshProjectSessions(projectId)
           approvals.clearForRun(event.runId)
+          interactions.clearForRun(event.runId)
           refreshAndPrune(
             event.runId,
             event.type === 'message.completed' ? event.messageId : undefined,
@@ -367,6 +397,9 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
       const snapshot = await invoke<BootstrapSnapshot>('bootstrap_get_state')
       if (disposed) return
       latest.current.setBootstrap(snapshot)
+      const pending = await listPendingInteractions()
+      if (disposed) return
+      latest.current.interactions.replaceAll(pending.interactions)
       latest.current.loadInitialData()
     }
 
@@ -397,9 +430,11 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
     runActivities: activity.runActivities,
     resetStreaming,
     pendingApprovals: approvals.pendingApprovals,
+    pendingInteractions: interactions.pendingInteractions,
     clearPendingApprovals: approvals.clearForRun,
     clearPendingApproval: approvals.removePending,
     restorePendingApproval: approvals.restorePending,
+    removePendingInteraction: interactions.onResolved,
     runningSessionIds: sessionTracking.runningSessionIds,
     completedSessionIds: sessionTracking.completedSessionIds,
     failedSessionIds: sessionTracking.failedSessionIds,
@@ -407,12 +442,12 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
       () =>
         [
           ...new Set(
-            approvals.pendingApprovals
+            [...approvals.pendingApprovals, ...interactions.pendingInteractions]
               .map((entry) => entry.sessionId)
               .filter((id): id is string => id !== undefined),
           ),
         ].sort(),
-      [approvals.pendingApprovals],
+      [approvals.pendingApprovals, interactions.pendingInteractions],
     ),
     clearSessionStatus: sessionTracking.clearSessionStatus,
   }

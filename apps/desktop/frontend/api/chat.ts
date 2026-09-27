@@ -33,6 +33,19 @@ export function resolveApproval(input: {
   return request<{ accepted: boolean }>('approval.resolve', input)
 }
 
+export function respondToInteraction(input: {
+  interactionId: string
+  answers: import('@reflexion-os-studio/runtime-client').UserQuestionAnswer[]
+}): Promise<{ accepted: boolean }> {
+  return request<{ accepted: boolean }>('interaction.respond', input)
+}
+
+export function listPendingInteractions(): Promise<{
+  interactions: import('@reflexion-os-studio/runtime-client').UserInteraction[]
+}> {
+  return request('interaction.list_pending', {})
+}
+
 export function retryRun(runId: string): Promise<{
   messageId: string
   runId: string

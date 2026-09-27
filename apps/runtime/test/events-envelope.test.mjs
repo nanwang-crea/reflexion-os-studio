@@ -72,6 +72,7 @@ test('session.updated uses the session resource identity', () => {
       id: 's1',
       projectId: null,
       gitBranch: null,
+      executionMode: 'execute',
       title: 'new title',
       status: 'active',
       createdAt: '2026-09-24T00:00:00.000Z',

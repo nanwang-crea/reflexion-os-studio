@@ -32,6 +32,8 @@ import { createMcpTool } from './mcp.js'
 import { createLegacyUpdatePlanTool, createManagePlanTool } from './plans.js'
 import { createTaskTool } from './task.js'
 import { FileReadState } from './read-state.js'
+import { createAskUserTool } from './ask-user.js'
+import { createEnterPlanModeTool, createExitPlanModeTool } from './plan-mode.js'
 
 export type { ToolContext } from './shared.js'
 
@@ -80,6 +82,9 @@ const BUILTIN_POLICIES: Record<string, ToolDefinition['execution']> = {
   'web.fetch': WEB_READ_POLICY,
   'skill.use': { effect: 'read', resourceKeys: () => [] },
   'memory.remember': STATE_POLICY,
+  ask_user: STATE_POLICY,
+  enter_plan_mode: STATE_POLICY,
+  exit_plan_mode: STATE_POLICY,
   manage_plan: STATE_POLICY,
   update_plan: STATE_POLICY,
   // 同一模型轮声明的多个独立委派可并行；ChildRunStarter 负责并发上限。
@@ -102,6 +107,9 @@ function alwaysAvailableTools(ctx: ToolContext): ToolDefinition[] {
     createWebFetchTool(),
     createSkillUseTool(ctx.skills),
     createMemoryRememberTool(ctx),
+    createAskUserTool(ctx),
+    createEnterPlanModeTool(ctx),
+    createExitPlanModeTool(ctx),
     createManagePlanTool(ctx),
     createLegacyUpdatePlanTool(ctx),
   ]

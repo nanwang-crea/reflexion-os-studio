@@ -52,12 +52,13 @@ export class SessionStore {
       gitBranch,
       title: title ?? DEFAULT_SESSION_TITLE,
       status: 'active',
+      executionMode: 'execute',
       createdAt: nowIso(),
       updatedAt: nowIso(),
     }
     this.db
       .prepare(
-        'INSERT INTO sessions (id, project_id, git_branch, title, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO sessions (id, project_id, git_branch, title, status, execution_mode, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .run(
         session.id,
@@ -65,6 +66,7 @@ export class SessionStore {
         session.gitBranch,
         session.title,
         session.status,
+        session.executionMode,
         session.createdAt,
         session.updatedAt,
       )
@@ -85,6 +87,15 @@ export class SessionStore {
     this.db
       .prepare('UPDATE sessions SET updated_at = ? WHERE id = ?')
       .run(nowIso(), id)
+  }
+
+  setExecutionMode(id: string, mode: Session['executionMode']): Session {
+    this.db
+      .prepare('UPDATE sessions SET execution_mode = ? WHERE id = ?')
+      .run(mode, id)
+    const session = this.get(id)
+    if (!session) throw new Error(`session not found: ${id}`)
+    return session
   }
 
   /** 删除用户会话及其内部子会话；消息、Run 与委派由外键级联删除。 */
@@ -113,6 +124,7 @@ export class SessionStore {
           : String(row.git_branch),
       title: String(row.title),
       status: row.status === 'archived' ? 'archived' : 'active',
+      executionMode: row.execution_mode === 'plan' ? 'plan' : 'execute',
       createdAt: String(row.created_at),
       updatedAt: String(row.updated_at),
     }

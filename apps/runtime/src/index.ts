@@ -141,6 +141,7 @@ const commandContext = {
   store,
   agent,
   approvals: agent.approvals,
+  interactions: agent.interactions,
   danger: agent.danger,
   workspace: workspaceIndexer,
   system: systemRuntime,

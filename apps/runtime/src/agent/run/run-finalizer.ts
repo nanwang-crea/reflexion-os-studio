@@ -160,7 +160,8 @@ export class RunFinalizer {
           (call) =>
             call.status === 'pending' ||
             call.status === 'running' ||
-            call.status === 'awaiting_approval',
+            call.status === 'awaiting_approval' ||
+            call.status === 'awaiting_user_input',
         )
         .map((call) => call.id)
       const cancelledToolCallIds = [

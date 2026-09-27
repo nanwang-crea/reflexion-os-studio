@@ -66,6 +66,10 @@ export type {
   PermissionPreset,
   SandboxPolicy,
   ShellInterpreter,
+  ExecutionMode,
+  UserQuestion,
+  UserQuestionAnswer,
+  UserInteraction,
 } from '@reflexion-os-studio/contracts'
 
 export {

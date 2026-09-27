@@ -11,6 +11,7 @@ import type { WorkspaceIndexer } from './workspace/indexer.js'
 import type { AssetService } from './assets/service.js'
 import type { TerminalService } from './terminal/service.js'
 import type { SkillPluginService } from './skills/service.js'
+import type { InteractionGateway } from './agent/interactions/index.js'
 
 export type CommandResult = Record<string, unknown>
 
@@ -18,6 +19,7 @@ export interface CommandContext {
   store: Store
   agent: ChatAgent
   approvals: ApprovalGateway
+  interactions: InteractionGateway
   /** Danger 高级能力租约（danger.* 命令；Runtime 是唯一真源）。 */
   danger: DangerLeaseService
   /** Phase 1B Workspace 索引器（仅 workspace.* 命令使用）。 */

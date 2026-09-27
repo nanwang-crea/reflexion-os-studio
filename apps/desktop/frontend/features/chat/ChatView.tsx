@@ -20,6 +20,7 @@ import { PlanCard } from './run/PlanCard'
 import { RunEventCard } from './run/RunEventCard'
 import type { SessionData } from '../../api/sessions'
 import type { PendingApproval } from '../../hooks/useAppBootstrap'
+import type { PendingInteraction } from '../../hooks/useAppBootstrap'
 import type { RunActivity } from '../../hooks/session/useRunActivity'
 import type {
   PermissionPreset,
@@ -31,6 +32,8 @@ import {
   computeRunDurationMs,
   isLastEditableUserMessage,
 } from './chat-blocks'
+import { InteractionQueue } from './interactions/InteractionQueue'
+import type { UserQuestionAnswer } from '@reflexion-os-studio/runtime-client'
 
 interface ChatViewProps {
   sessionData: SessionData | null
@@ -56,8 +59,14 @@ interface ChatViewProps {
   onStop: () => Promise<void>
   onRetry: () => Promise<void>
   onGoSettings: () => void
+  onExecutionModeChange: (mode: 'execute' | 'plan') => Promise<void>
   pendingApprovals: PendingApproval[]
   onResolveApproval: (toolCallId: string, choiceId: string) => void
+  pendingInteractions: PendingInteraction[]
+  onInteractionSubmit: (
+    interactionId: string,
+    answers: UserQuestionAnswer[],
+  ) => Promise<boolean>
   /** 点击已变更文件：有编辑前后快照时展示本次编辑 Diff。 */
   onOpenDiff?: (
     path: string,
@@ -135,6 +144,10 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
     () => props.pendingApprovals.filter((entry) => runIds.has(entry.runId)),
     [props.pendingApprovals, runIds],
   )
+  const sessionInteractions = useMemo(
+    () => props.pendingInteractions.filter((entry) => runIds.has(entry.runId)),
+    [props.pendingInteractions, runIds],
+  )
   const runById = useMemo(() => {
     const map = new Map<string, Run>()
     for (const run of runs) map.set(run.id, run)
@@ -161,11 +174,13 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
   }, [props.sessionData])
   const runActive =
     sessionApprovals.length > 0 ||
+    sessionInteractions.length > 0 ||
     visibleRuns.some(
       (run) =>
         run.status === 'created' ||
         run.status === 'running' ||
-        run.status === 'awaiting_approval',
+        run.status === 'awaiting_approval' ||
+        run.status === 'awaiting_user_input',
     )
   const activeRunIds = useMemo(() => {
     const ids = new Set(
@@ -174,7 +189,8 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
           (run) =>
             run.status === 'created' ||
             run.status === 'running' ||
-            run.status === 'awaiting_approval',
+            run.status === 'awaiting_approval' ||
+            run.status === 'awaiting_user_input',
         )
         .map((run) => run.id),
     )
@@ -453,6 +469,20 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
       {sessionId !== null && <QueueBar sessionId={sessionId} />}
 
       <div className="composer-wrap">
+        {props.sessionData?.session?.executionMode === 'plan' && (
+          <div className="plan-mode-banner" role="status">
+            <span>计划模式 · 仅允许只读调研，批准计划后才能执行修改</span>
+            <button
+              type="button"
+              className="ghost"
+              disabled={runActive}
+              title={runActive ? '运行中请通过计划审批退出' : '退出计划模式'}
+              onClick={() => void props.onExecutionModeChange('execute')}
+            >
+              退出
+            </button>
+          </div>
+        )}
         {props.dangerLease !== null && (
           <DangerLeaseBanner
             lease={props.dangerLease}
@@ -462,6 +492,10 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
         <ApprovalQueue
           approvals={sessionApprovals}
           onChoose={props.onResolveApproval}
+        />
+        <InteractionQueue
+          interactions={sessionInteractions}
+          onSubmit={props.onInteractionSubmit}
         />
         {!pinned && messages.length > 0 && (
           <button

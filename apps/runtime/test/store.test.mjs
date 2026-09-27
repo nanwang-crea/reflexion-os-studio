@@ -22,6 +22,12 @@ test('project and session CRUD', () => {
   const session = store.sessions.create(project.id)
   assert.equal(session.title, '新对话')
   assert.equal(session.projectId, project.id)
+  assert.equal(session.executionMode, 'execute')
+  assert.equal(
+    store.sessions.setExecutionMode(session.id, 'plan').executionMode,
+    'plan',
+  )
+  assert.equal(store.sessions.get(session.id).executionMode, 'plan')
 
   const named = store.sessions.create(project.id, '调研')
   store.sessions.create(project.id, 'unused')
@@ -141,6 +147,61 @@ test('pending assistant reset clears content while retaining message identity', 
   assert.equal(reset.reasoning, '')
   assert.deepEqual(reset.parts, [])
   assert.equal(reset.status, 'pending')
+})
+
+test('pending user interaction survives restart with its run and tool call', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'reflexion-interaction-'))
+  const first = new Store(dir)
+  const session = first.sessions.create(null)
+  const run = first.runs.create({
+    sessionId: session.id,
+    providerId: null,
+    model: null,
+  })
+  const message = first.messages.create({
+    sessionId: session.id,
+    runId: run.id,
+    role: 'assistant',
+    content: '',
+    status: 'completed',
+  })
+  const toolCall = first.toolCalls.create({
+    runId: run.id,
+    messageId: message.id,
+    toolName: 'ask_user',
+    args: {},
+  })
+  first.interactions.create({
+    id: 'interaction-1',
+    sessionId: session.id,
+    runId: run.id,
+    toolCallId: toolCall.id,
+    kind: 'user_question',
+    questions: [
+      {
+        id: 'choice',
+        header: '选择',
+        question: '请选择',
+        multiSelect: false,
+        options: [
+          { id: 'a', label: 'A', description: 'A 方案' },
+          { id: 'b', label: 'B', description: 'B 方案' },
+        ],
+      },
+    ],
+  })
+  first.runs.setIntermediateStatus(run.id, 'awaiting_user_input')
+  first.toolCalls.markStatus(toolCall.id, 'awaiting_user_input')
+  first.close()
+
+  const recovered = new Store(dir)
+  assert.equal(recovered.runs.get(run.id).status, 'awaiting_user_input')
+  assert.equal(
+    recovered.toolCalls.get(toolCall.id).status,
+    'awaiting_user_input',
+  )
+  assert.equal(recovered.interactions.listPending()[0].id, 'interaction-1')
+  recovered.close()
 })
 
 test('run lifecycle: awaiting_approval counts as active', () => {
@@ -882,12 +943,12 @@ test('v23 migration drops legacy memories/FTS/memory_jobs tables', () => {
     .map((row) => row.name)
   assert.deepEqual(names, [])
   const version = after.prepare('PRAGMA user_version').get()
-  assert.equal(Number(version.user_version), 28)
+  assert.equal(Number(version.user_version), 30)
   after.close()
   store.close()
 })
 
-test('fresh store schema has plugin manifests, no legacy memory tables, and version 28', () => {
+test('fresh store schema has interactions, plugin manifests, no legacy memory tables, and version 30', () => {
   const dir = mkdtempSync(join(tmpdir(), 'reflexion-v23-fresh-'))
   const store = new Store(dir)
   store.close()
@@ -900,7 +961,7 @@ test('fresh store schema has plugin manifests, no legacy memory tables, and vers
     .map((row) => row.name)
   assert.deepEqual(names, [])
   const version = db.prepare('PRAGMA user_version').get()
-  assert.equal(Number(version.user_version), 28)
+  assert.equal(Number(version.user_version), 30)
   const plugins = db
     .prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'plugins'",

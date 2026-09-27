@@ -110,14 +110,14 @@ export class RunStore {
       .run(status, nowIso(), errorCode ?? null, id)
   }
 
-  /** 非终态推进：running ↔ awaiting_approval（工具审批等待）；终态一律走 finalize。 */
+  /** 非终态推进：运行、权限等待与用户输入等待；终态一律走 finalize。 */
   setIntermediateStatus(
     id: string,
-    status: 'running' | 'awaiting_approval',
+    status: 'running' | 'awaiting_approval' | 'awaiting_user_input',
   ): void {
     this.db
       .prepare(
-        "UPDATE runs SET status = ? WHERE id = ? AND status IN ('running', 'awaiting_approval')",
+        "UPDATE runs SET status = ? WHERE id = ? AND status IN ('running', 'awaiting_approval', 'awaiting_user_input')",
       )
       .run(status, id)
   }
@@ -150,19 +150,23 @@ export class RunStore {
   activeForSession(sessionId: string): Run | null {
     const row = this.db
       .prepare(
-        // awaiting_approval 同属进行中：审批等待期间不允许并发发送新消息。
-        "SELECT * FROM runs WHERE session_id = ? AND status IN ('created', 'running', 'awaiting_approval') LIMIT 1",
+        // 两类等待态同属进行中：等待期间不允许并发发送新消息。
+        "SELECT * FROM runs WHERE session_id = ? AND status IN ('created', 'running', 'awaiting_approval', 'awaiting_user_input') LIMIT 1",
       )
       .get(sessionId)
     return row ? this.toRun(row as Row) : null
   }
 
-  /** 启动恢复：未结束的 Run 标记为 interrupted；等待审批的 Run 不自动放行。 */
+  /** 启动恢复：用户输入等待可恢复；其余未结束 Run 标记为 interrupted。 */
   recoverInterrupted(): void {
     this.db
       .prepare(
         `UPDATE runs SET status = 'interrupted', completed_at = ?
-         WHERE status IN ('created', 'running', 'awaiting_approval')`,
+         WHERE status IN ('created', 'running', 'awaiting_approval')
+            OR (status = 'awaiting_user_input' AND NOT EXISTS (
+              SELECT 1 FROM user_interactions ui
+              WHERE ui.run_id = runs.id AND ui.status = 'pending'
+            ))`,
       )
       .run(nowIso())
   }

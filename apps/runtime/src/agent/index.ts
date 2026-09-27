@@ -24,6 +24,10 @@ import { RunRunner } from './run/runner.js'
 import { SessionTitleService } from './session/session-titles.js'
 import { deriveSessionTitle } from './session/title.js'
 import { createChildRunStarter } from './delegation.js'
+import { InteractionGateway } from './interactions/index.js'
+import { normalizeToolOutput } from './run/toolResults.js'
+import { formatAnswers } from './tools/ask-user.js'
+import { applyPlanApproval } from './tools/plan-mode.js'
 import {
   dangerCapability,
   requireIdleSession,
@@ -42,6 +46,8 @@ export { DEFAULT_PRESET } from './permissions/index.js'
 export class ChatAgent {
   /** 审批网关跨 Run 共享（pending 以 toolCallId 为键；会话规则存内存）。 */
   readonly approvals = new ApprovalGateway()
+  /** 结构化用户问答网关；与权限审批严格分域。 */
+  readonly interactions: InteractionGateway
   /** Danger 高级能力租约：Runtime 是唯一真源，内存态、会话绑定。 */
   readonly danger: DangerLeaseService
   private readonly contextBuilder: ContextBuilder
@@ -57,6 +63,7 @@ export class ChatAgent {
     private readonly mcp: McpManager | null = null,
     private readonly skills: SkillRegistry = createSkillRegistry(),
   ) {
+    this.interactions = new InteractionGateway(store)
     this.danger = new DangerLeaseService(notifier, () =>
       dangerCapability(this.system),
     )
@@ -72,6 +79,7 @@ export class ChatAgent {
         runner: this.runner,
         contextBuilder: this.contextBuilder,
         approvals: this.approvals,
+        interactions: this.interactions,
         danger: this.danger,
         skills: this.skills,
       },
@@ -297,6 +305,95 @@ export class ChatAgent {
 
   dispose(): void {
     this.sessionTitles.dispose()
+  }
+
+  listPendingInteractions() {
+    return { interactions: this.interactions.listPending() }
+  }
+
+  /** 回答结构化问题；若等待来自上次进程，则补齐工具结果并续跑原 Run。 */
+  respondToInteraction(
+    interactionId: string,
+    answers: import('@reflexion-os-studio/contracts').UserQuestionAnswer[],
+  ): { accepted: boolean } {
+    const interaction = this.store.interactions.get(interactionId)
+    if (!interaction || interaction.status !== 'pending') {
+      return { accepted: false }
+    }
+    const run = this.store.runs.get(interaction.runId)
+    const session = run ? this.store.sessions.get(run.sessionId) : null
+    if (!run || !session || run.status !== 'awaiting_user_input') {
+      return { accepted: false }
+    }
+    const response = this.interactions.respond(interactionId, answers)
+    if (!response.accepted || response.recovered === null) {
+      return { accepted: response.accepted }
+    }
+
+    const toolCall = this.store.toolCalls.get(interaction.toolCallId)
+    if (!toolCall) return { accepted: false }
+    const { profile, apiKey, model } = resolveProvider(
+      this.store,
+      run.providerId ?? undefined,
+      run.model ?? undefined,
+    )
+    const assistantMessage = this.store.transaction(() => {
+      const result =
+        interaction.kind === 'plan_approval' &&
+        typeof toolCall.args === 'object' &&
+        toolCall.args !== null &&
+        !Array.isArray(toolCall.args) &&
+        typeof toolCall.args.planId === 'string'
+          ? applyPlanApproval(
+              this.store,
+              session.id,
+              toolCall.args.planId,
+              answers,
+            )
+          : {
+              content: formatAnswers(interaction.questions, answers),
+              isError: false,
+              data: { answers },
+            }
+      const output = normalizeToolOutput(
+        result,
+        session.projectId,
+        toolCall.toolName,
+      )
+      this.store.interactions.resolve(interactionId, answers)
+      this.store.toolCalls.finalize(interaction.toolCallId, 'completed', output)
+      this.store.runs.setIntermediateStatus(run.id, 'running')
+      return createPendingAssistantMessage(this.store, session.id, run)
+    })
+    const resumedRun = this.store.runs.get(run.id) ?? run
+    const emitter = new RunEventEmitter(run.id, this.notifier)
+    emitter.next({
+      type: 'interaction.resolved',
+      interactionId,
+      toolCallId: interaction.toolCallId,
+      answers,
+    })
+    emitter.next({
+      type: 'tool.completed',
+      toolCallId: interaction.toolCallId,
+      status: 'completed',
+      errorCode: null,
+    })
+    emitter.next({ type: 'run.started', run: resumedRun })
+    emitter.next({ type: 'message.created', message: assistantMessage })
+    this.launch({
+      run: resumedRun,
+      session,
+      profile,
+      apiKey,
+      model,
+      sampling: resolveSampling(profile, {}),
+      permissionPreset: DEFAULT_PRESET,
+      skill: run.skillId === null ? null : this.skills.get(run.skillId),
+      assistantMessage,
+      emitter,
+    })
+    return { accepted: true }
   }
 
   startRetry(params: { requestId: string; runId: string }): {

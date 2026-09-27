@@ -214,7 +214,8 @@ export function useSessionActions(deps: SessionActionsDeps): {
       (run) =>
         run.status === 'created' ||
         run.status === 'running' ||
-        run.status === 'awaiting_approval',
+        run.status === 'awaiting_approval' ||
+        run.status === 'awaiting_user_input',
     )
     if (!activeRun) return
     deps.setSessionData((current) =>

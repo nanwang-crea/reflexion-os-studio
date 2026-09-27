@@ -6,6 +6,7 @@ import { ProjectStore } from './chat/projects.js'
 import { RunStore } from './chat/runs.js'
 import { SessionStore } from './chat/sessions.js'
 import { ToolCallStore } from './chat/toolCalls.js'
+import { UserInteractionStore } from './chat/interactions.js'
 import { PlanStore } from './chat/plans.js'
 import { RunEventStore } from './chat/runEvents.js'
 import { AgentSettingsStore } from './agents/agentSettings.js'
@@ -34,6 +35,7 @@ export class Store {
   readonly messages: MessageStore
   readonly runs: RunStore
   readonly toolCalls: ToolCallStore
+  readonly interactions: UserInteractionStore
   readonly providers: ProviderStore
   readonly workspaceIndex: WorkspaceIndexStore
   readonly assetStore: AssetStore
@@ -62,6 +64,7 @@ export class Store {
     this.messages = new MessageStore(this.db)
     this.runs = new RunStore(this.db)
     this.toolCalls = new ToolCallStore(this.db)
+    this.interactions = new UserInteractionStore(this.db)
     this.providers = new ProviderStore(this.db)
     this.workspaceIndex = new WorkspaceIndexStore(this.db)
     this.assetStore = new AssetStore(this.db)

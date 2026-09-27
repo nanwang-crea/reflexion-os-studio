@@ -8,16 +8,21 @@ import {
 
 function makeGate(preset, opts = {}) {
   let danger = opts.danger === true
+  let executionMode = opts.executionMode ?? 'execute'
   const gate = new PermissionGate({
     preset,
     hasWorkspace: opts.hasWorkspace ?? true,
     approvalOverride: opts.override ?? 'default',
     dangerActive: () => danger,
+    executionMode: () => executionMode,
   })
   return {
     gate,
     setDanger(value) {
       danger = value
+    },
+    setExecutionMode(value) {
+      executionMode = value
     },
   }
 }
@@ -26,6 +31,63 @@ const pathSubject = (operation, path = 'a/b.ts') => ({
   kind: 'workspace-path',
   operation,
   path,
+})
+
+test('plan 模式强制只读，优先于 workspace-full 与 Danger', () => {
+  const state = makeGate('workspace-full', {
+    danger: true,
+    executionMode: 'plan',
+  })
+  for (const toolName of [
+    'file.write',
+    'file.edit',
+    'file.delete',
+    'shell.execute',
+    'memory.remember',
+    'task',
+    'server/tool-a',
+  ]) {
+    assert.equal(
+      state.gate.decisionFor({
+        toolName,
+        subject:
+          toolName === 'shell.execute'
+            ? shellSubject()
+            : { kind: 'operation', operation: toolName },
+        escalation: false,
+      }),
+      'denied',
+      toolName,
+    )
+  }
+  for (const toolName of [
+    'file.read',
+    'file.grep',
+    'manage_plan',
+    'ask_user',
+    'exit_plan_mode',
+  ]) {
+    assert.equal(
+      state.gate.decisionFor({
+        toolName,
+        subject: toolName.startsWith('file.')
+          ? pathSubject(toolName)
+          : { kind: 'operation', operation: toolName },
+        escalation: false,
+      }),
+      'automatic',
+      toolName,
+    )
+  }
+  state.setExecutionMode('execute')
+  assert.equal(
+    state.gate.decisionFor({
+      toolName: 'file.write',
+      subject: pathSubject('file.write'),
+      escalation: false,
+    }),
+    'automatic',
+  )
 })
 const shellSubject = (extra = {}) => ({
   kind: 'shell-command',
@@ -75,6 +137,18 @@ test('workspace-read：读取自动、写/删/Shell 询问（不是 denied）', 
       escalation: false,
     }),
     'ask',
+  )
+})
+
+test('ask_user 使用独立交互通道，不触发权限审批', () => {
+  const { gate } = makeGate('workspace-read', { override: 'ask-everything' })
+  assert.equal(
+    gate.decisionFor({
+      toolName: 'ask_user',
+      subject: { kind: 'operation', operation: 'ask_user' },
+      escalation: false,
+    }),
+    'automatic',
   )
 })
 

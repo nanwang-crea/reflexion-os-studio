@@ -47,6 +47,16 @@ export function renameSession(
   })
 }
 
+export function setSessionExecutionMode(
+  sessionId: string,
+  mode: Session['executionMode'],
+): Promise<{ session: Session }> {
+  return request<{ session: Session }>('session.execution_mode.set', {
+    sessionId,
+    mode,
+  })
+}
+
 export function deleteSession(sessionId: string): Promise<{
   removed: boolean
 }> {

@@ -4,6 +4,7 @@ import type {
   Project,
   Session,
   Delegation,
+  UserQuestionAnswer,
 } from '@reflexion-os-studio/runtime-client'
 import { AppMain } from './AppMain'
 import { useAppBootstrap } from './hooks/useAppBootstrap'
@@ -33,6 +34,8 @@ import { useSessionActions } from './hooks/session/useSessionActions'
 import { useResourceRouter } from './hooks/useResourceRouter'
 import { useSkillCatalog, useTerminalSurface } from './hooks/useAppSurfaces'
 import { BootstrapScreen } from './components/BootstrapScreen'
+import { respondToInteraction } from './api/chat'
+import { setSessionExecutionMode } from './api/sessions'
 
 export default function App() {
   const [view, setView] = useState<ViewName>('chat')
@@ -181,8 +184,10 @@ export default function App() {
     runActivities,
     resetStreaming,
     pendingApprovals,
+    pendingInteractions,
     clearPendingApproval,
     restorePendingApproval,
+    removePendingInteraction,
     runningSessionIds,
     completedSessionIds,
     failedSessionIds,
@@ -220,6 +225,18 @@ export default function App() {
     restorePendingApproval,
     setNotice,
   })
+  const handleInteractionSubmit = useCallback(
+    async (interactionId: string, answers: UserQuestionAnswer[]) => {
+      const result = await respondToInteraction({ interactionId, answers })
+      if (!result.accepted) {
+        setNotice('该问题已失效或答案无效，请等待 Agent 重新提问')
+        return false
+      }
+      removePendingInteraction(interactionId)
+      return true
+    },
+    [removePendingInteraction],
+  )
 
   useEffect(() => {
     activeSessionRef.current = activeSessionId
@@ -411,8 +428,26 @@ export default function App() {
           onStop: stopRun,
           onRetry: retryRun,
           onGoSettings: () => setView('settings'),
+          onExecutionModeChange: async (mode) => {
+            if (!activeSessionId) return
+            const result = await setSessionExecutionMode(activeSessionId, mode)
+            setSessionData((current) =>
+              current === null
+                ? current
+                : { ...current, session: result.session },
+            )
+          },
           pendingApprovals,
           onResolveApproval: handleResolveApproval,
+          pendingInteractions,
+          onInteractionSubmit: async (interactionId, answers) => {
+            try {
+              return await handleInteractionSubmit(interactionId, answers)
+            } catch (error) {
+              setNotice(error instanceof Error ? error.message : String(error))
+              return false
+            }
+          },
           onResourceClick: handleResourceClick,
           onOpenDiff: openDiff,
         }}

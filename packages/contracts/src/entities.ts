@@ -89,6 +89,9 @@ export type Project = z.infer<typeof ProjectSchema>
 export const SessionStatusSchema = z.enum(['active', 'archived'])
 export type SessionStatus = z.infer<typeof SessionStatusSchema>
 
+export const ExecutionModeSchema = z.enum(['execute', 'plan'])
+export type ExecutionMode = z.infer<typeof ExecutionModeSchema>
+
 export const SessionSchema = z.object({
   id: z.string().min(1),
   // null 表示不关联任何项目的独立会话。
@@ -97,6 +100,7 @@ export const SessionSchema = z.object({
   gitBranch: z.string().min(1).nullable(),
   title: z.string().min(1),
   status: SessionStatusSchema,
+  executionMode: ExecutionModeSchema,
   createdAt: IsoDateTimeSchema,
   updatedAt: IsoDateTimeSchema,
 })
@@ -136,6 +140,8 @@ export const RunStatusSchema = z.enum([
   'running',
   // Run 暂停等待用户审批工具调用；崩溃重启后恢复为 interrupted，不自动放行。
   'awaiting_approval',
+  // Run 暂停等待结构化用户回答；与权限审批语义分离。
+  'awaiting_user_input',
   'completed',
   'failed',
   'cancelled',
@@ -254,6 +260,7 @@ export type DelegationStatus = z.infer<typeof DelegationStatusSchema>
 export const ToolCallStatusSchema = z.enum([
   'pending',
   'awaiting_approval',
+  'awaiting_user_input',
   'running',
   'completed',
   'failed',

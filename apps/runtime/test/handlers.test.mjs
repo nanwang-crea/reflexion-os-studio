@@ -116,6 +116,31 @@ test('agent_settings.update passes nested settings to agent', async () => {
   })
 })
 
+test('session.execution_mode.set only changes idle sessions', async () => {
+  const store = freshStore()
+  const session = store.sessions.create(null, 'mode')
+  const changed = await dispatchCommand(
+    'session.execution_mode.set',
+    { sessionId: session.id, mode: 'plan' },
+    { store },
+  )
+  assert.equal(changed.session.executionMode, 'plan')
+  store.runs.create({
+    sessionId: session.id,
+    providerId: null,
+    model: null,
+  })
+  await assert.rejects(
+    () =>
+      dispatchCommand(
+        'session.execution_mode.set',
+        { sessionId: session.id, mode: 'execute' },
+        { store },
+      ),
+    /运行中的会话只能通过计划审批切换执行模式/,
+  )
+})
+
 test('child task starter rejects disabled agents before creating a delegation', async () => {
   const store = freshStore()
   const notifier = () => {}
