@@ -12,6 +12,7 @@ import { normalizeRelativePath } from './links'
 import { friendlyReadError, MD_PREVIEW_MAX_LINES } from './preview'
 import { IS_MAC } from '../../../lib/platform'
 import { useMdIncrementalFeed } from './useMdIncrementalFeed'
+import { useSaveFeedback } from '../editor/useSaveFeedback'
 
 /** 预览视图形态：默认富预览，可无损切换到编辑器。 */
 export type MarkdownPreviewViewMode = 'preview' | 'source'
@@ -76,6 +77,7 @@ export function MarkdownFilePreview(
     useMdIncrementalFeed(projectId, path, reloadTick)
 
   const fileName = path.split('/').pop() ?? path
+  const savedRecently = useSaveFeedback(surfaceState?.saveVersion ?? 0)
 
   const handleViewModeChange = useCallback(
     (next: MarkdownPreviewViewMode): void => {
@@ -111,6 +113,24 @@ export function MarkdownFilePreview(
     }
   }, [])
 
+  const handleReload = useCallback((): void => {
+    void (async () => {
+      const confirmed =
+        surfaceState?.dirty !== true ||
+        confirm === undefined ||
+        (await confirm({
+          title: '重新加载磁盘内容？',
+          message: `${fileName} 已在外部发生变化。重新加载会放弃当前未保存的修改。`,
+          confirmLabel: '重新加载',
+          danger: true,
+        }))
+      if (!confirmed) return
+      setDraft(null)
+      surfaceRef.current?.reloadFromDisk()
+      setReloadTick((tick) => tick + 1)
+    })()
+  }, [confirm, fileName, surfaceState?.dirty])
+
   // Cmd/Ctrl+S 由 MonacoSurface 内部处理；观察 dirty 回落，同步刷新富预览。
   useEffect(() => {
     const isDirty = surfaceState?.dirty === true
@@ -120,6 +140,12 @@ export function MarkdownFilePreview(
     }
     wasDirtyRef.current = isDirty
   }, [draft, surfaceState?.dirty])
+
+  // 编辑器在干净状态下检测到外部更新时，富预览同步刷新磁盘内容。
+  useEffect(() => {
+    if ((surfaceState?.externalReloadVersion ?? 0) === 0) return
+    setReloadTick((tick) => tick + 1)
+  }, [surfaceState?.externalReloadVersion])
 
   // 资源引用分发：workspace:// 缺省项目 / 指向其他项目时归一到当前
   // 项目再交给宿主路由器（与聊天消息同一条分发链路）。
@@ -231,12 +257,13 @@ export function MarkdownFilePreview(
     <div className="content-view">
       <header className="content-head">
         <div className="content-head-main">
-          <span className="content-name" title={path}>
-            {fileName}
-          </span>
-          {surfaceState?.dirty && (
+          {surfaceState?.externalChanged ? (
+            <span className="content-conflict-status">磁盘内容已变化</span>
+          ) : surfaceState?.dirty ? (
             <span className="content-edit-status">未保存</span>
-          )}
+          ) : savedRecently ? (
+            <span className="content-save-status">已保存</span>
+          ) : null}
         </div>
         <div className="file-mode-switch" role="tablist" aria-label="文件模式">
           <button
@@ -258,7 +285,11 @@ export function MarkdownFilePreview(
             编辑
           </button>
         </div>
-        {surfaceState?.dirty ? (
+        {surfaceState?.externalChanged ? (
+          <button className="ghost file-action" onClick={handleReload}>
+            重新加载
+          </button>
+        ) : surfaceState?.dirty ? (
           <>
             <button className="ghost file-action" onClick={handleDiscard}>
               还原

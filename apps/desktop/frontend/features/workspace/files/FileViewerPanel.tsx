@@ -165,7 +165,6 @@ export function FileViewerPanel(
                 path={tab.path}
                 initialLine={tab.line}
                 readOnly={false}
-                onClose={() => props.onRequestCloseTab(tabIdOf(tab))}
                 onDirtyChange={props.onDirtyChange}
                 registerSurface={registerSurface}
                 confirm={props.confirm}

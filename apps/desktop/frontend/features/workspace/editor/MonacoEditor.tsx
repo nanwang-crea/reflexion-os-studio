@@ -1,7 +1,7 @@
 /**
- * Monaco 单文件编辑器完整视图：头部（文件名+脏圆点居左，操作按钮组
- * 右对齐含关闭×）+ 无头内核 MonacoSurface。加载/编辑/脏跟踪/保存逻辑
- * 都在 Surface；脏状态与句柄经 props 上抛给标签层。
+ * Monaco 单文件编辑器完整视图：轻量状态/操作栏 + 无头内核
+ * MonacoSurface。文件身份与关闭入口由上层标签栏统一承载；加载、编辑、
+ * 脏跟踪和保存逻辑都在 Surface，状态与句柄经 props 上抛给标签层。
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -12,6 +12,7 @@ import {
 import { getFileName } from './language'
 import type { MonacoEditorProps } from './types'
 import { IS_MAC } from '../../../lib/platform'
+import { useSaveFeedback } from './useSaveFeedback'
 
 export function MonacoEditor({
   confirm,
@@ -24,12 +25,16 @@ export function MonacoEditor({
     error: null,
     dirty: false,
     saving: false,
+    saveVersion: 0,
+    externalChanged: false,
+    externalReloadVersion: 0,
     canEdit: false,
     editMode: false,
   })
   const surfaceRef = useRef<MonacoSurfaceHandle>(null)
   const fileName = getFileName(props.path)
   const editable = props.readOnly !== true
+  const savedRecently = useSaveFeedback(surface.saveVersion)
 
   const handleDiscard = useCallback((): void => {
     if (!surface.dirty) return
@@ -43,6 +48,21 @@ export function MonacoEditor({
           danger: true,
         }))
       if (confirmed) surfaceRef.current?.discardChanges()
+    })()
+  }, [confirm, fileName, surface.dirty])
+
+  const handleReload = useCallback((): void => {
+    void (async () => {
+      const confirmed =
+        !surface.dirty ||
+        confirm === undefined ||
+        (await confirm({
+          title: '重新加载磁盘内容？',
+          message: `${fileName} 已在外部发生变化。重新加载会放弃当前未保存的修改。`,
+          confirmLabel: '重新加载',
+          danger: true,
+        }))
+      if (confirmed) surfaceRef.current?.reloadFromDisk()
     })()
   }, [confirm, fileName, surface.dirty])
 
@@ -65,10 +85,13 @@ export function MonacoEditor({
     <div className="content-view monaco-editor-container">
       <header className="content-head">
         <div className="content-head-main">
-          <span className="content-name" title={props.path}>
-            {fileName}
-          </span>
-          {surface.dirty && <span className="content-edit-status">未保存</span>}
+          {surface.externalChanged ? (
+            <span className="content-conflict-status">磁盘内容已变化</span>
+          ) : surface.dirty ? (
+            <span className="content-edit-status">未保存</span>
+          ) : savedRecently ? (
+            <span className="content-save-status">已保存</span>
+          ) : null}
         </div>
         <div className="content-head-actions">
           <button
@@ -100,7 +123,11 @@ export function MonacoEditor({
               </button>
             </div>
           )}
-          {surface.dirty && (
+          {surface.externalChanged ? (
+            <button className="ghost file-action" onClick={handleReload}>
+              重新加载
+            </button>
+          ) : surface.dirty ? (
             <>
               <button className="ghost file-action" onClick={handleDiscard}>
                 还原
@@ -114,15 +141,7 @@ export function MonacoEditor({
                 {surface.saving ? '保存中…' : '保存'}
               </button>
             </>
-          )}
-          <button
-            className="ghost content-close"
-            onClick={props.onClose}
-            aria-label="关闭"
-            title="关闭"
-          >
-            ×
-          </button>
+          ) : null}
         </div>
         {surface.error !== null && (
           <span className="content-error-inline">{surface.error}</span>

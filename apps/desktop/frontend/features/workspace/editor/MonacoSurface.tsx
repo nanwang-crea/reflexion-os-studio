@@ -16,7 +16,14 @@ import {
 import Editor from '@monaco-editor/react'
 import type { OnMount } from '@monaco-editor/react'
 import type { editor as MonacoEditorType } from 'monaco-editor'
-import { readFile, writeFile } from '../../../api/workspace'
+import type { RuntimeEvent } from '@reflexion-os-studio/runtime-client'
+import {
+  readFile,
+  unwatchDir,
+  watchDir,
+  writeFile,
+} from '../../../api/workspace'
+import { transport } from '../../../lib/transport'
 import { getLanguageForFile } from './language'
 import { DEFAULT_EDITOR_OPTIONS, THEME_NAME, THEME_DATA } from './monaco'
 import { EDITOR_CONFIG } from './types'
@@ -32,6 +39,12 @@ export interface MonacoSurfaceState {
   error: string | null
   dirty: boolean
   saving: boolean
+  /** 成功写入磁盘后递增，供宿主显示短暂保存反馈。 */
+  saveVersion: number
+  /** 文件在磁盘上已变化，当前草稿需要用户决定是否重新加载。 */
+  externalChanged: boolean
+  /** 干净缓冲区因磁盘变化自动重载后递增。 */
+  externalReloadVersion: number
   /** 是否允许编辑（外部只读 / 大小超限 / 截断守卫命中时为 false）。 */
   canEdit: boolean
   editMode: boolean
@@ -40,6 +53,7 @@ export interface MonacoSurfaceState {
 export interface MonacoSurfaceHandle {
   save: () => Promise<boolean>
   discardChanges: () => void
+  reloadFromDisk: () => void
   setEditMode: (editMode: boolean) => void
   copyText: () => Promise<void>
 }
@@ -64,6 +78,9 @@ function sameState(a: MonacoSurfaceState, b: MonacoSurfaceState): boolean {
     a.error === b.error &&
     a.dirty === b.dirty &&
     a.saving === b.saving &&
+    a.saveVersion === b.saveVersion &&
+    a.externalChanged === b.externalChanged &&
+    a.externalReloadVersion === b.externalReloadVersion &&
     a.canEdit === b.canEdit &&
     a.editMode === b.editMode
   )
@@ -85,10 +102,18 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
   const [canEdit, setCanEdit] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [saveVersion, setSaveVersion] = useState(0)
+  const [externalChanged, setExternalChanged] = useState(false)
+  const [externalReloadVersion, setExternalReloadVersion] = useState(0)
+  const [reloadVersion, setReloadVersion] = useState(0)
   const editorRef = useRef<MonacoEditorType.IStandaloneCodeEditor | null>(null)
   const stateRef = useRef<MonacoSurfaceState | null>(null)
+  const dirtyRef = useRef(false)
+  const savingRef = useRef(false)
+  const ignoreChangesUntilRef = useRef(0)
 
   const dirty = content !== null && content !== baseline
+  dirtyRef.current = dirty
   const language = getLanguageForFile(path)
 
   // 加载文件内容；重置编辑态（canEdit 按大小/截断守卫判定）。
@@ -96,6 +121,8 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
     let disposed = false
     setLoading(true)
     setError(null)
+    setSaveVersion(0)
+    setExternalChanged(false)
     void (async () => {
       try {
         const result = await readFile(projectId, path, {
@@ -118,13 +145,52 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
       } catch (err) {
         if (disposed) return
         setError(err instanceof Error ? err.message : String(err))
+        if (reloadVersion > 0) setExternalChanged(true)
         setLoading(false)
       }
     })()
     return () => {
       disposed = true
     }
-  }, [projectId, path, readOnly])
+  }, [projectId, path, readOnly, reloadVersion])
+
+  useEffect(() => {
+    const directory = parentDirectory(path)
+    let watchId: string | null = null
+    let disposed = false
+    let reloadTimer: ReturnType<typeof setTimeout> | null = null
+    void watchDir(projectId, directory)
+      .then((result) => {
+        if (disposed) void unwatchDir(result.watchId).catch(() => {})
+        else watchId = result.watchId
+      })
+      .catch(() => {})
+    const unlisten = transport.onEvent((event: RuntimeEvent) => {
+      if (
+        event.type !== 'workspace.changed' ||
+        event.projectId !== projectId ||
+        event.path !== path ||
+        savingRef.current ||
+        Date.now() < ignoreChangesUntilRef.current
+      ) {
+        return
+      }
+      if (reloadTimer !== null) clearTimeout(reloadTimer)
+      reloadTimer = setTimeout(() => {
+        if (dirtyRef.current) setExternalChanged(true)
+        else {
+          setExternalReloadVersion((version) => version + 1)
+          setReloadVersion((version) => version + 1)
+        }
+      }, 120)
+    })
+    return () => {
+      disposed = true
+      unlisten()
+      if (reloadTimer !== null) clearTimeout(reloadTimer)
+      if (watchId !== null) void unwatchDir(watchId).catch(() => {})
+    }
+  }, [path, projectId])
 
   // 定位到目标行
   useEffect(() => {
@@ -144,6 +210,9 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
       error,
       dirty,
       saving,
+      saveVersion,
+      externalChanged,
+      externalReloadVersion,
       canEdit,
       editMode,
     }
@@ -151,7 +220,18 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
     if (prev !== null && sameState(prev, next)) return
     stateRef.current = next
     onStateChange(next)
-  }, [loading, error, dirty, saving, canEdit, editMode, onStateChange])
+  }, [
+    loading,
+    error,
+    dirty,
+    saving,
+    saveVersion,
+    externalChanged,
+    externalReloadVersion,
+    canEdit,
+    editMode,
+    onStateChange,
+  ])
 
   const handleChange = useCallback(
     (value: string | undefined) => {
@@ -167,14 +247,22 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
     // 内容未变化视为保存成功：Cmd+S 不触发对磁盘的无意义写入。
     if (content === baseline) return true
     setSaving(true)
+    savingRef.current = true
+    setError(null)
+    ignoreChangesUntilRef.current = Date.now() + 800
     try {
       await writeFile(projectId, path, content)
       setBaseline(content)
+      setSaveVersion((version) => version + 1)
+      setExternalChanged(false)
       return true
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      const message = err instanceof Error ? err.message : String(err)
+      setError(message)
+      if (isRevisionConflict(message)) setExternalChanged(true)
       return false
     } finally {
+      savingRef.current = false
       setSaving(false)
     }
   }, [content, baseline, saving, canEdit, projectId, path])
@@ -208,6 +296,9 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
         setContent(baseline)
         onContentChange?.(baseline)
       },
+      reloadFromDisk: (): void => {
+        setReloadVersion((version) => version + 1)
+      },
       setEditMode: (next: boolean): void => {
         if (canEdit) setEditMode(next)
       },
@@ -238,5 +329,19 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
         />
       )}
     </div>
+  )
+}
+
+function parentDirectory(path: string): string {
+  const index = path.lastIndexOf('/')
+  return index < 0 ? '.' : path.slice(0, index) || '.'
+}
+
+function isRevisionConflict(message: string): boolean {
+  const normalized = message.toLowerCase()
+  return (
+    normalized.includes('stale_revision') ||
+    normalized.includes('revision conflict') ||
+    normalized.includes('file changed since last read')
   )
 }

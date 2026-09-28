@@ -66,7 +66,7 @@ export function BinaryFilePreview(
       if (
         event.type === 'workspace.changed' &&
         event.projectId === props.projectId &&
-        event.path === directory
+        event.path === props.path
       ) {
         setReload((value) => value + 1)
       }
@@ -76,7 +76,7 @@ export function BinaryFilePreview(
       unlisten()
       if (watchId !== null) void unwatchDir(watchId).catch(() => {})
     }
-  }, [directory, props.projectId])
+  }, [directory, props.path, props.projectId])
 
   const fileName = props.path.split('/').pop() ?? props.path
   if (state.status === 'loading') {

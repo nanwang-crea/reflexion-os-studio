@@ -7,7 +7,6 @@ export interface MonacoEditorProps {
   path: string
   initialLine?: number
   readOnly?: boolean
-  onClose: () => void
   onContentChange?: (content: string) => void
   onDirtyChange?: (path: string, dirty: boolean) => void
   confirm?: (state: ConfirmDialogState) => Promise<boolean>

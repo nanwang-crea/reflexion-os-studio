@@ -54,6 +54,7 @@ export function FileTree(props: FileTreeProps): React.JSX.Element {
   )
   // 项目代次：切项目/刷新时自增，旧的异步响应据此丢弃，避免污染新项目。
   const generationRef = useRef(0)
+  const activeRowRef = useRef<HTMLButtonElement | null>(null)
 
   useEffect(() => {
     const generation = ++generationRef.current
@@ -156,18 +157,19 @@ export function FileTree(props: FileTreeProps): React.JSX.Element {
     return transport.onEvent((event: RuntimeEvent) => {
       if (
         event.type !== 'workspace.changed' ||
-        event.projectId !== props.projectId ||
-        !expanded.has(event.path)
+        event.projectId !== props.projectId
       ) {
         return
       }
-      const current = refreshTimersRef.current.get(event.path)
+      const directory = parentDirectory(event.path)
+      if (!expanded.has(directory)) return
+      const current = refreshTimersRef.current.get(directory)
       if (current !== undefined) clearTimeout(current)
       refreshTimersRef.current.set(
-        event.path,
+        directory,
         setTimeout(() => {
-          refreshTimersRef.current.delete(event.path)
-          void loadOnce(event.path)
+          refreshTimersRef.current.delete(directory)
+          void loadOnce(directory)
         }, 120),
       )
     })
@@ -232,6 +234,29 @@ export function FileTree(props: FileTreeProps): React.JSX.Element {
     [entries, loadOnce],
   )
 
+  // 从搜索、Git 或标签切换打开文件时，展开其全部父目录并加载缺失层级。
+  useEffect(() => {
+    if (props.activePath === null || !props.systemReady) return
+    const parents = parentDirectories(props.activePath)
+    setExpanded((current) => {
+      if (parents.every((path) => current.has(path))) return current
+      const next = new Set(current)
+      for (const path of parents) next.add(path)
+      return next
+    })
+    for (const path of parents) {
+      if (!entries.has(path)) void loadOnce(path)
+    }
+  }, [entries, loadOnce, props.activePath, props.systemReady])
+
+  useEffect(() => {
+    if (props.activePath === null || activeRowRef.current === null) return
+    const frame = window.requestAnimationFrame(() => {
+      activeRowRef.current?.scrollIntoView({ block: 'nearest' })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [entries, expanded, props.activePath])
+
   const renderDir = (path: string, depth: number): React.JSX.Element => {
     const dirEntries = entries.get(path) ?? []
     const state = dirState.get(path) ?? 'idle'
@@ -274,6 +299,11 @@ export function FileTree(props: FileTreeProps): React.JSX.Element {
                 ) : (
                   <li key={entry.path}>
                     <button
+                      ref={
+                        props.activePath === entry.path
+                          ? activeRowRef
+                          : undefined
+                      }
                       type="button"
                       className={`tree-row tree-file${
                         props.activePath === entry.path ? ' active' : ''
@@ -349,6 +379,23 @@ export function FileTree(props: FileTreeProps): React.JSX.Element {
 
 function basename(path: string): string {
   return path.split('/').pop() ?? path
+}
+
+function parentDirectory(path: string): string {
+  const index = path.lastIndexOf('/')
+  return index < 0 ? '.' : path.slice(0, index) || '.'
+}
+
+function parentDirectories(path: string): string[] {
+  const parts = path.split('/').filter(Boolean)
+  parts.pop()
+  const parents = ['.']
+  let current = ''
+  for (const part of parts) {
+    current = current === '' ? part : `${current}/${part}`
+    parents.push(current)
+  }
+  return parents
 }
 
 function hasAnyEntries(entries: WorkspaceEntry[]): boolean {

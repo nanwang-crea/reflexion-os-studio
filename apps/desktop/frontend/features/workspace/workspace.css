@@ -328,6 +328,28 @@
   font-weight: 400;
 }
 
+.content-save-status {
+  color: var(--ok);
+  font-size: 11px;
+  animation: content-status-in 0.16s ease-out;
+}
+
+.content-conflict-status {
+  color: var(--warning-text);
+  font-size: 11px;
+}
+
+@keyframes content-status-in {
+  from {
+    opacity: 0;
+    transform: translateY(1px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .content-close {
   padding: 2px 8px;
   font-size: 16px;

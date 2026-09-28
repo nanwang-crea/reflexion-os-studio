@@ -5,7 +5,6 @@ import type { SystemRuntimeClient } from '../system.js'
 
 interface WatchRecord {
   projectId: string
-  path: string
 }
 
 export class WorkspaceWatchService {
@@ -26,7 +25,7 @@ export class WorkspaceWatchService {
       path,
       watchId,
     })
-    this.watches.set(watchId, { projectId, path })
+    this.watches.set(watchId, { projectId })
     return { watchId }
   }
 
@@ -47,7 +46,7 @@ export class WorkspaceWatchService {
     if (!record) return
     this.emitters.for({ scope: 'project', projectId: record.projectId }).next({
       type: 'workspace.changed',
-      path: record.path,
+      path: params.path,
       kind: params.kind,
     })
   }

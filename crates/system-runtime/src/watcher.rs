@@ -28,20 +28,27 @@ pub fn watch(root: &Path, relative: &str, watch_id: &str) -> Result<(), String> 
     }
     let id = watch_id.to_string();
     let event_id = id.clone();
-    let event_path = relative.to_string();
+    let workspace_root = root.to_path_buf();
     let mut watcher = notify::recommended_watcher(move |result: notify::Result<Event>| {
         let Ok(event) = result else {
             return;
         };
-        emit(json!({
-            "jsonrpc": "2.0",
-            "method": "file.changed",
-            "params": {
-                "watchId": event_id,
-                "path": event_path,
-                "kind": format!("{:?}", event.kind),
-            }
-        }));
+        let kind = format!("{:?}", event.kind);
+        for changed_path in event.paths {
+            let Some(relative_path) = workspace_relative_path(&workspace_root, &changed_path)
+            else {
+                continue;
+            };
+            emit(json!({
+                "jsonrpc": "2.0",
+                "method": "file.changed",
+                "params": {
+                    "watchId": event_id,
+                    "path": relative_path,
+                    "kind": kind,
+                }
+            }));
+        }
     })
     .map_err(|error| format!("create watcher failed: {error}"))?;
     watcher
@@ -52,6 +59,19 @@ pub fn watch(root: &Path, relative: &str, watch_id: &str) -> Result<(), String> 
         .map_err(|_| "watch registry unavailable".to_string())?;
     active.insert(id, Registration { _watcher: watcher });
     Ok(())
+}
+
+fn workspace_relative_path(root: &Path, changed: &Path) -> Option<String> {
+    let relative = changed.strip_prefix(root).ok()?;
+    let parts = relative
+        .components()
+        .map(|component| component.as_os_str().to_str())
+        .collect::<Option<Vec<_>>>()?;
+    if parts.is_empty() {
+        Some(".".to_string())
+    } else {
+        Some(parts.join("/"))
+    }
 }
 
 pub fn unwatch(watch_id: &str) -> bool {
@@ -89,5 +109,18 @@ mod tests {
         assert!(unwatch("watch-1"));
         assert!(!unwatch("watch-1"));
         fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn changed_paths_are_workspace_relative() {
+        let root = Path::new("workspace");
+        assert_eq!(
+            workspace_relative_path(root, &root.join("src").join("main.rs")),
+            Some("src/main.rs".to_string())
+        );
+        assert_eq!(
+            workspace_relative_path(root, Path::new("outside").join("main.rs").as_path()),
+            None
+        );
     }
 }
