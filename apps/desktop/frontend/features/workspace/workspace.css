@@ -160,7 +160,15 @@
   padding: 4px;
 }
 
-.tree-root,
+.tree-root {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 16px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .tree-children {
   list-style: none;
   margin: 0;
