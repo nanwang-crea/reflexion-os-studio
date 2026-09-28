@@ -29,6 +29,14 @@ await build({
   target: 'node22',
   // node: 内建模块（含 node:sqlite）保持外部引用，由随包 Node 运行时提供。
   external: ['node:*'],
+  // 部分 CommonJS 依赖仍会动态 require Node 内建模块。ESM 单文件中为其
+  // 提供 Node 原生 require，避免安装包 Runtime 在模块加载阶段直接退出。
+  banner: {
+    js: [
+      "import { createRequire as __createRequire } from 'node:module'",
+      'const require = __createRequire(import.meta.url)',
+    ].join('\n'),
+  },
   sourcemap: false,
   minify: false,
   logLevel: 'info',
