@@ -64,6 +64,38 @@ test('loop completes a task across multiple tool turns', async () => {
   )
 })
 
+test('loop commits prepared messages as the baseline for later turns', async () => {
+  const seen = []
+  let turn = 0
+  const outcome = await runAgentLoop({
+    history: [userMessage('old'), userMessage('current')],
+    signal: new AbortController().signal,
+    prepareMessages: (messages) =>
+      messages.some((message) => message.content === 'old')
+        ? messages.filter((message) => message.content !== 'old')
+        : messages,
+    callModel: async (messages) => {
+      seen.push(messages.map((message) => message.content))
+      turn += 1
+      return turn === 1
+        ? {
+            content: '',
+            finishReason: 'tool_calls',
+            toolCalls: [{ id: 'c1', name: 'clock', arguments: '{}' }],
+          }
+        : { content: 'done', finishReason: 'stop', toolCalls: [] }
+    },
+    executeToolBatch: async () => [{ content: 'ok', isError: false }],
+  })
+
+  assert.deepEqual(seen[0], ['current'])
+  assert.equal(seen[1].includes('old'), false)
+  assert.equal(
+    outcome.messages.some((message) => message.content === 'old'),
+    false,
+  )
+})
+
 test('loop stops at max turns and reports exhaustion', async () => {
   let calls = 0
   const outcome = await runAgentLoop({

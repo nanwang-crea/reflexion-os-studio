@@ -10,7 +10,7 @@ import { JsonValueSchema, type JsonValue } from '@reflexion-os-studio/contracts'
 import { RunEventEmitter } from '../../events.js'
 import { ProviderError, streamChat } from '../../provider.js'
 import type { Store } from '../../store/index.js'
-import { compactInRun, type ProviderRuntimeConfig } from '../context/context.js'
+import type { ProviderRuntimeConfig } from '../context/context.js'
 import { ChildLimitError } from '../errors.js'
 import { normalizeContent } from '../context/resource-links.js'
 import type { RunExecutionState, TurnDraft } from './run-state.js'
@@ -39,7 +39,7 @@ export interface ModelTurnOutcome {
 }
 
 /**
- * 单个模型轮次：创建 assistant 草稿 → 上下文压缩 → 流式调用 →
+ * 单个模型轮次：创建 assistant 草稿 → 流式调用 →
  * 重置/重试事件 → 落终态 → 用量与 token 预算检查。
  */
 export async function executeModelTurn(
@@ -87,13 +87,12 @@ export async function executeModelTurn(
     store.messages.markStreaming(draft.id)
   }
 
-  const bounded = await compactInRun(messages, provider, signal)
   const result = await streamChat(
     {
       baseUrl: provider.baseUrl,
       apiKey: provider.apiKey,
       model: provider.model,
-      messages: bounded,
+      messages,
       tools: registry.specs(),
       ...(provider.temperature !== undefined
         ? { temperature: provider.temperature }

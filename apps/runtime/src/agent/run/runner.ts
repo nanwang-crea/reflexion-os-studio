@@ -11,7 +11,7 @@ import type { AgentSettings, Run } from '@reflexion-os-studio/contracts'
 import { RunEventEmitter } from '../../events.js'
 import { ProviderError } from '../../provider.js'
 import type { Store } from '../../store/index.js'
-import type { ProviderRuntimeConfig } from '../context/context.js'
+import { compactInRun, type ProviderRuntimeConfig } from '../context/context.js'
 import { ChildLimitError } from '../errors.js'
 import { executeModelTurn } from './model-turn.js'
 import type { ApprovalGateway, PermissionGate } from '../permissions/index.js'
@@ -24,7 +24,7 @@ import type { RootMutationCoordinator } from '../delegation/mutations.js'
 export interface RunStreamInput {
   run: Run
   provider: ProviderRuntimeConfig
-  /** Run 启动时构建会话历史（可能触发一次压缩摘要调用）。 */
+  /** Run 启动时构建已受预算约束的会话历史。 */
   buildHistory: (signal: AbortSignal) => Promise<ModelMessage[]>
   registry: ToolRegistry
   workspaceRoot: string | null
@@ -170,6 +170,7 @@ export class RunRunner {
         const outcome = await runAgentLoop({
           history,
           signal: controller.signal,
+          prepareMessages: (messages) => compactInRun(messages, input.provider),
           maxTurns,
           maxContinuationTurns: budgets.maxContinuationTurns,
           reflectionThreshold: input.settings.reflectionThreshold ?? undefined,

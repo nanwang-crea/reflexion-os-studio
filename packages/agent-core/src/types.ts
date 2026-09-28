@@ -103,6 +103,11 @@ export interface ToolExecutionPolicy {
 export interface AgentLoopOptions {
   /** 起始上下文（含 system prompt 与历史）。 */
   history: ModelMessage[]
+  /**
+   * 每轮模型调用前收敛内存工作集；返回值会替换循环基线，避免后续轮次反复
+   * 处理已淘汰历史。不得在此执行隐藏模型调用。
+   */
+  prepareMessages?(messages: ModelMessage[]): ModelMessage[]
   callModel(messages: ModelMessage[], signal: AbortSignal): Promise<ModelTurn>
   /**
    * 一轮全部工具调用的批量执行（由 Runtime 注入副作用调度器）：

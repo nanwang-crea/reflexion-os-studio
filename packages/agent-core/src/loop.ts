@@ -65,6 +65,12 @@ export async function runAgentLoop(
       failuresSinceReflection = 0
       failedToolNames = []
     }
+    if (options.prepareMessages !== undefined) {
+      const prepared = options.prepareMessages(messages)
+      if (prepared !== messages) {
+        messages.splice(0, messages.length, ...prepared)
+      }
+    }
     const turn = await options.callModel(messages, signal)
     turns += 1
 

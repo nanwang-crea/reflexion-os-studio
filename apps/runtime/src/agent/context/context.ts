@@ -3,16 +3,13 @@ import {
   type ContextFrame,
   type ModelMessage,
   boundFramesForModel,
-  compactFrames,
   estimateFrameTokens,
   estimateMessageTokens,
   framesToMessages,
   messagesToFrames,
 } from '@reflexion-os-studio/agent-core'
 import type { Store } from '../../store/index.js'
-import { streamChatCompletion } from '../../provider.js'
 import { buildInstructionBlock } from '../instructions/render.js'
-import { HISTORY_COMPACTOR_SYSTEM_PROMPT } from '../prompts/index.js'
 import {
   framesToValidatedMessages,
   reconstructSessionFramesWithIds,
@@ -108,46 +105,14 @@ export function contextBudgetFor(provider: ProviderRuntimeConfig): number {
 }
 
 /**
- * 一组 Frame 的模型摘要（启动压缩用）：HISTORY_COMPACTOR_SYSTEM_PROMPT +
- * transcript，一次补全调用。输入为 Frame 投影的消息序列。
+ * 轮内工作集收敛：仅做确定性 Frame 裁剪，不发起隐藏模型调用。调用方必须把
+ * 返回值写回 Agent 循环基线，确保后续轮次不会反复处理已淘汰历史。工具轮保持
+ * 原子性；转换出悬空引用时按序列校验失败处理，不发送 Provider。
  */
-export function summarizeFrames(
-  provider: ProviderRuntimeConfig,
-  stableFrames: ContextFrame[],
-  signal: AbortSignal,
-): Promise<string> {
-  const transcript = framesToMessages(stableFrames)
-    .map((message) => `${message.role}: ${message.content}`)
-    .join('\n')
-  return streamChatCompletion(
-    {
-      baseUrl: provider.baseUrl,
-      apiKey: provider.apiKey,
-      model: provider.model,
-      messages: [
-        { role: 'system', content: HISTORY_COMPACTOR_SYSTEM_PROMPT },
-        { role: 'user', content: transcript },
-      ],
-      signal,
-      timeoutMs: provider.timeoutMs ?? 60_000,
-      maxRetries: provider.maxRetries,
-    },
-    () => {},
-  ).then((result) => result.content)
-}
-
-/**
- * 轮内压缩管线：把循环内存消息流转为 Frame 后按预算压缩。
- * 超预算 → 模型摘要压缩窗口外 Frame（信息保留优先，工具轮不拆）；
- * 摘要失败或仍超 → 零成本 Frame 裁剪兜底。每轮最多一次摘要调用；
- * 摘要失败写 stderr 并降级，绝不阻塞对话。转换出悬空引用（循环 bug
- * 或损坏数据）时按序列校验失败处理，不发送 Provider。
- */
-export async function compactInRun(
+export function compactInRun(
   messages: ModelMessage[],
   provider: ProviderRuntimeConfig,
-  signal: AbortSignal,
-): Promise<ModelMessage[]> {
+): ModelMessage[] {
   const budget = contextBudgetFor(provider)
   let frames: ContextFrame[]
   try {
@@ -163,22 +128,9 @@ export async function compactInRun(
   if (estimateFrameTokens(frames) <= budget) {
     return messages
   }
-  try {
-    const { frames: compacted } = await compactFrames({
-      frames,
-      budgetTokens: budget,
-      keepRecentFrames: KEEP_RECENT_FRAMES,
-      summarize: (stable) => summarizeFrames(provider, stable, signal),
-    })
-    return framesToValidatedMessages(boundFramesForModel(compacted, budget))
-  } catch (error) {
-    if (error instanceof FrameError) throw error
-    if (error instanceof Error && error.name === 'AbortError') throw error
-    process.stderr.write(
-      `[runtime] in-run compaction failed, falling back to frame trimming: ${String(error)}\n`,
-    )
-    return framesToValidatedMessages(boundFramesForModel(frames, budget))
-  }
+  return framesToValidatedMessages(
+    boundFramesForModel(frames, budget, KEEP_RECENT_FRAMES),
+  )
 }
 
 /** 诊断指标（§17.1）：单行 JSON 写 stderr；hash 只记录短前缀，不含正文。 */
