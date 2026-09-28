@@ -287,8 +287,5 @@ test('file.grep exposes regex semantics and keeps legacy text calls compatible',
     () => run(tool, { pattern: 'new', text: 'old' }),
     /pattern and text differ/,
   )
-  await assert.rejects(
-    () => run(tool, {}),
-    /requires pattern or legacy text/,
-  )
+  await assert.rejects(() => run(tool, {}), /requires pattern or legacy text/)
 })

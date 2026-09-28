@@ -96,6 +96,7 @@ pub fn glob_search(
     })
 }
 
+#[cfg(test)]
 pub fn grep_search(
     workspace_root: &Path,
     pattern: &str,
