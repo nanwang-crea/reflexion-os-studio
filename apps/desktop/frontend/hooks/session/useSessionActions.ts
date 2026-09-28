@@ -283,7 +283,15 @@ export function useSessionActions(deps: SessionActionsDeps): {
       )
     if (!lastFinishedBadly) return
     try {
-      await chatApi.retryRun(lastFinishedBadly.id)
+      const modelKey = deps.selectedModelKey
+      const separator = modelKey ? modelKey.indexOf('::') : -1
+      await chatApi.retryRun({
+        runId: lastFinishedBadly.id,
+        providerId:
+          modelKey && separator > 0 ? modelKey.slice(0, separator) : undefined,
+        model:
+          modelKey && separator > 0 ? modelKey.slice(separator + 2) : undefined,
+      })
       await deps.refreshSessionData(deps.activeSessionId)
     } catch (error) {
       fail(error)

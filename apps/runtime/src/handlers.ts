@@ -199,10 +199,7 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
     agent.resumeQueue(requireString(p, 'sessionId')),
   'run.cancel': (p, { agent }) => agent.cancel(requireString(p, 'runId')),
   'run.retry': (p, { agent }) =>
-    agent.startRetry({
-      requestId: requireString(p, 'requestId'),
-      runId: requireString(p, 'runId'),
-    }),
+    agent.startRetry(p as unknown as Parameters<typeof agent.startRetry>[0]),
   'approval.resolve': (p, { approvals }) => ({
     // choiceId 必须属于当前 pending；不在等待/choice 未知都返回 accepted=false
     // （前端按失败恢复整条 PendingApproval）。

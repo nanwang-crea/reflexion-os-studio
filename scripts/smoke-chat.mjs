@@ -517,6 +517,12 @@ try {
   await waitForEvent('run.completed')
   console.log('PASS run.completed')
 
+  await waitForEvent(
+    (event) =>
+      event.type === 'session.updated' &&
+      event.session.id === session.id &&
+      event.session.title === '你好，这里是 mock 回复',
+  )
   const detail = await request(5, 'session.get', {
     requestId: randomUUID(),
     sessionId: session.id,
@@ -548,8 +554,8 @@ try {
   const run = detail.runs.find((item) => item.id === send.runId)
   check('run terminal state completed', run?.status === 'completed')
   check(
-    'session title derived from first message',
-    detail.session?.title === '打个招呼',
+    'session title generated asynchronously and persisted',
+    detail.session?.title === '你好，这里是 mock 回复',
     `title=${JSON.stringify(detail.session?.title)}`,
   )
   check(

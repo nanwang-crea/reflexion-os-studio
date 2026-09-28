@@ -3,6 +3,7 @@ import type {
   AgentSettings,
   ChatCommand,
   MessageEditResendParams,
+  RunRetryParams,
 } from '@reflexion-os-studio/contracts'
 import { RunEventEmitter, type EventNotifier } from '../events.js'
 import { createSkillRegistry, type SkillRegistry } from '../skills/index.js'
@@ -10,16 +11,15 @@ import { DEFAULT_SESSION_TITLE, type Store } from '../store/index.js'
 import type { SystemRuntimeClient } from '../system.js'
 import type { McpManager } from '../mcp/manager.js'
 import { ContextBuilder } from './context/context.js'
-import { CommandError } from './errors.js'
 import { createPendingAssistantMessage, RunLauncher } from './launcher.js'
 import {
   ApprovalGateway,
   DangerLeaseService,
-  DEFAULT_PRESET,
   resolveInputPreset,
 } from './permissions/index.js'
 import { resolveProvider, resolveSampling } from './provider-resolver.js'
 import { QueueService } from './session/queue.js'
+import { RunResubmissionService } from './run/resubmission.js'
 import { RunRunner } from './run/runner.js'
 import { SessionTitleService } from './session/session-titles.js'
 import { deriveSessionTitle } from './session/title.js'
@@ -30,9 +30,7 @@ import {
   RootMutationCoordinator,
 } from './delegation.js'
 import { InteractionGateway } from './interactions/index.js'
-import { normalizeToolOutput } from './run/toolResults.js'
-import { formatAnswers } from './tools/ask-user.js'
-import { applyPlanApproval } from './tools/plan-mode.js'
+import { resumeInteraction } from './interactions/resume.js'
 import {
   dangerCapability,
   requireIdleSession,
@@ -59,6 +57,7 @@ export class ChatAgent {
   private readonly runner: RunRunner
   private readonly queues: QueueService
   private readonly launcher: RunLauncher
+  private readonly resubmissions: RunResubmissionService
   private readonly sessionTitles: SessionTitleService
 
   constructor(
@@ -68,6 +67,12 @@ export class ChatAgent {
     private readonly mcp: McpManager | null = null,
     private readonly skills: SkillRegistry = createSkillRegistry(),
   ) {
+    this.resubmissions = new RunResubmissionService(
+      store,
+      notifier,
+      skills,
+      (input) => this.launch(input),
+    )
     this.interactions = new InteractionGateway(store)
     this.danger = new DangerLeaseService(notifier, () =>
       dangerCapability(this.system),
@@ -330,280 +335,29 @@ export class ChatAgent {
     return { interactions: this.interactions.listPending() }
   }
 
-  /** 回答结构化问题；若等待来自上次进程，则补齐工具结果并续跑原 Run。 */
   respondToInteraction(
     interactionId: string,
     answers: import('@reflexion-os-studio/contracts').UserQuestionAnswer[],
-  ): { accepted: boolean } {
-    const interaction = this.store.interactions.get(interactionId)
-    if (!interaction || interaction.status !== 'pending') {
-      return { accepted: false }
-    }
-    const run = this.store.runs.get(interaction.runId)
-    const session = run ? this.store.sessions.get(run.sessionId) : null
-    if (!run || !session || run.status !== 'awaiting_user_input') {
-      return { accepted: false }
-    }
-    const response = this.interactions.respond(interactionId, answers)
-    if (!response.accepted || response.recovered === null) {
-      return { accepted: response.accepted }
-    }
-
-    const toolCall = this.store.toolCalls.get(interaction.toolCallId)
-    if (!toolCall) return { accepted: false }
-    const { profile, apiKey, model } = resolveProvider(
-      this.store,
-      run.providerId ?? undefined,
-      run.model ?? undefined,
-    )
-    const assistantMessage = this.store.transaction(() => {
-      const result =
-        interaction.kind === 'plan_approval' &&
-        typeof toolCall.args === 'object' &&
-        toolCall.args !== null &&
-        !Array.isArray(toolCall.args) &&
-        typeof toolCall.args.planId === 'string'
-          ? applyPlanApproval(
-              this.store,
-              session.id,
-              toolCall.args.planId,
-              answers,
-            )
-          : {
-              content: formatAnswers(interaction.questions, answers),
-              isError: false,
-              data: { answers },
-            }
-      const output = normalizeToolOutput(
-        result,
-        session.projectId,
-        toolCall.toolName,
-      )
-      this.store.interactions.resolve(interactionId, answers)
-      this.store.toolCalls.finalize(interaction.toolCallId, 'completed', output)
-      this.store.runs.setIntermediateStatus(run.id, 'running')
-      const previousTurn = this.store.turnExecutions.latestForRun(run.id)
-      if (previousTurn !== null && previousTurn.completedAt === null) {
-        this.store.turnExecutions.transition(previousTurn.id, 'completed', {
-          pendingInteractionId: null,
-          continuationReason: 'user_input_resolved',
-        })
-      }
-      return createPendingAssistantMessage(this.store, session.id, run)
-    })
-    const resumedRun = this.store.runs.get(run.id) ?? run
-    const emitter = new RunEventEmitter(run.id, this.notifier)
-    emitter.next({
-      type: 'interaction.resolved',
+  ) {
+    return resumeInteraction(
+      {
+        store: this.store,
+        notifier: this.notifier,
+        interactions: this.interactions,
+        skills: this.skills,
+        launch: (input) => this.launch(input),
+      },
       interactionId,
-      toolCallId: interaction.toolCallId,
       answers,
-    })
-    emitter.next({
-      type: 'tool.completed',
-      toolCallId: interaction.toolCallId,
-      status: 'completed',
-      errorCode: null,
-    })
-    emitter.next({ type: 'run.started', run: resumedRun })
-    emitter.next({ type: 'message.created', message: assistantMessage })
-    this.launch({
-      run: resumedRun,
-      session,
-      profile,
-      apiKey,
-      model,
-      sampling: resolveSampling(profile, {}),
-      permissionPreset: DEFAULT_PRESET,
-      defaultChildTemplateId: run.agentTemplateId ?? undefined,
-      skill:
-        run.skillId === null
-          ? null
-          : this.skills.get(run.skillId, session.projectId),
-      assistantMessage,
-      emitter,
-    })
-    return { accepted: true }
+    )
   }
 
-  startRetry(params: { requestId: string; runId: string }): {
-    messageId: string
-    runId: string
-    retryOfRunId: string
-  } {
-    const original = this.store.runs.get(params.runId)
-    if (!original) {
-      throw new CommandError(
-        'invalid_request',
-        `run not found: ${params.runId}`,
-      )
-    }
-    if (original.status === 'created' || original.status === 'running') {
-      throw new CommandError('invalid_request', '原 Run 仍在进行中，无法重试')
-    }
-    const originalSession = requireSession(this.store, original.sessionId)
-    const { profile, apiKey, model } = resolveProvider(
-      this.store,
-      original.providerId ?? undefined,
-      original.model ?? undefined,
-    )
-    requireIdleSession(this.store, original.sessionId)
-
-    const run = this.store.transaction(() =>
-      this.store.runs.replaceWithRetry(
-        original.id,
-        {
-          sessionId: original.sessionId,
-          providerId: profile.id,
-          model,
-          skillId: original.skillId,
-          agentTemplateId: original.agentTemplateId,
-          planId: original.planId,
-          planStepId: original.planStepId,
-        },
-        this.store.messages,
-      ),
-    )
-
-    this.store.sessions.touch(original.sessionId)
-    const assistantMessage = createPendingAssistantMessage(
-      this.store,
-      original.sessionId,
-      run,
-    )
-
-    const emitter = new RunEventEmitter(run.id, this.notifier)
-    emitter.next({ type: 'run.started', run })
-    emitter.next({ type: 'message.created', message: assistantMessage })
-    this.launch({
-      run,
-      session: originalSession,
-      profile,
-      apiKey,
-      model,
-      sampling: resolveSampling(profile, {}),
-      // 重试不继承高权限档：回落默认预设（workspace-read）重跑；
-      // 会话级 ask-everything 覆盖项仍生效（只会更严，不构成提权）。
-      permissionPreset: DEFAULT_PRESET,
-      defaultChildTemplateId: original.agentTemplateId ?? undefined,
-      skill:
-        original.skillId === null
-          ? null
-          : this.skills.get(original.skillId, originalSession.projectId),
-      assistantMessage,
-      emitter,
-    })
-
-    return {
-      messageId: assistantMessage.id,
-      runId: run.id,
-      retryOfRunId: original.id,
-    }
+  startRetry(params: RunRetryParams) {
+    return this.resubmissions.startRetry(params)
   }
 
-  /** 编辑最后一条用户消息并重发。
-   * 产品语义：替换最后一条 user（标记旧 user+assistant 为 superseded），
-   * 以新内容作为新一轮发送；与 run.retry 区分（retry 同文案重跑，不改 user）。
-   * 会话有进行中的 Run → invalid_request（「请先停止当前回复」）。
-   * 排队中的消息继续只走 QueueBar，不走本命令。
-   */
   startEditResend(params: MessageEditResendParams) {
-    const session = requireSession(this.store, params.sessionId)
-    requireIdleSession(this.store, params.sessionId)
-    const content = params.content.trim()
-    if (content === '') {
-      throw new CommandError('invalid_request', '消息内容不能为空')
-    }
-    const messages = this.store.messages.listBySession(params.sessionId)
-    const lastUserMessage = [...messages]
-      .reverse()
-      .find((message) => message.role === 'user')
-    if (!lastUserMessage || lastUserMessage.id !== params.messageId) {
-      throw new CommandError('invalid_request', '只能编辑最后一条用户消息')
-    }
-    const replacedRunIds: string[] = []
-    let replacedRun = lastUserMessage.runId
-      ? this.store.runs.get(lastUserMessage.runId)
-      : null
-    while (replacedRun) {
-      replacedRunIds.push(replacedRun.id)
-      replacedRun = replacedRun.supersededByRunId
-        ? this.store.runs.get(replacedRun.supersededByRunId)
-        : null
-    }
-    const { skill } = resolveSkillInvocation(
-      content,
-      params.skillId,
-      this.skills,
-      session.projectId,
-    )
-    const { profile, apiKey, model } = resolveProvider(
-      this.store,
-      params.providerId,
-      params.model,
-    )
-    const sampling = resolveSampling(profile, params)
-    const { newRun, newUserMessage, newAssistantMessage } =
-      this.store.transaction(() => {
-        const newRun = this.store.runs.create({
-          sessionId: params.sessionId,
-          providerId: profile.id,
-          model,
-          skillId: skill?.manifest.id ?? null,
-          agentTemplateId: params.agentTemplateId ?? null,
-        })
-        if (replacedRunIds.length > 0) {
-          const visibleRunId = replacedRunIds.at(-1)
-          if (visibleRunId) {
-            this.store.runs.markSuperseded(visibleRunId, newRun.id)
-          }
-          for (const runId of replacedRunIds) {
-            this.store.messages.markSupersededRound(runId)
-          }
-        } else {
-          this.store.messages.markSuperseded(lastUserMessage.id)
-        }
-        const newUserMessage = this.store.messages.create({
-          sessionId: params.sessionId,
-          runId: newRun.id,
-          role: 'user',
-          content,
-          status: 'completed',
-        })
-        const newAssistantMessage = createPendingAssistantMessage(
-          this.store,
-          params.sessionId,
-          newRun,
-        )
-        return { newRun, newUserMessage, newAssistantMessage }
-      })
-
-    this.store.sessions.touch(params.sessionId)
-    const emitter = new RunEventEmitter(newRun.id, this.notifier)
-    emitter.next({ type: 'run.started', run: newRun })
-    emitter.next({ type: 'message.created', message: newUserMessage })
-    emitter.next({ type: 'message.created', message: newAssistantMessage })
-    this.launch({
-      run: newRun,
-      session,
-      profile,
-      apiKey,
-      model,
-      sampling,
-      permissionPreset: resolveInputPreset(params),
-      defaultChildTemplateId: params.agentTemplateId,
-      skill,
-      assistantMessage: newAssistantMessage,
-      emitter,
-    })
-
-    return {
-      queued: false,
-      messageId: newAssistantMessage.id,
-      runId: newRun.id,
-      queueId: null,
-      position: null,
-    }
+    return this.resubmissions.startEditResend(params)
   }
 
   cancel(runId: string): { accepted: boolean } {

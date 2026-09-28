@@ -11,7 +11,7 @@ const outDir = join(tmpdir(), 'reflexion-storage-test')
 mkdirSync(outDir, { recursive: true })
 const outfile = join(outDir, 'permission-storage.mjs')
 await build({
-  entryPoints: [join(ROOT, 'frontend/hooks/permission-storage.ts')],
+  entryPoints: [join(ROOT, 'frontend/hooks/permissions/permission-storage.ts')],
   bundle: true,
   format: 'esm',
   platform: 'neutral',

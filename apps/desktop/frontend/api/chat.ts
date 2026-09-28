@@ -47,14 +47,18 @@ export function listPendingInteractions(): Promise<{
   return request('interaction.list_pending', {})
 }
 
-export function retryRun(runId: string): Promise<{
+export function retryRun(input: {
+  runId: string
+  providerId?: string
+  model?: string
+}): Promise<{
   messageId: string
   runId: string
   retryOfRunId: string
 }> {
   return request<{ messageId: string; runId: string; retryOfRunId: string }>(
     'run.retry',
-    { runId },
+    input,
   )
 }
 

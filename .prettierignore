@@ -14,3 +14,6 @@ src-tauri/gen
 .worktrees/
 **/.worktrees/**
 pnpm-lock.yaml
+
+# 独立 Skill 子仓库，不属于主项目格式化范围
+/.tmp-life-development-skill/

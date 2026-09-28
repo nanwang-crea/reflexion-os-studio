@@ -558,6 +558,7 @@ test('tool call lifecycle: create, status, finalize, recovery', () => {
   assert.deepEqual(persisted.output, {
     type: 'tool_output',
     version: 1,
+    provenance: null,
     content: '{"lines":42}',
     data: { lines: 42 },
     resourceLinks: [],
