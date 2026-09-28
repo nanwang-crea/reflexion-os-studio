@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readdirSync, renameSync } from 'node:fs'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, relative, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import {
   PluginPackageManifestSchema,
@@ -70,6 +70,8 @@ export class SkillPluginService {
       kind: manifest.type,
       source: 'builtin' as const,
       sourceRef: null,
+      scope: 'global' as const,
+      projectId: null,
       status: 'enabled' as const,
       installPath: null,
       enabled: true,
@@ -99,6 +101,11 @@ export class SkillPluginService {
 
   cancelTask(id: string): PluginTask {
     return this.tasks.cancel(id)
+  }
+
+  projectDeleted(projectId: string): void {
+    cleanupTemporary(join(this.pluginsRoot, 'projects', projectId))
+    this.reloadRegistry()
   }
 
   toggle(id: string, enabled: boolean): PluginRecord {
@@ -144,6 +151,7 @@ export class SkillPluginService {
     for (const entry of readdirSync(this.pluginsRoot, {
       withFileTypes: true,
     })) {
+      if (entry.name === 'projects') continue
       if (!entry.isDirectory() || !ID_PATTERN.test(entry.name)) continue
       const installPath = join(this.pluginsRoot, entry.name)
       seen.add(entry.name)
@@ -162,6 +170,8 @@ export class SkillPluginService {
           description: loaded.manifest.description,
           source: existing?.source ?? 'local',
           sourceRef: existing?.sourceRef ?? installPath,
+          scope: existing?.scope ?? 'global',
+          projectId: existing?.projectId ?? null,
           status: existing?.enabled === false ? 'disabled' : 'enabled',
           installPath,
           enabled: existing?.enabled ?? true,
@@ -178,10 +188,44 @@ export class SkillPluginService {
           description: manifest.description,
           source: existing?.source ?? 'local',
           sourceRef: existing?.sourceRef ?? installPath,
+          scope: existing?.scope ?? 'global',
+          projectId: existing?.projectId ?? null,
           status: 'invalid',
           installPath,
           enabled: false,
           manifest,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+    for (const plugin of this.store.plugins.list()) {
+      if (
+        plugin.scope !== 'project' ||
+        plugin.installPath === null ||
+        !existsSync(plugin.installPath)
+      ) {
+        continue
+      }
+      seen.add(plugin.id)
+      try {
+        const loaded = loadSkillPackage(plugin.installPath)
+        if (loaded.manifest.id !== plugin.id) {
+          throw new Error('manifest id must match its directory name')
+        }
+        this.store.plugins.upsert({
+          ...plugin,
+          version: loaded.manifest.version,
+          name: loaded.manifest.name,
+          description: loaded.manifest.description,
+          status: plugin.enabled ? 'enabled' : 'disabled',
+          manifest: loaded.manifest,
+          error: null,
+        })
+      } catch (error) {
+        this.store.plugins.upsert({
+          ...plugin,
+          status: 'invalid',
+          enabled: false,
           error: error instanceof Error ? error.message : String(error),
         })
       }
@@ -207,6 +251,7 @@ export class SkillPluginService {
       try {
         this.registry.registerExternal(
           loadSkillPackage(plugin.installPath).definition,
+          { scope: plugin.scope, projectId: plugin.projectId },
         )
       } catch (error) {
         process.stderr.write(
@@ -220,7 +265,12 @@ export class SkillPluginService {
     if (plugin.installPath === null) return null
     const target = resolve(plugin.installPath)
     const root = resolve(this.pluginsRoot)
-    if (dirname(target) !== root || basename(target) !== plugin.id) {
+    const relativeTarget = relative(root, target)
+    const expected =
+      plugin.scope === 'project' && plugin.projectId !== null
+        ? join('projects', plugin.projectId, plugin.id)
+        : plugin.id
+    if (relativeTarget !== expected || basename(target) !== plugin.id) {
       throw new Error(`refusing to remove unmanaged plugin path: ${target}`)
     }
     return target

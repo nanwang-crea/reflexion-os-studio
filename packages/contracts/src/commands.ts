@@ -52,16 +52,22 @@ const PluginInstallParamsSchema = z.discriminatedUnion('source', [
     source: z.literal('dir'),
     projectId: z.string().min(1),
     path: z.string().min(1),
+    installScope: z.enum(['global', 'project']).optional(),
+    installProjectId: z.string().min(1).optional(),
   }),
   z.object({
     requestId: RequestIdSchema,
     source: z.literal('local'),
     path: z.string().min(1),
+    installScope: z.enum(['global', 'project']).optional(),
+    installProjectId: z.string().min(1).optional(),
   }),
   z.object({
     requestId: RequestIdSchema,
     source: z.literal('git'),
     url: z.string().url(),
+    installScope: z.enum(['global', 'project']).optional(),
+    installProjectId: z.string().min(1).optional(),
   }),
 ])
 
@@ -629,7 +635,10 @@ export const CommandSchemaRegistry = {
   },
   'skill.list': {
     // 内置 Skill 清单（Phase 1A 无安装/启停，列表即全部可用项）。
-    params: z.object({ requestId: RequestIdSchema }),
+    params: z.object({
+      requestId: RequestIdSchema,
+      projectId: z.string().min(1).nullable().optional(),
+    }),
     result: z.object({ skills: z.array(SkillManifestSchema) }),
   },
   'plugin.list': {

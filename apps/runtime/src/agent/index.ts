@@ -105,9 +105,14 @@ export class ChatAgent {
     queueId: string | null
     position: number | null
   } {
-    requireSession(this.store, params.sessionId)
+    const session = requireSession(this.store, params.sessionId)
     // 入队前先校验技能与 Provider/模型配置,参数错误当场反馈。
-    resolveSkillInvocation(params.content, params.skillId, this.skills)
+    resolveSkillInvocation(
+      params.content,
+      params.skillId,
+      this.skills,
+      session.projectId,
+    )
     resolveProvider(this.store, params.providerId, params.model)
     if (this.store.runs.activeForSession(params.sessionId) === null) {
       const started = this.startSend(params)
@@ -156,12 +161,17 @@ export class ChatAgent {
   updateQueue(sessionId: string, queueId: string, content: string) {
     const existing = this.queues.get(sessionId, queueId)
     if (!existing) return { item: null }
+    const session = requireSession(this.store, sessionId)
     const explicitSkillId = existing.params.skillId
     // 重解析并记录"生效的技能"：展示与出队执行口径一致
     // (显式 skillId 优先,否则按新内容识别斜杠)。
     const resolvedSkillId =
-      resolveSkillInvocation(content, explicitSkillId, this.skills).skill
-        ?.manifest.id ?? explicitSkillId
+      resolveSkillInvocation(
+        content,
+        explicitSkillId,
+        this.skills,
+        session.projectId,
+      ).skill?.manifest.id ?? explicitSkillId
     const updated = this.queues.update(sessionId, queueId, {
       ...existing.params,
       content,
@@ -225,6 +235,7 @@ export class ChatAgent {
       params.content,
       params.skillId,
       this.skills,
+      session.projectId,
     )
     const { profile, apiKey, model } = resolveProvider(
       this.store,
@@ -405,7 +416,10 @@ export class ChatAgent {
       sampling: resolveSampling(profile, {}),
       permissionPreset: DEFAULT_PRESET,
       defaultChildTemplateId: run.agentTemplateId ?? undefined,
-      skill: run.skillId === null ? null : this.skills.get(run.skillId),
+      skill:
+        run.skillId === null
+          ? null
+          : this.skills.get(run.skillId, session.projectId),
       assistantMessage,
       emitter,
     })
@@ -473,7 +487,9 @@ export class ChatAgent {
       permissionPreset: DEFAULT_PRESET,
       defaultChildTemplateId: original.agentTemplateId ?? undefined,
       skill:
-        original.skillId === null ? null : this.skills.get(original.skillId),
+        original.skillId === null
+          ? null
+          : this.skills.get(original.skillId, originalSession.projectId),
       assistantMessage,
       emitter,
     })
@@ -519,6 +535,7 @@ export class ChatAgent {
       content,
       params.skillId,
       this.skills,
+      session.projectId,
     )
     const { profile, apiKey, model } = resolveProvider(
       this.store,

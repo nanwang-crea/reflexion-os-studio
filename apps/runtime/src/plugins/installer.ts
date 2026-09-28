@@ -1,4 +1,4 @@
-import { existsSync, renameSync } from 'node:fs'
+import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type {
@@ -75,11 +75,10 @@ export class PluginPackageInstaller {
     if (current.source === 'builtin') {
       throw new Error('builtin plugins cannot be updated')
     }
-    return this.installOrUpdate(
-      sourceForUpdate(current.source, current.sourceRef),
-      current,
-      options,
-    )
+    const source = sourceForUpdate(current.source, current.sourceRef)
+    source.installScope = current.scope
+    source.installProjectId = current.projectId ?? undefined
+    return this.installOrUpdate(source, current, options)
   }
 
   private async installOrUpdate(
@@ -109,14 +108,34 @@ export class PluginPackageInstaller {
       throwIfAborted(options.signal)
       options.onProgress?.('validating', 60)
       const preview = inspectPackage(resolved.directory, options.onWarning)
-      this.assertInstallAllowed(preview, updating)
+      const standardSkill = !existsSync(join(resolved.directory, 'plugin.json'))
+      const scope = source.installScope ?? 'global'
+      const projectId =
+        scope === 'project' ? (source.installProjectId ?? null) : null
+      if (scope === 'project' && projectId === null) {
+        throw new Error('project-scoped skill requires installProjectId')
+      }
+      if (projectId !== null && !this.store.projects.get(projectId)) {
+        throw new Error(`project not found: ${projectId}`)
+      }
+      this.assertInstallAllowed(preview, updating, standardSkill)
 
       options.onProgress?.('staging', 75)
       stage = this.temporaryPath(`stage-${preview.id}`)
       copyPackage(resolved.directory, stage)
+      if (standardSkill) {
+        writeFileSync(
+          join(stage, 'plugin.json'),
+          `${JSON.stringify(preview, null, 2)}\n`,
+        )
+      }
       throwIfAborted(options.signal)
       const manifest = inspectPackage(stage)
-      target = join(this.pluginsRoot, manifest.id)
+      target =
+        projectId === null
+          ? join(this.pluginsRoot, manifest.id)
+          : join(this.pluginsRoot, 'projects', projectId, manifest.id)
+      mkdirSync(join(target, '..'), { recursive: true })
       options.onProgress?.('committing', 90)
       if (existsSync(target)) {
         if (updating === null)
@@ -134,6 +153,8 @@ export class PluginPackageInstaller {
         description: manifest.description,
         source: source.source,
         sourceRef: resolved.sourceRef,
+        scope,
+        projectId,
         status: updating?.enabled === false ? 'disabled' : 'enabled',
         installPath: target,
         enabled: updating?.enabled ?? true,
@@ -160,6 +181,7 @@ export class PluginPackageInstaller {
   private assertInstallAllowed(
     manifest: PluginPackageManifest,
     updating: PluginRecord | null,
+    standardSkill: boolean,
   ): void {
     if (this.builtinIds.has(manifest.id)) {
       throw new Error(`plugin id conflicts with builtin: ${manifest.id}`)
@@ -172,7 +194,10 @@ export class PluginPackageInstaller {
     if (manifest.id !== updating.id) {
       throw new Error('updated package id does not match installed plugin')
     }
-    if (compareVersions(manifest.version, updating.version) <= 0) {
+    if (
+      compareVersions(manifest.version, updating.version) <=
+      (standardSkill ? -1 : 0)
+    ) {
       throw new Error(
         `update version ${manifest.version} must be newer than ${updating.version}`,
       )

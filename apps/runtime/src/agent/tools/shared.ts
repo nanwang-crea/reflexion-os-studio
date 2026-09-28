@@ -21,6 +21,7 @@ export interface ToolContext {
   system: SystemRuntimeClient | null
   /** 会话关联项目的 folderPath；独立会话为 null（文件/Shell 工具不注册）。 */
   workspaceRoot: string | null
+  projectId: string | null
   /** Skill 注册表：skill.use 工具的数据源。 */
   skills: SkillRegistry
   /** MCP 管理服务：非空时把可用 server 工具注册进 Run(默认 ask 审批)。 */

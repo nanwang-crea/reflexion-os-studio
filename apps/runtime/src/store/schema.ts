@@ -172,6 +172,8 @@ CREATE TABLE IF NOT EXISTS plugins (
   description TEXT NOT NULL,
   source TEXT NOT NULL,
   source_ref TEXT,
+  scope TEXT NOT NULL DEFAULT 'global',
+  project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
   status TEXT NOT NULL,
   install_path TEXT,
   enabled INTEGER NOT NULL DEFAULT 1,
@@ -281,4 +283,4 @@ CREATE TABLE IF NOT EXISTS context_checkpoints (
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 35
+export const LATEST_SCHEMA_VERSION = 36

@@ -8,8 +8,8 @@
 
 ```text
 <id>/
-├── plugin.json       # 必需，元数据唯一真源
-├── SKILL.md          # Skill 必需，只包含 instructions；兼容读取旧 frontmatter
+├── SKILL.md          # 必需，标准 frontmatter + instructions
+├── plugin.json       # 可选，ReflexionOS 扩展 manifest
 ├── assets/           # 可选静态资源
 ├── references/       # 可选参考资料
 └── scripts/          # 可选随包资源；当前绝不执行
@@ -40,7 +40,7 @@
 }
 ```
 
-版本必须为 SemVer。协议兼容范围支持精确版本、比较组合和 caret。Skill 的入口固定为 `SKILL.md`，必须声明 `skill.instructions` 和 `skill` 元数据。
+标准 `SKILL.md` 的 `name` 与 `description` 必填，description 上限 1024 字符，正文按 100KB 上限加载；`metadata.version` 可选，缺失时内部版本为 `1.0.0`。扩展 manifest 的版本必须为 SemVer，协议兼容范围支持精确版本、比较组合和 caret；Skill 入口固定为 `SKILL.md`，并声明 `skill.instructions` 和 `skill` 元数据。
 
 权限是信息性声明，不产生授权。Skill 实际可调用的工具仍由单次 Run 的 ToolRegistry、PermissionGate、沙箱与审批决定。
 
@@ -54,9 +54,11 @@
 
 - `plugin.preview`：立即返回异步 task；完成后 task 携带 manifest 与同 id 的已安装记录，UI 据此展示权限确认。
 - `plugin.install`：立即返回异步 task；后台再次校验、复制到临时 stage、复验并原子改名到正式目录。
-- `plugin.update`：立即返回异步 task；从持久化来源重新取包，id 必须相同，版本按 SemVer 2.0.0 优先级严格递增。
+- `plugin.update`：立即返回异步 task；从持久化来源重新取包，id 必须相同；扩展 manifest 版本按 SemVer 2.0.0 优先级严格递增，标准 Skill 允许同版本刷新。
 - `plugin.task.list` / `plugin.task.cancel`：查询本次 Runtime 生命周期内的任务，以及取消尚未结束的任务；`plugin.task.changed` 持续报告 phase、百分比、终态和错误。
 - `plugin.toggle` / `plugin.uninstall` / `plugin.rescan`：启停、卸载和磁盘对账。
+
+安装时必须选择作用域：`global` 安装到全局插件目录；`project` 绑定明确的 `projectId` 并安装到项目隔离子目录。Registry、system prompt、显式 `$skill`/`/skill` 解析和 `skill.use` 均按会话项目过滤，禁止把项目 Skill 泄漏到其他项目或独立会话。
 
 更新顺序：
 
@@ -75,8 +77,8 @@ Runtime 启动时在正常插件扫描前恢复中断事务：遗留 stage/sourc
 安装前递归检查整个包：
 
 - 禁止符号链接、设备文件和其他非普通文件；
-- 禁止隐藏项、`.git`、凭据类文件名及 `.key`/`.pem`/`.token`；
-- 根目录只允许契约规定的文件和目录；
+- 禁止危险隐藏项、`.git`、凭据类文件名及 `.key`/`.pem`/`.token`；
+- 根目录非 Skill 条目在预览中告警并跳过复制；
 - 最多 1000 个文件、总计 16 MiB；
 - 入口必须留在包内且为普通文件；
 - 只加载 `skill`，Provider/Tool 包返回“不支持加载”；

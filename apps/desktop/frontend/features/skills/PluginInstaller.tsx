@@ -6,8 +6,10 @@ import type {
   PluginPackageManifest,
   PluginRecord,
   PluginTask,
+  Project,
 } from '@reflexion-os-studio/runtime-client'
 import { installPlugin, previewPlugin } from '../../api/skills'
+import { listProjects } from '../../api/projects'
 
 interface PluginInstallerProps {
   busy: boolean
@@ -28,14 +30,37 @@ export function PluginInstaller(
   const [working, setWorking] = useState(false)
   const [taskId, setTaskId] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
+  const [scope, setScope] = useState<'global' | 'project'>('global')
+  const [projectId, setProjectId] = useState('')
+  const [projects, setProjects] = useState<Project[]>([])
+
+  useEffect(() => {
+    void listProjects().then(({ projects: next }) => {
+      setProjects(next)
+      setProjectId((current) => current || next[0]?.id || '')
+    })
+  }, [])
+
+  const scopedSource = useCallback(
+    (value: PluginInstallSource): PluginInstallSource => ({
+      ...value,
+      installScope: scope,
+      installProjectId: scope === 'project' ? projectId : undefined,
+    }),
+    [projectId, scope],
+  )
 
   const inspect = useCallback(
     async (nextSource: PluginInstallSource): Promise<void> => {
       setWorking(true)
       setManifest(null)
       try {
-        const result = await previewPlugin(nextSource)
-        setSource(nextSource)
+        const selectedSource = scopedSource(nextSource)
+        if (scope === 'project' && projectId === '') {
+          throw new Error('请先选择项目')
+        }
+        const result = await previewPlugin(selectedSource)
+        setSource(selectedSource)
         setTaskId(result.task.id)
         rememberTask(result.task)
       } catch (error) {
@@ -43,7 +68,7 @@ export function PluginInstaller(
         setWorking(false)
       }
     },
-    [onError, rememberTask],
+    [onError, projectId, rememberTask, scope, scopedSource],
   )
 
   const task = taskId === null ? null : (tasks[taskId] ?? null)
@@ -106,9 +131,13 @@ export function PluginInstaller(
 
   const confirmInstall = async (): Promise<void> => {
     if (source === null || manifest === null || installed !== null) return
+    if (scope === 'project' && projectId === '') {
+      onError('请先选择项目')
+      return
+    }
     setWorking(true)
     try {
-      const result = await installPlugin(source)
+      const result = await installPlugin(scopedSource(source))
       setTaskId(result.task.id)
       rememberTask(result.task)
     } catch (error) {
@@ -121,10 +150,10 @@ export function PluginInstaller(
     <section className={`plugin-installer ${dragging ? 'dragging' : ''}`}>
       <div className="plugin-installer-head">
         <div>
-          <h2>安装技能插件</h2>
+          <h2>安装 Skill</h2>
           <p>
-            拖入插件目录、plugin.json 或 SKILL.md，也可以选择本地包或公共 Git
-            HTTPS 地址。
+            拖入包含 SKILL.md 的目录或文件，也可以选择本地 Skill、ReflexionOS
+            扩展包或公共 Git HTTPS 地址。
           </p>
         </div>
         <div className="plugin-local-actions">
@@ -165,7 +194,38 @@ export function PluginInstaller(
           检查 Git 包
         </button>
       </form>
-      {dragging && <div className="plugin-drop-hint">松开以检查插件包</div>}
+      <div className="plugin-scope-picker">
+        <label>
+          安装范围
+          <select
+            value={scope}
+            onChange={(event) => {
+              setScope(event.target.value as 'global' | 'project')
+            }}
+          >
+            <option value="global">全局 · 所有会话可用</option>
+            <option value="project">项目 · 仅指定项目可用</option>
+          </select>
+        </label>
+        {scope === 'project' && (
+          <label>
+            项目
+            <select
+              value={projectId}
+              onChange={(event) => {
+                setProjectId(event.target.value)
+              }}
+            >
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+      {dragging && <div className="plugin-drop-hint">松开以检查 Skill</div>}
       {task !== null &&
         !['completed', 'failed', 'cancelled'].includes(task.status) && (
           <div className="plugin-task-progress">

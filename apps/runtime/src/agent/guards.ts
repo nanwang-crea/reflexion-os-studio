@@ -56,9 +56,10 @@ export function resolveSkillInvocation(
   content: string,
   explicitSkillId: string | undefined,
   skills: SkillRegistry,
+  projectId: string | null = null,
 ): ReturnType<typeof resolveInvocation> {
   try {
-    return resolveInvocation(content, explicitSkillId, skills)
+    return resolveInvocation(content, explicitSkillId, skills, projectId)
   } catch (error) {
     throw new CommandError(
       'invalid_request',

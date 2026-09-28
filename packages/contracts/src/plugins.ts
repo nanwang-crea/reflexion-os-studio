@@ -38,6 +38,8 @@ export type PluginStatus = z.infer<typeof PluginStatusSchema>
 
 export const PluginSourceSchema = z.enum(['builtin', 'dir', 'git', 'local'])
 export type PluginSource = z.infer<typeof PluginSourceSchema>
+export const PluginScopeSchema = z.enum(['global', 'project'])
+export type PluginScope = z.infer<typeof PluginScopeSchema>
 
 export const PluginCompatSchema = z
   .object({
@@ -128,6 +130,8 @@ export const PluginRecordSchema = z
     description: z.string().min(1),
     source: PluginSourceSchema,
     sourceRef: z.string().nullable(),
+    scope: PluginScopeSchema,
+    projectId: z.string().min(1).nullable(),
     status: PluginStatusSchema,
     installPath: z.string().nullable(),
     enabled: z.boolean(),
@@ -137,6 +141,22 @@ export const PluginRecordSchema = z
     updatedAt: z.string().datetime(),
   })
   .strict()
+  .superRefine((plugin, context) => {
+    if (plugin.scope === 'project' && plugin.projectId === null) {
+      context.addIssue({
+        code: 'custom',
+        path: ['projectId'],
+        message: 'project-scoped plugin requires projectId',
+      })
+    }
+    if (plugin.scope === 'global' && plugin.projectId !== null) {
+      context.addIssue({
+        code: 'custom',
+        path: ['projectId'],
+        message: 'global plugin must not have projectId',
+      })
+    }
+  })
 export type PluginRecord = z.infer<typeof PluginRecordSchema>
 
 export const PluginInstallSourceSchema = z.discriminatedUnion('source', [
@@ -145,10 +165,26 @@ export const PluginInstallSourceSchema = z.discriminatedUnion('source', [
       source: z.literal('dir'),
       projectId: z.string().min(1),
       path: z.string().min(1),
+      installScope: PluginScopeSchema.optional(),
+      installProjectId: z.string().min(1).optional(),
     })
     .strict(),
-  z.object({ source: z.literal('local'), path: z.string().min(1) }).strict(),
-  z.object({ source: z.literal('git'), url: z.string().url() }).strict(),
+  z
+    .object({
+      source: z.literal('local'),
+      path: z.string().min(1),
+      installScope: PluginScopeSchema.optional(),
+      installProjectId: z.string().min(1).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      source: z.literal('git'),
+      url: z.string().url(),
+      installScope: PluginScopeSchema.optional(),
+      installProjectId: z.string().min(1).optional(),
+    })
+    .strict(),
 ])
 export type PluginInstallSource = z.infer<typeof PluginInstallSourceSchema>
 

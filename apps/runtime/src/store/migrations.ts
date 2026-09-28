@@ -118,6 +118,7 @@ function tableColumns(db: DatabaseSync, table: string): TableColumn[] {
  * v32 → v33：Agent 模板来源、动态实例快照与 mutation receipts。
  * v33 → v34：Run 持久化用户显式选择的默认子 Agent 模板。
  * v34 → v35：TurnExecution 增加版本化 Runtime 状态（首批持久化文件读取凭据）。
+ * v35 → v36：plugins 增加 global/project 作用域和可选 project_id。
  * 各步骤带形状检测：SCHEMA 刚建好的新库不会空跑重建。
  */
 export function runMigrations(db: DatabaseSync, dir: string): void {
@@ -547,6 +548,17 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
       )
     ) {
       db.exec('ALTER TABLE turn_executions ADD COLUMN runtime_state_json TEXT')
+    }
+    if (
+      version < 36 &&
+      !tableColumns(db, 'plugins').some((column) => column.name === 'scope')
+    ) {
+      db.exec(
+        "ALTER TABLE plugins ADD COLUMN scope TEXT NOT NULL DEFAULT 'global'",
+      )
+      db.exec(
+        'ALTER TABLE plugins ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE CASCADE',
+      )
     }
     db.exec('COMMIT')
     // 迁移全部执行完毕才推进版本号；否则下次启动会重复进入迁移分支。

@@ -180,6 +180,7 @@ export class RunLauncher {
       interactions: this.deps.interactions,
       system: this.deps.system,
       workspaceRoot,
+      projectId: session.projectId,
       skills: this.deps.skills,
       mcp: this.deps.mcp,
       childRunStarter: input.childRunStarter,
@@ -206,6 +207,7 @@ export class RunLauncher {
               this.deps.skills,
               input.skill,
               input.childRunStarter ? this.deps.store.agents.list() : undefined,
+              input.session.projectId,
             )
           return input.isolatedContext
             ? Promise.resolve(
@@ -253,8 +255,9 @@ export function composeSystemPrompt(
   skills: SkillRegistry,
   skill: SkillDefinition | null,
   agents: readonly AgentDefinition[] = [],
+  projectId: string | null = null,
 ): string {
-  const base = `${PRIMARY_AGENT_SYSTEM_PROMPT}${skillsPromptSection(skills.list())}${availableAgentsPromptSection(agents)}`
+  const base = `${PRIMARY_AGENT_SYSTEM_PROMPT}${skillsPromptSection(skills.list(projectId))}${availableAgentsPromptSection(agents)}`
   return skill === null ? base : `${base}${activeSkillPromptSection(skill)}`
 }
 

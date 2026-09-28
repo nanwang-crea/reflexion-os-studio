@@ -146,7 +146,7 @@ function alwaysAvailableTools(ctx: ToolContext): ToolDefinition[] {
   const tools = [
     createCurrentTimeTool(),
     createWebFetchTool(),
-    createSkillUseTool(ctx.skills),
+    createSkillUseTool(ctx.skills, ctx.projectId),
     createMemoryRememberTool(ctx),
     createAskUserTool(ctx),
     createEnterPlanModeTool(ctx),

@@ -66,10 +66,13 @@ export function SkillsView(props: SkillsViewProps): React.JSX.Element {
     }
   }
 
-  const startChat = async (skill: SkillManifest): Promise<void> => {
+  const startChat = async (
+    skill: SkillManifest,
+    projectId: string | null,
+  ): Promise<void> => {
     setStarting(skill.id)
     try {
-      const created: { session: Session } = await createSession(null)
+      const created: { session: Session } = await createSession(projectId)
       props.onUseSkill(skill.id, created.session.id)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -93,7 +96,7 @@ export function SkillsView(props: SkillsViewProps): React.JSX.Element {
   return (
     <div className="skills-view">
       <header className="panel-head">
-        <h1>技能 / 插件市场</h1>
+        <h1>Skills</h1>
         <p className="panel-sub">
           内置技能随应用发布；外部技能从数据目录发现。技能声明的工具不授予权限，
           实际调用仍受当前权限策略与审批约束。
@@ -120,7 +123,14 @@ export function SkillsView(props: SkillsViewProps): React.JSX.Element {
 
       <div className="skill-grid">
         {plugins.map((plugin) => {
-          const skill = skills.find((item) => item.id === plugin.id)
+          const skill = skills.find((item) => item.id === plugin.id) ?? {
+            id: plugin.id,
+            name: plugin.name,
+            version: plugin.version,
+            description: plugin.description,
+            tools: plugin.manifest.skill?.tools ?? [],
+            argumentHint: plugin.manifest.skill?.argumentHint ?? null,
+          }
           const enabled = plugin.enabled && plugin.status === 'enabled'
           const updateTask = Object.values(tasks).find(
             (task) =>
@@ -137,7 +147,7 @@ export function SkillsView(props: SkillsViewProps): React.JSX.Element {
                 <div className="skill-card-titles">
                   <div className="skill-card-name">{plugin.name}</div>
                   <div className="skill-card-id">
-                    /{plugin.id}{' '}
+                    ${plugin.id}{' '}
                     <span className="skill-card-ver">v{plugin.version}</span>
                   </div>
                   <div className="skill-card-source">
@@ -148,6 +158,8 @@ export function SkillsView(props: SkillsViewProps): React.JSX.Element {
                         : plugin.source === 'local'
                           ? '本地安装'
                           : '工作区安装'}
+                    {' · '}
+                    {plugin.scope === 'project' ? '项目范围' : '全局范围'}
                   </div>
                 </div>
                 <span className={`skill-card-tag ${plugin.status}`}>
@@ -170,7 +182,7 @@ export function SkillsView(props: SkillsViewProps): React.JSX.Element {
                 <div className="skill-card-hint">
                   <span className="skill-card-hint-label">用法</span>
                   <code>
-                    /{plugin.id} {skill.argumentHint}
+                    ${plugin.id} {skill.argumentHint}
                   </code>
                 </div>
               )}
@@ -232,12 +244,12 @@ export function SkillsView(props: SkillsViewProps): React.JSX.Element {
                     </button>
                   </>
                 )}
-                {skill !== undefined && enabled && (
+                {enabled && (
                   <button
                     className="primary"
                     type="button"
                     disabled={starting === plugin.id}
-                    onClick={() => void startChat(skill)}
+                    onClick={() => void startChat(skill, plugin.projectId)}
                   >
                     {starting === plugin.id ? '创建中…' : '在对话中使用'}
                   </button>

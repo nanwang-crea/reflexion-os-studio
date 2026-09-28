@@ -288,7 +288,7 @@ export default function App() {
     ? (STATUS_LABELS[bootstrap.state] ?? bootstrap.state)
     : '启动中…'
   const runtimeReady = bootstrap?.runtimeReady ?? false
-  const skills = useSkillCatalog(runtimeReady)
+  const skills = useSkillCatalog(runtimeReady, activeProjectId)
   const agentTemplates = useAgentTemplateCatalog(runtimeReady, view)
   const activeProject =
     projects.find((project) => project.id === activeProjectId) ?? null

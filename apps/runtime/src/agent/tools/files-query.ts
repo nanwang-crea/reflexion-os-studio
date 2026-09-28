@@ -203,7 +203,7 @@ export function createFileGlobTool(
   return {
     name: 'file.glob',
     description:
-      '按 glob 模式在工作区内递归查找文件路径。支持 **、*、?、字符类与 {ts,tsx} 展开；遵循 .gitignore，不跟随符号链接。结果包含 scannedFiles、scanTruncated、actualGlob 与分页信息；scanTruncated=true 表示达到遍历上限。需要"找出所有某种文件"时优先使用本工具。',
+      '按 glob 模式在工作区内递归查找文件路径。支持 **、*、?、字符类与 {ts,tsx} 展开；遵循 .gitignore，不跟随符号链接。结果包含 scannedFiles、scanTruncated、actualGlob 与分页信息；truncated=true 时用 nextOffset 或 nextCursor 继续，scanTruncated=true 表示达到遍历上限。需要"找出所有某种文件"时优先使用本工具。',
     parameters: {
       type: 'object',
       properties: {

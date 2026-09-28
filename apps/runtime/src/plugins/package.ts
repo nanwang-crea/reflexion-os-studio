@@ -14,9 +14,11 @@ import {
   type PluginPackageManifest,
 } from '@reflexion-os-studio/contracts'
 import type { SkillDefinition } from '../skills/types.js'
+import { manifestFromStandardSkill } from './standard-skill.js'
 
 const MAX_PACKAGE_FILES = 1_000
 const MAX_PACKAGE_BYTES = 16 * 1024 * 1024
+const MAX_SKILL_INSTRUCTION_BYTES = 100 * 1024
 const ALLOWED_ROOT_ENTRIES = new Set([
   'plugin.json',
   'SKILL.md',
@@ -59,10 +61,15 @@ export function inspectPackage(
 ): PluginPackageManifest {
   assertPackageTree(directory, onWarning)
   const manifestPath = join(directory, 'plugin.json')
-  if (!existsSync(manifestPath)) throw new Error('plugin.json is missing')
-  const manifest = PluginPackageManifestSchema.parse(
-    JSON.parse(readFileSync(manifestPath, 'utf8')),
-  )
+  const skillPath = join(directory, 'SKILL.md')
+  if (!existsSync(manifestPath) && !existsSync(skillPath)) {
+    throw new Error('SKILL.md is missing')
+  }
+  const manifest = existsSync(manifestPath)
+    ? PluginPackageManifestSchema.parse(
+        JSON.parse(readFileSync(manifestPath, 'utf8')),
+      )
+    : manifestFromStandardSkill(directory, onWarning)
   assertCompatible(manifest.compatibility.protocol)
   if (manifest.type !== 'skill') {
     throw new Error(`plugin type ${manifest.type} is not loadable yet`)
@@ -76,6 +83,7 @@ export function inspectPackage(
   ) {
     throw new Error('plugin entry must be a regular file inside the package')
   }
+  parseSkillInstructions(readFileSync(entry, 'utf8'), onWarning)
   return manifest
 }
 
@@ -198,12 +206,22 @@ function assertPackageTree(
   walk(root)
 }
 
-function parseSkillInstructions(source: string): string {
+function parseSkillInstructions(
+  source: string,
+  onWarning?: (warning: string) => void,
+): string {
   const frontmatter = /^---\r?\n[\s\S]*?\r?\n---\r?\n([\s\S]*)$/.exec(source)
   const instructions = (frontmatter?.[1] ?? source).trim()
   if (instructions === '')
     throw new Error('skill instructions must not be empty')
-  return instructions
+  if (Buffer.byteLength(instructions, 'utf8') <= MAX_SKILL_INSTRUCTION_BYTES) {
+    return instructions
+  }
+  onWarning?.('SKILL.md instructions exceed 100KB and will be truncated')
+  return Buffer.from(instructions, 'utf8')
+    .subarray(0, MAX_SKILL_INSTRUCTION_BYTES)
+    .toString('utf8')
+    .replace(/\uFFFD$/, '')
 }
 
 function assertCompatible(range: string): void {

@@ -7,7 +7,10 @@ import { requireString } from './shared.js'
  * 模型先从 system prompt 的"可用 Skills"清单挑选，再由此工具取正文；
  * 技能只约定"怎么做"，能力仍来自已注册的工具与权限策略。
  */
-export function createSkillUseTool(registry: SkillRegistry): ToolDefinition {
+export function createSkillUseTool(
+  registry: SkillRegistry,
+  projectId: string | null,
+): ToolDefinition {
   return {
     name: 'skill.use',
     description:
@@ -24,10 +27,10 @@ export function createSkillUseTool(registry: SkillRegistry): ToolDefinition {
     },
     execute: ({ args }) => {
       const skillId = requireString(args, 'skillId')
-      const skill = registry.get(skillId)
+      const skill = registry.get(skillId, projectId)
       if (!skill) {
         const known = registry
-          .list()
+          .list(projectId)
           .map((manifest) => manifest.id)
           .join(', ')
         return {

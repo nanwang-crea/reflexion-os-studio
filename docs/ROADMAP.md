@@ -31,7 +31,7 @@ Rust File/Shell Service、Workspace 边界、read-only/workspace Profile、Chat 
 
 ## Phase 2：Agent Platform（进行中）
 
-- **已完成子集**：Skills（4 个内置技能、斜杠激活、skill.use）；Plugin Foundation（独立 `plugin.json` v1 契约、能力/权限/兼容范围声明、本地文件与目录/工作区/Git HTTPS 安装、拖拽、预览确认、版本更新、原子替换与回滚、启停/卸载/隔离/状态持久化与管理 UI；旧 `<dataDir>/skills` 包启动迁移）；MCP（stdio 协议 client、管理服务、工具桥默认 ask 审批、设置页面板）。
+- **已完成子集**：Skills（4 个内置技能、斜杠激活、skill.use）；Plugin Foundation（标准 `SKILL.md` 包 + 可选 `plugin.json` v1 扩展契约、能力/权限/兼容范围声明、本地文件与目录/工作区/Git HTTPS 安装、拖拽、预览确认、版本更新、原子替换与回滚、启停/卸载/隔离/状态持久化与管理 UI；旧 `<dataDir>/skills` 包启动迁移）；MCP（stdio 协议 client、管理服务、工具桥默认 ask 审批、设置页面板）。
 - **已完成（2026-09，Memory V2 文件即记忆）**：AGENTS.md/MEMORY.md 四层注入 + memory.remember 免审批工具 + 指令页；A2 自动提取-合并-召回链路整体移除（v23 迁移删 memories/FTS/memory_jobs 表，不搬迁数据）；检索式记忆（mem0 直连原始对话数据）列为候选后续项。
 - **已完成（2026-09，Agent Loop Hardening 与 Context Engine V2）**：完成状态机（只有 stop 且无工具才算完成；length 限次续写；provider_protocol 如实失败）、Atomic Run Finalizer（单事务终态收敛）、Atomic Frames 与请求前校验、副作用感知调度（read 并行/mutation 串行/ToolCall 批量预建）、Loop Guard（重复/无进展拦截）、Run 预算（时长/token/工具数/续写）、增量 Context Checkpoint（source hash/single-flight）、AgentSettings 新预算字段与设置页循环分组。
 - **Terminal Surface（集成终端）**：设计与范围见 `docs/superpowers/specs/2026-09-12-integrated-terminal-design.md`，架构定位见 `ARCHITECTURE.md` §13。**W0–W4 macOS 已验证**（事件信封 1.1 与 terminal 契约冻结；portable-pty 纵向切片；后端多会话服务 + attach/ack/窗口背压/公平调度；前端多标签保活面板 xterm v6；故障矩阵 26/26、性能门槛 P0/P1/P2 实测全 PASS——见 `docs/TERMINAL-SPIKE-REPORT.md` §9/§11；打包冒烟见 §12）。**GUI 人工清单待执行**（`docs/TERMINAL-GUI-ACCEPTANCE.md`）；**Windows/Linux 待对应环境真机验收，不得宣称三平台完成**。发布入口开关：构建期 `VITE_TERMINAL_DISABLED=1`，或运行期 localStorage `terminal.forceDisabled='1'`（逃生舱，重启后生效）——禁用新建终端入口（顶栏按钮隐藏、create/recreate 拒绝），已打开的终端不受影响。`terminal.*` 不注册为 Agent 工具。

@@ -15,6 +15,8 @@ export interface PluginUpsertInput {
   description: string
   source: PluginRecord['source']
   sourceRef: string | null
+  scope: PluginRecord['scope']
+  projectId: string | null
   status: PluginRecord['status']
   installPath: string | null
   enabled: boolean
@@ -42,9 +44,9 @@ export class PluginStore {
     this.db
       .prepare(
         `INSERT INTO plugins
-          (id, kind, version, name, description, source, source_ref, status,
+          (id, kind, version, name, description, source, source_ref, scope, project_id, status,
            install_path, enabled, compat_json, manifest_json, error, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            kind = excluded.kind,
            version = excluded.version,
@@ -52,6 +54,8 @@ export class PluginStore {
            description = excluded.description,
            source = excluded.source,
            source_ref = excluded.source_ref,
+           scope = excluded.scope,
+           project_id = excluded.project_id,
            status = excluded.status,
            install_path = excluded.install_path,
            enabled = excluded.enabled,
@@ -68,6 +72,8 @@ export class PluginStore {
         input.description,
         input.source,
         input.sourceRef,
+        input.scope,
+        input.projectId,
         input.status,
         input.installPath,
         input.enabled ? 1 : 0,
@@ -135,6 +141,10 @@ export class PluginStore {
       description: String(row.description),
       source: String(row.source) as PluginRecord['source'],
       sourceRef: row.source_ref == null ? null : String(row.source_ref),
+      scope: (row.scope == null
+        ? 'global'
+        : String(row.scope)) as PluginRecord['scope'],
+      projectId: row.project_id == null ? null : String(row.project_id),
       status: String(row.status) as PluginRecord['status'],
       installPath: row.install_path == null ? null : String(row.install_path),
       enabled: Number(row.enabled) === 1,

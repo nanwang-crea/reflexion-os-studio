@@ -37,13 +37,16 @@ export function useAgentTemplateCatalog(
   return templates
 }
 
-export function useSkillCatalog(runtimeReady: boolean): SkillManifest[] {
+export function useSkillCatalog(
+  runtimeReady: boolean,
+  activeProjectId: string | null,
+): SkillManifest[] {
   const [skills, setSkills] = useState<SkillManifest[]>([])
   useEffect(() => {
     if (!runtimeReady) return
-    listSkills()
+    listSkills(activeProjectId)
       .then((result) => setSkills(result.skills))
       .catch(() => {})
-  }, [runtimeReady])
+  }, [activeProjectId, runtimeReady])
   return skills
 }

@@ -47,6 +47,14 @@ function writePackage(directory, id, options = {}) {
   return manifest
 }
 
+function writeStandardSkill(directory, name, options = {}) {
+  mkdirSync(directory, { recursive: true })
+  writeFileSync(
+    join(directory, 'SKILL.md'),
+    `---\nname: ${name}\ndescription: ${options.description ?? 'A portable test skill.'}\n${options.extra ?? ''}---\n\n# Instructions\n\nFollow the portable skill.\n`,
+  )
+}
+
 async function setup() {
   const root = await mkdtemp(join(tmpdir(), 'reflexion-skill-plugin-'))
   const store = new Store(root)
@@ -141,6 +149,63 @@ test('unsupported root files warn and are not installed', async () => {
     service.preview({ source: 'local', path: source }),
   )
   assert.match(nestedMetadata.error, /forbidden plugin package entry/)
+  store.close()
+})
+
+test('standard SKILL.md package installs without plugin.json', async () => {
+  const { root, store, service } = await setup()
+  const source = join(root, 'portable-skill')
+  writeStandardSkill(source, 'portable-skill', {
+    extra: 'metadata:\n  version: "2.1"\nallowed-tools: Read Bash(git:*)\n',
+  })
+
+  const preview = await completed(
+    service,
+    service.preview({ source: 'local', path: join(source, 'SKILL.md') }),
+  )
+  assert.equal(preview.manifest.id, 'portable-skill')
+  assert.equal(preview.manifest.version, '2.1.0')
+  assert.ok(
+    preview.warnings.some((warning) => warning.includes('allowed-tools')),
+  )
+
+  const installed = (
+    await completed(service, service.install({ source: 'local', path: source }))
+  ).plugin
+  assert.equal(existsSync(join(installed.installPath, 'plugin.json')), true)
+  assert.equal(service.registry.has('portable-skill'), true)
+  store.close()
+})
+
+test('project-scoped skill is visible only inside its project', async () => {
+  const { root, store, service } = await setup()
+  const source = join(root, 'project-skill')
+  writeStandardSkill(source, 'project-skill')
+  const project = store.projects.create({
+    name: 'Scoped Project',
+    folderPath: join(root, 'workspace'),
+  })
+
+  const installed = (
+    await completed(
+      service,
+      service.install({
+        source: 'local',
+        path: source,
+        installScope: 'project',
+        installProjectId: project.id,
+      }),
+    )
+  ).plugin
+
+  assert.equal(installed.scope, 'project')
+  assert.equal(installed.projectId, project.id)
+  assert.equal(service.registry.get('project-skill'), null)
+  assert.equal(
+    service.registry.get('project-skill', project.id)?.manifest.id,
+    'project-skill',
+  )
+  assert.equal(service.registry.get('project-skill', 'another-project'), null)
   store.close()
 })
 

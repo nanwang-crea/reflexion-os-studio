@@ -9,8 +9,10 @@ import { request, requestList } from './client'
 import { transport } from '../lib/transport'
 
 /** 内置 Skill 清单：斜杠命令浮层的数据源（Phase 1A 列表即全部可用项）。 */
-export function listSkills(): Promise<{ skills: SkillManifest[] }> {
-  return requestList<{ skills: SkillManifest[] }>('skill.list')
+export function listSkills(
+  projectId: string | null = null,
+): Promise<{ skills: SkillManifest[] }> {
+  return requestList<{ skills: SkillManifest[] }>('skill.list', { projectId })
 }
 
 export function listPlugins(): Promise<{ plugins: PluginRecord[] }> {

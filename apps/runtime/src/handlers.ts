@@ -136,7 +136,7 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
   },
   'project.delete': async (
     p,
-    { store, agent, assets, terminal, approvals, danger },
+    { store, agent, assets, terminal, approvals, danger, plugins },
   ) => {
     const projectId = requireString(p, 'projectId')
     // 终端回收先于删除：任一 close 失败即抛 terminal_cleanup_failed 且**保留项目**
@@ -161,6 +161,7 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
       return removed
     })
     if (removed) {
+      plugins?.projectDeleted(projectId)
       // 会话规则/Danger 随会话同清（内存态，不留孤儿）。
       for (const session of sessions) {
         approvals.clearSession(session.id)
@@ -254,7 +255,11 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
   'danger.status': (p, { danger }) => ({
     lease: danger.leaseFor(requireString(p, 'sessionId')),
   }),
-  'skill.list': (_p, { plugins }) => ({ skills: plugins.registry.list() }),
+  'skill.list': (p, { plugins }) => ({
+    skills: plugins.registry.list(
+      typeof p.projectId === 'string' ? p.projectId : null,
+    ),
+  }),
   'plugin.list': (_p, { plugins }) => ({ plugins: plugins.list() }),
   'plugin.install': (p, { plugins }) => {
     try {
@@ -339,15 +344,36 @@ function pluginSourceFromParams(
   params: Record<string, unknown>,
 ): PluginInstallSource {
   if (params.source === 'git') {
-    return { source: 'git', url: requireString(params, 'url') }
+    return {
+      source: 'git',
+      url: requireString(params, 'url'),
+      installScope: params.installScope === 'project' ? 'project' : 'global',
+      installProjectId:
+        typeof params.installProjectId === 'string'
+          ? params.installProjectId
+          : undefined,
+    }
   }
   if (params.source === 'local') {
-    return { source: 'local', path: requireString(params, 'path') }
+    return {
+      source: 'local',
+      path: requireString(params, 'path'),
+      installScope: params.installScope === 'project' ? 'project' : 'global',
+      installProjectId:
+        typeof params.installProjectId === 'string'
+          ? params.installProjectId
+          : undefined,
+    }
   }
   return {
     source: 'dir',
     projectId: requireString(params, 'projectId'),
     path: requireString(params, 'path'),
+    installScope: params.installScope === 'project' ? 'project' : 'global',
+    installProjectId:
+      typeof params.installProjectId === 'string'
+        ? params.installProjectId
+        : undefined,
   }
 }
 
