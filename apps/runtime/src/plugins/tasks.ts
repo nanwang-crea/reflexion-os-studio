@@ -99,6 +99,7 @@ export class PluginTaskManager {
         manifest: null,
         installed: null,
         plugin: null,
+        warnings: [],
         error: null,
         createdAt: now,
         updatedAt: now,
@@ -145,6 +146,10 @@ export class PluginTaskManager {
       signal: managed.controller.signal,
       onProgress: (phase: PluginTaskPhase, progress: number) =>
         this.progress(managed, phase, progress),
+      onWarning: (warning: string) => {
+        if (managed.task.warnings.includes(warning)) return
+        this.patch(managed, { warnings: [...managed.task.warnings, warning] })
+      },
     }
   }
 

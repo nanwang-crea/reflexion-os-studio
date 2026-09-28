@@ -12,6 +12,7 @@ import type { PluginInstallSource } from '@reflexion-os-studio/contracts'
 import type { Store } from '../store/index.js'
 import {
   isIgnoredRootMetadataFile,
+  isSupportedPluginRootEntry,
   resolvePackageDirectory,
 } from './package.js'
 
@@ -83,15 +84,16 @@ export function copyPackage(
 ): void {
   mkdirSync(target)
   for (const entry of readdirSync(source, { withFileTypes: true })) {
+    if (entry.isSymbolicLink()) throw new Error('symlinks are not allowed')
     if (
       isPackageRoot &&
-      isIgnoredRootMetadataFile(entry.name, entry.isFile())
+      (isIgnoredRootMetadataFile(entry.name, entry.isFile()) ||
+        !isSupportedPluginRootEntry(entry.name))
     ) {
       continue
     }
     const sourcePath = join(source, entry.name)
     const targetPath = join(target, entry.name)
-    if (entry.isSymbolicLink()) throw new Error('symlinks are not allowed')
     if (entry.isDirectory()) copyPackage(sourcePath, targetPath, false)
     else if (entry.isFile()) copyFileSync(sourcePath, targetPath)
     else throw new Error(`unsupported plugin entry: ${entry.name}`)

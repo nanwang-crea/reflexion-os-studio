@@ -166,6 +166,16 @@
   font-size: 12px;
 }
 
+.plugin-package-warnings {
+  color: var(--warning-text);
+  font-size: 12px;
+}
+
+.plugin-package-warnings ul {
+  margin: 4px 0 0;
+  padding-left: 20px;
+}
+
 .skill-card-error {
   padding: 8px 10px;
   border-radius: 6px;

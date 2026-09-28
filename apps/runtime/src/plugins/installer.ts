@@ -20,6 +20,7 @@ import {
 export interface PluginLifecycleOptions {
   signal?: AbortSignal
   onProgress?: (phase: PluginTaskPhase, progress: number) => void
+  onWarning?: (warning: string) => void
 }
 
 export class PluginPackageInstaller {
@@ -54,7 +55,7 @@ export class PluginPackageInstaller {
       )
       throwIfAborted(options.signal)
       options.onProgress?.('validating', 70)
-      const manifest = inspectPackage(resolved.directory)
+      const manifest = inspectPackage(resolved.directory, options.onWarning)
       return { manifest, installed: this.store.plugins.get(manifest.id) }
     } finally {
       cleanupTemporary(temporary)
@@ -107,7 +108,7 @@ export class PluginPackageInstaller {
       )
       throwIfAborted(options.signal)
       options.onProgress?.('validating', 60)
-      const preview = inspectPackage(resolved.directory)
+      const preview = inspectPackage(resolved.directory, options.onWarning)
       this.assertInstallAllowed(preview, updating)
 
       options.onProgress?.('staging', 75)

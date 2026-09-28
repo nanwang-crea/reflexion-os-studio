@@ -104,12 +104,28 @@ test('local directory install, toggle and restart preserve canonical state', asy
   restartedStore.close()
 })
 
-test('root Git metadata files are accepted but not installed', async () => {
+test('unsupported root files warn and are not installed', async () => {
   const { root, store, service } = await setup()
   const source = join(root, 'source-package')
   writePackage(source, 'git-metadata-test')
   writeFileSync(join(source, '.gitattributes'), '* text=auto\n')
   writeFileSync(join(source, '.gitignore'), 'dist/\n')
+  writeFileSync(join(source, 'LICENSE'), 'Test license\n')
+
+  const preview = await completed(
+    service,
+    service.preview({ source: 'local', path: source }),
+  )
+  assert.equal(preview.warnings.length, 3)
+  assert.ok(
+    preview.warnings.includes('Skipped repository metadata: .gitattributes'),
+  )
+  assert.ok(
+    preview.warnings.includes('Skipped repository metadata: .gitignore'),
+  )
+  assert.ok(
+    preview.warnings.includes('Skipped unsupported plugin root entry: LICENSE'),
+  )
 
   const installed = (
     await completed(service, service.install({ source: 'local', path: source }))
@@ -117,6 +133,7 @@ test('root Git metadata files are accepted but not installed', async () => {
 
   assert.equal(existsSync(join(installed.installPath, '.gitattributes')), false)
   assert.equal(existsSync(join(installed.installPath, '.gitignore')), false)
+  assert.equal(existsSync(join(installed.installPath, 'LICENSE')), false)
   mkdirSync(join(source, 'assets'))
   writeFileSync(join(source, 'assets', '.gitignore'), 'nested metadata')
   const nestedMetadata = await waitForTask(

@@ -53,8 +53,11 @@ export function resolvePackageDirectory(path: string): string {
   return dirname(absolute)
 }
 
-export function inspectPackage(directory: string): PluginPackageManifest {
-  assertPackageTree(directory)
+export function inspectPackage(
+  directory: string,
+  onWarning?: (warning: string) => void,
+): PluginPackageManifest {
+  assertPackageTree(directory, onWarning)
   const manifestPath = join(directory, 'plugin.json')
   if (!existsSync(manifestPath)) throw new Error('plugin.json is missing')
   const manifest = PluginPackageManifestSchema.parse(
@@ -142,7 +145,14 @@ export function isIgnoredRootMetadataFile(
   return isFile && IGNORED_ROOT_METADATA_FILES.has(name)
 }
 
-function assertPackageTree(directory: string): void {
+export function isSupportedPluginRootEntry(name: string): boolean {
+  return ALLOWED_ROOT_ENTRIES.has(name)
+}
+
+function assertPackageTree(
+  directory: string,
+  onWarning?: (warning: string) => void,
+): void {
   const root = resolve(directory)
   if (lstatSync(root).isSymbolicLink())
     throw new Error('symlinks are not allowed')
@@ -156,6 +166,7 @@ function assertPackageTree(directory: string): void {
         current === root &&
         isIgnoredRootMetadataFile(entry.name, entry.isFile())
       ) {
+        onWarning?.(`Skipped repository metadata: ${entry.name}`)
         continue
       }
       if (
@@ -167,8 +178,9 @@ function assertPackageTree(directory: string): void {
       ) {
         throw new Error(`forbidden plugin package entry: ${entry.name}`)
       }
-      if (current === root && !ALLOWED_ROOT_ENTRIES.has(entry.name)) {
-        throw new Error(`unsupported plugin root entry: ${entry.name}`)
+      if (current === root && !isSupportedPluginRootEntry(entry.name)) {
+        onWarning?.(`Skipped unsupported plugin root entry: ${entry.name}`)
+        continue
       }
       const path = join(current, entry.name)
       if (entry.isDirectory()) walk(path)

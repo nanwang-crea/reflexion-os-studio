@@ -187,6 +187,7 @@ export const PluginTaskSchema = z
     manifest: PluginPackageManifestSchema.nullable(),
     installed: PluginRecordSchema.nullable(),
     plugin: PluginRecordSchema.nullable(),
+    warnings: z.array(z.string()),
     error: z.string().nullable(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),

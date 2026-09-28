@@ -211,6 +211,16 @@ export function PluginInstaller(
               <dd>{manifest.permissions.shell ? '声明需要' : '不需要'}</dd>
             </div>
           </dl>
+          {task !== null && task.warnings.length > 0 && (
+            <div className="plugin-package-warnings">
+              <strong>以下内容不会安装：</strong>
+              <ul>
+                {task.warnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           {installed === null ? (
             <button
               type="button"
