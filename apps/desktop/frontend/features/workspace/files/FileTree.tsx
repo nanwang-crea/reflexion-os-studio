@@ -3,7 +3,12 @@ import type { WorkspaceEntry } from '@reflexion-os-studio/runtime-client'
 import type { RuntimeEvent } from '@reflexion-os-studio/runtime-client'
 import { listDir, unwatchDir, watchDir } from '../../../api/workspace'
 import { transport } from '../../../lib/transport'
-import { ChevronIcon, FolderIcon, RefreshIcon } from '../../../ui/icons'
+import {
+  ChevronIcon,
+  FileIcon,
+  FolderIcon,
+  RefreshIcon,
+} from '../../../ui/icons'
 
 interface FileTreeProps {
   projectId: string
@@ -277,7 +282,9 @@ export function FileTree(props: FileTreeProps): React.JSX.Element {
                       onClick={() => props.onOpenFile(entry.path)}
                       title={entry.path}
                     >
-                      <span className="tree-file-dot" aria-hidden="true" />
+                      <span className="tree-file-icon">
+                        <FileIcon />
+                      </span>
                       {gitStatus.has(entry.path) && (
                         <span
                           className={`git-dot git-dot-${gitStatus.get(entry.path)}`}

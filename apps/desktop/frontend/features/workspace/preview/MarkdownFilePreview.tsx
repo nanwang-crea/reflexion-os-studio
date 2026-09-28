@@ -13,7 +13,7 @@ import { friendlyReadError, MD_PREVIEW_MAX_LINES } from './preview'
 import { IS_MAC } from '../../../lib/platform'
 import { useMdIncrementalFeed } from './useMdIncrementalFeed'
 
-/** 预览视图形态：默认富预览，可一键切换源码（源码即编辑）。 */
+/** 预览视图形态：默认富预览，可无损切换到编辑器。 */
 export type MarkdownPreviewViewMode = 'preview' | 'source'
 
 /** 块级 memo：text 不变的块在追加加载时不重渲染。 */
@@ -35,24 +35,25 @@ interface MarkdownFilePreviewProps {
   path: string
   /** 资源引用（workspace:// asset:// https://）点击回调；宿主按类型分发。 */
   onResourceClick?: (link: ResourceLink) => void
-  /** 源码模式下编辑内核脏状态上抛（预览模式恒为 false）。 */
+  /** 编辑内核脏状态上抛。 */
   onDirtyChange?: (path: string, dirty: boolean) => void
   /** 注册 surface 句柄 getter（null 注销），供标签层保存/守卫使用。 */
   registerSurface?: (
     path: string,
     getter: (() => MonacoSurfaceHandle | null) | null,
   ) => void
-  /** 应用级确认弹窗（promise 风格），源码→预览丢弃守卫用。 */
+  /** 应用级确认弹窗（promise 风格），还原草稿时使用。 */
   confirm?: (state: ConfirmDialogState) => Promise<boolean>
 }
 
 /**
  * Markdown 文件富预览：默认渲染富文本（与聊天消息同一套 react-markdown
  * 内核 MarkdownCore，支持 GFM 表格/任务列表/自动链接），头部可一键切换
- * 源码视图。富预览按块增量加载（useMdIncrementalFeed：首批 + 触底追加，
+ * 编辑视图。富预览按块增量加载（useMdIncrementalFeed：首批 + 触底追加，
  * fence-aware 分块保证围栏/列表跨批不切散），达行数硬上限后停止并提示。
- * 源码视图为可编辑 Monaco（小文件默认可编辑，超限/截断自动只读），
- * 保存经 workspace.write_file 落盘，切回预览自动重读。
+ * 编辑视图为可编辑 Monaco（小文件默认可编辑，超限/截断自动只读），
+ * 保存经 workspace.write_file 落盘。编辑器打开后保持挂载，预览未保存
+ * 草稿时直接渲染内存内容，模式切换不会丢失修改。
  * 预览内的资源引用：workspace:// 与指向工作区文件的相对路径链接
  * （含 ../ 目录跳跃）统一换算后经 onResourceClick 分发；图片预览
  * 与 MD 文内锚点属后续迭代，锚点当前点击吞掉、图片渲染为占位芯片。
@@ -62,55 +63,63 @@ export function MarkdownFilePreview(
 ): React.JSX.Element {
   const { projectId, path, onResourceClick, confirm, onDirtyChange } = props
   const [mode, setMode] = useState<MarkdownPreviewViewMode>('preview')
-  // 显式重载计数：进入预览（初始/从源码切回/保存后）都会重新读文件。
+  const [editorOpened, setEditorOpened] = useState(false)
+  const [draft, setDraft] = useState<string | null>(null)
+  // 显式重载计数：用户刷新或保存后重新读文件。
   const [reloadTick, setReloadTick] = useState(0)
   const [surfaceState, setSurfaceState] = useState<MonacoSurfaceState | null>(
     null,
   )
   const surfaceRef = useRef<MonacoSurfaceHandle>(null)
+  const wasDirtyRef = useRef(false)
   const { feed, loading, error, loadingMore, sentinelRef } =
     useMdIncrementalFeed(projectId, path, reloadTick)
 
   const fileName = path.split('/').pop() ?? path
 
-  const onDirtyChangeSafe = useCallback(
-    (targetPath: string, dirty: boolean): void => {
-      onDirtyChange?.(targetPath, dirty)
-    },
-    [onDirtyChange],
-  )
-
   const handleViewModeChange = useCallback(
     (next: MarkdownPreviewViewMode): void => {
       if (next === mode) return
-      if (next === 'preview' && mode === 'source') {
-        const dirtyNow = surfaceState?.dirty === true
-        if (dirtyNow && confirm !== undefined) {
-          void (async () => {
-            const ok = await confirm({
-              title: '有未保存的修改',
-              message: `${fileName} 的源码修改尚未保存，切换到预览将丢弃。`,
-              confirmLabel: '放弃修改并预览',
-              danger: true,
-            })
-            if (!ok) return
-            onDirtyChangeSafe(path, false)
-            setMode('preview')
-            setReloadTick((tick) => tick + 1)
-          })()
-          return
-        }
-        onDirtyChangeSafe(path, false)
-      }
+      if (next === 'source') setEditorOpened(true)
       setMode(next)
-      if (next === 'preview') {
-        setReloadTick((tick) => tick + 1)
-      } else {
-        setSurfaceState(null)
-      }
     },
-    [mode, surfaceState?.dirty, confirm, fileName, path, onDirtyChangeSafe],
+    [mode],
   )
+
+  const handleDiscard = useCallback((): void => {
+    if (surfaceState?.dirty !== true) return
+    void (async () => {
+      const confirmed =
+        confirm === undefined ||
+        (await confirm({
+          title: '还原未保存的修改？',
+          message: `${fileName} 将恢复为上次保存的内容。`,
+          confirmLabel: '还原修改',
+          danger: true,
+        }))
+      if (!confirmed) return
+      surfaceRef.current?.discardChanges()
+      setDraft(null)
+    })()
+  }, [confirm, fileName, surfaceState?.dirty])
+
+  const handleSave = useCallback(async (): Promise<void> => {
+    const saved = await surfaceRef.current?.save()
+    if (saved) {
+      setDraft(null)
+      setReloadTick((tick) => tick + 1)
+    }
+  }, [])
+
+  // Cmd/Ctrl+S 由 MonacoSurface 内部处理；观察 dirty 回落，同步刷新富预览。
+  useEffect(() => {
+    const isDirty = surfaceState?.dirty === true
+    if (wasDirtyRef.current && !isDirty && draft !== null) {
+      setDraft(null)
+      setReloadTick((tick) => tick + 1)
+    }
+    wasDirtyRef.current = isDirty
+  }, [draft, surfaceState?.dirty])
 
   // 资源引用分发：workspace:// 缺省项目 / 指向其他项目时归一到当前
   // 项目再交给宿主路由器（与聊天消息同一条分发链路）。
@@ -161,9 +170,9 @@ export function MarkdownFilePreview(
   const handleSurfaceState = useCallback(
     (state: MonacoSurfaceState): void => {
       setSurfaceState(state)
-      onDirtyChange?.(path, mode === 'source' && state.dirty)
+      onDirtyChange?.(path, state.dirty)
     },
-    [mode, onDirtyChange, path],
+    [onDirtyChange, path],
   )
 
   const { registerSurface } = props
@@ -173,7 +182,20 @@ export function MarkdownFilePreview(
   }, [path, registerSurface])
 
   const previewBody =
-    loading || feed === null ? (
+    surfaceState?.dirty === true && draft !== null ? (
+      <div
+        className="md-preview-scroll md-draft-preview"
+        onClickCapture={handlePreviewClick}
+      >
+        <div className="md">
+          <MarkdownCore
+            text={draft}
+            bare
+            onResourceClick={handleResourceClick}
+          />
+        </div>
+      </div>
+    ) : loading || feed === null ? (
       <div className="content-hint">加载中…</div>
     ) : error !== null && feed.blocks.length === 0 ? (
       <div className="content-hint">{friendlyReadError(error)}</div>
@@ -208,10 +230,15 @@ export function MarkdownFilePreview(
   return (
     <div className="content-view">
       <header className="content-head">
-        <span className="content-name" title={path}>
-          {fileName}
-        </span>
-        <div className="md-view-toggle" role="tablist" aria-label="预览视图">
+        <div className="content-head-main">
+          <span className="content-name" title={path}>
+            {fileName}
+          </span>
+          {surfaceState?.dirty && (
+            <span className="content-edit-status">未保存</span>
+          )}
+        </div>
+        <div className="file-mode-switch" role="tablist" aria-label="文件模式">
           <button
             type="button"
             role="tab"
@@ -228,60 +255,52 @@ export function MarkdownFilePreview(
             className={mode === 'source' ? 'active' : ''}
             onClick={() => handleViewModeChange('source')}
           >
-            源码
+            编辑
           </button>
         </div>
-        {mode === 'preview' ? (
+        {surfaceState?.dirty ? (
+          <>
+            <button className="ghost file-action" onClick={handleDiscard}>
+              还原
+            </button>
+            <button
+              className="file-save-action"
+              onClick={() => void handleSave()}
+              disabled={surfaceState.saving}
+              title={IS_MAC ? '保存（⌘S）' : '保存（Ctrl+S）'}
+            >
+              {surfaceState.saving ? '保存中…' : '保存'}
+            </button>
+          </>
+        ) : mode === 'preview' ? (
           <button
-            className="ghost"
+            className="ghost file-action"
             onClick={() => setReloadTick((tick) => tick + 1)}
             disabled={loading}
             title="重新加载"
           >
             刷新
           </button>
-        ) : (
-          <>
-            <button
-              className={`ghost${surfaceState?.editMode ? ' active' : ''}`}
-              onClick={() =>
-                surfaceRef.current?.setEditMode(!surfaceState?.editMode)
-              }
-              disabled={surfaceState === null || !surfaceState.canEdit}
-              title={
-                surfaceState?.canEdit
-                  ? surfaceState.editMode
-                    ? '切换为只读'
-                    : '切换为编辑'
-                  : '文件过大或读取被截断，仅支持只读'
-              }
-            >
-              {surfaceState?.editMode ? '编辑中' : '只读'}
-            </button>
-            <button
-              className="ghost"
-              onClick={() => void surfaceRef.current?.save()}
-              disabled={!surfaceState?.dirty || surfaceState?.saving}
-              title={IS_MAC ? '保存（⌘S）' : '保存（Ctrl+S）'}
-            >
-              {surfaceState?.saving ? '保存中…' : '保存'}
-            </button>
-          </>
-        )}
+        ) : null}
         {mode === 'preview' && error !== null && (
           <span className="content-error-inline">{error}</span>
         )}
       </header>
-      {mode === 'source' ? (
-        <div className="content-body md-source-body">
+      {editorOpened && (
+        <div
+          className="content-body md-source-body"
+          style={{ display: mode === 'source' ? 'flex' : 'none' }}
+        >
           <MonacoSurface
             projectId={projectId}
             path={path}
             ref={surfaceRef}
             onStateChange={handleSurfaceState}
+            onContentChange={setDraft}
           />
         </div>
-      ) : (
+      )}
+      {mode === 'preview' && (
         <div className="content-body md-preview-body">{previewBody}</div>
       )}
     </div>

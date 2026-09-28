@@ -57,6 +57,20 @@ export function FolderIcon(): React.JSX.Element {
   )
 }
 
+export function FileIcon({ size = 14 }: IconProps): React.JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">
+      <path
+        d="M6 3h8l4 4v14H6V3zm8 0v5h4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 export function TerminalIcon({ size = 15 }: IconProps): React.JSX.Element {
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">

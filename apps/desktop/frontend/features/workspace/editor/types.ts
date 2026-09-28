@@ -1,4 +1,5 @@
 import type { MonacoSurfaceHandle } from './MonacoSurface'
+import type { ConfirmDialogState } from '../../../components/ConfirmDialog'
 
 /** 编辑内核脏状态上抛（仅脏/净切换时触发）。 */
 export interface MonacoEditorProps {
@@ -9,6 +10,7 @@ export interface MonacoEditorProps {
   onClose: () => void
   onContentChange?: (content: string) => void
   onDirtyChange?: (path: string, dirty: boolean) => void
+  confirm?: (state: ConfirmDialogState) => Promise<boolean>
   /** 注册 surface 句柄 getter（null 注销）；getter 调用时才解引用，规避闭包陈旧。 */
   registerSurface?: (
     path: string,

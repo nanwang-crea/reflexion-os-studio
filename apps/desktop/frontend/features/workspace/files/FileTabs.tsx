@@ -1,5 +1,5 @@
 /**
- * 文件标签条：多文件顶部标签 + 拖拽排序 + 自定义横向滚动条 + 脏圆点。
+ * 文件标签条：多文件顶部标签 + 拖拽排序 + 原生横向滚动 + 脏圆点。
  * 拖拽用 pointer events 自绘（不依赖原生 HTML5 DnD——后者在 Tauri 各平台
  * WebView 行为不一致）：按下只登记候选、不捕获指针，移动超过阈值才进入
  * 拖动态；被拖标签原位半透明 + 虚线框，插入指示线实时预览落点，松手一次
@@ -29,11 +29,6 @@ interface FileTabsProps {
 
 export function FileTabs(props: FileTabsProps): React.JSX.Element {
   const tabsScrollRef = useRef<HTMLDivElement>(null)
-  const trackRef = useRef<HTMLDivElement>(null)
-  const [canScroll, setCanScroll] = useState(false)
-  const [scrollRatio, setScrollRatio] = useState(0)
-  const [thumbRatio, setThumbRatio] = useState(1)
-  const [trackWidth, setTrackWidth] = useState(0)
 
   const pendingRef = useRef<{
     id: string
@@ -57,82 +52,12 @@ export function FileTabs(props: FileTabsProps): React.JSX.Element {
   const [dragId, setDragId] = useState<string | null>(null)
   const [insertLineX, setInsertLineX] = useState<number | null>(null)
 
+  // 激活标签始终保持可见；横向滚动交给触控板/Shift+滚轮的原生行为。
   useEffect(() => {
-    const el = tabsScrollRef.current
-    if (el === null) return
-    const update = (): void => {
-      const { scrollLeft, scrollWidth, clientWidth } = el
-      const overflow = scrollWidth - clientWidth
-      setCanScroll(overflow > 0)
-      setThumbRatio(Math.min(1, clientWidth / scrollWidth))
-      setScrollRatio(overflow > 0 ? scrollLeft / overflow : 0)
-    }
-    update()
-    el.addEventListener('scroll', update, { passive: true })
-    const observer = new ResizeObserver(update)
-    observer.observe(el)
-    const trackObserver = trackRef.current
-      ? new ResizeObserver(() => {
-          const width = trackRef.current?.clientWidth ?? 0
-          setTrackWidth(width)
-        })
-      : null
-    if (trackObserver !== null)
-      trackObserver.observe(trackRef.current as HTMLElement)
-    return () => {
-      el.removeEventListener('scroll', update)
-      observer.disconnect()
-      trackObserver?.disconnect()
-    }
-  }, [props.openTabs])
-
-  const handleTrackPointerDown = (
-    event: React.PointerEvent<HTMLDivElement>,
-  ): void => {
-    if (event.button !== 0) return
-    event.preventDefault()
-    const el = tabsScrollRef.current
-    const track = trackRef.current
-    if (el === null || track === null) return
-    const trackWidth = track.clientWidth
-    const thumbWidth = Math.max(24, trackWidth * thumbRatio)
-    const maxScroll = el.scrollWidth - el.clientWidth
-    const clickOffset = event.clientX - track.getBoundingClientRect().left
-    const startLeft = el.scrollLeft
-    const startX = event.clientX
-
-    const onThumb = clickOffset >= 0 && clickOffset <= thumbWidth
-    if (!onThumb && maxScroll > 0) {
-      el.scrollLeft = (clickOffset / trackWidth) * maxScroll
-    }
-
-    const move = (moveEvent: PointerEvent): void => {
-      if (maxScroll <= 0) return
-      const deltaX = moveEvent.clientX - startX
-      const maxDelta = trackWidth - thumbWidth
-      const ratio = maxDelta > 0 ? deltaX / maxDelta : 0
-      el.scrollLeft = Math.min(
-        maxScroll,
-        Math.max(0, startLeft + ratio * maxScroll),
-      )
-    }
-    const up = (): void => {
-      track.removeEventListener('pointermove', move)
-      track.removeEventListener('pointerup', up)
-      track.removeEventListener('pointercancel', up)
-    }
-    track.setPointerCapture(event.pointerId)
-    track.addEventListener('pointermove', move)
-    track.addEventListener('pointerup', up)
-    track.addEventListener('pointercancel', up)
-  }
-
-  const handleWheel = (event: React.WheelEvent<HTMLDivElement>): void => {
-    if (event.shiftKey || event.deltaX !== 0) return
-    const el = tabsScrollRef.current
-    if (el === null) return
-    el.scrollLeft += event.deltaY
-  }
+    const scroller = tabsScrollRef.current
+    const active = scroller?.querySelector<HTMLElement>('.file-tab.active')
+    active?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [props.activeTabId, props.openTabs])
 
   const computeDrop = (
     x: number,
@@ -279,11 +204,7 @@ export function FileTabs(props: FileTabsProps): React.JSX.Element {
 
   return (
     <div className="file-tabs" role="tablist" aria-label="已打开文件">
-      <div
-        className="file-tabs-scroll"
-        ref={tabsScrollRef}
-        onWheel={handleWheel}
-      >
+      <div className="file-tabs-scroll" ref={tabsScrollRef}>
         {dragId !== null && insertLineX !== null && (
           <div
             className="file-tabs-drop-line"
@@ -330,22 +251,6 @@ export function FileTabs(props: FileTabsProps): React.JSX.Element {
             </div>
           )
         })}
-      </div>
-      {/* 始终可见的自定义横向滚动条：有溢出才显示滑块，可点击/拖动 */}
-      <div
-        className="file-tabs-track"
-        ref={trackRef}
-        onPointerDown={handleTrackPointerDown}
-      >
-        {canScroll && trackWidth > 0 && (
-          <div
-            className="file-tabs-thumb"
-            style={{
-              width: `${Math.max(24, trackWidth * thumbRatio)}px`,
-              transform: `translateX(${scrollRatio * Math.max(0, trackWidth - 8 - Math.max(24, trackWidth * thumbRatio))}px)`,
-            }}
-          />
-        )}
       </div>
     </div>
   )

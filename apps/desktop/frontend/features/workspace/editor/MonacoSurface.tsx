@@ -39,6 +39,7 @@ export interface MonacoSurfaceState {
 
 export interface MonacoSurfaceHandle {
   save: () => Promise<boolean>
+  discardChanges: () => void
   setEditMode: (editMode: boolean) => void
   copyText: () => Promise<void>
 }
@@ -203,12 +204,16 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
     props.ref,
     () => ({
       save: handleSave,
+      discardChanges: (): void => {
+        setContent(baseline)
+        onContentChange?.(baseline)
+      },
       setEditMode: (next: boolean): void => {
         if (canEdit) setEditMode(next)
       },
       copyText: handleCopy,
     }),
-    [handleSave, handleCopy, canEdit],
+    [handleSave, handleCopy, canEdit, baseline, onContentChange],
   )
 
   return (

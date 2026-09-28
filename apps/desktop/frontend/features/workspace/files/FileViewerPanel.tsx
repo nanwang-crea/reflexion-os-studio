@@ -168,6 +168,7 @@ export function FileViewerPanel(
                 onClose={() => props.onRequestCloseTab(tabIdOf(tab))}
                 onDirtyChange={props.onDirtyChange}
                 registerSurface={registerSurface}
+                confirm={props.confirm}
               />
             )}
           </div>

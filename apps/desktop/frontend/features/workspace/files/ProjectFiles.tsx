@@ -5,7 +5,7 @@ import type {
 } from '@reflexion-os-studio/runtime-client'
 import { searchFiles, startIndex } from '../../../api/workspace'
 import { useWorkspaceGitStatus } from '../../../hooks/workspace/useWorkspaceGitStatus'
-import { ChevronIcon, FolderIcon } from '../../../ui/icons'
+import { FileIcon, FolderIcon, SearchIcon } from '../../../ui/icons'
 import { AssetsPanel } from '../assets/AssetsPanel'
 import { FileTree } from './FileTree'
 import { GitChanges } from '../git/GitChanges'
@@ -162,15 +162,33 @@ export function ProjectFiles(props: ProjectFilesProps): React.JSX.Element {
         {view === 'files' ? (
           <>
             <div className="file-search">
-              <span className="file-search-label">文件名</span>
+              <SearchIcon />
               <input
                 type="text"
                 placeholder="搜索文件名…"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') setQuery('')
+                }}
                 aria-label="搜索文件名"
               />
-              {searching && <span className="file-search-hint">搜索中…</span>}
+              {query !== '' && !searching && (
+                <button
+                  type="button"
+                  className="file-search-clear"
+                  aria-label="清空文件搜索"
+                  title="清空搜索"
+                  onClick={() => setQuery('')}
+                >
+                  ×
+                </button>
+              )}
+              {searching && (
+                <span className="file-search-hint" aria-label="搜索中">
+                  …
+                </span>
+              )}
             </div>
             {searchError !== null && (
               <div className="tree-hint tree-hint-error">{searchError}</div>
@@ -305,7 +323,9 @@ function SearchResults(props: SearchResultsProps): React.JSX.Element {
               title={entry.path}
               onClick={() => props.onOpenFile(entry.path)}
             >
-              <ChevronIcon />
+              <span className="tree-file-icon">
+                <FileIcon />
+              </span>
               <span className="tree-name">{entry.path}</span>
             </button>
           </li>

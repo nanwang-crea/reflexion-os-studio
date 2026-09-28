@@ -14,6 +14,7 @@ import type { MonacoEditorProps } from './types'
 import { IS_MAC } from '../../../lib/platform'
 
 export function MonacoEditor({
+  confirm,
   onDirtyChange,
   registerSurface,
   ...props
@@ -29,6 +30,21 @@ export function MonacoEditor({
   const surfaceRef = useRef<MonacoSurfaceHandle>(null)
   const fileName = getFileName(props.path)
   const editable = props.readOnly !== true
+
+  const handleDiscard = useCallback((): void => {
+    if (!surface.dirty) return
+    void (async () => {
+      const confirmed =
+        confirm === undefined ||
+        (await confirm({
+          title: '还原未保存的修改？',
+          message: `${fileName} 将恢复为上次保存的内容。`,
+          confirmLabel: '还原修改',
+          danger: true,
+        }))
+      if (confirmed) surfaceRef.current?.discardChanges()
+    })()
+  }, [confirm, fileName, surface.dirty])
 
   const handleStateChange = useCallback(
     (state: MonacoSurfaceState): void => {
@@ -52,9 +68,7 @@ export function MonacoEditor({
           <span className="content-name" title={props.path}>
             {fileName}
           </span>
-          {surface.dirty && (
-            <span className="content-dirty-dot" aria-label="未保存" />
-          )}
+          {surface.dirty && <span className="content-edit-status">未保存</span>}
         </div>
         <div className="content-head-actions">
           <button
@@ -64,28 +78,37 @@ export function MonacoEditor({
           >
             复制
           </button>
-          {editable && (
-            <>
+          {editable && surface.canEdit && (
+            <div
+              className="file-mode-switch"
+              role="group"
+              aria-label="文件模式"
+            >
               <button
-                className={`ghost${surface.editMode ? ' active' : ''}`}
-                onClick={() =>
-                  surfaceRef.current?.setEditMode(!surface.editMode)
-                }
-                disabled={!surface.canEdit}
-                title={
-                  surface.canEdit
-                    ? surface.editMode
-                      ? '切换为只读'
-                      : '切换为编辑'
-                    : '文件过大或读取被截断，仅支持只读'
-                }
+                type="button"
+                className={!surface.editMode ? 'active' : ''}
+                onClick={() => surfaceRef.current?.setEditMode(false)}
               >
-                {surface.editMode ? '编辑中' : '只读'}
+                预览
               </button>
               <button
-                className="ghost"
+                type="button"
+                className={surface.editMode ? 'active' : ''}
+                onClick={() => surfaceRef.current?.setEditMode(true)}
+              >
+                编辑
+              </button>
+            </div>
+          )}
+          {surface.dirty && (
+            <>
+              <button className="ghost file-action" onClick={handleDiscard}>
+                还原
+              </button>
+              <button
+                className="file-save-action"
                 onClick={() => void surfaceRef.current?.save()}
-                disabled={!surface.dirty || surface.saving}
+                disabled={surface.saving}
                 title={IS_MAC ? '保存（⌘S）' : '保存（Ctrl+S）'}
               >
                 {surface.saving ? '保存中…' : '保存'}

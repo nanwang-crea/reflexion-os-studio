@@ -151,36 +151,42 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 14px;
+  min-height: 32px;
+  padding: 4px 8px 4px 12px;
   font-size: 12px;
   color: var(--text-muted);
 }
 
 .file-tree-bar .ghost {
-  padding: 4px;
+  padding: 3px;
+  border-color: transparent;
 }
 
 .tree-root {
   list-style: none;
   margin: 0;
-  padding: 0 0 16px;
+  padding: 2px 0 12px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .tree-children {
   list-style: none;
   margin: 0;
-  padding: 0 0 16px;
+  padding: 0;
 }
 
 .tree-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  min-height: 28px;
   width: 100%;
-  padding: 4px 8px;
+  padding-block: 3px;
+  padding-right: 8px;
   background: transparent;
   border-radius: 0;
   font-size: 13px;
@@ -195,8 +201,17 @@
 }
 
 .tree-row.active {
-  background: var(--bg-active);
+  background: var(--accent-soft);
   color: var(--text);
+}
+
+.tree-row.active::after {
+  content: '';
+  align-self: stretch;
+  width: 2px;
+  margin-left: auto;
+  border-radius: 2px;
+  background: var(--text-secondary);
 }
 
 .tree-chevron {
@@ -219,14 +234,15 @@
   height: 11px;
 }
 
-.tree-file-dot {
-  width: 6px;
-  height: 6px;
+.tree-file-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
   margin-left: 8px;
-  border-radius: 2px;
-  background: var(--text-muted);
+  color: var(--text-muted);
   flex: none;
-  opacity: 0.7;
 }
 
 .tree-name {
@@ -283,9 +299,11 @@
 .content-head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
+  gap: 8px;
+  min-height: 42px;
+  padding: 6px 10px;
   border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg);
 }
 
 .content-head-main {
@@ -303,12 +321,11 @@
   flex: none;
 }
 
-.content-dirty-dot {
+.content-edit-status {
   flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--warning-text);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 400;
 }
 
 .content-close {
@@ -334,11 +351,30 @@
 
 .content-head .ghost {
   padding: 4px 6px;
+  border-color: transparent;
 }
 
 .content-head .ghost.active {
   background: var(--bg-active);
   color: var(--text);
+}
+
+.content-head .file-action {
+  padding-inline: 8px;
+}
+
+.file-save-action {
+  min-width: 52px;
+  padding: 4px 11px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--bg-sidebar);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.file-save-action:hover:not(:disabled) {
+  background: var(--accent-hover);
 }
 
 .jump-form input {
@@ -1139,7 +1175,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  padding: 4px 6px 0;
+  padding: 5px 6px 0;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-sidebar);
 }
@@ -1156,6 +1192,7 @@
   /* 标签文字不可选中，避免拖拽排序时被文本选择干扰 */
   user-select: none;
   -webkit-user-select: none;
+  scroll-behavior: smooth;
 }
 
 .file-tabs-scroll::-webkit-scrollbar {
@@ -1178,32 +1215,6 @@
   pointer-events: none;
 }
 
-/* 自定义横向滚动条：始终在标签行下方占位，有溢出才显示滑块 */
-.file-tabs-track {
-  position: relative;
-  height: 6px;
-  flex: none;
-  padding: 1px 4px;
-  background: var(--bg-inset);
-  border-top: 1px solid var(--border-subtle);
-  cursor: pointer;
-}
-
-.file-tabs-thumb {
-  position: absolute;
-  top: 1px;
-  left: 4px;
-  height: 4px;
-  border-radius: 3px;
-  background: var(--bg-active);
-  cursor: grab;
-}
-
-.file-tabs-thumb:active {
-  cursor: grabbing;
-  background: var(--text-muted);
-}
-
 /* VS Code 风格标签：无竖向分隔，active 融入内容区（底边上移盖住
    标签条边框 + 同色背景），顶部圆角。 */
 .file-tab {
@@ -1216,7 +1227,7 @@
   background: transparent;
   border: 1px solid transparent;
   border-bottom: none;
-  border-radius: 8px 8px 0 0;
+  border-radius: 7px 7px 0 0;
 }
 
 .file-tab:active {
@@ -1247,7 +1258,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 7px 8px;
+  padding: 6px 8px;
   border-radius: 0;
   background: transparent;
   color: inherit;
@@ -1308,7 +1319,7 @@
 }
 
 .project-files-head {
-  padding: 7px 12px 5px;
+  padding: 10px 12px 6px;
   color: var(--text);
   font-size: 13px;
   font-weight: 600;
@@ -1326,7 +1337,7 @@
 .project-files-tabs {
   display: flex;
   gap: 2px;
-  padding: 0 8px;
+  padding: 0 10px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -1403,24 +1414,48 @@
 }
 
 .file-search {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   flex: none;
-  margin: 7px 8px 3px;
+  margin: 8px 8px 4px;
+  padding: 0 7px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  background: var(--bg-inset);
+  color: var(--text-muted);
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
 .file-search input {
   width: 100%;
   min-width: 0;
-  padding: 5px 8px;
+  padding: 6px 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   font-size: 12px;
 }
 
-.file-search-label {
+.file-search:focus-within {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 1px var(--accent-border);
+}
+
+.file-search input:focus-visible {
+  box-shadow: none;
+}
+
+.file-search-clear {
   flex: none;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: transparent;
   color: var(--text-muted);
-  font-size: 11px;
+  line-height: 1;
 }
 
 .file-search-diagnostic {
@@ -1450,6 +1485,8 @@
   margin: 0;
   padding: 0 0 12px;
   overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .file-search-results .tree-row {
@@ -1505,15 +1542,30 @@
 /* ---------- 可拖拽分栏 ---------- */
 
 .resize-handle {
-  width: 5px;
-  flex: 0 0 5px;
+  position: relative;
+  width: 7px;
+  flex: 0 0 7px;
   cursor: col-resize;
   background: transparent;
   touch-action: none;
+  outline: none;
 }
 
-.resize-handle:hover {
-  background: var(--border);
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  inset: 0 3px;
+  background: var(--border-subtle);
+  transition:
+    inset 0.14s ease,
+    background-color 0.14s ease;
+}
+
+.resize-handle:hover::after,
+.resize-handle:focus-visible::after,
+.resize-handle.dragging::after {
+  inset-inline: 2px;
+  background: var(--text-muted);
 }
 
 /* ---------- 双栏 Diff 预览 ---------- */
@@ -1548,17 +1600,18 @@
   padding: 12px 16px 24px;
 }
 
-/* 预览 / 源码切换（文件头操作区，靠右） */
-.md-view-toggle {
+/* 文件预览 / 编辑切换：共用于普通文本和 Markdown。 */
+.file-mode-switch {
   display: flex;
   gap: 2px;
   flex: none;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   border-radius: 7px;
   padding: 1px;
+  background: var(--bg-inset);
 }
 
-.md-view-toggle button {
+.file-mode-switch button {
   padding: 2px 10px;
   border-radius: 5px;
   background: transparent;
@@ -1566,18 +1619,27 @@
   font-size: 12px;
 }
 
-.md-view-toggle button:hover {
+.file-mode-switch button:hover {
   color: var(--text);
 }
 
-.md-view-toggle button.active {
+.file-mode-switch button.active {
   background: var(--bg-active);
   color: var(--text);
+  box-shadow: var(--shadow-sm);
 }
 
 /* 源码视图容器：MonacoSurface（可编辑）填充预览区 */
 .md-source-body {
   display: flex;
+}
+
+.md-draft-preview::before {
+  content: '未保存内容的预览';
+  display: block;
+  margin-bottom: 10px;
+  color: var(--text-muted);
+  font-size: 11px;
 }
 
 /* 增量加载哨兵 / 提示（触底 600px 预取） */

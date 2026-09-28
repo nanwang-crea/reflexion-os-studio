@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 
 interface ResizeHandleProps {
   /** 向右拖动时宽度增量回调；右侧面板用 onResize(width - delta) 变窄。 */
@@ -9,15 +9,24 @@ interface ResizeHandleProps {
 export function ResizeHandle(props: ResizeHandleProps): React.JSX.Element {
   const draggingRef = useRef(false)
   const lastXRef = useRef(0)
+  const [dragging, setDragging] = useState(false)
+
+  const stopDragging = (): void => {
+    draggingRef.current = false
+    setDragging(false)
+  }
 
   return (
     <div
-      className="resize-handle"
+      className={`resize-handle${dragging ? ' dragging' : ''}`}
       role="separator"
       aria-orientation="vertical"
+      aria-label="调整面板宽度"
+      tabIndex={0}
       onPointerDown={(event) => {
         event.preventDefault()
         draggingRef.current = true
+        setDragging(true)
         lastXRef.current = event.clientX
         event.currentTarget.setPointerCapture(event.pointerId)
       }}
@@ -29,12 +38,18 @@ export function ResizeHandle(props: ResizeHandleProps): React.JSX.Element {
       }}
       onPointerUp={(event) => {
         if (!draggingRef.current) return
-        draggingRef.current = false
+        stopDragging()
         event.currentTarget.releasePointerCapture(event.pointerId)
       }}
       onPointerCancel={(event) => {
-        draggingRef.current = false
+        stopDragging()
         event.currentTarget.releasePointerCapture(event.pointerId)
+      }}
+      onLostPointerCapture={stopDragging}
+      onKeyDown={(event) => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+        event.preventDefault()
+        props.onResize(event.key === 'ArrowRight' ? 12 : -12)
       }}
     />
   )

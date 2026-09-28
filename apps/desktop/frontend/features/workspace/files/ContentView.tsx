@@ -1,5 +1,6 @@
 import { MonacoEditor } from '../editor/MonacoEditor'
 import type { MonacoSurfaceHandle } from '../editor/MonacoSurface'
+import type { ConfirmDialogState } from '../../../components/ConfirmDialog'
 
 interface ContentViewProps {
   projectId: string
@@ -8,6 +9,7 @@ interface ContentViewProps {
   readOnly?: boolean
   onClose: () => void
   onDirtyChange?: (path: string, dirty: boolean) => void
+  confirm?: (state: ConfirmDialogState) => Promise<boolean>
   registerSurface?: (
     path: string,
     getter: (() => MonacoSurfaceHandle | null) | null,
@@ -28,6 +30,7 @@ export function ContentView(props: ContentViewProps): React.JSX.Element {
       onClose={props.onClose}
       onDirtyChange={props.onDirtyChange}
       registerSurface={props.registerSurface}
+      confirm={props.confirm}
     />
   )
 }
