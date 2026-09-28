@@ -119,6 +119,7 @@ function tableColumns(db: DatabaseSync, table: string): TableColumn[] {
  * v33 → v34：Run 持久化用户显式选择的默认子 Agent 模板。
  * v34 → v35：TurnExecution 增加版本化 Runtime 状态（首批持久化文件读取凭据）。
  * v35 → v36：plugins 增加 global/project 作用域和可选 project_id。
+ * v36 → v37：provider_profiles 增加附加请求头 JSON。
  * 各步骤带形状检测：SCHEMA 刚建好的新库不会空跑重建。
  */
 export function runMigrations(db: DatabaseSync, dir: string): void {
@@ -558,6 +559,16 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
       )
       db.exec(
         'ALTER TABLE plugins ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE CASCADE',
+      )
+    }
+    if (
+      version < 37 &&
+      !tableColumns(db, 'provider_profiles').some(
+        (column) => column.name === 'headers_json',
+      )
+    ) {
+      db.exec(
+        "ALTER TABLE provider_profiles ADD COLUMN headers_json TEXT NOT NULL DEFAULT '[]'",
       )
     }
     db.exec('COMMIT')

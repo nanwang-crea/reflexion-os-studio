@@ -1,5 +1,6 @@
 import type {
   ApiFormat,
+  ProviderHeader,
   ProviderProfile,
 } from '@reflexion-os-studio/runtime-client'
 import {
@@ -28,6 +29,7 @@ export interface Draft {
   enabled: boolean
   /** API 协议格式。 */
   apiFormat: ApiFormat
+  headers: ProviderHeader[]
   /** 采样参数；空串表示未配置（服务端默认）。 */
   temperature: string
   maxTokens: string
@@ -46,6 +48,7 @@ export const EMPTY_DRAFT: Draft = {
   secretRef: null,
   enabled: true,
   apiFormat: 'openai-chat',
+  headers: [],
   temperature: '',
   maxTokens: '',
   contextWindow: '',
@@ -62,6 +65,7 @@ export function draftFromProfile(profile: ProviderProfile): Draft {
     secretRef: profile.secretRef,
     enabled: profile.enabled,
     apiFormat: profile.apiFormat ?? 'openai-chat',
+    headers: profile.headers.map((header) => ({ ...header })),
     temperature: profile.temperature == null ? '' : String(profile.temperature),
     maxTokens: profile.maxTokens == null ? '' : String(profile.maxTokens),
     contextWindow:
@@ -146,6 +150,9 @@ export function preflightProviderSave(
     secretRef,
     enabled: draft.enabled,
     apiFormat: draft.apiFormat,
+    headers: draft.headers
+      .map(({ name, value }) => ({ name: name.trim(), value: value.trim() }))
+      .filter(({ name, value }) => name !== '' || value !== ''),
     temperature: parseNumber(draft.temperature, false),
     maxTokens: parseNumber(draft.maxTokens, true),
     contextWindow: parseNumber(draft.contextWindow, true),
@@ -197,6 +204,7 @@ export function preflightProviderToggle(
     secretRef,
     enabled: nextEnabled,
     apiFormat: profile.apiFormat,
+    headers: profile.headers,
   }
   const feedbacks = validateCommandParams('provider.configure', {
     requestId: 'preflight',
@@ -229,6 +237,9 @@ export function preflightProviderTest(draft: Draft): Preflight<{
     secret: hasNewSecret ? draft.secret.trim() : undefined,
     secretRef: hasNewSecret ? undefined : normalizeSecretRef(draft.secretRef),
     apiFormat: draft.apiFormat,
+    headers: draft.headers
+      .map(({ name, value }) => ({ name: name.trim(), value: value.trim() }))
+      .filter(({ name, value }) => name !== '' || value !== ''),
   }
   const feedbacks = validateCommandParams('provider.test', {
     requestId: 'preflight',

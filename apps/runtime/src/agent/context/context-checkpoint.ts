@@ -303,6 +303,7 @@ async function summarizeCheckpointFrames(
       baseUrl: provider.baseUrl,
       apiKey: provider.apiKey,
       model: provider.model,
+      headers: provider.headers,
       messages: [
         { role: 'system', content: CHECKPOINT_SUMMARY_SYSTEM_PROMPT },
         { role: 'user', content: userPayload },

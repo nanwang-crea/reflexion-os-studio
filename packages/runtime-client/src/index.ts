@@ -8,6 +8,7 @@ export type {
   Message,
   Project,
   ProviderProfile,
+  ProviderHeader,
   Run,
   RuntimeEvent,
   RuntimeStatus,

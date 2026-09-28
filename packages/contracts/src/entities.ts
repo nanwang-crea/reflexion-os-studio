@@ -535,6 +535,49 @@ export const ApiFormatSchema = z.enum([
 ])
 export type ApiFormat = z.infer<typeof ApiFormatSchema>
 
+const HTTP_HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/
+const RESERVED_PROVIDER_HEADERS = new Set([
+  'authorization',
+  'content-type',
+  'x-api-key',
+])
+
+export const ProviderHeaderSchema = z.object({
+  name: z
+    .string()
+    .min(1)
+    .max(128)
+    .regex(HTTP_HEADER_NAME, '请求头名称格式无效')
+    .refine(
+      (name) => !RESERVED_PROVIDER_HEADERS.has(name.toLowerCase()),
+      '该请求头由 ReflexionOS 管理，不能覆盖',
+    ),
+  value: z
+    .string()
+    .min(1)
+    .max(4096)
+    .refine((value) => !/[\r\n]/.test(value), '请求头值不能包含换行符'),
+})
+export type ProviderHeader = z.infer<typeof ProviderHeaderSchema>
+
+export const ProviderHeadersSchema = z
+  .array(ProviderHeaderSchema)
+  .max(32)
+  .superRefine((headers, context) => {
+    const names = new Set<string>()
+    headers.forEach((header, index) => {
+      const normalized = header.name.toLowerCase()
+      if (names.has(normalized)) {
+        context.addIssue({
+          code: 'custom',
+          path: [index, 'name'],
+          message: '请求头名称不能重复（不区分大小写）',
+        })
+      }
+      names.add(normalized)
+    })
+  })
+
 export const ProviderProfileSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -547,6 +590,8 @@ export const ProviderProfileSchema = z.object({
   enabled: z.boolean(),
   // API 协议格式；缺失时向后兼容为 'openai-chat'。
   apiFormat: ApiFormatSchema.optional(),
+  /** 附加请求头；鉴权与 Content-Type 仍由 Runtime 管理。 */
+  headers: ProviderHeadersSchema,
   // 对话默认采样参数；null 表示未配置（沿用服务端默认）。
   temperature: z.number().min(0).max(2).nullable(),
   maxTokens: z.number().int().positive().nullable(),

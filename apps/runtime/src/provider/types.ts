@@ -1,4 +1,8 @@
-import type { ToolSpec, Usage } from '@reflexion-os-studio/contracts'
+import type {
+  ProviderHeader,
+  ToolSpec,
+  Usage,
+} from '@reflexion-os-studio/contracts'
 import type {
   ModelFinishReason,
   ModelMessage,
@@ -15,6 +19,8 @@ export interface StreamChatOptions {
   baseUrl: string
   apiKey: string
   model: string
+  /** 用户配置的非鉴权附加请求头。 */
+  headers?: ProviderHeader[]
   messages: ModelMessage[]
   signal: AbortSignal
   timeoutMs?: number

@@ -165,6 +165,9 @@ export async function streamAnthropic(
           {
             method: 'POST',
             headers: {
+              ...Object.fromEntries(
+                (options.headers ?? []).map(({ name, value }) => [name, value]),
+              ),
               'content-type': 'application/json',
               'x-api-key': options.apiKey,
               'anthropic-version': '2023-06-01',

@@ -1,6 +1,7 @@
 import type {
   ApiFormat,
   ProviderCapability,
+  ProviderHeader,
 } from '@reflexion-os-studio/contracts'
 import { CommandError } from '../agent/errors.js'
 import { streamChat } from '../provider.js'
@@ -53,6 +54,9 @@ export const providerCommandHandlers: Record<string, CommandHandler> = {
         typeof p.apiFormat === 'string'
           ? (p.apiFormat as ApiFormat)
           : undefined,
+      headers: Array.isArray(p.headers)
+        ? (p.headers as ProviderHeader[])
+        : undefined,
       // Keep the three-state semantics: omitted=preserve, null=clear, value=set.
       temperature: p.temperature as number | null | undefined,
       maxTokens: p.maxTokens as number | null | undefined,
@@ -105,6 +109,9 @@ export async function testProviderConnection(
     typeof params.apiFormat === 'string'
       ? (params.apiFormat as ApiFormat)
       : undefined
+  const headers = Array.isArray(params.headers)
+    ? (params.headers as ProviderHeader[])
+    : undefined
   const startedAt = Date.now()
   try {
     await streamChat(
@@ -112,6 +119,7 @@ export async function testProviderConnection(
         baseUrl,
         apiKey,
         model,
+        headers,
         messages: [{ role: 'user', content: 'ping' }],
         maxTokens: 1,
         timeoutMs: 15_000,

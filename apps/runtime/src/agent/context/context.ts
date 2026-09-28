@@ -9,6 +9,7 @@ import {
   messagesToFrames,
 } from '@reflexion-os-studio/agent-core'
 import type { Store } from '../../store/index.js'
+import type { ProviderHeader } from '@reflexion-os-studio/contracts'
 import { buildInstructionBlock } from '../instructions/render.js'
 import {
   framesToValidatedMessages,
@@ -76,6 +77,7 @@ export interface ProviderRuntimeConfig {
   model: string
   /** API 协议格式；缺失时向后兼容为 'openai-chat'。 */
   apiFormat?: 'openai-chat' | 'openai-responses' | 'anthropic'
+  headers?: ProviderHeader[]
   /** 缺省由服务端决定。 */
   temperature?: number
   maxTokens?: number

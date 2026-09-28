@@ -1,5 +1,6 @@
 import type {
   ApiFormat,
+  ProviderHeader,
   ProviderProfile,
 } from '@reflexion-os-studio/runtime-client'
 import { request, requestList } from './client'
@@ -20,6 +21,7 @@ export interface ConfigureProviderPayload {
   secretRef?: string
   /** API 协议格式；省略时编辑保留原值、新建为 'openai-chat'。 */
   apiFormat?: ApiFormat
+  headers?: ProviderHeader[]
   temperature?: number | null
   maxTokens?: number | null
   /** 模型上下文窗口（token 数）；Runtime 据此动态计算上下文预算。 */
@@ -52,6 +54,7 @@ export function testProvider(input: {
   secret?: string
   secretRef?: string
   apiFormat?: ApiFormat
+  headers?: ProviderHeader[]
 }): Promise<ProviderTestResult> {
   return request<ProviderTestResult>('provider.test', input)
 }

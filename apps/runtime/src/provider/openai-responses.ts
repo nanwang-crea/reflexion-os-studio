@@ -130,6 +130,9 @@ export async function streamOpenAIResponses(
           {
             method: 'POST',
             headers: {
+              ...Object.fromEntries(
+                (options.headers ?? []).map(({ name, value }) => [name, value]),
+              ),
               'content-type': 'application/json',
               authorization: `Bearer ${options.apiKey}`,
             },

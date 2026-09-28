@@ -1051,10 +1051,14 @@ test('provider profile upsert keeps capabilities when omitted on edit', () => {
     baseUrl: 'https://api.example.com/v1',
     models: ['model-b'],
     capabilities: ['chat', 'embedding'],
+    headers: [{ name: 'X-Client-Name', value: 'ReflexionOS Studio' }],
     secretRef: 'local:b',
     enabled: true,
   })
   assert.deepEqual(created.capabilities, ['chat', 'embedding'])
+  assert.deepEqual(created.headers, [
+    { name: 'X-Client-Name', value: 'ReflexionOS Studio' },
+  ])
   assert.equal(store.providers.getEnabled().id, created.id)
 
   const updated = store.providers.upsert({
@@ -1068,6 +1072,7 @@ test('provider profile upsert keeps capabilities when omitted on edit', () => {
   assert.equal(updated.name, 'main-renamed')
   // 编辑未传 capabilities → 保留原值而不是重置为 ['chat']。
   assert.deepEqual(updated.capabilities, ['chat', 'embedding'])
+  assert.deepEqual(updated.headers, created.headers)
 })
 
 test('transaction rolls back on error', () => {
@@ -1171,12 +1176,12 @@ test('v23 migration drops legacy memories/FTS/memory_jobs tables', () => {
     .map((row) => row.name)
   assert.deepEqual(names, [])
   const version = after.prepare('PRAGMA user_version').get()
-  assert.equal(Number(version.user_version), 34)
+  assert.equal(Number(version.user_version), 37)
   after.close()
   store.close()
 })
 
-test('fresh store schema has dynamic agent governance and version 34', () => {
+test('fresh store schema has dynamic agent governance and version 37', () => {
   const dir = mkdtempSync(join(tmpdir(), 'reflexion-v23-fresh-'))
   const store = new Store(dir)
   store.close()
@@ -1189,7 +1194,7 @@ test('fresh store schema has dynamic agent governance and version 34', () => {
     .map((row) => row.name)
   assert.deepEqual(names, [])
   const version = db.prepare('PRAGMA user_version').get()
-  assert.equal(Number(version.user_version), 34)
+  assert.equal(Number(version.user_version), 37)
   const plugins = db
     .prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'plugins'",
@@ -1201,6 +1206,11 @@ test('fresh store schema has dynamic agent governance and version 34', () => {
     .all()
     .map((column) => column.name)
   assert.equal(pluginColumns.includes('manifest_json'), true)
+  const providerColumns = db
+    .prepare('PRAGMA table_info(provider_profiles)')
+    .all()
+    .map((column) => column.name)
+  assert.equal(providerColumns.includes('headers_json'), true)
   const turnExecutions = db
     .prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'turn_executions'",

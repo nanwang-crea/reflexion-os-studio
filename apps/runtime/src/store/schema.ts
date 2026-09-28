@@ -144,6 +144,7 @@ CREATE TABLE IF NOT EXISTS provider_profiles (
   secret_ref TEXT NOT NULL,
   enabled INTEGER NOT NULL,
   api_format TEXT NOT NULL DEFAULT 'openai-chat',
+  headers_json TEXT NOT NULL DEFAULT '[]',
   temperature REAL,
   max_tokens INTEGER,
   context_window INTEGER,
@@ -283,4 +284,4 @@ CREATE TABLE IF NOT EXISTS context_checkpoints (
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 36
+export const LATEST_SCHEMA_VERSION = 37

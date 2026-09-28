@@ -19,6 +19,7 @@ import {
   samplingHint,
   type Draft,
 } from './provider-form'
+import { ProviderHeadersEditor } from './ProviderHeadersEditor'
 
 interface ProviderEditorProps {
   /** 当前选中供应商；isNew 时必为 null。 */
@@ -80,6 +81,7 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
       ? draft.name !== profile.name ||
         draft.baseUrl !== profile.baseUrl ||
         draft.models.join('\u0000') !== profile.models.join('\u0000') ||
+        JSON.stringify(draft.headers) !== JSON.stringify(profile.headers) ||
         draft.secret.trim() !== '' ||
         draft.enabled !== profile.enabled ||
         draft.temperature !==
@@ -286,6 +288,11 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
           ? '留空表示沿用已保存的密钥；修改其他配置无需重新输入。'
           : 'Key 仅在保存时传输一次并落盘到本地密钥文件（0600）。'}
       </p>
+
+      <ProviderHeadersEditor
+        headers={draft.headers}
+        onChange={(headers) => updateDraft({ headers })}
+      />
 
       <div className="field-label">模型列表</div>
       <div className="model-rows">

@@ -31,6 +31,7 @@ import {
   ApprovalOverrideSchema,
   ExecutionModeSchema,
   ApiFormatSchema,
+  ProviderHeadersSchema,
 } from './entities.js'
 import { PluginTaskSchema } from './plugins.js'
 import {
@@ -573,6 +574,8 @@ export const CommandSchemaRegistry = {
       capabilities: z.array(ProviderCapabilitySchema).optional(),
       // API 协议格式；省略时编辑保留原值、新建为 'openai-chat'。
       apiFormat: ApiFormatSchema.optional(),
+      // 附加请求头；禁止覆盖 Runtime 管理的鉴权与 Content-Type。
+      headers: ProviderHeadersSchema.optional(),
       // 对话默认采样参数；省略=保留原值，null=清空回未配置。
       temperature: z.number().min(0).max(2).nullable().optional(),
       maxTokens: z.number().int().positive().nullable().optional(),
@@ -601,6 +604,7 @@ export const CommandSchemaRegistry = {
       secretRef: z.string().min(1).optional(),
       // API 协议格式；省略时默认 'openai-chat'。
       apiFormat: ApiFormatSchema.optional(),
+      headers: ProviderHeadersSchema.optional(),
     }),
     result: z.object({
       ok: z.boolean(),

@@ -92,6 +92,7 @@ export async function executeModelTurn(
       baseUrl: provider.baseUrl,
       apiKey: provider.apiKey,
       model: provider.model,
+      headers: provider.headers,
       messages,
       tools: registry.specs(),
       ...(provider.temperature !== undefined

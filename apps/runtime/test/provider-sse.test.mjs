@@ -45,6 +45,7 @@ test('streamChatCompletion collects deltas, finish reason and usage', async () =
   const server = await startServer((request, response) => {
     assert.equal(request.url, '/v1/chat/completions')
     assert.match(request.headers.authorization ?? '', /^Bearer sk-/)
+    assert.equal(request.headers['x-client-name'], 'ReflexionOS Studio')
     response.writeHead(200, { 'content-type': 'text/event-stream' })
     response.end(sseBody())
   })
@@ -55,6 +56,7 @@ test('streamChatCompletion collects deltas, finish reason and usage', async () =
       baseUrl: `http://127.0.0.1:${port}/v1`,
       apiKey: 'sk-test',
       model: 'mock-model',
+      headers: [{ name: 'X-Client-Name', value: 'ReflexionOS Studio' }],
       messages: [{ role: 'user', content: 'hi' }],
       signal: new AbortController().signal,
     },

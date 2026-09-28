@@ -289,6 +289,7 @@ test('ProviderProfileSchema requires capability list', () => {
     capabilities: ['chat', 'embedding'],
     secretRef: 'local:a',
     enabled: true,
+    headers: [],
     temperature: null,
     maxTokens: null,
     contextWindow: null,
@@ -322,6 +323,30 @@ test('ProviderProfileSchema requires capability list', () => {
   assert.equal(
     ProviderProfileSchema.safeParse({ ...profile, capabilities: undefined })
       .success,
+    false,
+  )
+  assert.equal(
+    ProviderProfileSchema.safeParse({
+      ...profile,
+      headers: [{ name: 'anthropic-beta', value: 'tools-2024-04-04' }],
+    }).success,
+    true,
+  )
+  assert.equal(
+    ProviderProfileSchema.safeParse({
+      ...profile,
+      headers: [{ name: 'Authorization', value: 'secret' }],
+    }).success,
+    false,
+  )
+  assert.equal(
+    ProviderProfileSchema.safeParse({
+      ...profile,
+      headers: [
+        { name: 'x-client', value: 'one' },
+        { name: 'X-Client', value: 'two' },
+      ],
+    }).success,
     false,
   )
 })

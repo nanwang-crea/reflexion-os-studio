@@ -4,7 +4,9 @@ import {
   ProviderCapabilitySchema,
   type ApiFormat,
   type ProviderCapability,
+  type ProviderHeader,
   type ProviderProfile,
+  ProviderHeadersSchema,
 } from '@reflexion-os-studio/contracts'
 import { nowIso, type Row } from '../shared.js'
 
@@ -44,6 +46,7 @@ export class ProviderStore {
     secretRef: string
     enabled: boolean
     apiFormat?: ApiFormat
+    headers?: ProviderHeader[]
     /** 省略=保留原值，null=清空回未配置。 */
     temperature?: number | null
     maxTokens?: number | null
@@ -62,6 +65,8 @@ export class ProviderStore {
     const apiFormat: ApiFormat =
       input.apiFormat ??
       (input.id ? (this.get(id)?.apiFormat ?? 'openai-chat') : 'openai-chat')
+    const headers =
+      input.headers ?? (input.id ? (this.get(id)?.headers ?? []) : [])
     // 采样参数：省略保留原值，null 清空为未配置，数字直接赋值。
     const existing = input.id ? this.get(id) : null
     const temperature =
@@ -83,8 +88,8 @@ export class ProviderStore {
     const updatedAt = nowIso()
     this.db
       .prepare(
-        `INSERT INTO provider_profiles (id, name, base_url, models, capabilities, secret_ref, enabled, api_format, temperature, max_tokens, context_window, context_budget, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO provider_profiles (id, name, base_url, models, capabilities, secret_ref, enabled, api_format, headers_json, temperature, max_tokens, context_window, context_budget, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            base_url = excluded.base_url,
@@ -93,6 +98,7 @@ export class ProviderStore {
            secret_ref = excluded.secret_ref,
            enabled = excluded.enabled,
            api_format = excluded.api_format,
+           headers_json = excluded.headers_json,
            temperature = excluded.temperature,
            max_tokens = excluded.max_tokens,
            context_window = excluded.context_window,
@@ -108,6 +114,7 @@ export class ProviderStore {
         input.secretRef,
         input.enabled ? 1 : 0,
         apiFormat,
+        JSON.stringify(headers),
         temperature,
         maxTokens,
         contextWindow,
@@ -150,6 +157,7 @@ export class ProviderStore {
       secretRef: String(row.secret_ref),
       enabled: Number(row.enabled) === 1,
       apiFormat: this.parseApiFormat(row.api_format),
+      headers: this.parseHeaders(row.headers_json),
       temperature: row.temperature == null ? null : Number(row.temperature),
       maxTokens: row.max_tokens == null ? null : Number(row.max_tokens),
       contextWindow:
@@ -178,5 +186,17 @@ export class ProviderStore {
     const raw = String(value ?? '')
     if (valid.includes(raw as ApiFormat)) return raw as ApiFormat
     return 'openai-chat'
+  }
+
+  private parseHeaders(value: unknown): ProviderHeader[] {
+    try {
+      const result = ProviderHeadersSchema.safeParse(
+        JSON.parse(String(value ?? '[]')),
+      )
+      if (result.success) return result.data
+    } catch {
+      // 落入安全回退分支
+    }
+    return []
   }
 }

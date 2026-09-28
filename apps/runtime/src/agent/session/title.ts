@@ -35,6 +35,7 @@ export async function generateSessionTitle(
       baseUrl: provider.profile.baseUrl,
       apiKey: provider.apiKey,
       model: provider.model,
+      headers: provider.profile.headers,
       messages: [
         { role: 'system', content: TITLE_SYSTEM_PROMPT },
         { role: 'user', content: truncated },
