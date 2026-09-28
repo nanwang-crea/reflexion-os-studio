@@ -51,8 +51,10 @@ export interface ToolCallRequest {
 export interface ToolExecutionArgs {
   /** 解析后的参数；形状由工具的 parameters JSON Schema 描述，工具自行校验。 */
   args: JsonValue
-  /** Provider 本轮生成的稳定工具调用 ID；宿主交互能力用它关联暂停与回答。 */
+  /** 宿主侧 canonical 工具调用 ID；需要持久化关联时使用。 */
   toolCallId: string
+  /** Provider 本轮生成的协议调用 ID；仅用于模型消息配对。 */
+  protocolToolCallId: string
   signal: AbortSignal
   /**
    * 宿主为特权操作注入的授权引用（不透明字符串）；纯计算工具忽略。

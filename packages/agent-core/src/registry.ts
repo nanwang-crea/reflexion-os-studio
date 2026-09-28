@@ -104,12 +104,14 @@ export class ToolRegistry {
     request: ToolCallRequest,
     signal: AbortSignal,
     grant?: string,
+    toolCallId = request.id,
   ): Promise<ToolResult> {
     const validated = this.validateRequest(request)
     if (!validated.ok) return validated.result
     const executionArgs: ToolExecutionArgs = {
       args: validated.args,
-      toolCallId: request.id,
+      toolCallId,
+      protocolToolCallId: request.id,
       signal,
       grant,
     }
@@ -118,9 +120,10 @@ export class ToolRegistry {
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') throw error
       return {
-        content: `tool failed: ${error instanceof Error ? error.message : String(error)}`,
+        content:
+          'tool failed because the runtime entered an inconsistent internal state; do not retry unchanged',
         isError: true,
-        code: 'tool_error',
+        code: 'internal_error',
       }
     }
   }

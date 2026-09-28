@@ -141,6 +141,7 @@ test('loop propagates abort between turns', async () => {
 
 test('registry folds unknown tool, bad JSON and tool errors into results', async () => {
   const registry = new ToolRegistry()
+  const identities = []
   registry.register({
     name: 'echo',
     description: '回显文本',
@@ -156,6 +157,15 @@ test('registry folds unknown tool, bad JSON and tool errors into results', async
     parameters: {},
     execute: () => {
       throw new Error('炸了')
+    },
+  })
+  registry.register({
+    name: 'identity',
+    description: '记录调用身份',
+    parameters: {},
+    execute: ({ toolCallId, protocolToolCallId }) => {
+      identities.push({ toolCallId, protocolToolCallId })
+      return { content: 'ok', isError: false }
     },
   })
 
@@ -193,7 +203,24 @@ test('registry folds unknown tool, bad JSON and tool errors into results', async
     signal,
   )
   assert.equal(boom.isError, true)
-  assert.match(boom.content, /tool failed/)
+  assert.equal(
+    boom.content,
+    'tool failed because the runtime entered an inconsistent internal state; do not retry unchanged',
+  )
+  assert.equal(boom.code, 'internal_error')
+
+  await registry.call(
+    { id: 'provider-call', name: 'identity', arguments: '{}' },
+    signal,
+    undefined,
+    'persisted-call',
+  )
+  assert.deepEqual(identities, [
+    {
+      toolCallId: 'persisted-call',
+      protocolToolCallId: 'provider-call',
+    },
+  ])
 
   // 空参数默认解析为空对象。
   const empty = await registry.call(
@@ -204,7 +231,7 @@ test('registry folds unknown tool, bad JSON and tool errors into results', async
 
   assert.deepEqual(
     registry.specs().map((spec) => spec.name),
-    ['echo', 'boom'],
+    ['echo', 'boom', 'identity'],
   )
 })
 

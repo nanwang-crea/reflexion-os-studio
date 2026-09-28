@@ -482,7 +482,7 @@ export async function executeToolCall(
     store.toolCalls.markStatus(row.id, 'running', grant)
   }
 
-  const invoke = () => input.registry.call(request, signal, grant)
+  const invoke = () => input.registry.call(request, signal, grant, row.id)
   const result =
     input.mutationCoordinator && isMutatingTool(request.name)
       ? await input.mutationCoordinator.run(invoke)
