@@ -13,7 +13,7 @@ import { CHECKPOINT_SUMMARY_SYSTEM_PROMPT } from '../prompts/index.js'
 /**
  * 增量 Context Checkpoint 服务（W5）：
  * - source hash 覆盖稳定 Frame 内容（message id/role/content、ToolCall 参数/
- *   结果哈希）+ summary schema version；来源变化即失效，不依赖手工清缓存；
+ *   结果哈希）+ summary schema version；来源变化时旧摘要保留到新摘要成功替换；
  * - 命中相同 hash 直接复用；watermark 后新增稳定 Frame 只做一次增量摘要
  *   （输入 = 旧摘要 + 新增 Frame）；
  * - 相同 sessionId+hash 的并发摘要 single-flight；同 hash 失败后记录失败
@@ -200,9 +200,6 @@ async function runEnsure(
       summarized: false,
     }
   }
-  if (existingRow !== null && existingRow.sourceHash !== sourceHash) {
-    store.contextCheckpoints.delete(sessionId)
-  }
   if (failedHashes.has(flightKey)) {
     return {
       summary: emptySummary(),
@@ -215,17 +212,20 @@ async function runEnsure(
   try {
     // 增量起点：旧 Checkpoint 的 watermark 在本次稳定窗口内的位置；
     // 找不到（历史被清理/supersede）则全量重摘要。
-    const previousSummary =
+    const watermarkIndex =
+      existingRow === null || options.stableIds === undefined
+        ? -1
+        : options.stableIds.lastIndexOf(existingRow.throughMessageId)
+    const canExtendExisting =
       existingRow !== null &&
       existingRow.schemaVersion === CHECKPOINT_SCHEMA_VERSION &&
-      existingRow.sourceHash !== sourceHash
-        ? existingRow.summary
-        : null
-    const newFrames = sliceIncrementalFrames(
-      stableFrames,
-      options.stableIds,
-      existingRow?.throughMessageId ?? null,
-    )
+      watermarkIndex >= 0 &&
+      computeSourceHash(stableFrames.slice(0, watermarkIndex + 1)) ===
+        existingRow.sourceHash
+    const previousSummary = canExtendExisting ? existingRow.summary : null
+    const newFrames = canExtendExisting
+      ? stableFrames.slice(watermarkIndex + 1)
+      : stableFrames
     const raw = await options.summarize({
       previousSummary,
       newFrames,
@@ -259,25 +259,6 @@ async function runEnsure(
       summarized: false,
     }
   }
-}
-
-/**
- * 增量切片：旧 Checkpoint watermark 之后的 Frame。
- * 旧 watermark 为 null 或在窗口中找不到 → 返回全部（全量重摘要）。
- */
-function sliceIncrementalFrames(
-  stableFrames: ContextFrame[],
-  stableIds: (string | null)[] | undefined,
-  watermark: string | null,
-): ContextFrame[] {
-  if (watermark === null || stableIds === undefined) return stableFrames
-  // 从后往前找 watermark 的位置（稳定窗口尾部即 watermark 附近）。
-  for (let i = stableIds.length - 1; i >= 0; i -= 1) {
-    if (stableIds[i] === watermark) {
-      return stableFrames.slice(i + 1)
-    }
-  }
-  return stableFrames
 }
 
 /** 摘要自身的 token 估算（字段长度近似，供预算展示）。 */

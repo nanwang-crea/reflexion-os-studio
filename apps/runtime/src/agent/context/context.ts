@@ -18,6 +18,8 @@ import {
   reconstructSessionFramesWithIds,
 } from './context-frames.js'
 import {
+  CHECKPOINT_SCHEMA_VERSION,
+  computeSourceHash,
   ensureCheckpoint,
   summarizeCheckpointFrames,
   type ContextCheckpointSummary,
@@ -67,6 +69,9 @@ export const DEFAULT_CONTEXT_BUDGET_LIMIT = 64_000
 
 /** 压缩时始终原样保留的最近 Frame 数（工具轮整体计一，不拆分）。 */
 export const KEEP_RECENT_FRAMES = 8
+
+/** 已有 checkpoint 后至少累积这些稳定 Frame，才在后台刷新摘要。 */
+export const CHECKPOINT_REFRESH_FRAME_THRESHOLD = 8
 
 export interface ProviderRuntimeConfig {
   baseUrl: string
@@ -204,8 +209,9 @@ export class ContextBuilder {
 
   /**
    * 从 canonical 存储重建 Frame 历史（system + 指令/记忆块 → Checkpoint → 最近
-   * Frame）。超预算时走增量 Checkpoint（相同来源 hash 只摘要一次）；Checkpoint
-   * 失败退化为全文摘要压缩，再失败走确定性 Frame 裁剪，不阻塞对话。
+   * Frame）。超预算时优先复用已持久化的 Checkpoint，并把水位线后的历史原样
+   * 带入；摘要缺失或累计到阈值时在后台刷新。当前请求从不等待摘要模型，缺少
+   * 可用 Checkpoint 时直接走确定性 Frame 裁剪。
    * 本地数据损坏（FrameError）直接失败为 internal，不降级。
    */
   async build(
@@ -230,7 +236,6 @@ export class ContextBuilder {
       effectiveSystem,
     )
     const budget = contextBudgetFor(provider)
-    const metrics: Record<string, unknown> = {}
     if (estimateFrameTokens(frames) <= budget) {
       emitContextMetrics(sessionId, {
         contextBuildMs: Date.now() - buildStartedAt,
@@ -249,8 +254,25 @@ export class ContextBuilder {
     const recent = body.slice(body.length - keep)
     const throughMessageId =
       [...stableIds].reverse().find((id) => id !== null) ?? null
-    try {
-      const checkpoint = await ensureCheckpoint({
+    const existing = this.store.contextCheckpoints.get(sessionId)
+    const watermarkIndex =
+      existing === null ? -1 : stableIds.lastIndexOf(existing.throughMessageId)
+    const checkpointValid =
+      existing !== null &&
+      existing.schemaVersion === CHECKPOINT_SCHEMA_VERSION &&
+      watermarkIndex >= 0 &&
+      computeSourceHash(stable.slice(0, watermarkIndex + 1)) ===
+        existing.sourceHash &&
+      checkpointSummaryHasContent(existing.summary)
+    const suffix = checkpointValid ? body.slice(watermarkIndex + 1) : recent
+    const shouldRefresh =
+      !checkpointValid ||
+      stable.length - (watermarkIndex + 1) >= CHECKPOINT_REFRESH_FRAME_THRESHOLD
+
+    if (shouldRefresh) {
+      // 后台更新只写缓存，不参与本轮首字关键路径。摘要失败时保留旧 checkpoint，
+      // 让后续请求仍可复用；同 source hash 的失败由服务层在进程内去重。
+      void ensureCheckpoint({
         store: this.store,
         sessionId,
         provider,
@@ -259,78 +281,39 @@ export class ContextBuilder {
         stableIds,
         throughMessageId,
         signal,
-      })
-      metrics.checkpointHit = checkpoint.hit
-      metrics.checkpointSourceHash = checkpoint.sourceHash.slice(0, 8)
-      metrics.compactionCalls = checkpoint.summarized ? 1 : 0
-      if (
-        !checkpoint.failed &&
-        checkpointSummaryHasContent(checkpoint.summary)
-      ) {
-        const assembled: ContextFrame[] = [
-          ...(head === 1 ? [frames[0]] : []),
-          {
-            kind: 'user',
-            content: formatCheckpointBlock(checkpoint.summary),
-          },
-          ...recent,
-        ]
-        const messages = framesToValidatedMessages(
-          boundFramesForModel(assembled, budget, KEEP_RECENT_FRAMES),
-        )
-        emitContextMetrics(sessionId, {
-          ...metrics,
-          contextBuildMs: Date.now() - buildStartedAt,
-        })
-        return messages
-      }
-      throw new Error('checkpoint unavailable')
-    } catch (error) {
-      if (error instanceof FrameError) throw error
-      if (error instanceof Error && error.name === 'AbortError') throw error
-      // Checkpoint 失败（网络/Provider 异常）不拦任务：退化为全文摘要压缩。
-      process.stderr.write(
-        `[runtime] checkpoint compaction failed, falling back to legacy compaction: ${String(error)}\n`,
-      )
-      try {
-        const { frames: compacted } = await compactFrames({
-          frames,
-          budgetTokens: budget,
-          keepRecentFrames: KEEP_RECENT_FRAMES,
-          summarize: (stablePart) =>
-            summarizeFrames(provider, stablePart, signal),
-        })
-        const messages = framesToValidatedMessages(
-          boundFramesForModel(compacted, budget, KEEP_RECENT_FRAMES),
-        )
-        emitContextMetrics(sessionId, {
-          ...metrics,
-          contextBuildMs: Date.now() - buildStartedAt,
-          compactionCalls: ((metrics.compactionCalls as number) ?? 0) + 1,
-        })
-        return messages
-      } catch (legacyError) {
-        if (legacyError instanceof FrameError) throw legacyError
-        if (legacyError instanceof Error && legacyError.name === 'AbortError') {
-          throw legacyError
+      }).catch((error) => {
+        if (!(error instanceof Error && error.name === 'AbortError')) {
+          process.stderr.write(
+            `[runtime] background checkpoint refresh failed: ${String(error)}\n`,
+          )
         }
-        // 第二层也失败（同一 Provider 故障二次命中）：零成本确定性裁剪兜底，
-        // 与 compactInRun 的降级路径一致，绝不让上下文压缩阻塞对话。
-        process.stderr.write(
-          `[runtime] legacy compaction failed, falling back to deterministic frame trimming: ${String(legacyError)}\n`,
-        )
-        const messages = framesToValidatedMessages(
-          boundFramesForModel(frames, budget),
-        )
-        emitContextMetrics(sessionId, {
-          ...metrics,
-          contextBuildMs: Date.now() - buildStartedAt,
-          compactionCalls: ((metrics.compactionCalls as number) ?? 0) + 1,
-          deterministicTrim: true,
-        })
-        return messages
-      }
+      })
     }
+
+    const assembled: ContextFrame[] = checkpointValid
+      ? [
+          {
+            kind: 'system',
+            content:
+              `${frames[0]?.kind === 'system' ? frames[0].content : ''}\n\n${formatCheckpointBlock(existing.summary)}`.trim(),
+          },
+          ...suffix,
+        ]
+      : frames
+    const messages = framesToValidatedMessages(
+      boundFramesForModel(assembled, budget, KEEP_RECENT_FRAMES),
+    )
+    emitContextMetrics(sessionId, {
+      contextBuildMs: Date.now() - buildStartedAt,
+      checkpointHit: checkpointValid,
+      checkpointSourceHash: checkpointValid
+        ? existing.sourceHash.slice(0, 8)
+        : undefined,
+      compactionCalls: 0,
+      checkpointRefreshScheduled: shouldRefresh,
+      deterministicTrim: !checkpointValid,
+    })
+    return messages
   }
 
   /** 当前历史的 token 估算，暴露给诊断与未来预算策略。 */

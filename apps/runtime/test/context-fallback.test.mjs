@@ -6,11 +6,7 @@ import { join } from 'node:path'
 import { Store } from '../dist/store/index.js'
 import { ContextBuilder } from '../dist/agent/context/context.js'
 
-// W5：Checkpoint → legacy → 确定性裁剪三级降级闭环。
-// Checkpoint 失败已有 context-checkpoint.test.mjs 覆盖；这里覆盖
-// "legacy 摘要也失败"的第二级降级——旧实现在此场景会把异常直接抛出，
-// 导致整个 Run 失败，违背"压缩失败绝不阻塞对话"的设计约束。
-test('ContextBuilder.build degrades to deterministic trim when both summaries fail', async () => {
+test('ContextBuilder.build trims immediately without waiting for checkpoint refresh', async () => {
   const store = new Store(
     mkdtempSync(join(tmpdir(), 'reflexion-ctx-fallback-')),
   )
@@ -27,27 +23,101 @@ test('ContextBuilder.build degrades to deterministic trim when both summaries fa
     })
   }
   const builder = new ContextBuilder(store)
-  // 死端口 + 零重试 + 短超时：Checkpoint 与 legacy 摘要两层都立即失败。
+  const originalFetch = globalThis.fetch
+  let requestReceived
+  const received = new Promise((resolve) => {
+    requestReceived = resolve
+  })
+  globalThis.fetch = async () => {
+    requestReceived()
+    return new Promise(() => {})
+  }
   const provider = {
-    baseUrl: 'http://127.0.0.1:1',
+    baseUrl: 'http://checkpoint.invalid/v1',
     apiKey: 'k',
     model: 'm',
     contextBudget: 200,
     maxRetries: 0,
-    timeoutMs: 1000,
+    timeoutMs: 5000,
   }
   const controller = new AbortController()
-  const messages = await builder.build(
-    session.id,
-    '你是助手。',
-    provider,
-    controller.signal,
-  )
+  const messages = await Promise.race([
+    builder.build(session.id, '你是助手。', provider, controller.signal),
+    new Promise((_, reject) =>
+      setTimeout(
+        () => reject(new Error('build waited for checkpoint refresh')),
+        200,
+      ),
+    ),
+  ])
   // 降级产物仍是合法消息序列：system 头 + 确定性裁剪后的最近窗口。
   assert.ok(Array.isArray(messages))
   assert.ok(messages.length > 0)
   assert.equal(messages[0].role, 'system')
   assert.match(messages[0].content, /助手/)
+  await received
+  controller.abort()
+  globalThis.fetch = originalFetch
+  store.close()
+})
+
+test('ContextBuilder.build reuses checkpoint and includes watermark suffix', async () => {
+  const store = new Store(
+    mkdtempSync(join(tmpdir(), 'reflexion-ctx-checkpoint-hit-')),
+  )
+  const project = store.projects.create({ name: 'p', folderPath: '/w' })
+  const session = store.sessions.create(project.id)
+  for (let i = 0; i < 16; i += 1) {
+    store.messages.create({
+      sessionId: session.id,
+      runId: null,
+      role: i % 2 === 0 ? 'user' : 'assistant',
+      content: `消息-${i}-${'内容'.repeat(300)}`,
+      status: 'completed',
+    })
+  }
+  const messages = store.messages.listBySession(session.id)
+  const prefixFrames = messages.slice(0, 8).map((message) => ({
+    kind: message.role === 'user' ? 'user' : 'assistant_text',
+    content: message.content,
+  }))
+  const { computeSourceHash } =
+    await import('../dist/agent/context/context-checkpoint.js')
+  store.contextCheckpoints.upsert({
+    sessionId: session.id,
+    throughMessageId: messages[7].id,
+    sourceHash: computeSourceHash(prefixFrames),
+    summary: {
+      goal: '复用既有摘要',
+      constraints: [],
+      decisions: [],
+      completed: [],
+      pending: [],
+      toolFacts: [],
+      knownErrors: [],
+    },
+    tokenEstimate: 10,
+    model: 'm',
+    schemaVersion: 1,
+  })
+
+  const result = await new ContextBuilder(store).build(
+    session.id,
+    '你是助手。',
+    {
+      baseUrl: 'http://127.0.0.1:1',
+      apiKey: 'k',
+      model: 'm',
+      contextBudget: 5000,
+      maxRetries: 0,
+    },
+    new AbortController().signal,
+  )
+  const text = result.map((message) => message.content).join('\n')
+  assert.match(text, /复用既有摘要/)
+  assert.doesNotMatch(text, /消息-0-/)
+  assert.match(text, /消息-8-/)
+  assert.match(text, /消息-15-/)
   store.close()
 })
 
