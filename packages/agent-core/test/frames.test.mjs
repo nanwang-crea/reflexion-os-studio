@@ -119,7 +119,7 @@ test('compactFrames never splits a tool round at the boundary', async () => {
   )
 })
 
-test('boundFramesForModel folds whole tool rounds without dangling results', () => {
+test('boundFramesForModel preserves recent tool rounds and shrinks their results', () => {
   const frames = messagesToFrames([
     { role: 'system', content: 'sys' },
     userMessage('读文件'),
@@ -149,8 +149,10 @@ test('boundFramesForModel folds whole tool rounds without dangling results', () 
   const projected = framesToMessages(bounded)
   assert.equal(
     projected.some((m) => m.role === 'tool'),
-    false,
+    true,
   )
+  const result = projected.find((m) => m.role === 'tool')
+  assert.match(result.content, /因上下文超长被截断/)
   assert.ok(estimateFrameTokens(bounded) <= 2000)
   assert.deepEqual(validateModelMessages(projected), [])
 })

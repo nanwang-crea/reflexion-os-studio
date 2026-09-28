@@ -51,6 +51,12 @@ test('compactInRun deterministically bounds old rounds without provider calls', 
   assert.ok(text.includes('更早的历史已因上下文超长被截断'))
   assert.ok(!text.includes('旧问题0'))
   assert.ok(text.includes('最近一条'))
+  assert.equal(
+    result.some(
+      (message) => message.role === 'tool' && message.toolCallId === 'c1',
+    ),
+    true,
+  )
   // 无悬空 tool 消息:所有 role=tool 都能匹配到保留的 assistant.toolCalls。
   const keptIds = new Set()
   for (const message of result) {

@@ -28,7 +28,7 @@ test('capToolResultForModel truncates long plain text keeping head and tail', ()
 
 test('capToolResultForModel preserves JSON metadata and elides middle of long content', () => {
   const content = JSON.stringify({
-    content: 'a'.repeat(60_000),
+    content: 'a'.repeat(160_000),
     modifiedMs: 1234567890,
     offset: 0,
     sizeBytes: 123456,
@@ -48,7 +48,7 @@ test('capToolResultForModel preserves JSON metadata and elides middle of long co
 
 test('capToolResultForModel caps large arrays and records elided count', () => {
   const matches = []
-  for (let index = 0; index < 500; index += 1) {
+  for (let index = 0; index < 5000; index += 1) {
     matches.push({
       line: index + 1,
       path: `src/file-${index}.ts`,
@@ -60,12 +60,12 @@ test('capToolResultForModel caps large arrays and records elided count', () => {
   assert.ok(capped.length <= MODEL_TOOL_RESULT_MAX_CHARS)
   const parsed = JSON.parse(capped)
   assert.equal(parsed.truncated, true)
-  assert.equal(parsed.matchesElided, 500 - parsed.matches.length)
+  assert.equal(parsed.matchesElided, 5000 - parsed.matches.length)
   assert.ok(parsed.matchesElided > 0)
   assert.equal(parsed.matches[0].path, 'src/file-0.ts')
   assert.equal(
     parsed.matches[parsed.matches.length - 1].path,
-    'src/file-499.ts',
+    'src/file-4999.ts',
   )
 })
 
@@ -73,7 +73,7 @@ test('capToolResultForModel keeps exitCode when stdout is huge', () => {
   const content = JSON.stringify({
     exitCode: 0,
     stderr: '',
-    stdout: 'x'.repeat(80_000),
+    stdout: 'x'.repeat(180_000),
     truncated: false,
   })
   const capped = capToolResultForModel(content)
@@ -87,7 +87,7 @@ test('capToolResultForModel keeps exitCode when stdout is huge', () => {
 
 test('capToolResultForModel falls back to plain truncation when JSON cannot shrink', () => {
   const many = {}
-  for (let index = 0; index < 400; index += 1) {
+  for (let index = 0; index < 2000; index += 1) {
     many[`key${index}`] = 'v'.repeat(80)
   }
   const content = JSON.stringify(many)

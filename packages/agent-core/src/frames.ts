@@ -209,11 +209,11 @@ export function boundFramesForModel(
 ): ContextFrame[] {
   let current = [...frames]
   if (estimateFrameTokens(current) <= budgetTokens) return current
-  let folded = foldOldestToolRoundFrame(current)
+  let folded = foldOldestToolRoundFrame(current, keepRecentFrames)
   while (folded !== null) {
     current = folded
     if (estimateFrameTokens(current) <= budgetTokens) return current
-    folded = foldOldestToolRoundFrame(current)
+    folded = foldOldestToolRoundFrame(current, keepRecentFrames)
   }
   // 截断兜底：保留 system + 最近 Frame 窗口。
   const head = current[0]?.kind === 'system' ? 1 : 0
@@ -229,27 +229,7 @@ export function boundFramesForModel(
   let shrinkPasses = 0
   while (estimateFrameTokens(bounded) > budgetTokens && shrinkPasses < 48) {
     shrinkPasses += 1
-    const index = largestShrinkableIndex(bounded)
-    if (index < 0) break
-    const frame = bounded[index]
-    const text =
-      frame.kind === 'system' ||
-      frame.kind === 'user' ||
-      frame.kind === 'assistant_text' ||
-      frame.kind === 'runtime_control'
-        ? frame.content
-        : frame.assistant.content
-    if (text.length < 32) break
-    const half = text.slice(0, Math.floor(text.length / 2))
-    const truncated = `${half}…（因上下文超长被截断）`
-    if (frame.kind === 'tool_round') {
-      bounded[index] = {
-        ...frame,
-        assistant: { ...frame.assistant, content: truncated },
-      }
-    } else {
-      bounded[index] = { ...frame, content: truncated } as ContextFrame
-    }
+    if (!shrinkLargestFrameContent(bounded)) break
   }
   return bounded
 }
@@ -257,8 +237,11 @@ export function boundFramesForModel(
 /** 折叠最老的工具轮 Frame 为说明性 assistant 文本；无可折叠返回 null。 */
 function foldOldestToolRoundFrame(
   frames: ContextFrame[],
+  keepRecentFrames: number,
 ): ContextFrame[] | null {
-  for (let i = 0; i < frames.length; i += 1) {
+  const head = frames[0]?.kind === 'system' ? 1 : 0
+  const protectedStart = Math.max(head, frames.length - keepRecentFrames)
+  for (let i = head; i < protectedStart; i += 1) {
     const frame = frames[i]
     if (frame.kind !== 'tool_round') continue
     const prefix =
@@ -274,20 +257,63 @@ function foldOldestToolRoundFrame(
   return null
 }
 
-function largestShrinkableIndex(frames: ContextFrame[]): number {
-  let index = -1
-  let length = 0
+interface ShrinkTarget {
+  frameIndex: number
+  resultIndex: number | null
+  text: string
+}
+
+/** 收缩最大正文；工具结果只改 content，保持 call/result 配对与错误状态。 */
+function shrinkLargestFrameContent(frames: ContextFrame[]): boolean {
+  let target: ShrinkTarget | null = null
   for (let i = 0; i < frames.length; i += 1) {
     const frame = frames[i]
     if (frame.kind === 'system') continue
-    const text =
-      frame.kind === 'tool_round' ? frame.assistant.content : frame.content
-    if (text.length > length) {
-      index = i
-      length = text.length
+    if (frame.kind !== 'tool_round') {
+      if (target === null || frame.content.length > target.text.length) {
+        target = { frameIndex: i, resultIndex: null, text: frame.content }
+      }
+      continue
+    }
+    if (
+      target === null ||
+      frame.assistant.content.length > target.text.length
+    ) {
+      target = {
+        frameIndex: i,
+        resultIndex: null,
+        text: frame.assistant.content,
+      }
+    }
+    for (let j = 0; j < frame.results.length; j += 1) {
+      const text = frame.results[j].content
+      if (target === null || text.length > target.text.length) {
+        target = { frameIndex: i, resultIndex: j, text }
+      }
     }
   }
-  return index
+  if (target === null || target.text.length < 32) return false
+  const half = target.text.slice(0, Math.floor(target.text.length / 2))
+  const truncated = `${half}…（因上下文超长被截断）`
+  const frame = frames[target.frameIndex]
+  if (frame.kind !== 'tool_round') {
+    frames[target.frameIndex] = { ...frame, content: truncated }
+    return true
+  }
+  if (target.resultIndex === null) {
+    frames[target.frameIndex] = {
+      ...frame,
+      assistant: { ...frame.assistant, content: truncated },
+    }
+    return true
+  }
+  frames[target.frameIndex] = {
+    ...frame,
+    results: frame.results.map((result, index) =>
+      index === target.resultIndex ? { ...result, content: truncated } : result,
+    ),
+  }
+  return true
 }
 
 // 供按消息估算的旧接口兼容使用（诊断口径）。

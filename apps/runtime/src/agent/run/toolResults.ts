@@ -24,18 +24,18 @@ import {
  *   尾部截断会把分页与截断语义一起切掉。
  * - 纯文本结果：保留头尾、省略中间，并注明原文总长。
  */
-export const MODEL_TOOL_RESULT_MAX_CHARS = 16_000
+export const MODEL_TOOL_RESULT_MAX_CHARS = 100_000
 
 /** 纯文本截断的首尾保留量（含省略标记总量恒低于上限）。 */
-const PLAIN_HEAD_CHARS = 10_000
-const PLAIN_TAIL_CHARS = 3_000
+const PLAIN_HEAD_CHARS = 70_000
+const PLAIN_TAIL_CHARS = 20_000
 
 /** JSON 内超长字符串的首轮收缩参数；放不下时逐轮减半直到下限。 */
-const STRING_HEAD = 3_000
-const STRING_TAIL = 1_500
+const STRING_HEAD = 60_000
+const STRING_TAIL = 25_000
 /** JSON 内大数组的首轮收缩参数（头尾各保留条数）。 */
-const ARRAY_HEAD = 40
-const ARRAY_TAIL = 20
+const ARRAY_HEAD = 400
+const ARRAY_TAIL = 200
 /** 收缩下限：全部触底仍未放得下则放弃结构化路径，退回纯文本截断。 */
 const STRING_FLOOR_HEAD = 600
 const STRING_FLOOR_TAIL = 300
