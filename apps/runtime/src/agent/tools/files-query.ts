@@ -203,7 +203,7 @@ export function createFileGlobTool(
   return {
     name: 'file.glob',
     description:
-      '按 glob 模式在工作区内递归查找文件路径。支持 **（跨目录）、* 与 ?（单段内）。结果带 truncated/nextOffset：truncated=true 时用同一 pattern 以 offset=nextOffset 续读，或缩小 pattern/limit。需要"找出所有某种文件"时优先用它而不是逐层 list。',
+      '按 glob 模式在工作区内递归查找文件路径。支持 **、*、?、字符类与 {ts,tsx} 展开；遵循 .gitignore，不跟随符号链接。结果包含 scannedFiles、scanTruncated、actualGlob 与分页信息；scanTruncated=true 表示达到遍历上限。需要"找出所有某种文件"时优先使用本工具。',
     parameters: {
       type: 'object',
       properties: {
@@ -249,7 +249,7 @@ export function createFileGrepTool(
   return {
     name: 'file.grep',
     description:
-      '在工作区文件内容中使用正则表达式搜索，返回命中的 path/line/text。支持 foo|bar、function\\s+\\w+ 等模式；搜索普通文本但包含正则符号时设置 literal=true。context>0 时附带上下文行。glob 可缩小文件范围，不含 / 的模式（如 *.rs）匹配任意目录下的文件名。返回 truncated=true 时用 cursor 续读或缩小范围。二进制文件自动跳过。',
+      '在工作区文件内容中使用正则表达式搜索，返回命中的 path/line/text。支持 foo|bar、function\\s+\\w+ 等模式；搜索普通文本但包含正则符号时设置 literal=true。glob 可缩小范围，不含 / 的模式（如 *.rs）匹配任意目录文件名。搜索遵循 .gitignore、不跟随符号链接并硬拒绝凭据路径；结果包含 scannedFiles、scanTruncated、actualGlob、ignoreCase 与分页信息，便于判断空命中是否完整。',
     parameters: {
       type: 'object',
       properties: {

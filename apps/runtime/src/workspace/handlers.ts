@@ -94,15 +94,35 @@ export const workspaceCommandHandlers: Record<string, CommandHandler> = {
     const query = globSafe(requireString(p, 'query'))
     // 文件名子串搜索用 glob 全量递归：`**` 跨所有目录段，`*query*` 命中末段文件名。
     // query 已做白名单清洗（去掉 `/`、`..`、通配符等），避免影响分段与匹配语义。
-    if (query === '') return { entries: [], truncated: false }
+    if (query === '') {
+      return {
+        entries: [],
+        truncated: false,
+        scanTruncated: false,
+        scannedFiles: 0,
+        actualGlob: '',
+        ignoreCase: false,
+      }
+    }
     const pattern = `**/*${query}*`
     const result = (await requestSystem(system, 'file.glob', {
       workspaceRoot: project.folderPath,
       pattern,
-    })) as { matches?: unknown[]; truncated?: boolean }
+    })) as {
+      matches?: unknown[]
+      truncated?: boolean
+      scanTruncated?: boolean
+      scannedFiles?: number
+      actualGlob?: string
+      ignoreCase?: boolean
+    }
     return {
       entries: result.matches ?? [],
       truncated: result.truncated ?? false,
+      scanTruncated: result.scanTruncated ?? false,
+      scannedFiles: result.scannedFiles ?? 0,
+      actualGlob: result.actualGlob ?? pattern,
+      ignoreCase: result.ignoreCase ?? false,
     }
   },
   'workspace.read_file': async (p, { store, system }) => {

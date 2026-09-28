@@ -10,7 +10,7 @@ use serde::Serialize;
 
 use super::glob;
 use super::paths::resolve_in_workspace;
-use super::walk::{walk_files, FileEntry};
+use super::walk::{walk_search_files, FileEntry};
 
 pub const MAX_GLOB_RESULTS: usize = 2000;
 /// grep 单次调用的全工作区累计上限（跨文件累计，非单文件上限）。
@@ -32,6 +32,7 @@ pub struct GlobOutcome {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_offset: Option<usize>,
     pub scan_truncated: bool,
+    pub scanned_files: usize,
 }
 
 #[derive(Serialize)]
@@ -62,6 +63,7 @@ pub struct GrepOutcome {
     pub truncated: bool,
     pub next_offset: Option<usize>,
     pub scan_truncated: bool,
+    pub scanned_files: usize,
 }
 
 pub fn glob_search(
@@ -70,16 +72,15 @@ pub fn glob_search(
     offset: Option<usize>,
     limit: usize,
 ) -> Result<GlobOutcome, String> {
-    let segments = glob::pattern_segments(pattern)?;
+    let matcher = glob::compile(pattern)?;
     let start = resolve_in_workspace(workspace_root, ".")?;
-    let walked = walk_files(&start, "");
+    let walked = walk_search_files(&start);
     let limit = limit.clamp(1, MAX_GLOB_RESULTS);
     // 全量收集后再分页：match 到 limit 即 break 是有偏截断，
     // 排序完整的匹配集才能给出稳定可续读的 offset 语义。
     let mut all: Vec<FileEntry> = Vec::new();
     for entry in &walked.files {
-        let path_segments: Vec<&str> = entry.path.split('/').collect();
-        if glob::matches(&segments, &path_segments) {
+        if matcher.is_match(&entry.path) {
             all.push(entry.clone());
         }
     }
@@ -93,6 +94,7 @@ pub fn glob_search(
         truncated: walked.truncated || more,
         next_offset: if more { Some(page_end) } else { None },
         scan_truncated: walked.truncated,
+        scanned_files: walked.scanned_files,
     })
 }
 
@@ -132,7 +134,7 @@ pub fn grep_search_with_mode(
         return Err("search pattern must not be empty".to_string());
     }
     let filter = match glob_filter {
-        Some(value) => Some(glob::pattern_segments(value)?),
+        Some(value) => Some(glob::compile(value)?),
         None => None,
     };
     let source = if literal {
@@ -147,7 +149,7 @@ pub fn grep_search_with_mode(
         .map_err(|error| format!("invalid search regex: {error}"))?;
     let context = context.min(MAX_GREP_CONTEXT);
     let start = resolve_in_workspace(workspace_root, ".")?;
-    let walked = walk_files(&start, "");
+    let walked = walk_search_files(&start);
     let limit = limit.clamp(1, MAX_GREP_RESULTS);
     let mut matches: Vec<GrepMatch> = Vec::new();
     // W3：limit 是全工作区累计上限——旧实现按文件各自计数，
@@ -158,8 +160,7 @@ pub fn grep_search_with_mode(
     let mut hit_limit = false;
     'files: for entry in &walked.files {
         if let Some(pattern) = &filter {
-            let path_segments: Vec<&str> = entry.path.split('/').collect();
-            if !glob::matches(pattern, &path_segments) {
+            if !pattern.is_match(&entry.path) {
                 continue;
             }
         }
@@ -251,6 +252,7 @@ pub fn grep_search_with_mode(
             None
         },
         scan_truncated: walked.truncated,
+        scanned_files: walked.scanned_files,
     })
 }
 
@@ -372,6 +374,7 @@ mod tests {
         assert_eq!(outcome.matches.len(), 2);
         assert_eq!(outcome.matches[0].path, "a.ts");
         assert_eq!(outcome.matches[1].path, "src/b.ts");
+        assert_eq!(outcome.scanned_files, 3);
         assert!(!outcome.truncated);
         assert_eq!(outcome.next_offset, None);
         fs::remove_dir_all(&root).ok();

@@ -4,6 +4,7 @@
 use std::fs;
 use std::path::Path;
 
+use ignore::WalkBuilder;
 use serde::Serialize;
 
 pub const MAX_WALK_FILES: usize = 20_000;
@@ -40,6 +41,7 @@ pub struct FileEntry {
 
 pub struct Walked {
     pub files: Vec<FileEntry>,
+    pub scanned_files: usize,
     /// 文件数/深度达到上限：结果不完整，调用方应如实告知模型。
     pub truncated: bool,
 }
@@ -69,9 +71,118 @@ fn walk_files_with_limits(
     );
     state.files.sort_by(|a, b| a.path.cmp(&b.path));
     Walked {
+        scanned_files: state.files.len(),
         files: state.files,
         truncated: state.truncated,
     }
+}
+
+/// 搜索专用遍历：遵循仓库 ignore 规则，但安全拒绝项优先级更高，且永不跟随符号链接。
+pub fn walk_search_files(start_dir: &Path) -> Walked {
+    walk_search_files_with_limits(start_dir, MAX_WALK_FILES, MAX_WALK_DEPTH)
+}
+
+fn walk_search_files_with_limits(start_dir: &Path, max_files: usize, max_depth: usize) -> Walked {
+    let mut builder = WalkBuilder::new(start_dir);
+    builder
+        .hidden(false)
+        .follow_links(false)
+        .parents(true)
+        .git_ignore(true)
+        .git_global(true)
+        .git_exclude(true)
+        .require_git(false)
+        .max_depth(Some(max_depth));
+    let root = start_dir.to_path_buf();
+    builder.filter_entry(move |entry| {
+        if entry.depth() == 0 {
+            return true;
+        }
+        let relative = entry.path().strip_prefix(&root).unwrap_or(entry.path());
+        let name = entry.file_name().to_string_lossy();
+        if entry.file_type().is_some_and(|kind| kind.is_dir())
+            && IGNORED_DIR_NAMES.contains(&name.as_ref())
+        {
+            return false;
+        }
+        !is_sensitive_search_path(relative)
+    });
+
+    let mut files = Vec::new();
+    let mut truncated = false;
+    for result in builder.build() {
+        let Ok(entry) = result else { continue };
+        if entry.depth() == max_depth && entry.file_type().is_some_and(|kind| kind.is_dir()) {
+            truncated = true;
+        }
+        let Some(file_type) = entry.file_type() else {
+            continue;
+        };
+        if file_type.is_symlink() || !file_type.is_file() {
+            continue;
+        }
+        if files.len() >= max_files {
+            truncated = true;
+            break;
+        }
+        let Ok(relative) = entry.path().strip_prefix(start_dir) else {
+            continue;
+        };
+        if is_sensitive_search_path(relative) {
+            continue;
+        }
+        let file_name = entry.file_name().to_string_lossy();
+        if super::upload::is_upload_artifact_name(&file_name) {
+            continue;
+        }
+        let path = relative
+            .components()
+            .map(|component| component.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/");
+        let size_bytes = entry.metadata().map(|metadata| metadata.len()).unwrap_or(0);
+        files.push(FileEntry {
+            path,
+            kind: "file".to_string(),
+            size_bytes,
+        });
+    }
+    files.sort_by(|left, right| left.path.cmp(&right.path));
+    Walked {
+        scanned_files: files.len(),
+        files,
+        truncated,
+    }
+}
+
+/// 搜索不得读取或通过命中片段泄露凭据；ignore 文件中的反向规则也不能覆盖此边界。
+fn is_sensitive_search_path(relative: &Path) -> bool {
+    let components: Vec<String> = relative
+        .components()
+        .map(|component| component.as_os_str().to_string_lossy().to_ascii_lowercase())
+        .collect();
+    if components.iter().any(|component| {
+        matches!(
+            component.as_str(),
+            ".ssh" | ".gnupg" | "pgp" | ".aws" | ".docker"
+        )
+    }) {
+        return true;
+    }
+    let Some(name) = components.last() else {
+        return false;
+    };
+    name == ".npmrc"
+        || name == ".netrc"
+        || name == "credentials.json"
+        || name == "secrets.json"
+        || name == "id_token"
+        || name.starts_with(".env")
+        || name.ends_with(".key")
+        || name.ends_with(".pem")
+        || name.ends_with(".token")
+        || name.starts_with("id_rsa")
+        || name.starts_with("id_ed25519")
 }
 
 struct WalkState {
@@ -214,5 +325,57 @@ mod tests {
         assert_eq!(walked.files[0].path, "src/real.ts");
         assert!(!walked.truncated);
         fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn search_walk_honours_gitignore_and_keeps_sensitive_paths_denied() {
+        let root = temp_workspace("search-ignore");
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::create_dir_all(root.join(".ssh")).unwrap();
+        fs::write(
+            root.join(".gitignore"),
+            "ignored.txt\n!.env.local\n!.ssh/id_ed25519\n",
+        )
+        .unwrap();
+        fs::write(root.join("ignored.txt"), "ignored").unwrap();
+        fs::write(root.join("src/visible.txt"), "visible").unwrap();
+        fs::write(root.join(".env.local"), "").unwrap();
+        fs::write(root.join("credentials.json"), "").unwrap();
+        fs::write(root.join(".ssh/id_ed25519"), "").unwrap();
+
+        let walked = walk_search_files(&root);
+        let paths: Vec<&str> = walked
+            .files
+            .iter()
+            .map(|entry| entry.path.as_str())
+            .collect();
+        assert!(paths.contains(&"src/visible.txt"));
+        assert!(!paths.contains(&"ignored.txt"));
+        assert!(!paths.contains(&".env.local"));
+        assert!(!paths.contains(&"credentials.json"));
+        assert!(!paths.iter().any(|path| path.starts_with(".ssh/")));
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn search_walk_reports_file_limit_and_never_follows_symlinks() {
+        let root = temp_workspace("search-limits");
+        let outside = temp_workspace("search-limits-outside");
+        for index in 0..4 {
+            fs::write(root.join(format!("file-{index}.txt")), "value").unwrap();
+        }
+        fs::write(outside.join("outside.txt"), "outside").unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&outside, root.join("linked")).unwrap();
+
+        let walked = walk_search_files_with_limits(&root, 2, 32);
+        assert_eq!(walked.scanned_files, 2);
+        assert!(walked.truncated);
+        assert!(!walked
+            .files
+            .iter()
+            .any(|entry| entry.path.contains("outside")));
+        fs::remove_dir_all(&root).ok();
+        fs::remove_dir_all(&outside).ok();
     }
 }

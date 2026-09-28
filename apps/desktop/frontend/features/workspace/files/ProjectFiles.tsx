@@ -50,6 +50,10 @@ export function ProjectFiles(props: ProjectFilesProps): React.JSX.Element {
   const [searchResults, setSearchResults] = useState<{
     entries: WorkspaceEntry[]
     truncated: boolean
+    scanTruncated: boolean
+    scannedFiles: number
+    actualGlob: string
+    ignoreCase: boolean
   } | null>(null)
   const [searching, setSearching] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
@@ -158,6 +162,7 @@ export function ProjectFiles(props: ProjectFilesProps): React.JSX.Element {
         {view === 'files' ? (
           <>
             <div className="file-search">
+              <span className="file-search-label">文件名</span>
               <input
                 type="text"
                 placeholder="搜索文件名…"
@@ -174,6 +179,10 @@ export function ProjectFiles(props: ProjectFilesProps): React.JSX.Element {
               <SearchResults
                 entries={searchResults.entries}
                 truncated={searchResults.truncated}
+                scanTruncated={searchResults.scanTruncated}
+                scannedFiles={searchResults.scannedFiles}
+                actualGlob={searchResults.actualGlob}
+                ignoreCase={searchResults.ignoreCase}
                 activePath={props.activePath}
                 onOpenFile={props.onOpenFile}
               />
@@ -257,13 +266,29 @@ export function ProjectFiles(props: ProjectFilesProps): React.JSX.Element {
 interface SearchResultsProps {
   entries: WorkspaceEntry[]
   truncated: boolean
+  scanTruncated: boolean
+  scannedFiles: number
+  actualGlob: string
+  ignoreCase: boolean
   activePath: string | null
   onOpenFile: (path: string, line?: number) => void
 }
 
 function SearchResults(props: SearchResultsProps): React.JSX.Element {
   if (props.entries.length === 0) {
-    return <div className="tree-hint">没有匹配的文件。</div>
+    return (
+      <div className="tree-hint file-search-diagnostic">
+        <span>没有匹配的文件名。</span>
+        <small>
+          已扫描 {props.scannedFiles} 个文件 ·{' '}
+          {props.ignoreCase ? '忽略' : '区分'}
+          大小写 · {props.actualGlob}
+        </small>
+        {props.scanTruncated && (
+          <strong>已达到遍历上限，结果可能不完整。</strong>
+        )}
+      </div>
+    )
   }
   const sorted = props.entries
     .slice()
@@ -287,7 +312,11 @@ function SearchResults(props: SearchResultsProps): React.JSX.Element {
         )
       })}
       {props.truncated && (
-        <li className="tree-hint">结果过多，仅显示前 {sorted.length} 条。</li>
+        <li className="tree-hint">
+          {props.scanTruncated
+            ? `已扫描 ${props.scannedFiles} 个文件并达到遍历上限，结果可能不完整。`
+            : `结果过多，仅显示前 ${sorted.length} 条。`}
+        </li>
       )}
     </ul>
   )

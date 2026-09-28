@@ -140,6 +140,9 @@ pub fn handle_file_glob(params: Value) -> Result<Value, OpError> {
         "truncated": outcome.truncated,
         "nextOffset": outcome.next_offset,
         "scanTruncated": outcome.scan_truncated,
+        "scannedFiles": outcome.scanned_files,
+        "actualGlob": params.pattern,
+        "ignoreCase": false,
         "truncationReason": if outcome.scan_truncated { "workspace_walk_limit" } else if outcome.truncated { "page_limit" } else { "none" },
     }))
 }
@@ -165,6 +168,9 @@ pub fn handle_file_grep(params: Value) -> Result<Value, OpError> {
         "truncated": outcome.truncated,
         "nextOffset": outcome.next_offset,
         "scanTruncated": outcome.scan_truncated,
+        "scannedFiles": outcome.scanned_files,
+        "actualGlob": params.glob,
+        "ignoreCase": params.ignore_case.unwrap_or(false),
         "truncationReason": if outcome.scan_truncated { "workspace_walk_limit" } else if outcome.truncated { "page_limit" } else { "none" },
     }))
 }

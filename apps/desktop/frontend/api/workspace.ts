@@ -104,11 +104,15 @@ export function writeFile(
 export function searchFiles(
   projectId: string,
   query: string,
-): Promise<{ entries: WorkspaceEntry[]; truncated: boolean }> {
-  return request<{ entries: WorkspaceEntry[]; truncated: boolean }>(
-    'workspace.search_files',
-    { projectId, query },
-  )
+): Promise<{
+  entries: WorkspaceEntry[]
+  truncated: boolean
+  scanTruncated: boolean
+  scannedFiles: number
+  actualGlob: string
+  ignoreCase: boolean
+}> {
+  return request('workspace.search_files', { projectId, query })
 }
 
 /** Git 变更列表（porcelain 状态聚合）；repo=false 表示不是 Git 仓库。 */

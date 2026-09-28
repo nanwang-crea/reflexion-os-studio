@@ -738,6 +738,10 @@ export const CommandSchemaRegistry = {
     result: z.object({
       entries: z.array(WorkspaceEntrySchema),
       truncated: z.boolean(),
+      scanTruncated: z.boolean(),
+      scannedFiles: z.number().int().nonnegative(),
+      actualGlob: z.string(),
+      ignoreCase: z.boolean(),
     }),
   },
   'workspace.read_file': {
