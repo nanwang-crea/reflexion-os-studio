@@ -104,6 +104,29 @@ test('local directory install, toggle and restart preserve canonical state', asy
   restartedStore.close()
 })
 
+test('root Git metadata files are accepted but not installed', async () => {
+  const { root, store, service } = await setup()
+  const source = join(root, 'source-package')
+  writePackage(source, 'git-metadata-test')
+  writeFileSync(join(source, '.gitattributes'), '* text=auto\n')
+  writeFileSync(join(source, '.gitignore'), 'dist/\n')
+
+  const installed = (
+    await completed(service, service.install({ source: 'local', path: source }))
+  ).plugin
+
+  assert.equal(existsSync(join(installed.installPath, '.gitattributes')), false)
+  assert.equal(existsSync(join(installed.installPath, '.gitignore')), false)
+  mkdirSync(join(source, 'assets'))
+  writeFileSync(join(source, 'assets', '.gitignore'), 'nested metadata')
+  const nestedMetadata = await waitForTask(
+    service,
+    service.preview({ source: 'local', path: source }),
+  )
+  assert.match(nestedMetadata.error, /forbidden plugin package entry/)
+  store.close()
+})
+
 test('local plugin.json file and workspace directory are valid install sources', async () => {
   const { root, store, service } = await setup()
   const local = join(root, 'local-package')

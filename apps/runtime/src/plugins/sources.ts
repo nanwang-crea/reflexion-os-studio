@@ -10,7 +10,10 @@ import { spawn } from 'node:child_process'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import type { PluginInstallSource } from '@reflexion-os-studio/contracts'
 import type { Store } from '../store/index.js'
-import { resolvePackageDirectory } from './package.js'
+import {
+  isIgnoredRootMetadataFile,
+  resolvePackageDirectory,
+} from './package.js'
 
 export interface SourceResolutionOptions {
   signal?: AbortSignal
@@ -73,13 +76,23 @@ export function sourceForUpdate(
   throw new Error('builtin plugins cannot be updated')
 }
 
-export function copyPackage(source: string, target: string): void {
+export function copyPackage(
+  source: string,
+  target: string,
+  isPackageRoot = true,
+): void {
   mkdirSync(target)
   for (const entry of readdirSync(source, { withFileTypes: true })) {
+    if (
+      isPackageRoot &&
+      isIgnoredRootMetadataFile(entry.name, entry.isFile())
+    ) {
+      continue
+    }
     const sourcePath = join(source, entry.name)
     const targetPath = join(target, entry.name)
     if (entry.isSymbolicLink()) throw new Error('symlinks are not allowed')
-    if (entry.isDirectory()) copyPackage(sourcePath, targetPath)
+    if (entry.isDirectory()) copyPackage(sourcePath, targetPath, false)
     else if (entry.isFile()) copyFileSync(sourcePath, targetPath)
     else throw new Error(`unsupported plugin entry: ${entry.name}`)
   }

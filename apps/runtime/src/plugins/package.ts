@@ -24,6 +24,7 @@ const ALLOWED_ROOT_ENTRIES = new Set([
   'references',
   'scripts',
 ])
+const IGNORED_ROOT_METADATA_FILES = new Set(['.gitattributes', '.gitignore'])
 const FORBIDDEN_NAMES = new Set([
   '.env',
   '.git',
@@ -134,6 +135,13 @@ export function packageManifestForBuiltin(
 
 export const compareVersions = compareSemVer
 
+export function isIgnoredRootMetadataFile(
+  name: string,
+  isFile: boolean,
+): boolean {
+  return isFile && IGNORED_ROOT_METADATA_FILES.has(name)
+}
+
 function assertPackageTree(directory: string): void {
   const root = resolve(directory)
   if (lstatSync(root).isSymbolicLink())
@@ -144,6 +152,12 @@ function assertPackageTree(directory: string): void {
     for (const entry of readdirSync(current, { withFileTypes: true })) {
       const normalized = entry.name.toLowerCase()
       if (entry.isSymbolicLink()) throw new Error('symlinks are not allowed')
+      if (
+        current === root &&
+        isIgnoredRootMetadataFile(entry.name, entry.isFile())
+      ) {
+        continue
+      }
       if (
         entry.name.startsWith('.') ||
         FORBIDDEN_NAMES.has(normalized) ||
