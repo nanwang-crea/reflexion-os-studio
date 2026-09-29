@@ -1,5 +1,7 @@
+import { useState } from 'react'
+
 import type { GitChangeEntry } from '@reflexion-os-studio/runtime-client'
-import { RefreshIcon } from '../../../ui/icons'
+import { ChevronIcon, RefreshIcon } from '../../../ui/icons'
 
 interface GitChangeListProps {
   entries: GitChangeEntry[]
@@ -47,50 +49,64 @@ export function GitChangeList(props: GitChangeListProps): React.JSX.Element {
     label: string,
     rows: GitChangeEntry[],
     mode: 'staged' | 'unstaged',
+    collapsed: boolean,
+    onToggle: () => void,
   ): React.JSX.Element => (
     <section>
-      <div className="git-group-label">
+      <button
+        type="button"
+        className="git-group-label"
+        aria-expanded={!collapsed}
+        onClick={onToggle}
+      >
+        <ChevronIcon />
         {label}（{rows.length}
         {mode === 'unstaged' && conflicts > 0 ? `，${conflicts} 冲突` : ''}）
-      </div>
-      <ul className="git-list">
-        {rows.map((entry) => (
-          <li key={entry.path} className="git-list-item">
-            <button
-              type="button"
-              className="git-row"
-              onClick={() => props.onOpen(entry)}
-              title={`在右侧打开 ${entry.path}`}
-            >
-              <span className={`git-badge git-badge-${entry.status}`}>
-                {STATUS_LABELS[entry.status]}
-              </span>
-              <span className="git-path">{entry.path}</span>
-              {entry.oldPath !== undefined && (
-                <span className="git-old-path">{entry.oldPath} →</span>
-              )}
-            </button>
-            {!props.readOnly && entry.status !== 'conflicted' && (
+      </button>
+      {!collapsed && (
+        <ul className="git-list">
+          {rows.map((entry) => (
+            <li key={entry.path} className="git-list-item">
               <button
                 type="button"
-                className="git-row-action"
-                disabled={props.busy}
-                title={mode === 'staged' ? '取消暂存' : '暂存'}
-                aria-label={mode === 'staged' ? '取消暂存' : '暂存'}
-                onClick={() =>
-                  mode === 'staged'
-                    ? props.onUnstagePaths(unstagePathsOf(entry))
-                    : props.onStagePaths([entry.path])
-                }
+                className="git-row"
+                onClick={() => props.onOpen(entry)}
+                title={`在右侧打开 ${entry.path}`}
               >
-                {mode === 'staged' ? '−' : '+'}
+                <span className={`git-badge git-badge-${entry.status}`}>
+                  {STATUS_LABELS[entry.status]}
+                </span>
+                <span className="git-path">{entry.path}</span>
+                {entry.oldPath !== undefined && (
+                  <span className="git-old-path">{entry.oldPath} →</span>
+                )}
               </button>
-            )}
-          </li>
-        ))}
-      </ul>
+              {!props.readOnly && entry.status !== 'conflicted' && (
+                <button
+                  type="button"
+                  className="git-row-action"
+                  disabled={props.busy}
+                  title={mode === 'staged' ? '取消暂存' : '暂存'}
+                  aria-label={mode === 'staged' ? '取消暂存' : '暂存'}
+                  onClick={() =>
+                    mode === 'staged'
+                      ? props.onUnstagePaths(unstagePathsOf(entry))
+                      : props.onStagePaths([entry.path])
+                  }
+                >
+                  {mode === 'staged' ? '−' : '+'}
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   )
+
+  // 分组默认展开；切换只改本地 UI 状态，不影响暂存语义。
+  const [collapsedStaged, setCollapsedStaged] = useState(false)
+  const [collapsedUnstaged, setCollapsedUnstaged] = useState(false)
 
   return (
     <>
@@ -135,8 +151,14 @@ export function GitChangeList(props: GitChangeListProps): React.JSX.Element {
         </div>
       ) : (
         <div className="git-groups">
-          {staged.length > 0 && renderGroup('已暂存', staged, 'staged')}
-          {unstaged.length > 0 && renderGroup('变更', unstaged, 'unstaged')}
+          {staged.length > 0 &&
+            renderGroup('已暂存', staged, 'staged', collapsedStaged, () =>
+              setCollapsedStaged((value) => !value),
+            )}
+          {unstaged.length > 0 &&
+            renderGroup('变更', unstaged, 'unstaged', collapsedUnstaged, () =>
+              setCollapsedUnstaged((value) => !value),
+            )}
         </div>
       )}
     </>

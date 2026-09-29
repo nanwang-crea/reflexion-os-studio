@@ -927,10 +927,35 @@
 }
 
 .git-group-label {
-  padding: 8px 14px 2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 8px 10px 2px 8px;
+  border: 0;
+  background: transparent;
   font-size: 11px;
   letter-spacing: 0.4px;
   color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.git-group-label:hover {
+  color: var(--text-secondary);
+}
+
+/* 折叠态 chevron 朝右、展开态朝下（顺时针 90°），复用树折叠约定。 */
+.git-group-label svg {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  transition: transform 0.12s ease;
+  transform: rotate(-90deg);
+}
+
+.git-group-label[aria-expanded='true'] svg {
+  transform: rotate(0deg);
 }
 
 .git-list-item {
