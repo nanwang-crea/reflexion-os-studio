@@ -3,77 +3,13 @@ import { test } from 'node:test'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { ToolRegistry } from '@reflexion-os-studio/agent-core'
-import { Store } from '../dist/store/index.js'
-import { RunEventEmitter } from '../dist/events.js'
 import { executeToolCall } from '../dist/agent/run/tool-executor.js'
-import { createRunExecutionState } from '../dist/agent/run/run-state.js'
+import { canonicalDigest } from '../dist/agent/permissions/index.js'
+
 import {
-  ApprovalGateway,
-  PermissionGate,
-  canonicalDigest,
-} from '../dist/agent/permissions/index.js'
-
-function freshContext(preset = 'workspace-read', danger = false) {
-  const store = new Store(mkdtempSync(join(tmpdir(), 'reflexion-shell-rule-')))
-  const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
-  const session = store.sessions.create(project.id)
-  const run = store.runs.create({
-    sessionId: session.id,
-    providerId: 'provider',
-    model: 'model',
-  })
-  const approvals = new ApprovalGateway()
-  const registry = new ToolRegistry()
-  const executed = []
-  registry.register({
-    name: 'shell.execute',
-    description: 'test double',
-    parameters: { type: 'object' },
-    execute: async (input) => {
-      executed.push({
-        command: input.args.command,
-        grant: input.grant,
-      })
-      return { content: 'ok', isError: false }
-    },
-  })
-  const events = []
-  const gate = new PermissionGate({
-    preset,
-    hasWorkspace: true,
-    approvalOverride: 'default',
-    dangerActive: () => danger,
-  })
-  return {
-    store,
-    session,
-    run,
-    approvals,
-    registry,
-    executed,
-    events,
-    emitter: new RunEventEmitter(run.id, (event) => events.push(event)),
-    input: {
-      store,
-      state: createRunExecutionState(),
-      run,
-      gate,
-      approvals,
-      registry,
-      workspaceRoot: '/tmp/p',
-      sandboxProvider: 'seatbelt',
-    },
-  }
-}
-
-function shellRequest(id, command, extra = {}) {
-  return {
-    id,
-    name: 'shell.execute',
-    arguments: JSON.stringify({ command, ...extra }),
-  }
-}
+  freshContext,
+  shellRequest,
+} from './fixtures/shell-permission-context.mjs'
 
 test('简单命令 session 前缀授权：同前缀后续免问，异前缀/换 cwd 仍问', async () => {
   const ctx = freshContext()
@@ -231,6 +167,7 @@ test('escalated：提权卡 elevated，grant 携带提权根并绑定 digest', a
     shellRequest('call-1', command, {
       sandbox_permissions: 'require_escalated',
       justification: '把结果导出到用户指定的笔记目录',
+      additional_write_roots: [target],
     }),
     new AbortController().signal,
   )
@@ -239,6 +176,7 @@ test('escalated：提权卡 elevated，grant 携带提权根并绑定 digest', a
   assert.equal(required.risk, 'elevated')
   assert.equal(required.context.escalation, true)
   assert.equal(required.subject.escalation, true)
+  assert.deepEqual(required.subject.escalationRoots, [target])
   assert.equal(required.subject.prefixCandidate, null, '提权不给会话前缀')
   approvals.resolveChoice(required.toolCallId, 'allow-once')
   const result = await first
@@ -271,7 +209,8 @@ test('提权缺 justification → 参数校验拒绝；敏感目标 → 不弹�
     { ...ctx3.input, emitter: ctx3.emitter },
     shellRequest('call-3', `cat ${home}/.ssh/id_ed25519`, {
       sandbox_permissions: 'require_escalated',
-      justification: '需要 ssh 私钥',
+      justification: '拒绝凭据目标',
+      additional_write_roots: [`${home}/.ssh/id_ed25519`],
     }),
     new AbortController().signal,
   )
@@ -318,6 +257,7 @@ test('Danger + require_escalated：提权被 danger 档吸收（roots 不进 gra
     shellRequest('call-d2', command, {
       sandbox_permissions: 'require_escalated',
       justification: '导出到笔记目录',
+      additional_write_roots: ['/Users/dev/notes/y'],
     }),
     new AbortController().signal,
   )
@@ -432,6 +372,7 @@ test('workspace-full：require_escalated 仍需提权审批（不因完全允许
     shellRequest('call-f2', command, {
       sandbox_permissions: 'require_escalated',
       justification: '归档运行日志到用户笔记目录',
+      additional_write_roots: ['/Users/dev/notes/archive/run.log'],
     }),
     new AbortController().signal,
   )
@@ -446,4 +387,68 @@ test('workspace-full：require_escalated 仍需提权审批（不因完全允许
   const grant = JSON.parse(ctx.executed[0].grant)
   assert.equal(grant.sandbox, 'escalated')
   assert.deepEqual(grant.escalationRoots, ['/Users/dev/notes/archive/run.log'])
+})
+
+for (const failure of [
+  'missing-scope',
+  'unavailable-provider',
+  'denied',
+  'cancelled',
+]) {
+  test(`escalation ${failure} never executes`, async () => {
+    const ctx = freshContext('workspace-full')
+    const controller = new AbortController()
+    if (failure === 'unavailable-provider') ctx.input.system = null
+    const promise = executeToolCall(
+      { ...ctx.input, emitter: ctx.emitter },
+      shellRequest('esc', 'tool --global', {
+        sandbox_permissions: 'require_escalated',
+        justification: 'write explicit cache',
+        ...(failure === 'missing-scope'
+          ? {}
+          : { additional_write_roots: [join(tmpdir(), 'external cache')] }),
+      }),
+      controller.signal,
+    )
+    // Attach rejection observer before aborting.
+    const observed = promise.catch((error) => error)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const required = ctx.events.find((e) => e.type === 'approval.required')
+    if (failure === 'denied') {
+      assert.ok(required)
+      ctx.approvals.resolveChoice(required.toolCallId, 'deny')
+    } else if (failure === 'cancelled') {
+      assert.ok(required)
+      controller.abort()
+    } else assert.equal(required, undefined)
+    const result = await observed
+    assert.ok(result.isError || result.name === 'AbortError')
+    assert.equal(ctx.executed.length, 0)
+  })
+}
+
+test('approval and grant bind Rust canonical paths rather than shell tokens', async () => {
+  const ctx = freshContext()
+  const canonical = join(tmpdir(), 'resolved scope')
+  ctx.input.system.request = async () => ({
+    escalationRoots: [canonical],
+    sandboxProvider: 'seatbelt',
+  })
+  const pending = executeToolCall(
+    { ...ctx.input, emitter: ctx.emitter },
+    shellRequest('scope', 'tool --global', {
+      sandbox_permissions: 'require_escalated',
+      justification: 'write cache',
+      additional_write_roots: [join(tmpdir(), 'alias scope')],
+    }),
+    new AbortController().signal,
+  )
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  const required = ctx.events.find((e) => e.type === 'approval.required')
+  assert.deepEqual(required.subject.escalationRoots, [canonical])
+  ctx.approvals.resolveChoice(required.toolCallId, 'allow-once')
+  assert.equal((await pending).isError, false)
+  const grant = JSON.parse(ctx.executed[0].grant)
+  assert.deepEqual(grant.escalationRoots, [canonical])
+  assert.equal(grant.subjectDigest, required.subject.commandDigest)
 })

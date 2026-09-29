@@ -1,3 +1,9 @@
+import type {
+  ToolCallRequest,
+  ToolResult,
+} from '@reflexion-os-studio/agent-core'
+import type { JsonValue, Run } from '@reflexion-os-studio/contracts'
+import { normalizeToolOutput } from './toolResults.js'
 import type { ToolOutput } from '@reflexion-os-studio/contracts'
 import type { RunEventEmitter } from '../../events.js'
 import type { Store } from '../../store/index.js'
@@ -51,4 +57,50 @@ export function finalizeToolCall(
     status,
     errorCode,
   })
+}
+
+/** Persist requests rejected before execution, including metadata preflight failures. */
+export function finalizeRejectedTool(
+  input: {
+    store: Store
+    state: RunExecutionState
+    run: Run
+    emitter: RunEventEmitter
+  },
+  request: ToolCallRequest,
+  result: ToolResult,
+  args: JsonValue,
+  projectId: string | null,
+): ToolResult {
+  const { store, state, run, emitter } = input
+  const precreatedId = state.precreatedToolCallRows.get(request.id)
+  const existing =
+    precreatedId === undefined ? null : store.toolCalls.get(precreatedId)
+  const row =
+    existing ??
+    store.toolCalls.create({
+      runId: run.id,
+      messageId: state.lastAssistantMessageId,
+      toolName: request.name,
+      args,
+      status: 'pending',
+    })
+  if (existing === null) {
+    emitter.next({
+      type: 'tool.requested',
+      toolCallId: row.id,
+      toolName: request.name,
+      args,
+    })
+  }
+  finalizeToolCall(
+    store,
+    state,
+    emitter,
+    row.id,
+    'failed',
+    result.code ?? 'invalid_request',
+    normalizeToolOutput(result, projectId, request.name),
+  )
+  return result
 }

@@ -46,6 +46,7 @@ fn handle_request(request: &Value) -> (Value, bool) {
         Some("file.mkdir") => finish(id, handlers::handle_file_mkdir(params)),
         Some("file.watch") => finish(id, handlers::handle_file_watch(params)),
         Some("file.unwatch") => finish(id, handlers::handle_file_unwatch(params)),
+        Some("shell.prepare_escalation") => finish(id, sandbox::escalation::prepare(params)),
         Some("shell.execute") => handlers::handle_shell_execute(id, params),
         Some("git.status") => handlers_git::handle_git_status(id, params),
         Some("git.diff") => handlers_git::handle_git_diff(id, params),

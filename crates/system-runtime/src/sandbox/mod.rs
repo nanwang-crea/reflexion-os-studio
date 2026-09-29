@@ -8,6 +8,7 @@ use std::sync::OnceLock;
 
 use crate::shell::ShellOutcome;
 
+pub(crate) mod escalation;
 pub(crate) mod noop;
 // Seatbelt/bwrap 渲染器全平台编译（纯字符串/std::process），便于跨机单测；
 // select() 仅在对应平台 cfg 分支消费（其余平台构建靠 cfg_attr 放行 dead_code）。
@@ -73,7 +74,11 @@ pub(crate) fn deepest_resolved(path: &Path) -> PathBuf {
     for ancestor in path.ancestors() {
         if let Ok(resolved) = std::fs::canonicalize(ancestor) {
             let tail = path.strip_prefix(ancestor).unwrap_or(path);
-            return resolved.join(tail);
+            return if tail.as_os_str().is_empty() {
+                resolved
+            } else {
+                resolved.join(tail)
+            };
         }
     }
     path.to_path_buf()

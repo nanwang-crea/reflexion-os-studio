@@ -22,6 +22,7 @@ export interface ApprovalDisplay {
   subject: { kind: 'path' | 'command' | 'text'; value: string } | null
   /** 规则说明：存在会话 choice 时写明"本会话将允许什么"。 */
   ruleNote: string | null
+  writeRoots: string[]
   /** 关键范围短标签（无值不占位）。 */
   chips: string[]
   /** 低频技术信息（默认收起的"查看详情"）。 */
@@ -174,7 +175,7 @@ export function presentApproval(approval: PendingApproval): ApprovalDisplay {
       details.push({
         label: '提权',
         value:
-          '本命令获批后将解除工作区写边界（仅限卡面列出的目标路径，机密路径除外）',
+          '仅本次命令可写工作区、专用临时目录及下列批准范围；仍受系统权限与机密保护约束',
       })
     }
     if (approval.subject?.kind === 'shell-command') {
@@ -197,6 +198,10 @@ export function presentApproval(approval: PendingApproval): ApprovalDisplay {
     risk,
     subject: subjectOf(approval.subject, approval.summary, approval.operation),
     ruleNote: ruleNoteFor(choices),
+    writeRoots:
+      approval.subject?.kind === 'shell-command' && approval.subject.escalation
+        ? (approval.subject.escalationRoots ?? [])
+        : [],
     chips: chipsFor(approval.context ?? null, approval.operation),
     details,
     choices,

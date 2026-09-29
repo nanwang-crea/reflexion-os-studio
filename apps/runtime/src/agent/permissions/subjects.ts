@@ -87,7 +87,7 @@ export interface ShellSubjectInput {
   prefixCandidate: string[] | null
   interpreter: ShellInterpreter
   /**
-   * escalated 档的审批提权根（Runtime 从命令的绝对路径参数推导并经敏感
+   * escalated 档的审批提权根（Runtime 经 Rust 预检规范化并经敏感
    * 校验；参与 digest + 写入 grant，Rust 重算绑定后再独立复核）。
    */
   escalationRoots?: string[]
@@ -95,7 +95,7 @@ export interface ShellSubjectInput {
 
 /**
  * Shell 资源身份：command + cwd +（escalated 时）提权根 + sandbox + network
- * （§11.1；根集合顺序按命令参数出现序，TS/Rust 同源字符串逐段比对）。
+ * （§11.1；根集合顺序按显式申请数组顺序，TS/Rust 同源字符串逐段比对）。
  */
 export function shellDigest(input: ShellSubjectInput): string {
   const parts = [input.command, input.cwd]
@@ -174,6 +174,9 @@ export function buildApprovalSubject(
           displayCommand: shell.displayCommand,
           prefixCandidate: shell.prefixCandidate,
           escalation: shell.escalation,
+          ...(shell.escalation
+            ? { escalationRoots: shell.escalationRoots }
+            : {}),
           network: shell.network,
         },
         digest: shellDigest(shell),

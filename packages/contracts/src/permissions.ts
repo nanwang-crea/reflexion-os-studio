@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { JsonValueSchema } from './json-value.js'
 import { SandboxPolicySchema, ToolOperationSchema } from './entities.js'
 
 /**
@@ -17,6 +18,11 @@ export const ApprovalRiskSchema = z.enum([
   'danger-confirm',
 ])
 export type ApprovalRisk = z.infer<typeof ApprovalRiskSchema>
+
+export const EscalationRootsSchema = z
+  .array(z.string().min(1).max(4096))
+  .min(1)
+  .max(8)
 
 /**
  * 审批主题：Runtime 依工具参数构造，模型不得直接提供。
@@ -39,6 +45,7 @@ export const ApprovalSubjectSchema = z.discriminatedUnion('kind', [
     displayCommand: z.string(),
     prefixCandidate: z.array(z.string().min(1)).nullable(),
     escalation: z.boolean(),
+    escalationRoots: EscalationRootsSchema.optional(),
     network: z.boolean(),
   }),
 ])
@@ -158,13 +165,29 @@ export type DangerRevokeReason = z.infer<typeof DangerRevokeReasonSchema>
 export const ShellExecuteParamsSchema = z
   .object({
     command: z.string().min(1),
-    cwd: z.string().optional(),
-    requires_network: z.boolean().optional(),
+    cwd: z.string().describe('工作区相对工作目录，默认工作区根').optional(),
+    requires_network: z
+      .boolean()
+      .describe('需要联网时置 true，独立审批，默认 false')
+      .optional(),
     sandbox_permissions: z
       .enum(['use_default', 'require_escalated'])
       .optional(),
-    justification: z.string().min(1).max(500).optional(),
-    prefix_rule: z.array(z.string().min(1).max(128)).max(16).optional(),
+    justification: z
+      .string()
+      .min(1)
+      .max(500)
+      .describe('提权必填：展示给用户的理由')
+      .optional(),
+    additional_write_roots: EscalationRootsSchema.describe(
+      'require_escalated 必填：所需额外可写文件/目录的绝对路径，包含隐含缓存与锁文件范围；不展开 ~ 或变量，Linux/Windows 须已存在。',
+    ).optional(),
+    timeoutMs: z.number().int().min(1000).max(120000).optional(),
+    prefix_rule: z
+      .array(z.string().min(1).max(128))
+      .max(16)
+      .describe('可选会话命令前缀建议；提权不支持复用授权')
+      .optional(),
   })
   .refine(
     (value) =>
@@ -176,4 +199,37 @@ export const ShellExecuteParamsSchema = z
       path: ['justification'],
     },
   )
+  .refine(
+    (value) =>
+      value.sandbox_permissions !== 'require_escalated' ||
+      value.additional_write_roots !== undefined,
+    {
+      message: 'require_escalated requires explicit additional_write_roots',
+      path: ['additional_write_roots'],
+    },
+  )
+  .refine(
+    (value) =>
+      value.additional_write_roots === undefined ||
+      value.sandbox_permissions === 'require_escalated',
+    {
+      message: 'additional_write_roots requires require_escalated',
+      path: ['additional_write_roots'],
+    },
+  )
 export type ShellExecuteParams = z.infer<typeof ShellExecuteParamsSchema>
+
+/** 内部 TS → Rust 元数据预检；不作为模型工具或前端业务命令公开。 */
+export const ShellEscalationPrepareSchema = z.object({
+  workspaceRoot: z.string().min(1),
+  cwd: z.string(),
+  escalationRoots: EscalationRootsSchema,
+})
+export const ShellEscalationPreparedSchema = z.object({
+  escalationRoots: EscalationRootsSchema,
+  sandboxProvider: z.enum(['seatbelt', 'bwrap', 'windows-token']),
+})
+
+export const shellExecuteParameters = JsonValueSchema.parse(
+  z.toJSONSchema(ShellExecuteParamsSchema),
+)

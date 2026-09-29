@@ -96,13 +96,7 @@ fn denied_read_paths(home: Option<&Path>, data_dir: &Path) -> Vec<PathBuf> {
 /// 拼回剩余尾段。只规范化根自身，不放开洞：写越根内符号链接落在根外路径，
 /// 仍被 deny default 拒。连 `/` 都解析失败的病态情况下回退原样。
 fn profile_path(path: &Path) -> PathBuf {
-    for ancestor in path.ancestors() {
-        if let Ok(resolved) = std::fs::canonicalize(ancestor) {
-            let tail = path.strip_prefix(ancestor).unwrap_or(path);
-            return resolved.join(tail);
-        }
-    }
-    path.to_path_buf()
+    super::deepest_resolved(path)
 }
 
 /// 纯函数渲染，单测钉住核心结构；真机白名单微调以集成测试为准（禁软化核心语义）。

@@ -148,7 +148,15 @@ fn build_bwrap_args(request: &SandboxRequest, facts: &BindFacts) -> Vec<String> 
     }
     // TMPDIR 重定向两分支：dest 可达时沙盒临时目录双挂载（原路径 + 固定名），
     // 子进程看到稳定路径；否则回退原路径（上一步已按可写根绑好，不丢功能）。
-    let sandbox_tmpdir = match (facts.fixed_tmp_bindable, request.writable_roots.last()) {
+    let temp_index = if request.access == SandboxAccess::ReadOnly {
+        0
+    } else {
+        1
+    };
+    let sandbox_tmpdir = match (
+        facts.fixed_tmp_bindable,
+        request.writable_roots.get(temp_index),
+    ) {
         (true, Some(temp)) => {
             args.extend([
                 "--bind".into(),
@@ -193,6 +201,28 @@ mod tests {
     use crate::sandbox::SandboxAccess;
 
     const FULL_MASKS: &[&str] = &["/home/t/.ssh", "/home/t/.aws", "/home/t/.gnupg", "/data"];
+
+    #[test]
+    fn escalation_never_uses_approved_root_as_temp() {
+        for bindable in [true, false] {
+            let mut req = request(false);
+            req.access = SandboxAccess::Escalated;
+            req.writable_roots.push(PathBuf::from("/outside/approved"));
+            let args = build_bwrap_args(&req, &facts(&[], bindable));
+            let index = args.iter().position(|arg| arg == "TMPDIR").unwrap();
+            assert_eq!(
+                args[index + 1],
+                if bindable {
+                    FIXED_TMP
+                } else {
+                    "/tmp-x/reflexion-sandbox"
+                }
+            );
+            assert!(!args
+                .windows(3)
+                .any(|parts| parts == ["--bind", "/outside/approved", FIXED_TMP]));
+        }
+    }
 
     fn request(allow_network: bool) -> SandboxRequest {
         SandboxRequest {

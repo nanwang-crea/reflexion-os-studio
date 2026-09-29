@@ -1,3 +1,4 @@
+import type { SystemRuntimeClient } from '../../system.js'
 import {
   runAgentLoop,
   LoopGuard,
@@ -32,6 +33,7 @@ export interface RunStreamInput {
   gate: PermissionGate
   approvals: ApprovalGateway
   /** Rust 沙箱 provider 标识（审批上下文展示用）；缺省 null。 */
+  system?: SystemRuntimeClient | null
   sandboxProvider?: string | null
   /** 本轮运行使用的 Agent 全局设置快照。 */
   settings: AgentSettings
@@ -122,6 +124,7 @@ export class RunRunner {
           registry,
           emitter,
           sandboxProvider: input.sandboxProvider ?? null,
+          system: input.system,
           permissionDomainId: input.permissionDomainId,
           rootRunId: input.rootRunId,
           mutationCoordinator: input.mutationCoordinator,

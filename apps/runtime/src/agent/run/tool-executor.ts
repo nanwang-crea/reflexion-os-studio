@@ -1,3 +1,4 @@
+import type { SystemRuntimeClient } from '../../system.js'
 import {
   type ToolCallRequest,
   type ToolRegistry,
@@ -23,6 +24,7 @@ import {
   InvalidWorkspacePathError,
   isToolOperation,
   prepareShellExecution,
+  preflightShellExecution,
   requiresRustGrant,
   currentShellInterpreter,
   shellDigestWithSandbox,
@@ -33,12 +35,17 @@ import {
   type ShellSubjectInput,
   type PermissionGate,
 } from '../permissions/index.js'
-import { finalizeToolCall, type RunExecutionState } from './run-state.js'
+import {
+  finalizeToolCall,
+  finalizeRejectedTool,
+  type RunExecutionState,
+} from './run-state.js'
 import {
   argsRecord,
   buildApprovalContext,
   fileSandboxFor,
   riskFor,
+  requestToolApproval,
 } from './tool-execution-context.js'
 import {
   isMutatingTool,
@@ -56,6 +63,7 @@ export interface ToolExecutorInput {
   registry: ToolRegistry
   emitter: RunEventEmitter
   /** Rust 沙箱 provider 标识（"none"/"seatbelt"/"bwrap"/"windows-token"）。 */
+  system?: SystemRuntimeClient | null
   sandboxProvider: string | null
   permissionDomainId: string
   rootRunId: string
@@ -75,41 +83,8 @@ export async function executeToolCall(
 ): Promise<ToolResult> {
   const { store, state, run, emitter } = input
   const projectId = store.sessions.get(run.sessionId)?.projectId ?? null
-  const finalizeRejected = (
-    result: ToolResult,
-    args: JsonValue,
-  ): ToolResult => {
-    const precreatedId = state.precreatedToolCallRows.get(request.id)
-    const existing =
-      precreatedId === undefined ? null : store.toolCalls.get(precreatedId)
-    const row =
-      existing ??
-      store.toolCalls.create({
-        runId: run.id,
-        messageId: state.lastAssistantMessageId,
-        toolName: request.name,
-        args,
-        status: 'pending',
-      })
-    if (existing === null) {
-      emitter.next({
-        type: 'tool.requested',
-        toolCallId: row.id,
-        toolName: request.name,
-        args,
-      })
-    }
-    finalizeToolCall(
-      store,
-      state,
-      emitter,
-      row.id,
-      'failed',
-      result.code ?? 'invalid_request',
-      normalizeToolOutput(result, projectId, request.name),
-    )
-    return result
-  }
+  const finalizeRejected = (result: ToolResult, args: JsonValue): ToolResult =>
+    finalizeRejectedTool(input, request, result, args, projectId)
   // Tool schema is the single admission boundary. Invalid input is rejected before
   // subject construction or approval, so UI/audit/execution all see one meaning.
   const validation = input.registry.validateRequest(request)
@@ -123,12 +98,17 @@ export async function executeToolCall(
   // ---- Shell 执行维度先于 subject：分类、提权根与 digest 由权限内核准备。----
   const prepared =
     request.name === 'shell.execute'
-      ? prepareShellExecution({
-          args,
-          record,
-          preset: input.gate.preset,
-          dangerActive,
-        })
+      ? await preflightShellExecution(
+          prepareShellExecution({
+            args,
+            record,
+            preset: input.gate.preset,
+            dangerActive,
+          }),
+          input.system,
+          input.workspaceRoot,
+          signal,
+        )
       : undefined
   if (prepared !== undefined && !prepared.ok) {
     return finalizeRejected(
@@ -287,7 +267,7 @@ export async function executeToolCall(
   const context = buildApprovalContext({
     workspaceRoot: input.workspaceRoot,
     sandbox,
-    sandboxProvider: input.sandboxProvider,
+    sandboxProvider: prepared?.sandboxProvider ?? input.sandboxProvider,
     network: networkRequested,
     escalation,
     justification:
@@ -297,51 +277,26 @@ export async function executeToolCall(
     agent: agentContextForRun(store, run, input.rootRunId),
   })
 
-  /** 发审批卡并等待用户 choice；Abort 时异常上抛（取消路径统一处理）。 */
-  const requestApprovalWith = async (
+  const requestApprovalWith = (
     toolCallId: string,
     operation: string,
     summary: string,
     subject: ApprovalSubject,
     risk: ApprovalRisk,
     choices: ChoiceSpec[],
-  ): Promise<ApprovalOutcome> => {
-    store.runs.setIntermediateStatus(run.id, 'awaiting_approval')
-    if (state.currentTurnId !== null) {
-      store.turnExecutions.transition(
-        state.currentTurnId,
-        'awaiting_permission',
-        { pendingApprovalId: toolCallId },
-      )
-    }
-    try {
-      return await input.approvals.request({
-        toolCallId,
-        emitter,
-        operation,
-        summary,
-        subject,
-        risk,
-        context,
-        choices,
-        signal,
-        scope,
-      })
-    } finally {
-      // 并行工具轮次:还有其它调用在等审批时保持 awaiting_approval，
-      // 否则才回置 running，避免 Run 状态错报。
-      if (!input.approvals.hasPendingRun(run.id)) {
-        store.runs.setIntermediateStatus(run.id, 'running')
-        if (state.currentTurnId !== null) {
-          store.turnExecutions.transition(
-            state.currentTurnId,
-            'executing_tools',
-            { pendingApprovalId: null },
-          )
-        }
-      }
-    }
-  }
+  ): Promise<ApprovalOutcome> =>
+    requestToolApproval(input, {
+      toolCallId,
+      emitter,
+      operation,
+      summary,
+      subject,
+      risk,
+      context,
+      choices,
+      signal,
+      scope,
+    })
 
   const requestApproval = (
     toolCallId: string,

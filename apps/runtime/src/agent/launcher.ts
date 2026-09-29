@@ -226,6 +226,7 @@ export class RunLauncher {
         gate,
         approvals: this.deps.approvals,
         sandboxProvider: this.deps.system?.sandboxName ?? null,
+        system: this.deps.system,
         permissionDomainId: input.permissionDomainId ?? run.sessionId,
         rootRunId: input.rootRunId ?? run.id,
         mutationCoordinator: input.mutationCoordinator,

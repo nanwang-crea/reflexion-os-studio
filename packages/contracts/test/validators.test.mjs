@@ -1384,6 +1384,7 @@ test('shell.execute 参数：require_escalated 必须携带非空 justification'
       command: 'git config --global user.name',
       sandbox_permissions: 'require_escalated',
       justification: '需要读取全局 git 配置回答用户问题',
+      additional_write_roots: ['/home/dev/notes'],
     }).success,
     true,
   )
@@ -1600,4 +1601,28 @@ test('plugin.json contract validates type, entry, compatibility and permissions'
 
 test('协议版本升级到 1.3', () => {
   assert.equal(PROTOCOL_VERSION, '1.3')
+})
+
+test('escalation requires explicit nonempty bounded scope and rejects implicit scope on default', () => {
+  const base = {
+    command: 'tool --global',
+    sandbox_permissions: 'require_escalated',
+    justification: 'write cache',
+  }
+  for (const roots of [undefined, [], [''], Array(9).fill('/tmp/cache')]) {
+    assert.equal(
+      ShellExecuteParamsSchema.safeParse({
+        ...base,
+        additional_write_roots: roots,
+      }).success,
+      false,
+    )
+  }
+  assert.equal(
+    ShellExecuteParamsSchema.safeParse({
+      command: 'tool',
+      additional_write_roots: ['/tmp/cache'],
+    }).success,
+    false,
+  )
 })

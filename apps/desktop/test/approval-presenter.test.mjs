@@ -160,3 +160,21 @@ test('降级事件（无 V2 字段）：回退 summary 展示 + normal 风险', 
   assert.equal(display.subject.value, 'docs/a.md')
   assert.equal(display.chips.length, 0)
 })
+
+test('escalation scopes are visible without opening details', () => {
+  const roots = ['/private/tmp/export with spaces', '/private/tmp/cache']
+  const display = presentApproval({
+    operation: 'shell.execute',
+    toolCallId: 'esc',
+    summary: 'tool --global',
+    subject: { ...SHELL_SUBJECT, escalation: true, escalationRoots: roots },
+    context: {
+      ...CONTEXT,
+      escalation: true,
+      sandbox: 'escalated',
+      justification: 'Write cache',
+    },
+  })
+  assert.deepEqual(display.writeRoots, roots)
+  assert.equal(display.context.justification, 'Write cache')
+})

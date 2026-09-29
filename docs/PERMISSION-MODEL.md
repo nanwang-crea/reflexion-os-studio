@@ -94,6 +94,14 @@ Preset → Shell 默认 SandboxPolicy：`workspace-read→read-only`、`workspac
 
 `shell.execute` 参数扩展：`sandbox_permissions: 'use_default'|'require_escalated'`、`justification?`、`prefix_rule?`。`require_escalated` 必须携带非空 justification（`ShellExecuteParamsSchema` refine）。
 
+### 7.1 显式提权范围与执行预检
+
+`require_escalated` 必须同时提供非空 `justification` 和 `additional_write_roots`（1–8 个绝对路径）；不再从命令字符串猜测写入目标。路径可以含空格或 Windows 反斜杠，但不展开 `~`、环境变量或 shell 表达式。命令隐含的缓存、配置与锁文件位置必须一并申请；拒绝空范围，不产生无效审批。
+
+Runtime 在弹卡前调用内部 Rust `shell.prepare_escalation`：检查 provider、工作区/cwd、路径深度和敏感范围，解析符号链接，返回规范化范围。该接口仅做元数据校验，不读取内容、不创建路径、不授予权限。审批 subject 顶层展示全部规范化 `escalationRoots`，同一数组参与 digest 并进入 grant；执行时再次校验，路径解析改变则拒绝并要求重新申请。提权始终只允许一次，取消、拒绝或预检失败均不得执行命令。
+
+macOS Seatbelt 支持明确文件或目录（包括尚未创建的目标）；Linux bwrap 与 Windows 受限令牌要求范围已经存在，缺失目标应显式申请合适的现存父目录，绝不静默扩到父目录。系统根、凭据目录及其祖先仍拒绝；无法应用的 provider 在审批前报错。普通操作系统权限仍然有效，审批不授予管理员身份。Linux 的 TMPDIR 始终指向专用临时目录，不受附加范围顺序影响。Windows/Linux 的真实平台验收须分别在对应平台执行。
+
 本期只为**简单单命令**生成 session prefix choice；出现多命令/控制符（`;` `&&` `||` `|` 换行 `&`）、重定向、命令替换、`eval`/`exec`/`sh -c`/`bash -c`/`cmd /C`、无法闭合引号、环境变量前缀、动态可执行名等任一形态时**只允许一次**。前缀匹配基于 **token**（禁止 `startsWith`），至少含可执行文件 + 一个稳定子命令；`git push --force`/`reset --hard`/`clean`/删除类只允许一次；deny/always-ask 优先于 session allow；cwd/sandbox/network/interpreter 参与 rule identity，read-only 规则不得在 write/escalated 执行中复用。
 
 分类器解释器：macOS/Linux `/bin/sh -c` → POSIX tokenizer；Windows `cmd.exe /C` → cmd tokenizer。PowerShell 不属本期执行器。若未来 `sh`→`bash`，分类器与执行器必须同批切换并回传实际 interpreter。

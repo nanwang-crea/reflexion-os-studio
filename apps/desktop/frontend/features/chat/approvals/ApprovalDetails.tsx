@@ -57,6 +57,21 @@ export function ApprovalDetails({
           )}
         </div>
       )}
+      {display.writeRoots.length > 0 && (
+        <div className="approval-write-roots" aria-label="本次额外可写范围">
+          <p>本次额外可写范围（目录包含子目录）</p>
+          <ul>
+            {display.writeRoots.map((root) => (
+              <li key={root}>
+                <code>{root}</code>
+              </li>
+            ))}
+          </ul>
+          {display.context?.justification && (
+            <p>{display.context.justification}</p>
+          )}
+        </div>
+      )}
       {display.chips.length > 0 && (
         <div className="approval-chips" aria-label="执行范围">
           {display.chips.map((chip) => (

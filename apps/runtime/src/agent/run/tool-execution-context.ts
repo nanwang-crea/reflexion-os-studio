@@ -1,3 +1,8 @@
+import type { ToolExecutorInput } from './tool-executor.js'
+import type {
+  ApprovalRequestInput,
+  ApprovalOutcome,
+} from '../permissions/index.js'
 import type {
   ApprovalContextView,
   ApprovalRisk,
@@ -63,5 +68,38 @@ export function buildApprovalContext(input: {
       ? displayCommand(input.justification)
       : null,
     ...(input.agent ? { agent: input.agent } : {}),
+  }
+}
+
+/** Maintain Run/Turn states while concurrent approval requests are pending. */
+export async function requestToolApproval(
+  input: ToolExecutorInput,
+  request: ApprovalRequestInput,
+): Promise<ApprovalOutcome> {
+  const { store, state, run } = input
+  const toolCallId = request.toolCallId
+  store.runs.setIntermediateStatus(run.id, 'awaiting_approval')
+  if (state.currentTurnId !== null) {
+    store.turnExecutions.transition(
+      state.currentTurnId,
+      'awaiting_permission',
+      { pendingApprovalId: toolCallId },
+    )
+  }
+  try {
+    return await input.approvals.request(request)
+  } finally {
+    // 并行工具轮次:还有其它调用在等审批时保持 awaiting_approval，
+    // 否则才回置 running，避免 Run 状态错报。
+    if (!input.approvals.hasPendingRun(run.id)) {
+      store.runs.setIntermediateStatus(run.id, 'running')
+      if (state.currentTurnId !== null) {
+        store.turnExecutions.transition(
+          state.currentTurnId,
+          'executing_tools',
+          { pendingApprovalId: null },
+        )
+      }
+    }
   }
 }

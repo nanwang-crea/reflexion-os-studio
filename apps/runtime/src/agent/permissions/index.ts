@@ -34,13 +34,9 @@ export {
 } from './resource-rules.js'
 export {
   buildShellPrefixRule,
-  currentShellInterpreter,
   matchesShellPrefixRule,
   MIN_PREFIX_TOKENS,
-  prepareShellExecution,
-  shellDigestWithSandbox,
   ShellRuleStore,
-  type ShellExecutionPrepared,
 } from './shell-rules.js'
 export {
   classifyShellCommand,
@@ -48,8 +44,7 @@ export {
   type ShellClassification,
 } from './shell-classifier.js'
 export {
-  extractEscalationTargets,
-  MAX_ESCALATION_ROOTS,
+  validateEscalationTargets,
   sensitiveRoots,
   touchesSensitive,
   type EscalationTargetOutcome,
@@ -77,3 +72,11 @@ export {
   summarizeArgs,
   truncateForDisplay,
 } from './summaries.js'
+
+export {
+  currentShellInterpreter,
+  prepareShellExecution,
+  preflightShellExecution,
+  shellDigestWithSandbox,
+  type ShellExecutionPrepared,
+} from './shell-preparation.js'
