@@ -119,10 +119,8 @@ export function PluginInstaller(
     const selected = await open({
       directory,
       multiple: false,
-      title: directory ? '选择插件目录' : '选择 plugin.json 或 SKILL.md',
-      filters: directory
-        ? undefined
-        : [{ name: 'Plugin package', extensions: ['json', 'md'] }],
+      title: directory ? '选择插件目录' : '选择 SKILL.md',
+      filters: directory ? undefined : [{ name: 'Skill', extensions: ['md'] }],
     })
     if (typeof selected === 'string' && selected !== '') {
       await inspect({ source: 'local', path: selected })
@@ -155,6 +153,7 @@ export function PluginInstaller(
             拖入包含 SKILL.md 的目录或文件，也可以选择本地 Skill、ReflexionOS
             扩展包或公共 Git HTTPS 地址。
           </p>
+          <p>选择文件时仅安装该 SKILL.md；附带资源请改选整个目录。</p>
         </div>
         <div className="plugin-local-actions">
           <button
@@ -248,6 +247,9 @@ export function PluginInstaller(
           <div>
             <strong>{manifest.name}</strong> <code>v{manifest.version}</code>
             <p>{manifest.description}</p>
+            {manifest.skill?.whenToUse != null && (
+              <p>触发时机：{manifest.skill.whenToUse}</p>
+            )}
           </div>
           <dl>
             <div>
@@ -270,6 +272,12 @@ export function PluginInstaller(
               <dt>Shell</dt>
               <dd>{manifest.permissions.shell ? '声明需要' : '不需要'}</dd>
             </div>
+            {manifest.skill?.license != null && (
+              <div>
+                <dt>许可证</dt>
+                <dd>{manifest.skill.license}</dd>
+              </div>
+            )}
           </dl>
           {task !== null && task.warnings.length > 0 && (
             <div className="plugin-package-warnings">

@@ -156,24 +156,106 @@ test('standard SKILL.md package installs without plugin.json', async () => {
   const { root, store, service } = await setup()
   const source = join(root, 'portable-skill')
   writeStandardSkill(source, 'portable-skill', {
-    extra: 'metadata:\n  version: "2.1"\nallowed-tools: Read Bash(git:*)\n',
+    extra:
+      'when_to_use: Use when a portable workflow is requested.\nlicense: Apache-2.0\nmetadata:\n  version: "2.1"\n  author: Test Author\n  compatibility:\n    zcode: true\nallowed-tools: Read Bash(git:*)\n',
   })
+  writeFileSync(join(source, '.dat.nosync-test.db'), 'unrelated hidden file')
+  writeFileSync(join(source, 'plugin.json'), '{unselected invalid manifest')
+  mkdirSync(join(source, 'assets'))
+  writeFileSync(join(source, 'assets', 'unselected.txt'), 'not selected')
+  const skillFile = join(source, 'SKILL.md')
 
   const preview = await completed(
     service,
-    service.preview({ source: 'local', path: join(source, 'SKILL.md') }),
+    service.preview({ source: 'local', path: skillFile }),
   )
   assert.equal(preview.manifest.id, 'portable-skill')
   assert.equal(preview.manifest.version, '2.1.0')
+  assert.equal(
+    preview.manifest.skill.whenToUse,
+    'Use when a portable workflow is requested.',
+  )
+  assert.equal(preview.manifest.skill.license, 'Apache-2.0')
+  assert.deepEqual(preview.manifest.skill.metadata, {
+    version: '2.1',
+    author: 'Test Author',
+    compatibility: { zcode: true },
+  })
   assert.ok(
     preview.warnings.some((warning) => warning.includes('allowed-tools')),
   )
 
   const installed = (
-    await completed(service, service.install({ source: 'local', path: source }))
+    await completed(
+      service,
+      service.install({ source: 'local', path: skillFile }),
+    )
   ).plugin
   assert.equal(existsSync(join(installed.installPath, 'plugin.json')), true)
+  assert.equal(existsSync(join(installed.installPath, 'assets')), false)
+  assert.equal(
+    existsSync(join(installed.installPath, '.dat.nosync-test.db')),
+    false,
+  )
   assert.equal(service.registry.has('portable-skill'), true)
+  assert.equal(
+    service.registry.get('portable-skill').manifest.whenToUse,
+    'Use when a portable workflow is requested.',
+  )
+  store.close()
+})
+
+test('ZCode optional frontmatter fields are validated', async () => {
+  const { root, store, service } = await setup()
+  const source = join(root, 'invalid-zcode-skill')
+  writeStandardSkill(source, 'invalid-zcode-skill', {
+    extra: 'when_to_use:\n',
+  })
+  const invalidWhen = await waitForTask(
+    service,
+    service.preview({ source: 'local', path: source }),
+  )
+  assert.match(invalidWhen.error, /when_to_use must be a non-empty string/)
+
+  writeStandardSkill(source, 'invalid-zcode-skill', {
+    extra: 'metadata:\n  - invalid\n',
+  })
+  const invalidMetadata = await waitForTask(
+    service,
+    service.preview({ source: 'local', path: source }),
+  )
+  assert.match(invalidMetadata.error, /metadata must be a mapping/)
+  store.close()
+})
+
+test('ZCode description and instruction size limits are enforced', async () => {
+  const { root, store, service } = await setup()
+  const source = join(root, 'zcode-size-limits')
+  writeStandardSkill(source, 'zcode-size-limits', {
+    description: 'x'.repeat(1_025),
+  })
+  const longDescription = await waitForTask(
+    service,
+    service.preview({ source: 'local', path: source }),
+  )
+  assert.match(longDescription.error, /description must be at most 1024/)
+
+  writeFileSync(
+    join(source, 'SKILL.md'),
+    `---\nname: zcode-size-limits\ndescription: Size limit test.\n---\n\n${'x'.repeat(100 * 1024 + 32)}`,
+  )
+  const installed = await completed(
+    service,
+    service.install({ source: 'local', path: source }),
+  )
+  assert.ok(installed.warnings.some((warning) => warning.includes('truncated')))
+  assert.equal(
+    Buffer.byteLength(
+      service.registry.get('zcode-size-limits').instructions,
+      'utf8',
+    ),
+    100 * 1024,
+  )
   store.close()
 })
 
@@ -209,19 +291,16 @@ test('project-scoped skill is visible only inside its project', async () => {
   store.close()
 })
 
-test('local plugin.json file and workspace directory are valid install sources', async () => {
+test('plugin.json requires directory selection and workspace directories remain valid', async () => {
   const { root, store, service } = await setup()
   const local = join(root, 'local-package')
   writePackage(local, 'file-test')
-  assert.equal(
-    (
-      await completed(
-        service,
-        service.install({ source: 'local', path: join(local, 'plugin.json') }),
-      )
-    ).plugin.id,
-    'file-test',
+  const pluginFile = await waitForTask(
+    service,
+    service.install({ source: 'local', path: join(local, 'plugin.json') }),
   )
+  assert.equal(pluginFile.status, 'failed')
+  assert.match(pluginFile.error, /select the plugin directory/)
 
   const workspace = join(root, 'workspace')
   const workspacePackage = join(workspace, 'skills', 'workspace-test')

@@ -44,6 +44,7 @@ export function createSkillUseTool(
         content: [
           `Skill：${manifest.name}（/${manifest.id} v${manifest.version}）`,
           `适用：${manifest.description}`,
+          ...(manifest.whenToUse ? [`触发时机：${manifest.whenToUse}`] : []),
           '',
           skill.instructions,
         ].join('\n'),

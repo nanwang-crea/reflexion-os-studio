@@ -10,6 +10,9 @@ export const WEB_RESEARCH_SKILL: SkillDefinition = {
       '就一个问题抓取相关网页（web.fetch）并综合成带来源链接的调研摘要；不访问需要登录的页面。',
     tools: ['web.fetch'],
     argumentHint: '<调研问题> [起始 URL]',
+    whenToUse: null,
+    license: null,
+    metadata: {},
   },
   instructions: `
 # 网络调研

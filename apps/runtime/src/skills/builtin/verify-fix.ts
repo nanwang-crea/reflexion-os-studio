@@ -19,6 +19,9 @@ export const VERIFY_FIX_SKILL: SkillDefinition = {
       'file.grep',
     ],
     argumentHint: '<验证命令>；缺省时自动推断（npm test / pnpm test）',
+    whenToUse: null,
+    license: null,
+    metadata: {},
   },
   instructions: `
 # 验证-修复循环

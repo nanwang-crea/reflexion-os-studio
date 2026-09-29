@@ -13,6 +13,9 @@ const skill = {
     description: 'Portable instructions',
     tools: [],
     argumentHint: null,
+    whenToUse: null,
+    license: null,
+    metadata: {},
   },
   instructions: 'Follow the instructions.',
 }
@@ -66,4 +69,14 @@ test('skill metadata prompt truncates descriptions and degrades to names', () =>
   )
   assert.equal(crowded.includes(longDescription.slice(0, 20)), false)
   assert.equal(crowded.includes('$skill-0 — Skill 0'), true)
+})
+
+test('skill metadata prompt includes ZCode when_to_use trigger guidance', () => {
+  const prompt = skillsPromptSection([
+    {
+      ...skill.manifest,
+      whenToUse: 'Use when a portable workflow is requested.',
+    },
+  ])
+  assert.match(prompt, /触发时机：Use when a portable workflow is requested\./)
 })

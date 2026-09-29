@@ -5,7 +5,7 @@ import {
   readdirSync,
   statSync,
 } from 'node:fs'
-import { basename, dirname, join, relative, resolve } from 'node:path'
+import { join, relative, resolve } from 'node:path'
 import {
   PluginPackageManifestSchema,
   PROTOCOL_VERSION,
@@ -47,12 +47,7 @@ export function resolvePackageDirectory(path: string): string {
   const info = lstatSync(absolute)
   if (info.isSymbolicLink()) throw new Error('symlinks are not allowed')
   if (info.isDirectory()) return absolute
-  if (!info.isFile())
-    throw new Error('plugin source must be a file or directory')
-  if (!['plugin.json', 'SKILL.md'].includes(basename(absolute))) {
-    throw new Error('plugin file must be plugin.json or SKILL.md')
-  }
-  return dirname(absolute)
+  throw new Error('workspace plugin source must be a directory')
 }
 
 export function inspectPackage(
@@ -140,6 +135,9 @@ export function packageManifestForBuiltin(
     skill: {
       tools,
       argumentHint: definition.manifest.argumentHint,
+      whenToUse: definition.manifest.whenToUse,
+      license: definition.manifest.license,
+      metadata: definition.manifest.metadata,
     },
   })
 }

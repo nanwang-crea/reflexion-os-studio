@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { JsonValueSchema } from './json-value.js'
 import { SemVerSchema } from './semver.js'
 
 const PluginIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]*$/)
@@ -21,6 +22,9 @@ export const SkillManifestSchema = z
     description: z.string().min(1),
     tools: z.array(z.string().min(1)),
     argumentHint: z.string().min(1).nullable(),
+    whenToUse: z.string().min(1).nullable().default(null),
+    license: z.string().min(1).nullable().default(null),
+    metadata: z.record(z.string(), JsonValueSchema).default({}),
   })
   .strict()
 export type SkillManifest = z.infer<typeof SkillManifestSchema>
@@ -89,6 +93,9 @@ export const PluginPackageManifestSchema = z
       .object({
         tools: z.array(z.string().min(1)).default([]),
         argumentHint: z.string().min(1).nullable().default(null),
+        whenToUse: z.string().min(1).nullable().default(null),
+        license: z.string().min(1).nullable().default(null),
+        metadata: z.record(z.string(), JsonValueSchema).default({}),
       })
       .strict()
       .optional(),
@@ -244,5 +251,8 @@ export function skillManifestFromPackage(
     description: manifest.description,
     tools: manifest.skill.tools,
     argumentHint: manifest.skill.argumentHint,
+    whenToUse: manifest.skill.whenToUse,
+    license: manifest.skill.license,
+    metadata: manifest.skill.metadata,
   })
 }

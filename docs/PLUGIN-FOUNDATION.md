@@ -40,14 +40,14 @@
 }
 ```
 
-标准 `SKILL.md` 的 `name` 与 `description` 必填，description 上限 1024 字符，正文按 100KB 上限加载；`metadata.version` 可选，缺失时内部版本为 `1.0.0`。扩展 manifest 的版本必须为 SemVer，协议兼容范围支持精确版本、比较组合和 caret；Skill 入口固定为 `SKILL.md`，并声明 `skill.instructions` 和 `skill` 元数据。
+标准 `SKILL.md` 与 ZCode Skill 字段保持一致：`name` 与 `description` 必填，`when_to_use`、`license` 与 JSON `metadata` 可选；description 上限 1024 字符，正文按 100KB 上限加载。`when_to_use` 参与模型侧技能匹配，license 与 metadata 随内部规范化 manifest 保留；`metadata.version` 缺失时内部版本为 `1.0.0`。扩展 manifest 的版本必须为 SemVer，协议兼容范围支持精确版本、比较组合和 caret；Skill 入口固定为 `SKILL.md`，并声明 `skill.instructions` 和 `skill` 元数据。
 
 权限是信息性声明，不产生授权。Skill 实际可调用的工具仍由单次 Run 的 ToolRegistry、PermissionGate、沙箱与审批决定。
 
 ## 2. 安装源与生命周期
 
 - `dir`：当前项目中的相对路径；拒绝绝对路径、`..` 与路径链符号链接。
-- `local`：用户经系统文件选择器或 Tauri 拖拽明确提供的本地文件/目录；文件必须是 `plugin.json` 或 `SKILL.md`。
+- `local`：用户经系统文件选择器或 Tauri 拖拽明确提供的本地文件/目录；选择文件时只接受并隔离复制该 `SKILL.md`，不扫描父目录；`plugin.json` 扩展包必须选择目录。
 - `git`：无用户名和密码的 HTTPS URL；浅克隆，关闭交互式 credential helper，60 秒超时，验证前删除 `.git`。
 
 命令：

@@ -10,6 +10,9 @@ export const WORKSPACE_REPORT_SKILL: SkillDefinition = {
       '盘点当前工作区：目录结构、文件类型分布、大文件与异常文件（如临时/锁文件），产出一份结构化报告，可按需写入文件。',
     tools: ['file.list', 'file.glob', 'file.grep', 'file.write'],
     argumentHint: '[输出报告的路径] [关注点]',
+    whenToUse: null,
+    license: null,
+    metadata: {},
   },
   instructions: `
 # 工作区盘点

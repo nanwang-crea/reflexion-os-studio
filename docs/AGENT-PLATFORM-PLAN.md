@@ -148,8 +148,8 @@ Runtime + SQLite：
 
 ## 6. A3：Skills + MCP
 
-- **Skill 采用 SKILL.md 目录格式**（对齐业界 Claude Agent Skills 的 progressive disclosure 实践，
-  替代早期"manifest 校验"占位）：frontmatter（name / description / allowed-tools / 版本）+
+- **Skill 采用 SKILL.md 目录格式**（对齐业界 Claude Agent Skills 与 ZCode 的 progressive disclosure 实践，
+  替代早期"manifest 校验"占位）：frontmatter（name / description / when_to_use / license / metadata）+
   正文指令 + 可选资源文件。描述（短）常驻 system prompt，正文（长）按需加载。
 - **两级发现**：用户级 `<数据目录>/skills/` 与项目级 `<workspace>/.reflexion/skills/`。
 - **边界**：Skill 只能引用已注册 Tool，不得绕过 Tool/Policy 直访系统；Skill 自带脚本默认按

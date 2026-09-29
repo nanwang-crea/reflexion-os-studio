@@ -10,6 +10,9 @@ export const CODE_REVIEW_SKILL: SkillDefinition = {
       '审查工作区内指定文件或目录的代码质量：正确性、边界条件、可读性与明显性能问题，输出分级结论。',
     tools: ['file.glob', 'file.grep', 'file.read'],
     argumentHint: '<文件或目录路径> [审查重点]',
+    whenToUse: null,
+    license: null,
+    metadata: {},
   },
   instructions: `
 # 代码审查

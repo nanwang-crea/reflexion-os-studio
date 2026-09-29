@@ -1,6 +1,6 @@
 # 插件系统
 
-当前可安装插件仅为声明式 Skill。标准包只需包含带 YAML frontmatter 的 `SKILL.md`；`name` 和 `description` 是必填元数据，description 上限 1024 字符，正文按 100KB 上限加载。`plugin.json` v1 是可选的 ReflexionOS 扩展 manifest，用于声明入口、协议兼容范围、能力与权限；缺失时 Runtime 从 `SKILL.md` 生成内部规范化 manifest。扩展 manifest 的未知字段、非法相对路径、不支持类型和不兼容版本仍在安装前拒绝。
+当前可安装插件仅为声明式 Skill。标准包只需包含带 YAML frontmatter 的 `SKILL.md`；字段与 ZCode Skill 规范一致：`name` 和 `description` 必填，`when_to_use`、`license` 与 JSON `metadata` 可选，description 上限 1024 字符，正文按 100KB 上限加载。`when_to_use` 参与技能匹配，其他兼容元数据随安装记录保留。`plugin.json` v1 是可选的 ReflexionOS 扩展 manifest，用于声明入口、协议兼容范围、能力与权限；缺失时 Runtime 从 `SKILL.md` 生成内部规范化 manifest。扩展 manifest 的未知字段、非法相对路径、不支持类型和不兼容版本仍在安装前拒绝。
 
 安装源包括项目相对目录、本地文件/目录和无凭据 HTTPS Git URL。preview、安装与更新都以异步生命周期任务运行；命令立即返回 task，`plugin.task.changed` 报告阶段与进度，`plugin.task.cancel` 可终止运行中的 Git 子进程。统一生命周期为：
 

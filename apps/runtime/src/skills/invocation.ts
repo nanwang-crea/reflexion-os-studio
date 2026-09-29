@@ -47,12 +47,13 @@ export function skillsPromptSection(
     name: string
     description: string
     argumentHint: string | null
+    whenToUse?: string | null
   }[],
 ): string {
   if (manifests.length === 0) return ''
   const detailedLines = manifests.map(
     (manifest) =>
-      `- $${manifest.id} — ${manifest.name}：${manifest.description.slice(0, MAX_DESCRIPTION_CHARS)}${
+      `- $${manifest.id} — ${manifest.name}：${skillTriggerDescription(manifest).slice(0, MAX_DESCRIPTION_CHARS)}${
         manifest.argumentHint
           ? `（用法：$${manifest.id} ${manifest.argumentHint}）`
           : ''
@@ -70,6 +71,15 @@ export function skillsPromptSection(
     '未显式指定但任务与某个技能高度匹配时，先调用 skill.use 加载完整说明再行动。',
     ...lines,
   ].join('\n')
+}
+
+function skillTriggerDescription(manifest: {
+  description: string
+  whenToUse?: string | null
+}): string {
+  return manifest.whenToUse
+    ? `${manifest.description}；触发时机：${manifest.whenToUse}`
+    : manifest.description
 }
 
 /** 已激活 Skill 的注入段落：完整 instructions + 生效声明。 */

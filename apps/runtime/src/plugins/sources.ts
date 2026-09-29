@@ -7,7 +7,7 @@ import {
   rmSync,
 } from 'node:fs'
 import { spawn } from 'node:child_process'
-import { isAbsolute, join, relative, resolve } from 'node:path'
+import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import type { PluginInstallSource } from '@reflexion-os-studio/contracts'
 import type { Store } from '../store/index.js'
 import {
@@ -43,9 +43,25 @@ export async function resolveInstallSource(
   if (source.source === 'local') {
     if (!isAbsolute(source.path))
       throw new Error('local plugin path must be absolute')
+    const sourcePath = resolve(source.path)
+    const sourceInfo = lstatSync(sourcePath)
+    if (sourceInfo.isSymbolicLink()) throw new Error('symlinks are not allowed')
+    if (sourceInfo.isFile()) {
+      if (basename(sourcePath) !== 'SKILL.md') {
+        throw new Error(
+          'local plugin file must be SKILL.md; select the plugin directory for plugin.json packages',
+        )
+      }
+      mkdirSync(temporary)
+      copyFileSync(sourcePath, join(temporary, 'SKILL.md'))
+      return { directory: temporary, sourceRef: sourcePath }
+    }
+    if (!sourceInfo.isDirectory()) {
+      throw new Error('local plugin source must be a file or directory')
+    }
     return {
-      directory: resolvePackageDirectory(source.path),
-      sourceRef: resolve(source.path),
+      directory: sourcePath,
+      sourceRef: sourcePath,
     }
   }
   assertGitUrl(source.url)

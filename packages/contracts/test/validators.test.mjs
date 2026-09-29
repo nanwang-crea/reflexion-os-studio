@@ -1563,7 +1563,25 @@ test('plugin.json contract validates type, entry, compatibility and permissions'
     },
     skill: { tools: ['file.read'], argumentHint: '<path>' },
   }
-  assert.equal(PluginPackageManifestSchema.safeParse(manifest).success, true)
+  const parsed = PluginPackageManifestSchema.parse(manifest)
+  assert.deepEqual(parsed.skill, {
+    tools: ['file.read'],
+    argumentHint: '<path>',
+    whenToUse: null,
+    license: null,
+    metadata: {},
+  })
+  const zcode = PluginPackageManifestSchema.parse({
+    ...manifest,
+    skill: {
+      ...manifest.skill,
+      whenToUse: 'Use when reviewing code.',
+      license: 'MIT',
+      metadata: { author: 'Example', nested: { portable: true } },
+    },
+  })
+  assert.equal(zcode.skill.whenToUse, 'Use when reviewing code.')
+  assert.deepEqual(zcode.skill.metadata.nested, { portable: true })
   assert.equal(
     PluginPackageManifestSchema.safeParse({
       ...manifest,

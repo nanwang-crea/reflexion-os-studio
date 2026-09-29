@@ -130,6 +130,9 @@ export function SkillsView(props: SkillsViewProps): React.JSX.Element {
             description: plugin.description,
             tools: plugin.manifest.skill?.tools ?? [],
             argumentHint: plugin.manifest.skill?.argumentHint ?? null,
+            whenToUse: plugin.manifest.skill?.whenToUse ?? null,
+            license: plugin.manifest.skill?.license ?? null,
+            metadata: plugin.manifest.skill?.metadata ?? {},
           }
           const enabled = plugin.enabled && plugin.status === 'enabled'
           const updateTask = Object.values(tasks).find(
@@ -174,6 +177,9 @@ export function SkillsView(props: SkillsViewProps): React.JSX.Element {
               </header>
 
               <p className="skill-card-desc">{plugin.description}</p>
+              {skill?.whenToUse != null && (
+                <p className="skill-card-desc">触发时机：{skill.whenToUse}</p>
+              )}
               {plugin.error !== null && (
                 <div className="skill-card-error">{plugin.error}</div>
               )}
@@ -184,6 +190,13 @@ export function SkillsView(props: SkillsViewProps): React.JSX.Element {
                   <code>
                     ${plugin.id} {skill.argumentHint}
                   </code>
+                </div>
+              )}
+
+              {skill?.license != null && (
+                <div className="skill-card-hint">
+                  <span className="skill-card-hint-label">许可证</span>
+                  <span>{skill.license}</span>
                 </div>
               )}
 
