@@ -342,10 +342,16 @@ export async function streamOpenAIChat(
       }))
 
     if (finishReason === null) {
-      throw new ProviderError(
-        'provider_protocol',
-        `stream ended without a valid finish_reason (raw: ${String(rawFinishReason).slice(0, 40)})`,
-      )
+      if (toolCalls.length > 0) {
+        finishReason = 'tool_calls'
+      } else if (content || reasoning) {
+        finishReason = 'stop'
+      } else {
+        throw new ProviderError(
+          'provider_protocol',
+          `stream ended without a valid finish_reason (raw: ${String(rawFinishReason).slice(0, 40)})`,
+        )
+      }
     }
 
     return { content, reasoning, finishReason, usage, toolCalls }
