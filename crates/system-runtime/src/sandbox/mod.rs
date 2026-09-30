@@ -127,7 +127,8 @@ pub(crate) trait SandboxProvider: Send + Sync {
     /// 稳定标识，进入协议："windows-token" / "seatbelt" / "bwrap" / "none"。
     fn id(&self) -> &'static str;
 
-    /// 工厂探测：不可用则降级 Noop。仅在工厂初始化时调用一次。
+    /// 工厂探测：不可用则选择 Noop。仅在工厂初始化时调用一次；Noop
+    /// 只报告能力不可用，不提供 Shell 执行降级。
     #[cfg_attr(
         not(any(windows, target_os = "macos", target_os = "linux")),
         allow(dead_code)
@@ -153,7 +154,7 @@ pub(crate) trait SandboxProvider: Send + Sync {
     }
 
     /// 包装路径（轮次 B）：返回完整 argv（launcher + `-- sh -c <command>`）。
-    /// None = 不包装（Noop 现状路径）。请求上下文经 `SandboxRequest` 进入渲染。
+    /// None 表示该 provider 没有包装执行路径；handler 必须拒绝，不能裸执行。
     fn wrap(&self, request: &SandboxRequest) -> Option<Vec<String>> {
         let _ = request;
         None
@@ -161,7 +162,7 @@ pub(crate) trait SandboxProvider: Send + Sync {
 }
 
 /// 进程内唯一 provider：按平台探测（Windows 受限令牌 / macOS Seatbelt / Linux bwrap），
-/// 探测不过降级 Noop。
+/// 探测不过选择 Noop；Shell handler 随后对需要沙箱的请求 fail-closed。
 pub(crate) fn provider() -> &'static dyn SandboxProvider {
     static PROVIDER: OnceLock<Box<dyn SandboxProvider>> = OnceLock::new();
     PROVIDER.get_or_init(select).as_ref()
@@ -206,15 +207,14 @@ mod tests {
     }
 
     #[test]
-    fn noop_wrap_defers_to_plain_execution() {
-        let request = SandboxRequest {
-            command: "echo hi".to_string(),
-            cwd: std::env::temp_dir(),
-            timeout_ms: 1_000,
-            allow_network: false,
-            access: SandboxAccess::WorkspaceWrite,
-            writable_roots: vec![],
-        };
-        assert!(NoopSandbox.wrap(&request).is_none());
+    fn noop_provider_is_never_capable_of_shell_isolation() {
+        for access in [
+            SandboxAccess::ReadOnly,
+            SandboxAccess::WorkspaceWrite,
+            SandboxAccess::Escalated,
+            SandboxAccess::Danger,
+        ] {
+            assert!(!NoopSandbox.supports_access(access));
+        }
     }
 }

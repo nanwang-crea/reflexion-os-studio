@@ -238,8 +238,11 @@ test('ask-everything 覆盖项：automatic 全部升为 ask，denied 不变', ()
   )
 })
 
-test('无工作区：file.* 拒绝；Shell 仅显式提权进入审批', () => {
-  const { gate } = makeGate('workspace-full', { hasWorkspace: false })
+test('无工作区：file.* 拒绝；Shell 仅显式提权进入审批，Danger 不能覆盖', () => {
+  const { gate } = makeGate('workspace-full', {
+    hasWorkspace: false,
+    danger: true,
+  })
   assert.equal(
     gate.decisionFor({
       toolName: 'file.read',

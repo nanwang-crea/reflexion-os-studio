@@ -1,6 +1,7 @@
-//! Noop provider：无 OS 沙箱时的降级终点（保持现状执行路径与语义）。
-//! 只能如实执行 read-only / workspace-write（workspace-write 无 OS 强制即尽力而为）；
-//! 对 escalation / danger fail-closed——无法验证的提权绝不允许假装已提权后放行。
+//! Noop provider：表示当前平台没有可用的 OS 沙箱。
+//!
+//! Noop 不执行 Shell，也不声称能够应用任何 SandboxAccess；需要沙箱的请求
+//! 必须由 handler fail-closed。
 
 use super::{SandboxAccess, SandboxProvider};
 
@@ -15,10 +16,7 @@ impl SandboxProvider for NoopSandbox {
         true
     }
 
-    fn supports_access(&self, access: SandboxAccess) -> bool {
-        matches!(
-            access,
-            SandboxAccess::ReadOnly | SandboxAccess::WorkspaceWrite
-        )
+    fn supports_access(&self, _access: SandboxAccess) -> bool {
+        false
     }
 }

@@ -121,7 +121,7 @@ fn run_command(
 
 ```rust
     /// 包装路径（轮次 B）：返回完整 argv（launcher + `-- sh -c <command>`）。
-    /// None = 不包装（Noop 现状路径）。请求上下文经 `SandboxRequest` 进入渲染。
+    /// None 表示该 provider 没有包装执行路径；handler 必须拒绝，不能裸执行。
     fn wrap(&self, request: &SandboxRequest) -> Option<Vec<String>> {
         let _ = request;
         None
@@ -149,20 +149,20 @@ mod tests {
     }
 
     #[test]
-    fn noop_wrap_defers_to_plain_execution() {
-        let request = SandboxRequest {
-            command: "echo hi".to_string(),
-            cwd: std::env::temp_dir(),
-            timeout_ms: 1_000,
-            allow_network: false,
-            writable_roots: vec![],
-        };
-        assert!(NoopSandbox.wrap(&request).is_none());
+    fn noop_provider_is_never_capable_of_shell_isolation() {
+        for access in [
+            SandboxAccess::ReadOnly,
+            SandboxAccess::WorkspaceWrite,
+            SandboxAccess::Escalated,
+            SandboxAccess::Danger,
+        ] {
+            assert!(!NoopSandbox.supports_access(access));
+        }
     }
 }
 ```
 
-- [ ] **Step 1.5: handler 分发更新**
+- [x] **Step 1.5: handler 分发更新**
 
 `handlers.rs` `handle_shell_execute` 线程内，替换 `None => shell::execute(...)` 臂：
 
@@ -190,16 +190,10 @@ mod tests {
                         }
                     }
                 }
-                None => shell::execute(
-                    &request.command,
-                    &request.cwd,
-                    request.timeout_ms,
-                    &|pid| {
-                        let _ = running_shells().lock().map(|mut shells| {
-                            shells.insert(request_id.clone(), pid);
-                        });
-                    },
-                ),
+                None => Err(format!(
+                    "sandbox provider {} has no executable isolation path",
+                    provider.id()
+                )),
             },
 ```
 

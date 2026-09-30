@@ -135,13 +135,10 @@ pub fn handle_shell_execute(id: Value, params: Value) -> Result<(Value, bool), O
                             });
                         },
                     ),
-                    None => {
-                        shell::execute(&request.command, &request.cwd, request.timeout_ms, &|pid| {
-                            let _ = running_shells().lock().map(|mut shells| {
-                                shells.insert(request_id.clone(), pid);
-                            });
-                        })
-                    }
+                    None => Err(format!(
+                        "sandbox provider {} has no executable isolation path",
+                        provider.id()
+                    )),
                 },
             },
         };

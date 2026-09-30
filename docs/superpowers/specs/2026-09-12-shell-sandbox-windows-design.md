@@ -92,9 +92,9 @@ pub trait SandboxProvider: Send + Sync {
         None
     }
     /// 包装路径（轮次 B 重构）：返回完整 argv（launcher + `-- sh -c <command>`）。
-    /// None = 不包装（Noop，走现状 `shell::execute`）。argv 形态避免把巨型 profile
-    /// 塞进 `sh -c` 字符串的转义灾难；请求上下文（可写根/网络开关）经 SandboxRequest
-    /// 进入 profile/args 渲染。
+    /// None 表示该 provider 没有包装执行路径；handler 必须拒绝，不能裸执行。
+    /// argv 形态避免把巨型 profile 塞进 `sh -c` 字符串的转义灾难；请求上下文
+    /// （可写根/网络开关）经 SandboxRequest 进入 profile/args 渲染。
     fn wrap(&self, request: &SandboxRequest) -> Option<Vec<String>> {
         let _ = request;
         None
@@ -127,7 +127,7 @@ match provider.exec_direct(&request, &on_spawn):
     Some(result) → result（Windows 自持路径）
     None → match provider.wrap(&request):
         Some(argv)  → shell::execute_argv(argv, envs={TMPDIR: sandbox_temp}, …)（macOS/Linux）
-        None        → shell::execute(command, …)（Noop 现状路径）
+        None        → sandbox_policy_unavailable（禁止裸 shell::execute）
 result 增加 "sandbox": { "active": bool, "provider": id }
 ```
 
@@ -233,14 +233,15 @@ TS 侧零破坏：result 新字段向后兼容；params 新字段可选。工具
 | Windows 探测失败（令牌/完整性设置不可用）      | 工厂选 `none`；ready 能力位如实为 `none`                                                      |
 | 选定后执行失败（spawn/管道/Job 错误）          | 结构化错误（`execution_failed` + 明确 message），不回退无沙箱执行                             |
 | allowNetwork=true 但 grant 无 sandboxNetwork   | `network_approval_required` 错误，TS 侧不会出现（审批先行），此为绕过兜底                     |
-| macOS `sandbox-exec` 缺失/被系统移除（轮次 B） | 工厂探测失败 → `none`，行为与现状一致；探测成功则选定后不再回退                               |
-| Linux `bwrap` 缺失 / userns 被禁（轮次 B）     | 同上：探测阶段降级 `none`；不做任何"半沙箱"执行                                               |
+| macOS `sandbox-exec` 缺失/被系统移除（轮次 B） | 工厂探测失败 → `none`；Shell 请求返回 `sandbox_policy_unavailable`，不裸执行                   |
+| Linux `bwrap` 缺失 / userns 被禁（轮次 B）     | 工厂探测失败 → `none`；Shell 请求返回 `sandbox_policy_unavailable`，不做任何"半沙箱"执行       |
 | sandbox.cancel / system.cancel                 | 现有 `running_shells` + `kill_tree` 路径不变；Job 兜底收割；bwrap 以 `--die-with-parent` 兜底 |
 
 ## 8. 测试与验证
 
-- **平台无关单测**（cargo test，本地 macOS）：工厂在非 Windows 返回 `none`；noop wrap
-  恒等；params `allowNetwork` 缺省 false；grant.rs 的 sandboxNetwork 核对（含缺省字段、
+- **平台无关单测**（cargo test，本地 macOS）：工厂不可用时返回 `none`；Noop 对所有
+  access 均不支持且 handler fail-closed；params `allowNetwork` 缺省 false；grant.rs 的
+  sandboxNetwork 核对（含缺省字段、
   allowNetwork=true 无声明 → `network_approval_required`）；现有 shell.rs 测试全绿。
 - **Windows 编译级验证**：`rustup target add x86_64-pc-windows-msvc` +
   `cargo check --target x86_64-pc-windows-msvc`。**运行时行为未经真机验证**（无 Windows

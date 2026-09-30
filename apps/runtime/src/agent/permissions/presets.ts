@@ -203,14 +203,15 @@ export class PermissionGate {
       // Danger lease 不旁路 MCP：系统范围访问经 shell 承担，工具审批语义不变。
       return AUTOMATIC_OTHER_TOOLS.has(request.toolName) ? 'automatic' : 'ask'
     }
-    if (this.dangerActive) return 'automatic'
     if (!this.opts.hasWorkspace) {
-      // 无工作区：file.* 一律拒绝；Shell 只有显式提权请求才进入审批。
+      // 无工作区是永久硬边界：file.* 一律拒绝；Shell 只有显式提权请求才进入审批。
+      // Danger 不能覆盖该边界。
       if (request.toolName === 'shell.execute' && request.escalation) {
         return 'ask'
       }
       return 'denied'
     }
+    if (this.dangerActive) return 'automatic'
     let decision = POLICY[this.opts.preset][request.toolName]
     // 工作区外访问必须显式提权审批（§6.1"工作区外=ask escalation"列）：
     // 任何日常档位都不因 automatic 静默扩大沙箱（Danger 在前面已旁路）。
