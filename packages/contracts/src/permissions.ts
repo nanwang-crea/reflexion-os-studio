@@ -1,6 +1,10 @@
 import { z } from 'zod'
 import { JsonValueSchema } from './json-value.js'
-import { SandboxPolicySchema, ToolOperationSchema } from './entities.js'
+import {
+  PermissionPresetSchema,
+  SandboxPolicySchema,
+  ToolOperationSchema,
+} from './entities.js'
 
 /**
  * 权限模型 V2（Codex 风格）契约唯一真源：
@@ -79,6 +83,11 @@ export type AgentContextView = z.infer<typeof AgentContextSchema>
 export const ApprovalContextSchema = z.object({
   displayCwd: z.string().nullable(),
   workspaceScope: z.enum(['inside', 'outside', 'none']),
+  // defaults keep previously persisted approval events replayable.
+  permissionPreset: PermissionPresetSchema.default('workspace-read'),
+  approvalReason: z
+    .enum(['preset-policy', 'ask-everything', 'escalation', 'dynamic-tool'])
+    .default('preset-policy'),
   sandbox: SandboxPolicySchema,
   sandboxProvider: z.string().nullable(),
   network: z.boolean(),

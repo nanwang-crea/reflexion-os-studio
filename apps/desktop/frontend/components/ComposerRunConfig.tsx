@@ -98,7 +98,9 @@ export function ComposerRunConfig(
                 />
                 <span>
                   所有操作均询问
-                  <small>本会话内的工具调用全部逐次确认。</small>
+                  <small>
+                    本会话内即使当前档位已允许，也会逐次确认工作区读取、编辑和命令。
+                  </small>
                 </span>
               </label>
               <button

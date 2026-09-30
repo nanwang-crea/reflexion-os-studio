@@ -144,6 +144,8 @@ test('read-only 档：allow-once-workspace-write 批准后 grant 按可写档重
   await new Promise((resolve) => setTimeout(resolve, 0))
   const required = ctx.events.find((e) => e.type === 'approval.required')
   assert.equal(required.context.sandbox, 'read-only')
+  assert.equal(required.context.permissionPreset, 'workspace-read')
+  assert.equal(required.context.approvalReason, 'preset-policy')
   approvals.resolveChoice(required.toolCallId, 'allow-once-workspace-write')
   const result = await first
   assert.equal(result.isError, false)

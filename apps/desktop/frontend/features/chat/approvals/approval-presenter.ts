@@ -55,6 +55,12 @@ const RISK_TITLES: Record<ApprovalRisk, string> = {
   'danger-confirm': '危险能力确认',
 }
 
+const PRESET_NAMES: Record<ApprovalContextView['permissionPreset'], string> = {
+  'workspace-read': '工作区只读',
+  'workspace-write': '工作区可写',
+  'workspace-full': '完全允许',
+}
+
 export function actionLabelFor(operation: string): string {
   return OPERATION_LABELS[operation] ?? operation
 }
@@ -76,8 +82,12 @@ function chipsFor(
   if (operation.startsWith('file.')) {
     chips.push(context.workspaceScope === 'inside' ? '工作区内' : '无工作区')
   }
-  if (context.sandbox === 'read-only') chips.push('沙箱只读')
-  else if (context.sandbox === 'workspace-write') chips.push('工作区可写')
+  chips.push(`当前档位 ${PRESET_NAMES[context.permissionPreset]}`)
+  if (context.approvalReason === 'ask-everything') {
+    chips.push('因“所有操作均询问”而确认')
+  }
+  if (context.sandbox === 'read-only') chips.push('批准后沙箱只读')
+  else if (context.sandbox === 'workspace-write') chips.push('批准后工作区可写')
   else if (context.sandbox === 'escalated') chips.push('提权：工作区外路径')
   else if (context.sandbox === 'danger') chips.push('Danger 系统范围')
   chips.push(context.network ? '将联网' : '不联网')
@@ -155,6 +165,17 @@ export function presentApproval(approval: PendingApproval): ApprovalDisplay {
   const risk: ApprovalRisk = approval.risk ?? 'normal'
   const details: ApprovalDisplay['details'] = []
   if (approval.context) {
+    if (approval.context.approvalReason === 'preset-policy') {
+      details.push({
+        label: '询问原因',
+        value: `当前权限档位“${PRESET_NAMES[approval.context.permissionPreset]}”要求确认此操作`,
+      })
+    } else if (approval.context.approvalReason === 'ask-everything') {
+      details.push({
+        label: '询问原因',
+        value: '本会话已开启“所有操作均询问”',
+      })
+    }
     if (approval.context.agent) {
       details.push({
         label: '执行 Agent',

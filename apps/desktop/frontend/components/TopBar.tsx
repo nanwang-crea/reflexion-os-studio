@@ -1,4 +1,9 @@
-import { DoubleChevronIcon, FolderIcon, TerminalIcon } from '../ui/icons'
+import {
+  DoubleChevronIcon,
+  FolderIcon,
+  PlusIcon,
+  TerminalIcon,
+} from '../ui/icons'
 
 /** Runtime 状态文案：顶栏角标与启动页共用。 */
 export const STATUS_LABELS: Record<string, string> = {
@@ -14,6 +19,9 @@ interface TopBarProps {
   sidebarOpen: boolean
   onToggleSidebar: () => void
   contextTitle: string
+  /** 聊天页：开启不关联项目的独立对话。 */
+  showNewChat: boolean
+  onNewChat: () => void
   /** 仅聊天页显示工作区面板开关。 */
   showWorkspaceToggle: boolean
   workspaceOpen: boolean
@@ -27,7 +35,7 @@ interface TopBarProps {
   statusLabel: string
 }
 
-/** 主区顶栏：侧栏开关、上下文标题、工作区面板开关与状态角标。 */
+/** 主区顶栏：侧栏开关、标题、新建独立对话、面板开关与状态角标。 */
 export function TopBar(props: TopBarProps): React.JSX.Element {
   return (
     <header className="topbar">
@@ -41,6 +49,17 @@ export function TopBar(props: TopBarProps): React.JSX.Element {
         <DoubleChevronIcon direction={props.sidebarOpen ? 'left' : 'right'} />
       </button>
       <span className="topbar-title">{props.contextTitle}</span>
+      {props.showNewChat && (
+        <button
+          type="button"
+          className="topbar-toggle"
+          title="新建独立对话"
+          aria-label="新建独立对话"
+          onClick={props.onNewChat}
+        >
+          <PlusIcon size={15} />
+        </button>
+      )}
       <span className="spacer" />
       {props.showWorkspaceToggle && (
         <button

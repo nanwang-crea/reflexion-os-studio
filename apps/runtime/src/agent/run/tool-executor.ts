@@ -149,11 +149,12 @@ export async function executeToolCall(
     ? shellSandbox
     : fileSandboxFor(request.name)
 
-  const decision = input.gate.decisionFor({
+  const permissionRequest = {
     toolName: request.name,
     subject: built.subject,
     escalation,
-  })
+  }
+  const decision = input.gate.decisionFor(permissionRequest)
 
   // 预创建 ToolCall 行消费（无预建行时按需创建）。
   const precreatedId = state.precreatedToolCallRows.get(request.id)
@@ -266,6 +267,14 @@ export async function executeToolCall(
 
   const context = buildApprovalContext({
     workspaceRoot: input.workspaceRoot,
+    permissionPreset: input.gate.preset,
+    approvalReason: escalation
+      ? 'escalation'
+      : input.gate.approvalOverrideAppliesTo(permissionRequest)
+        ? 'ask-everything'
+        : isToolOperation(request.name)
+          ? 'preset-policy'
+          : 'dynamic-tool',
     sandbox,
     sandboxProvider: prepared?.sandboxProvider ?? input.sandboxProvider,
     network: networkRequested,

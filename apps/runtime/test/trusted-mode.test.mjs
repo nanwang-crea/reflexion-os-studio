@@ -176,6 +176,8 @@ test('workspace-read：file.write 弹卡（V2 载荷），once 批准签发 once
   )
   assert.equal(required.context.sandbox, 'workspace-write')
   assert.equal(required.context.workspaceScope, 'inside')
+  assert.equal(required.context.permissionPreset, 'workspace-read')
+  assert.equal(required.context.approvalReason, 'preset-policy')
   assert.equal(store.runs.get(run.id).status, 'completed')
   const grant = JSON.parse(seenGrants[0])
   assert.equal(grant.source, 'once')

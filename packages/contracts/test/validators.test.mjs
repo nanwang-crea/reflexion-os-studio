@@ -1125,6 +1125,8 @@ test('ApprovalChoice/Runtime 下发协议：presentation 不携带授权语义',
     ApprovalContextSchema.safeParse({
       displayCwd: '…/repo',
       workspaceScope: 'outside',
+      permissionPreset: 'workspace-write',
+      approvalReason: 'escalation',
       sandbox: 'escalated',
       sandboxProvider: 'seatbelt',
       network: false,
@@ -1144,6 +1146,8 @@ test('ApprovalChoice/Runtime 下发协议：presentation 不携带授权语义',
     ApprovalContextSchema.safeParse({
       displayCwd: null,
       workspaceScope: 'everywhere',
+      permissionPreset: 'workspace-read',
+      approvalReason: 'preset-policy',
       sandbox: 'read-only',
       sandboxProvider: null,
       network: false,
@@ -1175,6 +1179,8 @@ test('approval.required 携带 V2 字段；历史事件（无新字段）仍可�
     context: {
       displayCwd: '…/repo',
       workspaceScope: 'inside',
+      permissionPreset: 'workspace-write',
+      approvalReason: 'preset-policy',
       sandbox: 'workspace-write',
       sandboxProvider: 'seatbelt',
       network: false,
@@ -1234,6 +1240,20 @@ test('approval.required 携带 V2 字段；历史事件（无新字段）仍可�
     }).success,
     true,
   )
+})
+
+test('旧审批 context 缺少档位与原因时使用兼容默认值', () => {
+  const parsed = ApprovalContextSchema.parse({
+    displayCwd: '…/repo',
+    workspaceScope: 'inside',
+    sandbox: 'workspace-write',
+    sandboxProvider: 'seatbelt',
+    network: false,
+    escalation: false,
+    justification: null,
+  })
+  assert.equal(parsed.permissionPreset, 'workspace-read')
+  assert.equal(parsed.approvalReason, 'preset-policy')
 })
 
 test('approval.resolve 只接受 toolCallId + choiceId，旧 decision/scope 失效', () => {

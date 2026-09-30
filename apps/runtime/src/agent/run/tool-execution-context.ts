@@ -8,6 +8,7 @@ import type {
   ApprovalRisk,
   ApprovalSubject,
   JsonValue,
+  PermissionPreset,
   SandboxPolicy,
 } from '@reflexion-os-studio/contracts'
 import { displayCommand } from '../permissions/index.js'
@@ -45,6 +46,8 @@ export function riskFor(
 
 export function buildApprovalContext(input: {
   workspaceRoot: string | null
+  permissionPreset: PermissionPreset
+  approvalReason: ApprovalContextView['approvalReason']
   sandbox: SandboxPolicy
   sandboxProvider: string | null
   network: boolean
@@ -60,6 +63,8 @@ export function buildApprovalContext(input: {
   return {
     displayCwd: basename === null ? null : `…/${basename}`,
     workspaceScope: root === null ? 'none' : 'inside',
+    permissionPreset: input.permissionPreset,
+    approvalReason: input.approvalReason,
     sandbox: input.sandbox,
     sandboxProvider: input.sandboxProvider,
     network: input.network,

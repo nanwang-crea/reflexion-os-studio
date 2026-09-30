@@ -173,6 +173,20 @@ export class PermissionGate {
     return this.opts.preset
   }
 
+  /** 审批卡解释原因使用；只暴露会话覆盖状态，不允许调用方改写策略。 */
+  get approvalOverride(): 'default' | 'ask-everything' {
+    return this.opts.approvalOverride
+  }
+
+  /** 当前 ask 是否由“所有操作均询问”把原 automatic 决策提升而来。 */
+  approvalOverrideAppliesTo(request: PermissionRequest): boolean {
+    if (this.opts.approvalOverride !== 'ask-everything') return false
+    if (!isToolOperation(request.toolName)) return false
+    if (this.dangerActive || !this.opts.hasWorkspace) return false
+    if (request.toolName === 'shell.execute' && request.escalation) return false
+    return POLICY[this.opts.preset][request.toolName] === 'automatic'
+  }
+
   get dangerActive(): boolean {
     return this.opts.dangerActive()
   }

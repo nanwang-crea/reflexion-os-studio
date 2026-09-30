@@ -8,6 +8,8 @@ import {
 const CONTEXT = {
   displayCwd: '…/repo',
   workspaceScope: 'inside',
+  permissionPreset: 'workspace-write',
+  approvalReason: 'preset-policy',
   sandbox: 'workspace-write',
   sandboxProvider: 'seatbelt',
   network: false,

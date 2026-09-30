@@ -199,6 +199,11 @@ test('workspace-full：全部 automatic（仍受沙箱与 no-read 硬边界）',
 
 test('ask-everything 覆盖项：automatic 全部升为 ask，denied 不变', () => {
   const { gate } = makeGate('workspace-write', { override: 'ask-everything' })
+  const editRequest = {
+    toolName: 'file.edit',
+    subject: pathSubject('file.edit'),
+    escalation: false,
+  }
   assert.equal(
     gate.decisionFor({
       toolName: 'file.read',
@@ -207,13 +212,16 @@ test('ask-everything 覆盖项：automatic 全部升为 ask，denied 不变', ()
     }),
     'ask',
   )
+  assert.equal(gate.decisionFor(editRequest), 'ask')
+  assert.equal(gate.approvalOverrideAppliesTo(editRequest), true)
   assert.equal(
-    gate.decisionFor({
-      toolName: 'file.edit',
-      subject: pathSubject('file.edit'),
+    gate.approvalOverrideAppliesTo({
+      toolName: 'file.delete',
+      subject: pathSubject('file.delete'),
       escalation: false,
     }),
-    'ask',
+    false,
+    '本来就要求审批的删除操作不能误报为覆盖项触发',
   )
   // 无工作区硬拒绝不被覆盖项软化。
   const noWs = makeGate('workspace-full', {

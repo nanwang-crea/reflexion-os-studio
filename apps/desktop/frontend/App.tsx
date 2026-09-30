@@ -6,12 +6,11 @@ import type {
   Delegation,
   UserQuestionAnswer,
 } from '@reflexion-os-studio/runtime-client'
-import { AppMain } from './AppMain'
+import { ReadyApp } from './components/ReadyApp'
 import { useAppBootstrap } from './hooks/useAppBootstrap'
 import { useModelSelection } from './hooks/useModelSelection'
 import { usePermissionPreset } from './hooks/permissions/usePermissionPreset'
 import { useAdvancedPermissions } from './hooks/permissions/useAdvancedPermissions'
-import { DangerConfirmationDialog } from './features/chat/approvals/DangerConfirmationDialog'
 import { useSidebarPanel } from './hooks/useSidebarPanel'
 import { useWorkspacePanel } from './hooks/workspace/useWorkspacePanel'
 import { useConfirmDialog } from './hooks/useConfirmDialog'
@@ -22,11 +21,8 @@ import {
 } from './hooks/session/useSessionNavigation'
 import { useApprovalResolution } from './hooks/permissions/useApprovalResolution'
 import type { SessionData } from './api/sessions'
-import { ConfirmDialog } from './components/ConfirmDialog'
-import { showToast, ToastHost } from './components/Toast'
-import { ResizeHandle } from './components/ResizeHandle'
+import { showToast } from './components/Toast'
 import { STATUS_LABELS } from './components/TopBar'
-import { Sidebar } from './components/Sidebar'
 import type { FileViewerPanelHandle } from './features/workspace/files/FileViewerPanel'
 import { useWorkspaceTabGuard } from './hooks/workspace/useWorkspaceTabGuard'
 import { useAppHotkeys } from './hooks/useAppHotkeys'
@@ -39,7 +35,6 @@ import {
 } from './hooks/useAppSurfaces'
 import { BootstrapScreen } from './components/BootstrapScreen'
 import { respondToInteraction } from './api/chat'
-import { setSessionExecutionMode } from './api/sessions'
 
 export default function App() {
   const [view, setView] = useState<ViewName>('chat')
@@ -333,7 +328,7 @@ export default function App() {
     setSidebarOpen,
   ])
 
-  if (!runtimeReady) {
+  if (!runtimeReady || bootstrap === null) {
     return (
       <BootstrapScreen
         status={statusLabel}
@@ -343,199 +338,106 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
-      <Sidebar
-        open={sidebarOpen}
-        width={sidebarWidth}
-        mode={sidebarMode}
-        projects={projects}
-        projectSessions={projectSessions}
-        standaloneSessions={standaloneSessions}
-        activeProjectId={activeProjectId}
-        activeSessionId={activeSessionId}
-        runningSessionIds={runningSessionIds}
-        completedSessionIds={completedSessionIds}
-        failedSessionIds={failedSessionIds}
-        approvalSessionIds={approvalSessionIds}
-        creatingProject={creatingProject}
-        view={view}
-        systemReady={bootstrap?.systemReady ?? false}
-        activeFilePath={openTabs.length > 0 ? activeFilePath : null}
-        focusAssetId={filesFocusAssetId}
-        onFocusConsumed={() => setFilesFocusAssetId(null)}
-        onOpenFile={openFile}
-        onOpenDiff={openDiff}
-        guardDirtyBuffersThen={guardDirtyBuffersThen}
-        reloadAllTextTabs={reloadAllTextTabs}
-        onEnterProjectFiles={enterProjectFiles}
-        onBackToChat={backToChat}
-        onSelectProject={selectProject}
-        onSelectSession={handleSelectSession}
-        onSelectStandaloneSession={handleSelectStandaloneSession}
-        onNewSessionInProject={selectProject}
-        onNewChat={newStandaloneChat}
-        onCreateProject={createProject}
-        onDeleteProject={deleteProject}
-        onRenameSession={renameSession}
-        onDeleteSession={deleteSession}
-        onSelectView={(nextView) => {
-          // 底部导航：打开对应页面；点已激活项回到聊天。
-          setView((current) => (current === nextView ? 'chat' : nextView))
-        }}
-      />
-      <ResizeHandle
-        onResize={(delta) =>
-          setSidebarWidth((width) =>
-            Math.max(200, Math.min(560, width + delta)),
-          )
-        }
-      />
-      <AppMain
-        view={view}
-        activeSessionId={activeSessionId}
-        notice={notice}
-        onDismissNotice={() => setNotice(null)}
-        topBar={{
-          sidebarOpen,
-          onToggleSidebar: () => setSidebarOpen((open) => !open),
-          runtimeState: bootstrap?.state ?? '',
-          statusLabel,
-        }}
-        chat={{
-          sessionData,
-          delegations,
-          streaming,
-          streamingReasoning,
-          runActivities,
-          hasEnabledProvider,
-          permissionValue: permissionPreset,
-          onPermissionChange: changePermissionPreset,
-          advanced: {
-            approvalOverride,
-            onApprovalOverrideChange: (value) => {
-              void changeApprovalOverride(value)
-            },
-            dangerActive: dangerLease !== null,
-            onOpenDanger: () => setDangerDialogOpen(true),
-          },
-          dangerLease,
-          onDisableDanger: () => {
-            void disableDanger()
-          },
-          modelOptions,
-          selectedModelKey,
-          onModelChange: setSelectedModelKey,
-          skills,
-          agentTemplates,
-          composerPrefill,
-          onPrefillConsumed: () => setComposerPrefill(null),
-          onSend: sendMessage,
-          onEditResend: editResendMessage,
-          onStop: stopRun,
-          onRetry: retryRun,
-          onGoSettings: () => setView('settings'),
-          onExecutionModeChange: async (mode) => {
-            if (!activeSessionId) return
-            const result = await setSessionExecutionMode(activeSessionId, mode)
-            setSessionData((current) =>
-              current === null
-                ? current
-                : { ...current, session: result.session },
-            )
-          },
-          pendingApprovals,
-          onResolveApproval: handleResolveApproval,
-          pendingInteractions,
-          onInteractionSubmit: async (interactionId, answers) => {
-            try {
-              return await handleInteractionSubmit(interactionId, answers)
-            } catch (error) {
-              setNotice(error instanceof Error ? error.message : String(error))
-              return false
-            }
-          },
-          onResourceClick: handleResourceClick,
-          onOpenDiff: openDiff,
-        }}
-        landing={{
-          project: activeProject,
-          projects,
-          selectedProjectId: activeProjectId,
-          onProjectChange: selectLandingProject,
-          sessions: activeProject ? projectSessions : [],
-          hasEnabledProvider,
-          permissionValue: permissionPreset,
-          onPermissionChange: changePermissionPreset,
-          modelOptions,
-          selectedModelKey,
-          onModelChange: setSelectedModelKey,
-          skills,
-          agentTemplates,
-          composerPrefill,
-          onPrefillConsumed: () => setComposerPrefill(null),
-          onSend: sendMessage,
-          onSelectSession: openSession,
-          onRenameSession: renameSession,
-          onDeleteSession: deleteSession,
-          onGoSettings: () => setView('settings'),
-        }}
-        settings={{
-          profiles,
-          onSaved: refreshProfiles,
-          onBackToChat: () => setView('chat'),
-          confirm,
-        }}
-        instructions={{ confirm }}
-        onUseSkill={async (skillId, sessionId) => {
-          if (!(await guardedResetWorkspaceFiles())) return
-          setActiveProjectId(null)
-          setActiveSessionId(sessionId)
-          void refreshSessionData(sessionId)
-          void refreshStandaloneSessions()
-          setComposerPrefill({ skillId, nonce: Date.now() })
-          setView('chat')
-        }}
-        workspace={{
-          open: workspaceOpen,
-          setOpen: setWorkspaceOpen,
-          width: workspaceWidth,
-          setWidth: setWorkspaceWidth,
-          panel: {
-            ref: filePanelRef,
-            project: activeProject,
-            systemReady: bootstrap?.systemReady ?? false,
-            openTabs,
-            activeTabId,
-            dirtyPaths,
-            onSelectTab: selectTab,
-            onRequestCloseTab: requestCloseTab,
-            onReorderTabs: reorderTabs,
-            onDirtyChange: setTabDirty,
-            confirm,
-            onResourceClick: handleResourceClick,
-            width: workspaceWidth,
-          },
-        }}
-        terminal={{
-          open: terminalOpen,
-          onToggle: toggleTerminal,
-          activeProjectId,
-          confirm,
-        }}
-      />
-      <DangerConfirmationDialog
-        open={dangerDialogOpen}
-        sessionId={activeSessionId}
-        onClose={() => setDangerDialogOpen(false)}
-        onEnabled={() => setDangerDialogOpen(false)}
-      />
-      <ConfirmDialog
-        state={confirmState}
-        onConfirm={handleConfirm}
-        onCancel={handleCancel}
-        onTertiary={handleTertiary}
-      />
-      <ToastHost />
-    </div>
+    <ReadyApp
+      sidebarOpen={sidebarOpen}
+      setSidebarOpen={setSidebarOpen}
+      sidebarMode={sidebarMode}
+      setSidebarMode={setSidebarMode}
+      sidebarWidth={sidebarWidth}
+      setSidebarWidth={setSidebarWidth}
+      projects={projects}
+      projectSessions={projectSessions}
+      standaloneSessions={standaloneSessions}
+      activeProject={activeProject}
+      activeProjectId={activeProjectId}
+      setActiveProjectId={setActiveProjectId}
+      activeSessionId={activeSessionId}
+      setActiveSessionId={setActiveSessionId}
+      sessionData={sessionData}
+      setSessionData={setSessionData}
+      delegations={delegations}
+      creatingProject={creatingProject}
+      view={view}
+      setView={setView}
+      notice={notice}
+      setNotice={setNotice}
+      bootstrap={bootstrap}
+      statusLabel={statusLabel}
+      profiles={profiles}
+      skills={skills}
+      agentTemplates={agentTemplates}
+      hasEnabledProvider={hasEnabledProvider}
+      permissionPreset={permissionPreset}
+      changePermissionPreset={changePermissionPreset}
+      approvalOverride={approvalOverride}
+      changeApprovalOverride={changeApprovalOverride}
+      dangerLease={dangerLease}
+      disableDanger={disableDanger}
+      dangerDialogOpen={dangerDialogOpen}
+      setDangerDialogOpen={setDangerDialogOpen}
+      modelOptions={modelOptions}
+      selectedModelKey={selectedModelKey}
+      setSelectedModelKey={setSelectedModelKey}
+      composerPrefill={composerPrefill}
+      setComposerPrefill={setComposerPrefill}
+      streaming={streaming}
+      streamingReasoning={streamingReasoning}
+      runActivities={runActivities}
+      pendingApprovals={pendingApprovals}
+      pendingInteractions={pendingInteractions}
+      runningSessionIds={runningSessionIds}
+      completedSessionIds={completedSessionIds}
+      failedSessionIds={failedSessionIds}
+      approvalSessionIds={approvalSessionIds}
+      workspaceOpen={workspaceOpen}
+      setWorkspaceOpen={setWorkspaceOpen}
+      workspaceWidth={workspaceWidth}
+      setWorkspaceWidth={setWorkspaceWidth}
+      openTabs={openTabs}
+      activeTabId={activeTabId}
+      activeFilePath={activeFilePath}
+      filesFocusAssetId={filesFocusAssetId}
+      setFilesFocusAssetId={setFilesFocusAssetId}
+      dirtyPaths={dirtyPaths}
+      filePanelRef={filePanelRef}
+      terminalOpen={terminalOpen}
+      toggleTerminal={toggleTerminal}
+      confirm={confirm}
+      confirmState={confirmState}
+      handleConfirm={handleConfirm}
+      handleTertiary={handleTertiary}
+      handleCancel={handleCancel}
+      openFile={openFile}
+      openDiff={openDiff}
+      selectTab={selectTab}
+      requestCloseTab={requestCloseTab}
+      reorderTabs={reorderTabs}
+      setTabDirty={setTabDirty}
+      guardDirtyBuffersThen={guardDirtyBuffersThen}
+      guardedResetWorkspaceFiles={guardedResetWorkspaceFiles}
+      reloadAllTextTabs={reloadAllTextTabs}
+      refreshSessionData={refreshSessionData}
+      refreshStandaloneSessions={refreshStandaloneSessions}
+      refreshProfiles={refreshProfiles}
+      enterProjectFiles={enterProjectFiles}
+      backToChat={backToChat}
+      selectProject={selectProject}
+      selectLandingProject={selectLandingProject}
+      openSession={openSession}
+      newStandaloneChat={newStandaloneChat}
+      createProject={createProject}
+      deleteProject={deleteProject}
+      renameSession={renameSession}
+      deleteSession={deleteSession}
+      handleSelectSession={handleSelectSession}
+      handleSelectStandaloneSession={handleSelectStandaloneSession}
+      sendMessage={sendMessage}
+      editResendMessage={editResendMessage}
+      stopRun={stopRun}
+      retryRun={retryRun}
+      handleResolveApproval={handleResolveApproval}
+      handleInteractionSubmit={handleInteractionSubmit}
+      handleResourceClick={handleResourceClick}
+    />
   )
 }

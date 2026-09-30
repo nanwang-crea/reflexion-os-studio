@@ -40,6 +40,8 @@ const SHELL_SUBJECT = {
 const CONTEXT = {
   displayCwd: '…/repo',
   workspaceScope: 'inside',
+  permissionPreset: 'workspace-read',
+  approvalReason: 'preset-policy',
   sandbox: 'workspace-write',
   sandboxProvider: 'seatbelt',
   network: false,
@@ -86,8 +88,45 @@ test('文件审批：路径主体 + 工作区内 chip + 会话规则说明', () 
   assert.equal(display.subject.kind, 'path')
   assert.equal(display.subject.value, 'src/a.ts')
   assert.ok(display.chips.some((chip) => chip === '工作区内'))
+  assert.ok(display.chips.some((chip) => chip === '当前档位 工作区只读'))
+  assert.ok(display.chips.some((chip) => chip === '批准后工作区可写'))
+  assert.ok(
+    display.details.some(
+      (detail) =>
+        detail.label === '询问原因' && detail.value.includes('工作区只读'),
+    ),
+  )
   assert.ok(display.ruleNote.includes('本会话允许读取并编辑此文件'))
   assert.equal(display.choices.length, 3)
+})
+
+test('workspace-write + 所有操作均询问：明确显示覆盖项是弹卡原因', () => {
+  const display = presentApproval({
+    toolCallId: 'override',
+    runId: 'r1',
+    operation: 'file.edit',
+    summary: 'file.edit: src/a.ts',
+    subject: {
+      kind: 'workspace-path',
+      operation: 'file.edit',
+      path: 'src/a.ts',
+    },
+    risk: 'normal',
+    context: {
+      ...CONTEXT,
+      permissionPreset: 'workspace-write',
+      approvalReason: 'ask-everything',
+    },
+  })
+  assert.ok(display.chips.includes('当前档位 工作区可写'))
+  assert.ok(display.chips.includes('因“所有操作均询问”而确认'))
+  assert.ok(
+    display.details.some(
+      (detail) =>
+        detail.label === '询问原因' &&
+        detail.value === '本会话已开启“所有操作均询问”',
+    ),
+  )
 })
 
 test('Shell 审批：命令主体 + 档位/网络 chips；无会话 choice 时不显示规则说明', () => {
@@ -117,7 +156,7 @@ test('Shell 审批：命令主体 + 档位/网络 chips；无会话 choice 时�
   assert.equal(display.risk, 'warning')
   assert.equal(display.subject.kind, 'command')
   assert.equal(display.subject.value, 'pnpm test --filter runtime')
-  assert.ok(display.chips.includes('沙箱只读'))
+  assert.ok(display.chips.includes('批准后沙箱只读'))
   assert.ok(display.chips.includes('不联网'))
   assert.equal(display.ruleNote, null)
 })
