@@ -213,6 +213,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
         onNewSessionInProject={props.onNewSessionInProject}
         onEnterProjectFiles={props.onEnterProjectFiles}
         onCreateProject={props.onCreateProject}
+        onNewChat={props.onNewChat}
         onDeleteProject={props.onDeleteProject}
         onRenameSession={props.onRenameSession}
         onDeleteSession={props.onDeleteSession}
@@ -268,6 +269,7 @@ interface ChatsPanelProps {
   /** 点击项目行文件图标：切到该项目并让侧栏进入文件工作区。 */
   onEnterProjectFiles: (projectId: string) => void
   onCreateProject: () => Promise<void>
+  onNewChat: () => void
   onDeleteProject: (projectId: string) => Promise<void>
   onRenameSession: (sessionId: string, title: string) => Promise<void>
   onDeleteSession: (sessionId: string) => Promise<void>
@@ -405,6 +407,14 @@ function ChatsPanel(props: ChatsPanelProps): React.JSX.Element {
 
         <div className="section-head">
           <span>对话</span>
+          <button
+            className="icon-btn"
+            title="新建独立对话"
+            aria-label="新建独立对话"
+            onClick={props.onNewChat}
+          >
+            <PlusIcon />
+          </button>
         </div>
         {standalone.length === 0 && (
           <p className="empty">

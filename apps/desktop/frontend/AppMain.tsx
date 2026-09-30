@@ -19,7 +19,6 @@ export interface AppMainProps {
   topBar: Omit<
     ComponentProps<typeof TopBar>,
     | 'contextTitle'
-    | 'showNewChat'
     | 'showWorkspaceToggle'
     | 'workspaceOpen'
     | 'onToggleWorkspace'
@@ -76,7 +75,6 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
       <TopBar
         {...props.topBar}
         contextTitle={contextTitle}
-        showNewChat={view === 'chat'}
         showWorkspaceToggle={view === 'chat'}
         workspaceOpen={workspace.open}
         onToggleWorkspace={() => workspace.setOpen((open) => !open)}

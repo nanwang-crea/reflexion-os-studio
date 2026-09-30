@@ -53,7 +53,6 @@ export function ReadyApp(props: ReadyAppProps): React.JSX.Element {
         topBar: {
           sidebarOpen: props.sidebarOpen,
           onToggleSidebar: () => props.setSidebarOpen((open) => !open),
-          onNewChat: props.newStandaloneChat,
           runtimeState: props.bootstrap.state,
           statusLabel: props.statusLabel,
         },
