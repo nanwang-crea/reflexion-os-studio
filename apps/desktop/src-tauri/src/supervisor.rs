@@ -80,8 +80,8 @@ pub(super) fn update_state(
 ) {
     // 失败详情此前只发前端，排障时终端里毫无线索；这里同步落一份到 stderr。
     match &detail {
-        Some(text) => eprintln!("[host] state -> {next}: {text}"),
-        None => eprintln!("[host] state -> {next}"),
+        Some(text) => crate::logging::write(&format!("[host] state -> {next}: {text}")),
+        None => crate::logging::write(&format!("[host] state -> {next}")),
     }
     let snapshot = {
         let Ok(mut snapshot) = state.snapshot.lock() else {
@@ -160,7 +160,7 @@ fn observe_stderr(name: &'static str, stderr: impl std::io::Read + Send + 'stati
         let mut reader = BufReader::new(stderr);
         let mut line = String::new();
         while reader.read_line(&mut line).unwrap_or(0) > 0 {
-            eprint!("[{name}] {line}");
+            crate::logging::write(&format!("[{name}] {line}"));
             line.clear();
         }
     });
@@ -200,14 +200,18 @@ fn monitor_exit(app: tauri::AppHandle, state: Arc<SupervisorState>, cfg: Arc<Run
                         return;
                     };
                     if restart.count >= MAX_RUNTIME_RESTARTS {
-                        eprintln!("[host] runtime restart budget exhausted; staying down");
+                        crate::logging::write(&format!(
+                            "[host] runtime restart budget exhausted; staying down"
+                        ));
                         return;
                     }
                     let backoff = RUNTIME_RESTART_BACKOFF_MS[restart.count as usize];
                     restart.count += 1;
                     backoff
                 };
-                eprintln!("[host] runtime exited, restarting in {delay_ms}ms");
+                crate::logging::write(&format!(
+                    "[host] runtime exited, restarting in {delay_ms}ms"
+                ));
                 let state_for_restart = state.clone();
                 let cfg_for_restart = cfg.clone();
                 let app_for_restart = app.clone();
@@ -327,12 +331,12 @@ pub(super) fn start_sidecars(app: &tauri::AppHandle, state: Arc<SupervisorState>
     let killed =
         crate::orphan_cleanup::cleanup_orphans(&orphan_cleanup_markers(resources.as_deref()));
     if killed.is_empty() {
-        eprintln!("[host] orphan cleanup: nothing to kill");
+        crate::logging::write(&format!("[host] orphan cleanup: nothing to kill"));
     } else {
-        eprintln!(
+        crate::logging::write(&format!(
             "[host] orphan cleanup: killed {} process(es): {killed:?}",
             killed.len()
-        );
+        ));
     }
     let Some(cfg) = resolve_runtime_launch_config(resources.as_deref(), &root) else {
         update_state(
@@ -351,6 +355,20 @@ pub(super) fn start_sidecars(app: &tauri::AppHandle, state: Arc<SupervisorState>
             Some("Rust System Runtime binary not found; tools unavailable".to_string()),
         );
     }
+    crate::logging::write(&format!(
+        "[host] sidecar paths: node={} runtime={} cwd={} system={}",
+        cfg.node.display(),
+        cfg.args
+            .last()
+            .map(|path| path.display().to_string())
+            .unwrap_or_default(),
+        cfg.cwd.display(),
+        cfg.envs
+            .iter()
+            .find(|(key, _)| key == "REFLEXION_SYSTEM_RUNTIME_BIN")
+            .map(|(_, path)| path.as_str())
+            .unwrap_or("not found")
+    ));
     launch_runtime(app, state, Arc::new(cfg));
 }
 

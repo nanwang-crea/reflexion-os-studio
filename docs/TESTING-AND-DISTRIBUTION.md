@@ -103,3 +103,19 @@ Monaco 缓冲区的 LF/CRLF 差异不作为脏状态；保存时对本次加载�
 workspace.read_file 的 readToken 对应不可变的根目录、路径、revision 与完整读取状态。workspace.write_file 使用该 token 并返回成功写入的新 token；编辑器持有自身 token，预览刷新、分页与其他编辑器读取都不能推进它。未知/跨文件 token 和不完整快照拒绝；无 token 的既有文件覆盖由 Rust 拒绝。凭据簿最多 1024 项，失效时保留草稿并要求重新加载。端到端回归验证外部修改后即使预览读到新版本，旧编辑器仍不能覆盖它。
 
 项目会话、委派与会话内容刷新同时检查请求序号和当前上下文，旧请求不能覆盖其他项目/会话或清空后的页面。workspace-state.test.mjs 覆盖乱序响应和行号定位；它验证受控 hook 与组件输出，三平台 WebView 交互仍需真机验收。
+
+### 桌面启动日志与轮转配置
+
+桌面宿主在启动 sidecar 前初始化文件日志，统一保存宿主与 Node/Rust sidecar 的 stderr；保留原 stderr 输出，不记录 stdout JSON-RPC 消息。每条带 Unix 毫秒时间戳和宿主 PID。启动记录应用版本、平台和 sidecar 路径，便于排查安装资源、进程退出与握手错误。日志创建/写入失败只降级到 stderr，不阻断 Chat。
+
+默认每个文件 2 MB（2097152 字节），保留 3 个文件：studio.log 为当前文件，studio.1.log 为上一段，studio.2.log 为最旧段；超过上限前轮转，淘汰最旧文件。重启追加已有日志；超大单条按 UTF-8 边界截断。POSIX 上新日志文件为 0600，Windows 使用用户日志目录继承权限。
+
+| 平台    | 默认目录                                                       |
+| ------- | -------------------------------------------------------------- |
+| Windows | `%LOCALAPPDATA%\com.reflexionos.studio\logs`                   |
+| macOS   | `~/Library/Logs/com.reflexionos.studio`                        |
+| Linux   | `${XDG_DATA_HOME:-~/.local/share}/com.reflexionos.studio/logs` |
+
+可在启动应用前配置环境变量：`REFLEXION_LOG_DIR` 覆盖目录，`REFLEXION_LOG_MAX_BYTES` 调整单文件上限（1024–104857600 字节），`REFLEXION_LOG_KEEP_FILES` 调整总文件数（1–20，包含当前文件）。无效值使用默认配置，重启应用生效。日志用于启动/服务诊断，分享前应检查其中的本机路径等个人信息；不得新增 Provider secret、工具参数、聊天正文或完整协议回包的日志。
+
+回归：`cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml logging::` 覆盖轮转排序/淘汰、重启续写、UTF-8 大行截断、单文件窗口与并发记录。Windows 的 NSIS 真机验收应确认无控制台窗口时仍生成 studio.log，并记录 system runtime 启动失败详情。

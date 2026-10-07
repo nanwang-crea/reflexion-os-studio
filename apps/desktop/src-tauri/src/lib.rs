@@ -2,6 +2,7 @@
 //! 进程监管见 supervisor.rs、路径解析见 sidecar_paths.rs、
 //! 关停与信号见 shutdown.rs；本文件只做装配与 Tauri 命令注册。
 
+mod logging;
 mod orphan_cleanup;
 mod shutdown;
 mod sidecar_paths;
@@ -103,6 +104,16 @@ pub fn run() {
             open_external
         ])
         .setup(move |app| {
+            match app.path().app_log_dir() {
+                Ok(directory) => logging::init(directory),
+                Err(error) => logging::write(&format!("[host] log directory unavailable: {error}")),
+            }
+            logging::write(&format!(
+                "[host] ReflexionOS Studio {} ({} {})",
+                env!("CARGO_PKG_VERSION"),
+                std::env::consts::OS,
+                std::env::consts::ARCH
+            ));
             supervisor::start_sidecars(app.handle(), state_for_setup.clone());
             Ok(())
         })
