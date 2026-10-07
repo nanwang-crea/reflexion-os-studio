@@ -251,6 +251,7 @@ export function ProjectFiles(props: ProjectFilesProps): React.JSX.Element {
                 onOpenDiff={props.onOpenDiff}
                 guardDirtyBuffersThen={props.guardDirtyBuffersThen}
                 reloadAllTextTabs={props.reloadAllTextTabs}
+                statusSnapshot={repository.snapshot}
                 loadGitStatus={repository.refresh}
                 onAfterMutation={() =>
                   void repository.refresh().catch(() => {})

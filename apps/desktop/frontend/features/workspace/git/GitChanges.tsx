@@ -40,6 +40,8 @@ interface GitChangesProps {
   reloadAllTextTabs?: () => void
   /** Git 面板每次完成刷新后的回调：文件树 git 徽章随变更联动刷新。 */
   onAfterMutation?: () => void
+  /** 由父级 workspace 事件 Hook 维护的共享状态快照，避免重复订阅事件。 */
+  statusSnapshot: WorkspaceGitStatus | null
   loadGitStatus: () => Promise<WorkspaceGitStatus>
 }
 
@@ -80,6 +82,19 @@ export function GitChanges(props: GitChangesProps): React.JSX.Element {
   useEffect(() => {
     onAfterMutationRef.current = props.onAfterMutation
   }, [props.onAfterMutation])
+
+  // 外部文件变化由父级 useWorkspaceGitStatus 统一防抖刷新；面板只投影快照，
+  // 不再为同一项目建立第二个 workspace.changed 订阅。
+  useEffect(() => {
+    const snapshot = props.statusSnapshot
+    if (snapshot === null || busy !== null) return
+    setRepo(snapshot.repo)
+    setEntries(snapshot.entries)
+    setTruncated(snapshot.truncated)
+    setBranch(snapshot.branch)
+    setAhead(snapshot.ahead)
+    setBehind(snapshot.behind)
+  }, [props.statusSnapshot, busy])
 
   const loadStatus = useCallback(async (): Promise<void> => {
     const [status, branchList, remoteList] = await Promise.all([
