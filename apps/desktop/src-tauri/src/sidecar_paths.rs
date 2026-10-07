@@ -119,6 +119,9 @@ pub(super) fn resolve_runtime_launch_config(
     // 避免被误读为真正的运行时报错（stderr 仍是日志通道）。
     let args = vec![
         PathBuf::from("--disable-warning=ExperimentalWarning"),
+        // Windows 盘符路径（如 C:\\...）必须位于 `--` 之后，避免 Node
+        // 将盘符前缀误当成选项/入口的一部分。
+        PathBuf::from("--"),
         runtime_entry,
     ];
     let cwd = sidecar_cwd(resources, root);

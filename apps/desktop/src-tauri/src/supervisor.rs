@@ -6,6 +6,8 @@ use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -240,6 +242,11 @@ fn spawn_sidecar(
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    #[cfg(windows)]
+    {
+        // Runtime 是后台 sidecar，不应在 Windows 上弹出独立控制台窗口。
+        command.creation_flags(0x08000000);
+    }
     for (key, value) in envs {
         command.env(key, value);
     }
