@@ -28,7 +28,7 @@ pub fn watch(root: &Path, relative: &str, watch_id: &str) -> Result<(), String> 
     }
     let id = watch_id.to_string();
     let event_id = id.clone();
-    let workspace_root = root.to_path_buf();
+    let workspace_root = resolve_in_workspace(root, ".")?;
     let mut watcher = notify::recommended_watcher(move |result: notify::Result<Event>| {
         let Ok(event) = result else {
             return;
@@ -62,6 +62,18 @@ pub fn watch(root: &Path, relative: &str, watch_id: &str) -> Result<(), String> 
 }
 
 fn workspace_relative_path(root: &Path, changed: &Path) -> Option<String> {
+    // notify 的 Windows 路径可能没有 verbatim 前缀；删除事件也必须能转换。
+    // 先尝试无需 IO 的匹配，失配时只规范化最长现存祖先再拼回已删除尾段。
+    let resolved;
+    let changed = if changed.starts_with(root) {
+        changed
+    } else {
+        let (ancestor, canonical) = changed
+            .ancestors()
+            .find_map(|ancestor| ancestor.canonicalize().ok().map(|path| (ancestor, path)))?;
+        resolved = canonical.join(changed.strip_prefix(ancestor).ok()?);
+        &resolved
+    };
     let relative = changed.strip_prefix(root).ok()?;
     let parts = relative
         .components()
@@ -92,6 +104,26 @@ mod tests {
     use super::*;
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn canonical_root_matches_created_and_deleted_paths_from_raw_root() {
+        let root =
+            std::env::temp_dir().join(format!("reflexion-watch-path-{}", std::process::id()));
+        fs::create_dir_all(root.join("目录")).unwrap();
+        let canonical = root.canonicalize().unwrap();
+        let file = root.join("目录").join("file.txt");
+        fs::write(&file, "fixture").unwrap();
+        assert_eq!(
+            workspace_relative_path(&canonical, &file),
+            Some("目录/file.txt".to_string())
+        );
+        fs::remove_file(&file).unwrap();
+        assert_eq!(
+            workspace_relative_path(&canonical, &file),
+            Some("目录/file.txt".to_string())
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn watch_is_workspace_scoped_and_removable() {

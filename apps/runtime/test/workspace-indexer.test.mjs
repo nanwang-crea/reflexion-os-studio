@@ -146,3 +146,16 @@ test('recoverInterrupted marks leftover scanning rows as failed', async () => {
 test.after(() => {
   for (const path of fixtures) rmSync(path, { recursive: true, force: true })
 })
+
+test('scanWorkspace reports an inaccessible root instead of an empty success', async () => {
+  const root = makeWorkspace()
+  fixtures.push(root)
+  await assert.rejects(
+    scanWorkspace(join(root, 'missing-root'), new AbortController().signal),
+    { code: 'ENOENT' },
+  )
+  await assert.rejects(
+    scanWorkspace(join(root, 'README.md'), new AbortController().signal),
+    { code: 'ENOTDIR' },
+  )
+})

@@ -62,8 +62,11 @@ export async function scanWorkspace(
     let entries
     try {
       entries = await readdir(dir, { withFileTypes: true })
-    } catch {
-      continue // 无权限/已被删除的目录直接跳过，索引不强求完整。
+    } catch (error) {
+      // 根目录失败必须报告；子目录不可访问则标记扫描不完整。
+      if (depth === 0) throw error
+      truncated = true
+      continue
     }
     for (const entry of entries) {
       if (signal.aborted) {

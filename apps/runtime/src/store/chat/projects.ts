@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import type { Project } from '@reflexion-os-studio/contracts'
 import { nowIso, type Row } from '../shared.js'
+import { normalizeProjectFolderPath } from './project-path.js'
 
 /** 项目领域：项目即本地文件夹的元数据。 */
 export class ProjectStore {
@@ -15,9 +16,14 @@ export class ProjectStore {
   }
 
   findByFolderPath(folderPath: string): Project | null {
+    const normalized = normalizeProjectFolderPath(folderPath)
+    const legacy =
+      process.platform === 'win32' && /^[A-Za-z]:\\$/.test(normalized)
+        ? normalized.slice(0, -1)
+        : normalized
     const row = this.db
-      .prepare('SELECT * FROM projects WHERE folder_path = ?')
-      .get(folderPath)
+      .prepare('SELECT * FROM projects WHERE folder_path IN (?, ?)')
+      .get(normalized, legacy)
     return row ? this.toProject(row as Row) : null
   }
 
@@ -30,7 +36,7 @@ export class ProjectStore {
     const project: Project = {
       id: randomUUID(),
       name: input.name,
-      folderPath: input.folderPath,
+      folderPath: normalizeProjectFolderPath(input.folderPath),
       createdAt: nowIso(),
       updatedAt: nowIso(),
     }
@@ -58,7 +64,7 @@ export class ProjectStore {
     return {
       id: String(row.id),
       name: String(row.name),
-      folderPath: String(row.folder_path ?? ''),
+      folderPath: normalizeProjectFolderPath(String(row.folder_path ?? '')),
       createdAt: String(row.created_at),
       updatedAt: String(row.updated_at),
     }

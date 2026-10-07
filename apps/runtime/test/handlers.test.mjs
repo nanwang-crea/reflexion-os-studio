@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, parse } from 'node:path'
+import { normalizeProjectFolderPath } from '../dist/store/chat/project-path.js'
 import { Store } from '../dist/store/index.js'
 import { dispatchCommand } from '../dist/handlers.js'
 import { createTaskTool } from '../dist/agent/tools/task.js'
@@ -1444,4 +1445,32 @@ test('workspace.git_remote_add validates params, forwards url untouched, queues 
   // 本地 config 写：外层 35s > Rust 内层 30s。
   assert.equal(calls[0].timeoutMs, 35_000)
   assert.equal(calls[1].timeoutMs, 35_000)
+})
+
+test('project paths preserve Windows drive/UNC and POSIX roots', () => {
+  for (const [input, platform, expected] of [
+    ['C:\\', 'win32', 'C:\\'],
+    ['C:/', 'win32', 'C:\\'],
+    ['C:', 'win32', 'C:\\'],
+    ['\\\\server\\share\\', 'win32', '\\\\server\\share\\'],
+    ['C:\\工作 目录\\', 'win32', 'C:\\工作 目录'],
+    ['/', 'linux', '/'],
+    ['/tmp/work/', 'darwin', '/tmp/work'],
+    ['/tmp/name\\', 'linux', '/tmp/name\\'],
+    ['', 'win32', ''],
+  ]) {
+    assert.equal(normalizeProjectFolderPath(input, platform), expected)
+  }
+})
+
+test('project.create retains the native filesystem root', async () => {
+  const store = freshStore()
+  const root = parse(process.cwd()).root
+  const result = await dispatchCommand(
+    'project.create',
+    { folderPath: root },
+    { store },
+  )
+  assert.equal(result.project.folderPath, root)
+  assert.equal(store.projects.get(result.project.id).folderPath, root)
 })

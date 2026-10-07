@@ -149,7 +149,7 @@ pnpm build:desktop         # 打包安装包（beforeBuildCommand 自动准备 s
 - **编码与换行**：文件与协议统一 UTF-8 无 BOM；协议换行固定 `\n`（newline-delimited JSON），读取侧不要依赖 CRLF/LF 平台默认。
 - **系统依赖**：Linux 运行需要 `webkit2gtk`，Windows 依赖 WebView2（Win10/11 多数自带）；新增系统依赖时在文档记录三平台差异。
 - **脚本**：bash 脚本仅用于开发编排；产品逻辑不得写成 bash-only。跨平台工具逻辑进 Node/Rust。
-- **分发**：安装包（.app/.dmg、.msi、.deb/AppImage）在对应平台分别构建（CI 矩阵），Tauri 不支持交叉打包；`pnpm build` 即产出安装包（`bundle.active = true`），打包前需先拉取随包 Node 发行版（脚本自动完成，需联网）。签名/公证、自动更新、激活码许可仍属 Phase 6。
+- **分发**：安装包（.app/.dmg、NSIS .exe、.deb/AppImage）在对应平台分别构建（CI 矩阵），Tauri 不支持交叉打包；`pnpm build` 即产出安装包（`bundle.active = true`），打包前需先拉取随包 Node 发行版（脚本自动完成，需联网）。签名/公证、自动更新、激活码许可仍属 Phase 6。
 
 ## 9. 变更纪律
 

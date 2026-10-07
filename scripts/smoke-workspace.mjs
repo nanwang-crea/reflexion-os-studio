@@ -3,6 +3,7 @@
 //   → list_dir 根目录 → read_file 内容 → .. 越权被拒 → idle 时 cancel 为 false →
 //   git.diff 两侧内容（untracked/删除/staged）→ runtime 干净退出。
 // 用法：先 pnpm build:packages（+ cargo build），再 node scripts/smoke-workspace.mjs
+// --packaged 使用随包 Node/Runtime/System Runtime，在独立 cwd 验证资源启动。
 import { spawn } from 'node:child_process'
 import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
@@ -12,7 +13,28 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const TS_ENTRY = join(ROOT, 'apps/runtime/dist/index.js')
+const packaged = process.argv.includes('--packaged')
+const resources = join(ROOT, 'apps/desktop/src-tauri/package-resources')
+const TS_ENTRY = packaged
+  ? join(resources, 'runtime', 'runtime.mjs')
+  : join(ROOT, 'apps/runtime/dist/index.js')
+const NODE = packaged
+  ? join(
+      resources,
+      'node',
+      'bin',
+      process.platform === 'win32' ? 'node.exe' : 'node',
+    )
+  : process.execPath
+const SYSTEM = packaged
+  ? join(
+      resources,
+      'bin',
+      process.platform === 'win32'
+        ? 'reflexion-system-runtime.exe'
+        : 'reflexion-system-runtime',
+    )
+  : process.env.REFLEXION_SYSTEM_RUNTIME_BIN
 
 let failures = 0
 function check(name, condition, detail) {
@@ -26,11 +48,17 @@ function check(name, condition, detail) {
 
 function startRuntime(dataDir) {
   const child = spawn(
-    process.execPath,
-    ['--disable-warning=ExperimentalWarning', TS_ENTRY],
+    NODE,
+    ['--disable-warning=ExperimentalWarning', '--', TS_ENTRY],
     {
-      env: { ...process.env, REFLEXION_DATA_DIR: dataDir },
-      stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: packaged ? dataDir : ROOT,
+      env: {
+        ...process.env,
+        REFLEXION_DATA_DIR: dataDir,
+        ...(SYSTEM ? { REFLEXION_SYSTEM_RUNTIME_BIN: SYSTEM } : {}),
+      },
+      windowsHide: true,
+      stdio: ['pipe', 'pipe', 'inherit'],
     },
   )
   const events = []
@@ -61,8 +89,15 @@ function startRuntime(dataDir) {
     }
   })
   const request = (id, method, params = {}) =>
-    new Promise((resolve) => {
-      pending.set(id, resolve)
+    new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        pending.delete(id)
+        reject(new Error(`request timed out: ${method}`))
+      }, 15_000)
+      pending.set(id, (message) => {
+        clearTimeout(timer)
+        resolve(message)
+      })
       child.stdin.write(
         `${JSON.stringify({ jsonrpc: '2.0', id, method, params: { ...params, requestId: randomUUID() } })}\n`,
       )
@@ -73,6 +108,7 @@ function startRuntime(dataDir) {
     request,
     waitExit,
     cleanup: () => {
+      if (child.exitCode === null) child.kill()
       try {
         rmSync(dataDir, { recursive: true, force: true })
       } catch {
@@ -161,7 +197,7 @@ async function checkGitDiff(runtime, projectId, wsRoot) {
 
 ;(async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'reflexion-ws-smoke-'))
-  const wsRoot = mkdtempSync(join(tmpdir(), 'reflexion-ws-proj-'))
+  const wsRoot = mkdtempSync(join(tmpdir(), 'reflexion 工作目录-'))
   mkdirSync(join(wsRoot, 'src'), { recursive: true })
   mkdirSync(join(wsRoot, 'node_modules', 'pkg'), { recursive: true })
   writeFileSync(join(wsRoot, 'README.md'), '# smoke\n')
@@ -173,12 +209,20 @@ async function checkGitDiff(runtime, projectId, wsRoot) {
     try {
       // 等待 runtime 就绪；workspace 文件/git 步骤依赖系统通道，
       // 必须等 systemAvailable（Runtime 启动改为 shell 环境快照后异步）。
+      let systemReady = false
       for (let attempt = 0; attempt < 100; attempt++) {
         const ready = await runtime.request(1, 'runtime.get_status')
-        if (ready?.result?.state === 'ready' && ready?.result?.systemAvailable)
+        if (
+          ready?.result?.state === 'ready' &&
+          ready?.result?.systemAvailable
+        ) {
+          systemReady = true
           break
+        }
         await new Promise((resolve) => setTimeout(resolve, 100))
       }
+
+      if (!systemReady) throw new Error('System Runtime failed to become ready')
 
       const created = await runtime.request(2, 'project.create', {
         folderPath: wsRoot,
@@ -230,6 +274,43 @@ async function checkGitDiff(runtime, projectId, wsRoot) {
           names.includes('node_modules'),
         JSON.stringify(names),
       )
+
+      const nested = await runtime.request(10, 'workspace.list_dir', {
+        projectId: project.id,
+        path: process.platform === 'win32' ? 'src\\' : './src',
+      })
+      check(
+        'native directory path returns portable file names',
+        nested.result?.entries.some((entry) => entry.path === 'src/app.ts'),
+        JSON.stringify(nested.result ?? nested.error),
+      )
+
+      const watching = await runtime.request(11, 'workspace.watch_dir', {
+        projectId: project.id,
+        path: '.',
+      })
+      check(
+        'root directory watcher starts',
+        typeof watching.result?.watchId === 'string',
+      )
+      const eventName = 'watch-created.txt'
+      writeFileSync(join(wsRoot, eventName), 'watch fixture')
+      let changed = false
+      for (let attempt = 0; attempt < 50; attempt++) {
+        changed = runtime.events.some(
+          (event) =>
+            event.type === 'workspace.changed' &&
+            event.projectId === project.id &&
+            event.path === eventName,
+        )
+        if (changed) break
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
+      check('watcher emits portable workspace-relative paths', changed)
+      await runtime.request(12, 'workspace.unwatch_dir', {
+        watchId: watching.result?.watchId,
+      })
+      rmSync(join(wsRoot, eventName))
 
       const read = await runtime.request(6, 'workspace.read_file', {
         projectId: project.id,

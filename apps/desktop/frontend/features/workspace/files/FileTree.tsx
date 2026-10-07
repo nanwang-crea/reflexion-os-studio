@@ -345,7 +345,7 @@ export function FileTree(props: FileTreeProps): React.JSX.Element {
             )}
             {page?.truncated && page.nextOffset == null && (
               <li className="tree-hint tree-hint-error">
-                目录结果不完整，建议缩小目录范围
+                目录结果不完整，部分条目无法读取或已达到上限
               </li>
             )}
           </ul>
@@ -369,6 +369,16 @@ export function FileTree(props: FileTreeProps): React.JSX.Element {
           <RefreshIcon />
         </button>
       </div>
+      {!props.systemReady && (
+        <div className="tree-hint tree-hint-error">
+          系统文件服务尚未就绪，暂时无法加载目录。
+        </div>
+      )}
+      {props.systemReady &&
+        dirState.get('.') === 'loaded' &&
+        (entries.get('.')?.length ?? 0) === 0 && (
+          <div className="tree-hint">目录为空。</div>
+        )}
       {rootError && (
         <div className="tree-hint tree-hint-error">{rootError}</div>
       )}

@@ -1,4 +1,5 @@
 import { basename } from 'node:path'
+import { normalizeProjectFolderPath } from './store/chat/project-path.js'
 import type {
   ChatCommand,
   PluginInstallSource,
@@ -33,7 +34,9 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
   }),
   'project.create': (p, { store }) => {
     // 去掉结尾分隔符再查重/落盘，避免同一文件夹因尾部斜杠重复建项。
-    const folderPath = requireString(p, 'folderPath').replace(/[\\/]+$/, '')
+    const folderPath = normalizeProjectFolderPath(
+      requireString(p, 'folderPath'),
+    )
     if (folderPath === '') {
       throw new CommandError('invalid_request', 'folderPath 不能为空')
     }

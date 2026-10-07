@@ -26,6 +26,35 @@ Tauri Host 从打包资源目录或开发目录解析 sidecar（`resource_dir/pk
 
 1. `scripts/prepare-package.sh`（tauri build 的 beforeBuildCommand 自动调用）：`bundle-runtime.mjs` 用 esbuild 把 TS Runtime 打成单文件 `runtime.mjs`；`fetch-node-dist.mjs` 下载官方 Node 发行版（默认 v22.21.1，`REFLEXION_NODE_VERSION` 可覆盖，SHA256 校验，缓存 `.cache/node-dist/`）并提取 `node`/`node.exe`；拷贝 `reflexion-system-runtime`（release）进 `package-resources/`。
 2. `bundle.resources` 把 `package-resources/` 打进安装包资源目录（`pkg/`），宿主编译时按 `pkg/runtime/runtime.mjs`、`pkg/node/bin/node(.exe)`、`pkg/bin/reflexion-system-runtime(.exe)` 解析，目标机器无需预装 Node，也不依赖仓库目录。
-3. `bundle.active = true`，targets 为当前平台全部（macOS: .app/.dmg；Windows: .msi/nsis；Linux: .deb/AppImage），产物在 `apps/desktop/src-tauri/target/release/bundle/`。
+3. `bundle.active = true`，targets 按平台配置（macOS: .app/.dmg；Windows: NSIS .exe；Linux: .deb/AppImage），产物在 `apps/desktop/src-tauri/target/release/bundle/`。
 
 冒烟：直接运行安装包内二进制，确认两个 sidecar 从包内路径启动、宿主退出后无孤儿进程。签名、公证、自动更新、回滚、崩溃报告和备份恢复在 Phase 6 完善；Windows/Linux 安装包需在对应平台构建（Tauri 不支持交叉打包），随包 Node 版本按平台分别下载。
+
+Windows 当前仅分发已验证可正常启动的 NSIS 安装包，CI 只上传
+`bundle/nsis/*.exe`。MSI 与 portable ZIP 已停止生成和上传。
+
+## 工作区跨平台回归检查
+
+Windows/macOS CI 在上传安装包前执行 `node scripts/smoke-workspace.mjs --packaged`：
+使用随包 Node、runtime.mjs 与 Rust sidecar，在独立工作目录及含中文/空格的项目路径下，
+验证 System Runtime 就绪、目录加载、嵌套路径、文件读取、文件变更监听、Git diff 和协议关停。
+Windows 继续只上传 NSIS；Linux 保持 deb/AppImage 目标，尚未加入当前安装包 CI 矩阵。
+这项检查验证打包资源本身，不能替代安装后通过 Tauri 宿主启动的真机验收。
+
+2026-10-07 检查修复了以下问题：
+
+- 项目目录移除尾部斜杠会破坏 Windows 盘符根与 POSIX 根；现保留原生根格式，
+  Windows 读取旧项目时兼容旧版误存的 `C:`，不改写历史数据库。
+- 文件服务未就绪时文件树无提示；现在区分服务未就绪、加载失败与空目录。
+- 单个目录条目的类型/元数据读取失败会阻断整页；现在保留可枚举条目，
+  失败项标记结果不完整，根目录本身不可枚举仍报错。
+- 原生目录输入的反斜杠可能进入列表返回路径；现在协议路径按组件统一用 `/`。
+- 目录监听根与事件路径的 canonical/verbatim 形式不同会丢掉事件；现在统一根，
+  并用最长现存祖先兼容创建和删除事件，仍拒绝工作区外事件。
+- Git PATH 搜索缺少 Windows `git.exe`，回退安装路径还硬编码 C 盘；现在尝试
+  原生可执行名及系统 ProgramFiles 目录，Git 后台调用隐藏控制台。
+- 索引根读取失败曾被吞成零文件成功；现在报告失败，子目录跳过则标记结果不完整。
+
+仅有“文件树为空”不足以确认某台 Windows 机器的直接故障原因。新版若显示系统文件服务
+未就绪，应检查启动日志中的 `system runtime` 状态；若显示目录读取错误，则按对应路径
+或权限错误继续定位。Windows/Linux 的实际安装启动、目录权限及平台沙箱仍需对应真机验证。

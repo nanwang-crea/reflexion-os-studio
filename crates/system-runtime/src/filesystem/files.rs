@@ -148,22 +148,40 @@ pub fn list(
         return Err(format!("not a directory: {relative}"));
     }
     // 输出路径统一为 workspace 相对形状（去掉多余的 "./" 前缀），可直接回传给后续工具调用。
-    let prefix = if relative == "." {
-        ""
-    } else {
-        relative.trim_start_matches("./")
-    };
+    let prefix = Path::new(relative)
+        .components()
+        .filter_map(|part| match part {
+            std::path::Component::Normal(name) => Some(name.to_string_lossy()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("/");
     let (mut entries, hard_truncated) = if recursive {
-        let walked = walk_files(&path, prefix);
+        let walked = walk_files(&path, &prefix);
         (walked.files, walked.truncated)
     } else {
         let mut entries = Vec::new();
+        let mut incomplete = false;
         for entry in fs::read_dir(&path).map_err(|e| e.to_string())? {
-            let entry = entry.map_err(|e| e.to_string())?;
-            let metadata = entry.metadata().map_err(|e| e.to_string())?;
-            let kind = if metadata.is_dir() {
+            let Ok(entry) = entry else {
+                incomplete = true;
+                continue;
+            };
+            let Ok(file_type) = entry.file_type() else {
+                incomplete = true;
+                continue;
+            };
+            // 个别条目无权限/被删除不能阻断整棵文件树，保留可枚举的条目。
+            let size_bytes = match entry.metadata() {
+                Ok(metadata) => metadata.len(),
+                Err(_) => {
+                    incomplete = true;
+                    0
+                }
+            };
+            let kind = if file_type.is_dir() {
                 "dir"
-            } else if metadata.is_file() {
+            } else if file_type.is_file() {
                 "file"
             } else {
                 "other"
@@ -179,10 +197,10 @@ pub fn list(
                     format!("{prefix}/{name}")
                 },
                 kind: kind.to_string(),
-                size_bytes: metadata.len(),
+                size_bytes,
             });
         }
-        (entries, false)
+        (entries, incomplete)
     };
     entries.sort_by(|a, b| a.path.cmp(&b.path));
     let offset = offset.unwrap_or(0);
@@ -396,6 +414,18 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn list_native_nested_paths_returns_portable_relative_names() {
+        let root = temp_workspace("native-list");
+        fs::create_dir_all(root.join("目录").join("子目录")).unwrap();
+        fs::write(root.join("目录").join("子目录").join("file.txt"), "fixture").unwrap();
+        let relative = std::path::PathBuf::from("目录").join("子目录");
+        let page = list(&root, relative.to_str().unwrap(), false, None, None).unwrap();
+        assert_eq!(page.entries.len(), 1);
+        assert_eq!(page.entries[0].path, "目录/子目录/file.txt");
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

@@ -2,6 +2,8 @@
 //! 超时受控运行、管道受限排空。LC_ALL=C 固定英文输出，便于错误分类。
 
 use std::io::Read;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -63,6 +65,8 @@ pub(super) fn run_git_opts(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    #[cfg(windows)]
+    command.creation_flags(0x08000000);
     if opts.noninteractive {
         command
             .env("GIT_TERMINAL_PROMPT", "0")
@@ -119,8 +123,10 @@ pub(super) fn find_git_executable() -> Option<std::path::PathBuf> {
         }
     }
     let mut candidates = Vec::new();
-    if let Ok(path) = std::env::var("PATH") {
-        candidates.extend(std::env::split_paths(&path).map(|dir| dir.join("git")));
+    if let Some(path) = std::env::var_os("PATH") {
+        if let Some(git) = find_git_in_path(&path, cfg!(windows)) {
+            return Some(git);
+        }
     }
     #[cfg(target_os = "macos")]
     candidates.extend([
@@ -129,13 +135,32 @@ pub(super) fn find_git_executable() -> Option<std::path::PathBuf> {
         std::path::PathBuf::from("/usr/local/bin/git"),
     ]);
     #[cfg(target_os = "windows")]
-    candidates.extend([
-        std::path::PathBuf::from(r"C:\\Program Files\\Git\\cmd\\git.exe"),
-        std::path::PathBuf::from(r"C:\\Program Files\\Git\\bin\\git.exe"),
-    ]);
+    for variable in ["ProgramFiles", "ProgramFiles(x86)"] {
+        if let Some(base) = std::env::var_os(variable) {
+            for folder in ["cmd", "bin"] {
+                candidates.push(
+                    std::path::PathBuf::from(&base)
+                        .join("Git")
+                        .join(folder)
+                        .join("git.exe"),
+                );
+            }
+        }
+    }
     #[cfg(target_os = "linux")]
     candidates.push(std::path::PathBuf::from("/usr/bin/git"));
     candidates.into_iter().find(|path| path.is_file())
+}
+
+fn find_git_in_path(path: &std::ffi::OsStr, windows: bool) -> Option<std::path::PathBuf> {
+    let names: &[&str] = if windows {
+        &["git.exe", "git"]
+    } else {
+        &["git"]
+    };
+    std::env::split_paths(path)
+        .flat_map(|dir| names.iter().map(move |name| dir.join(name)))
+        .find(|path| path.is_file())
 }
 
 /// 后台排空子进程管道：受限收集，避免子进程写满管道而阻塞。
@@ -217,6 +242,20 @@ pub(super) fn last_nonempty_line(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn path_lookup_finds_windows_exe_without_fixed_install_location() {
+        let root = crate::shell::temp_dir("git-path");
+        let dir = root.join("自定义 Git 目录");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("git.exe"), "fixture").unwrap();
+        let path = std::env::join_paths([root.join("missing"), dir.clone()]).unwrap();
+        assert_eq!(find_git_in_path(&path, true), Some(dir.join("git.exe")));
+        assert_eq!(find_git_in_path(&path, false), None);
+        std::fs::write(dir.join("git"), "fixture").unwrap();
+        assert_eq!(find_git_in_path(&path, false), Some(dir.join("git")));
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn first_line_scrubs_url_secrets_and_keeps_plain_text() {
