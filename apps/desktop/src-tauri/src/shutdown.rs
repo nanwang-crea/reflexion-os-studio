@@ -2,6 +2,9 @@
 //! 信号只作兜底（POSIX）；Windows 无 SIGTERM，依赖协议关停 + taskkill 树杀。
 
 #[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+#[cfg(windows)]
 use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
 
@@ -53,6 +56,7 @@ fn kill_process_tree(process: &mut SidecarProcess) {
         // taskkill /T 按父子关系终止整棵树，/F 强制。
         let _ = Command::new("taskkill")
             .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .creation_flags(0x08000000)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status();

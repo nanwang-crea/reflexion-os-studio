@@ -199,6 +199,7 @@ export class SystemRuntimeClient {
     try {
       child = spawn(this.binaryPath, this.binaryArgs, {
         stdio: ['pipe', 'pipe', 'pipe'],
+        windowsHide: true,
       })
     } catch (error) {
       this.onUnexpectedExit(`spawn failed: ${String(error)}`, generation)

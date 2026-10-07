@@ -119,10 +119,9 @@ pub(super) fn resolve_runtime_launch_config(
     // 避免被误读为真正的运行时报错（stderr 仍是日志通道）。
     let args = vec![
         PathBuf::from("--disable-warning=ExperimentalWarning"),
-        // Windows 盘符路径（如 C:\\...）必须位于 `--` 之后，避免 Node
-        // 将盘符前缀误当成选项/入口的一部分。
+        // 明确结束 Node 选项；Windows 扩展路径兼容由 node_entry_path 处理。
         PathBuf::from("--"),
-        runtime_entry,
+        node_entry_path(runtime_entry),
     ];
     let cwd = sidecar_cwd(resources, root);
     // Rust 二进制路径经环境变量交接给 TS；找不到则照常启动（TS 会按
@@ -160,4 +159,59 @@ pub(super) fn orphan_cleanup_markers(resources: Option<&Path>) -> Vec<String> {
     markers.sort();
     markers.dedup();
     markers
+}
+
+/// Node 22 的入口 realpath 不支持 Windows verbatim 盘符路径。
+/// 仅转换盘符/UNC 文件路径，保留其他设备命名空间；macOS/Linux 原样传递。
+fn node_entry_path(path: PathBuf) -> PathBuf {
+    #[cfg(windows)]
+    if let Some(value) = path.to_str() {
+        return PathBuf::from(node_compatible_windows_path(value));
+    }
+    path
+}
+
+#[cfg(any(windows, test))]
+fn node_compatible_windows_path(path: &str) -> String {
+    if let Some(unc) = path.strip_prefix(r"\\?\UNC\") {
+        return format!(r"\\{unc}");
+    }
+    if let Some(drive) = path.strip_prefix(r"\\?\") {
+        let bytes = drive.as_bytes();
+        if bytes.len() >= 3
+            && bytes[0].is_ascii_alphabetic()
+            && bytes[1] == b':'
+            && bytes[2] == b'\\'
+        {
+            return drive.to_string();
+        }
+    }
+    path.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn node_entry_supports_drive_unc_and_preserves_other_paths() {
+        for (input, expected) in [
+            (
+                r"\\?\C:\Program Files\应用\runtime.mjs",
+                r"C:\Program Files\应用\runtime.mjs",
+            ),
+            (
+                r"\\?\UNC\server\share\runtime.mjs",
+                r"\\server\share\runtime.mjs",
+            ),
+            (r"C:\app\runtime.mjs", r"C:\app\runtime.mjs"),
+            (
+                r"\\?\Volume{abc}\runtime.mjs",
+                r"\\?\Volume{abc}\runtime.mjs",
+            ),
+            ("/opt/app/runtime.mjs", "/opt/app/runtime.mjs"),
+        ] {
+            assert_eq!(node_compatible_windows_path(input), expected);
+        }
+    }
 }

@@ -12,6 +12,9 @@
 //!    无害，下次启动再清；误杀活实例的 sidecar 有害，故宁漏勿误。
 //! 3. 收割：按进程组/进程树整棵带走（覆盖 marker 匹配不到的 MCP 子进程）。
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
 use sysinfo::{Pid, System};
 
 /// 纯函数：命令行（join 后）是否包含任一 marker。空 marker 忽略。
@@ -68,6 +71,7 @@ fn kill_tree(pid: u32) -> bool {
     // 残留（POSIX 经进程组无此问题）；该形态罕见，残留项下次整树清理再收。
     std::process::Command::new("taskkill")
         .args(["/PID", &pid.to_string(), "/T", "/F"])
+        .creation_flags(0x08000000)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status()

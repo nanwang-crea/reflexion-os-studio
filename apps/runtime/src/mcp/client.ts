@@ -40,6 +40,7 @@ export class McpClient {
   async connect(): Promise<void> {
     const child = spawn(this.config.command, this.config.args, {
       stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
       env: { ...process.env, ...this.config.env },
     })
     if (!child.stdout || !child.stdin) {
