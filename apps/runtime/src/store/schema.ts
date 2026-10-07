@@ -82,6 +82,10 @@ CREATE TABLE IF NOT EXISTS plans (
   updated_at TEXT NOT NULL,
   completed_at TEXT
 );
+CREATE TABLE IF NOT EXISTS plan_documents (
+  plan_id TEXT PRIMARY KEY REFERENCES plans(id) ON DELETE CASCADE,
+  document_json TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS plan_steps (
   id TEXT PRIMARY KEY,
   plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
@@ -284,4 +288,4 @@ CREATE TABLE IF NOT EXISTS context_checkpoints (
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 37
+export const LATEST_SCHEMA_VERSION = 38

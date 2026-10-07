@@ -1259,47 +1259,7 @@
   color: var(--danger);
 }
 
-/* ---------- Artifact 卡 ---------- */
-
-.artifact-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.artifact-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 8px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 12px;
-  max-width: 100%;
-}
-
-.artifact-chip:hover {
-  border-color: var(--info);
-  color: var(--text);
-}
-
-.artifact-kind {
-  flex: none;
-  font-size: 10px;
-  color: var(--text-muted);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 0 3px;
-}
-
-.artifact-target {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* ---------- 变更文件 ---------- */
 
 .changed-files {
   margin: 10px 0 0;
@@ -1329,12 +1289,15 @@
 .changed-files[open] summary svg {
   transform: rotate(0deg);
 }
-.changed-files-count {
+.changed-files-hint {
   color: var(--text-muted);
+  margin-left: auto;
 }
 .changed-files-list {
   border-top: 1px solid var(--border);
   padding: 4px;
+  max-height: 280px;
+  overflow-y: auto;
 }
 .changed-file {
   display: flex;
@@ -1346,6 +1309,7 @@
   color: var(--text-secondary);
   text-align: left;
   cursor: pointer;
+  overflow-wrap: anywhere;
 }
 .changed-file:hover {
   background: var(--surface-hover);
@@ -1353,6 +1317,7 @@
 }
 .changed-file-action {
   min-width: 48px;
+  flex-shrink: 0;
   color: var(--text-muted);
 }
 

@@ -69,6 +69,8 @@ test('manage_plan tool definition carries final name, description and flat schem
     'modify_plan',
     'complete_plan',
     'cancel_plan',
+    'write_document',
+    'retain_document',
   ])
   assert.deepEqual(schema.required, ['action'])
 })

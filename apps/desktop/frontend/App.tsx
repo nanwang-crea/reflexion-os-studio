@@ -84,7 +84,7 @@ export default function App() {
     reloadAllTextTabs,
     dirtyPaths,
     setTabDirty,
-  } = useWorkspacePanel()
+  } = useWorkspacePanel(activeProjectId)
   const {
     confirmState,
     confirm,

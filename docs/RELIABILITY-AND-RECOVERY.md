@@ -17,9 +17,13 @@ MVP 应用重启后以 SQLite canonical state 为准，将未完成 Run 标记�
 ## Agent Loop Hardening 与 Atomic Finalizer（2026-09）
 
 - **完成状态机**：只有 `finish_reason=stop` 且无工具调用的轮次才能完成 Run；`length` 在续写预算内（默认 2 轮）继续，耗尽为 `output_truncated`；`content_filter` 失败且草稿落 failed（不伪造 completed）；finish reason 缺失/未知或与 toolCalls 不一致失败为 `provider_protocol`。稳定错误码：`max_turns` / `output_truncated` / `content_filtered` / `provider_protocol` / `no_progress` / `run_timeout` / `run_token_budget` / `tool_call_budget`。
-- **Atomic Run Finalizer**：全部 Run 终态唯一生产入口，单个 SQLite 事务内收尾 pending 消息（含首轮失败悬挂的草稿清扫）、取消未终态 ToolCall（预建行一并收敛）、收敛活动 Plan（含未完成步骤）、写 Run 终态与失败事件、幂等创建 memory job；提交后按序发事件并执行回调（回调最多一次，通知器抛错不吞回调）。事务失败受控重试一次。
+- **Atomic Run Finalizer**：全部 Run 终态唯一生产入口，单个 SQLite 事务内收尾 pending 消息（含首轮失败悬挂的草稿清扫）、取消未终态 ToolCall（预建行一并收敛）、收敛活动 Plan（含未完成步骤）、写 Run 终态与失败事件；提交后按序发事件并执行回调（回调最多一次，通知器抛错不吞回调）。事务失败受控重试一次。终态不再创建自动记忆任务，Memory V2 以文件即记忆为准。
 - **ToolCall 批量预建**：Provider 返回合法 tool_calls 后，模型轮事务内按声明顺序创建全部行（初始 pending），提交后发 `tool.requested`；进程在工具执行前退出时全部调用可审计，启动恢复统一 cancelled。
 - **副作用调度**：相邻 pure/read 且资源不冲突的调用并行成批；write/shell/state 串行独占批，mutation 完成前后续 read 不交叉；结果按声明顺序回填；审批按声明顺序弹出，不允许后批准操作越过前一操作。
 - **Loop Guard**：调用指纹 = 工具名 + canonicalJson(args) + freshness epoch（mutation 成功/Plan 变化/新消息递增）；相同只读指纹两次相同结果后第三次拦截（Run 失败 `no_progress`）；已成功 mutation 立即重放拦截（`duplicate_side_effect` 工具错误），模型仍重复一次失败 `no_progress`。
 - **Run 预算**（AgentSettings，null = 内置默认而非无限制）：总时长 7200s（2 小时）、累计 token 2 亿（Provider usage 口径）、工具调用 1000 次、续写 2 轮、最大轮次 100。
-- **Memory Job 恢复**：启动时遗留 running job 放回 pending（不计失败）；前台 Run 到达可抢占后台提取。
+- **Memory V2 边界**：启动恢复不处理任何 `memory_jobs`；AGENTS.md/MEMORY.md 由指令注入链路按当前文件内容读取，`memory.remember` 的写入仍遵守单条长度、单行与敏感内容拒绝规则。
+
+## 计划审批恢复与临时文档清理
+
+计划审批等待项持久化完整正文快照，重启续答前复核文件摘要与计划规格；旧审批缺少快照时保持计划模式并重新提交。活动计划文档跨失败与重启保留，仅计划完成或明确取消后清理，删除失败登记重试，人工修改或用户选择保留的文件不自动删除。历史审阅读取 canonical ToolOutput 中的快照。详见 [计划模式设计](PLAN-MODE.md)。

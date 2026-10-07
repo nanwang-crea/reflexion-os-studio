@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import type {
   ChangedFile,
   ResourceLink,
@@ -26,19 +25,23 @@ export function aggregateChangedFiles(
   ]
   const seenCalls = new Set<string>()
   const files = new Map<string, ChangedFile>()
+  const record = (file: ChangedFile) => {
+    const key = normalizeFilePath(file.path)
+    if (file.action === 'moved' && file.oldPath)
+      files.delete(normalizeFilePath(file.oldPath))
+    // Keep the last occurrence in execution order (including move/recreate).
+    files.delete(key)
+    files.set(key, file)
+  }
   for (const call of calls) {
-    if (
-      seenCalls.has(call.id) ||
-      call.status !== 'completed' ||
-      !MUTATION_TOOLS.has(call.toolName)
-    )
-      continue
+    if (seenCalls.has(call.id) || call.status !== 'completed') continue
     seenCalls.add(call.id)
     const canonicalFiles = call.output?.changedFiles
     if (canonicalFiles && canonicalFiles.length > 0) {
-      for (const file of canonicalFiles) files.set(file.path, file)
+      for (const file of canonicalFiles) record(file)
       continue
     }
+    if (!MUTATION_TOOLS.has(call.toolName)) continue
     // Older runtime snapshots expose only the legacy result projection.
     const result = call.result
     if (!result || typeof result !== 'object' || Array.isArray(result)) continue
@@ -70,15 +73,18 @@ export function aggregateChangedFiles(
       )
         continue
       const value = file as ChangedFile
-      files.set(value.path, value)
+      record(value)
     }
   }
   return [...files.values()]
 }
 
+function normalizeFilePath(path: string): string {
+  return path.replaceAll('\\', '/').replace(/^(?:\.\/)+/, '')
+}
+
 interface ChangedFilesProps {
-  items: ProcessItem[]
-  finalItem: ProcessItem | null
+  files: ChangedFile[]
   projectId: string
   onResourceClick?: (link: ResourceLink) => void
   /** 有快照时打开本次编辑 Diff，否则降级 onResourceClick。 */
@@ -103,16 +109,13 @@ const ACTION_LABELS: Record<string, string> = {
 export function ChangedFiles(
   props: ChangedFilesProps,
 ): React.JSX.Element | null {
-  const files = useMemo(
-    () => aggregateChangedFiles(props.items, props.finalItem),
-    [props.items, props.finalItem],
-  )
+  const { files } = props
   if (files.length === 0) return null
   return (
     <details className="changed-files">
       <summary>
-        <span>已变更文件</span>
-        <span className="changed-files-count">{files.length}</span>
+        <span>变更了 {files.length} 个文件</span>
+        <span className="changed-files-hint">查看变更</span>
         <ChevronIcon />
       </summary>
       <div className="changed-files-list">

@@ -33,6 +33,7 @@ fn handle_request(request: &Value) -> (Value, bool) {
     let outcome: Result<(Value, bool), OpError> = match method {
         Some("system.ping") => Ok((ok_response(id, json!({ "ok": true })), false)),
         Some("system.shutdown") => Ok((ok_response(id, json!({ "ok": true })), true)),
+        Some("plan.document") => finish(id, filesystem::plan_documents::handle(params)),
         Some("file.read") => finish(id, handlers::handle_file_read(params)),
         Some("file.read_binary") => finish(id, handlers::handle_file_read_binary(params)),
         Some("file.list") => finish(id, handlers::handle_file_list(params)),

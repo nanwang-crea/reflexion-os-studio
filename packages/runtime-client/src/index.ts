@@ -1,3 +1,5 @@
+export { PlanSnapshotSchema } from '@reflexion-os-studio/contracts'
+
 export type {
   JsonRpcErrorDetail,
   JsonRpcMessage,
@@ -71,6 +73,8 @@ export type {
   SandboxPolicy,
   ShellInterpreter,
   ExecutionMode,
+  PlanSnapshot,
+  PlanDocument,
   UserQuestion,
   UserQuestionAnswer,
   UserInteraction,

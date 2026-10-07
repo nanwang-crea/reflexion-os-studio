@@ -1,3 +1,4 @@
+import { writePlanDocument } from '../dist/agent/tools/plan-documents.js'
 import assert from 'node:assert/strict'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -145,6 +146,11 @@ test('exit_plan_mode uses the same canonical interaction boundary', async () => 
     goal: '修复交互边界',
     steps: [{ id: 'fix-boundary', title: '修复调用身份' }],
   })
+  await writePlanDocument(
+    { store: context.store, workspaceRoot: null, projectId: null },
+    plan,
+    '# 实施方案\n\n修复调用身份并验证。',
+  )
   const protocolToolCallId = 'provider-exit-call'
   const execution = context.execute({
     id: protocolToolCallId,

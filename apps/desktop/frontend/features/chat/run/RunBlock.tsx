@@ -8,8 +8,7 @@ import { ChevronIcon } from '../../../ui/icons'
 import type { RunActivity } from '../../../hooks/session/useRunActivity'
 import { AssistantMessage } from '../message/AssistantMessage'
 import { RunProcess, type ProcessItem } from './RunProcess'
-import { ChangedFiles } from './ChangedFiles'
-import { Artifacts } from './Artifacts'
+import { ChangedFiles, aggregateChangedFiles } from './ChangedFiles'
 import { DelegationList, type DelegationAttention } from './DelegationList'
 import { formatRetryLabel, useRetryCountdown } from './useRetryCountdown'
 
@@ -45,6 +44,10 @@ interface RunBlockProps {
 }
 
 export function RunBlock(props: RunBlockProps): React.JSX.Element {
+  const changedFiles = useMemo(
+    () => aggregateChangedFiles(props.processItems, props.finalItem),
+    [props.processItems, props.finalItem],
+  )
   const [open, setOpen] = useState(props.runActive)
   const previousActive = useRef<boolean | null>(null)
   const processItems = useMemo(() => {
@@ -156,17 +159,10 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
         />
       )}
       <ChangedFiles
-        items={props.processItems}
-        finalItem={props.finalItem}
+        files={changedFiles}
         projectId={props.projectId}
         onResourceClick={props.onResourceClick}
         onOpenDiff={props.onOpenDiff}
-      />
-      <Artifacts
-        items={props.processItems}
-        finalItem={props.finalItem}
-        projectId={props.projectId}
-        onResourceClick={props.onResourceClick}
       />
       <DelegationList
         items={props.delegations}

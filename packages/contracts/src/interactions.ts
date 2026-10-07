@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { PlanSnapshotSchema } from './plan-documents.js'
 import { AgentContextSchema } from './permissions.js'
 
 export const UserQuestionOptionSchema = z.object({
@@ -13,6 +14,7 @@ export const UserQuestionSchema = z
     id: z.string().min(1),
     header: z.string().min(1).max(40),
     question: z.string().min(1).max(500),
+    plan: PlanSnapshotSchema.optional(),
     multiSelect: z.boolean().default(false),
     options: z.array(UserQuestionOptionSchema).min(2).max(3),
   })
@@ -34,6 +36,7 @@ export const UserQuestionAnswerSchema = z
   .object({
     questionId: z.string().min(1),
     selectedOptionIds: z.array(z.string().min(1)).max(3),
+    keepPlan: z.boolean().optional(),
     customText: z.string().trim().min(1).max(1000).optional(),
   })
   .refine(

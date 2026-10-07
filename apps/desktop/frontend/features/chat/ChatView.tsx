@@ -1,16 +1,14 @@
+import type { ChatViewProps } from './chat-view-types'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
-  ResourceLink,
   Run,
-  SkillManifest,
   ToolCall,
   Delegation,
-  AgentTemplate,
   RunEvent,
 } from '@reflexion-os-studio/runtime-client'
-import { Composer, type ComposerModelOption } from '../../components/Composer'
-import { CopyButton } from '../../components/CopyButton'
-import { ArrowDownIcon, SparkIcon, PencilIcon } from '../../ui/icons'
+import { Composer } from '../../components/Composer'
+import { UserMessage } from './message/UserMessage'
+import { ArrowDownIcon, SparkIcon } from '../../ui/icons'
 import './approvals/approvals.css'
 import { ApprovalQueue } from './approvals/ApprovalQueue'
 import { DangerLeaseBanner } from './approvals/DangerLeaseBanner'
@@ -20,71 +18,12 @@ import type { DelegationAttention } from './run/DelegationList'
 import { QueueBar } from './QueueBar'
 import { PlanCard } from './run/PlanCard'
 import { RunEventCard } from './run/RunEventCard'
-import type { SessionData } from '../../api/sessions'
-import type { PendingApproval } from '../../hooks/useAppBootstrap'
-import type { PendingInteraction } from '../../hooks/useAppBootstrap'
-import type { RunActivity } from '../../hooks/session/useRunActivity'
-import type {
-  PermissionPreset,
-  DangerAccessLease,
-} from '@reflexion-os-studio/runtime-client'
-import type { ComposerAdvancedState } from '../../components/Composer'
 import {
   buildChatBlocks,
   computeRunDurationMs,
   isLastEditableUserMessage,
 } from './chat-blocks'
 import { InteractionQueue } from './interactions/InteractionQueue'
-import type { UserQuestionAnswer } from '@reflexion-os-studio/runtime-client'
-
-interface ChatViewProps {
-  sessionData: SessionData | null
-  delegations: Delegation[]
-  streaming: Record<string, string>
-  streamingReasoning: Record<string, string>
-  /** Run 级活动阶段（事件驱动，对齐 Codex）：决定状态行文案与折叠。 */
-  runActivities: Record<string, RunActivity>
-  hasEnabledProvider: boolean
-  permissionValue: PermissionPreset
-  onPermissionChange: (value: PermissionPreset) => void
-  advanced: ComposerAdvancedState
-  /** Danger 租约（Runtime 真源投影）：激活时 Composer 上方常驻红色状态条。 */
-  dangerLease: DangerAccessLease | null
-  onDisableDanger: () => void
-  modelOptions: ComposerModelOption[]
-  selectedModelKey: string | null
-  onModelChange: (key: string) => void
-  skills: SkillManifest[]
-  agentTemplates: AgentTemplate[]
-  composerPrefill?: { skillId: string; nonce: number } | null
-  onPrefillConsumed?: () => void
-  onSend: (content: string, agentTemplateId?: string) => Promise<void>
-  onStop: () => Promise<void>
-  onRetry: () => Promise<void>
-  onGoSettings: () => void
-  onExecutionModeChange: (mode: 'execute' | 'plan') => Promise<void>
-  pendingApprovals: PendingApproval[]
-  onResolveApproval: (toolCallId: string, choiceId: string) => void
-  pendingInteractions: PendingInteraction[]
-  onInteractionSubmit: (
-    interactionId: string,
-    answers: UserQuestionAnswer[],
-  ) => Promise<boolean>
-  /** 点击已变更文件：有编辑前后快照时展示本次编辑 Diff。 */
-  onOpenDiff?: (
-    path: string,
-    options: {
-      source: 'chat'
-      before?: string
-      after?: string
-      oldPath?: string
-    },
-  ) => void
-  /** 编辑最后一条用户消息的回调：提交后由 Runtime 处理 superseded 与新 Run 创建。 */
-  onEditResend: (messageId: string, content: string) => Promise<void>
-  /** 资源引用（工作区文件/资产/外链）点击后按类型分发。 */
-  onResourceClick?: (link: ResourceLink) => void
-}
 
 /** 距底部小于该值视为“贴底”，流式期间继续跟随滚动。 */
 const PIN_THRESHOLD_PX = 80
@@ -392,67 +331,18 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
                 runActive,
               )
               return (
-                <div key={message.id} className="msg-user">
-                  <div
-                    className={`user-bubble${editMessageId === message.id ? ' user-bubble-editing' : ''}`}
-                  >
-                    {editMessageId === message.id ? (
-                      <div className="edit-resend-inline">
-                        <textarea
-                          className="edit-resend-textarea"
-                          rows={4}
-                          value={editDraft}
-                          onChange={(event) => setEditDraft(event.target.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Escape') cancelEdit()
-                            if (event.key === 'Enter' && !event.shiftKey) {
-                              event.preventDefault()
-                              void saveEdit()
-                            }
-                          }}
-                          disabled={editSaving}
-                          autoFocus
-                        />
-                        <div className="edit-resend-actions">
-                          <button
-                            type="button"
-                            className="ghost"
-                            onClick={cancelEdit}
-                            disabled={editSaving}
-                          >
-                            取消
-                          </button>
-                          <button
-                            type="button"
-                            className="primary"
-                            onClick={() => void saveEdit()}
-                            disabled={editSaving || editDraft.trim() === ''}
-                          >
-                            {editSaving ? '发送中…' : '发送'}
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="user-content">{message.content}</div>
-                    )}
-                  </div>
-                  {editMessageId !== message.id && (
-                    <div className="user-actions">
-                      <CopyButton text={message.content} />
-                      {lastUserMsg && (
-                        <button
-                          type="button"
-                          className="msg-action"
-                          title="编辑并重发"
-                          aria-label="编辑并重发"
-                          onClick={() => startEdit(message.id)}
-                        >
-                          <PencilIcon />
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <UserMessage
+                  key={message.id}
+                  message={message}
+                  editing={editMessageId === message.id}
+                  editable={lastUserMsg}
+                  editDraft={editDraft}
+                  editSaving={editSaving}
+                  onDraftChange={setEditDraft}
+                  onCancel={cancelEdit}
+                  onSave={saveEdit}
+                  onEdit={() => startEdit(message.id)}
+                />
               )
             }
             if (message.role === 'assistant') {
@@ -527,6 +417,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
           onChoose={props.onResolveApproval}
         />
         <InteractionQueue
+          onResourceClick={props.onResourceClick}
           interactions={sessionInteractions}
           onSubmit={props.onInteractionSubmit}
         />

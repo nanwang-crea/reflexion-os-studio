@@ -25,18 +25,6 @@ export function parseResourceLink(href: string): ResourceLink | null {
   }
 }
 
-const LINK_RE_GLOBAL = /\[([^\]]*)\]\(([^)\s]*)\)/g
-
-/** 从文本提取全部资源链接（Artifact 聚合卡与内联渲染共用）。 */
-export function extractResourceLinks(text: string): ResourceLink[] {
-  const links: ResourceLink[] = []
-  for (const match of text.matchAll(LINK_RE_GLOBAL)) {
-    const parsed = parseResourceLink(match[2])
-    if (parsed !== null) links.push(parsed)
-  }
-  return links
-}
-
 /** workspace:// 与 asset:// 引用显示名：无标题文本时用最短有意义的片段。 */
 export function displayNameOf(link: ResourceLink): string {
   if (link.kind === 'workspaceFile') return link.path

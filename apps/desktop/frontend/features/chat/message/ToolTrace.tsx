@@ -1,3 +1,5 @@
+import { PlanSnapshotSchema } from '@reflexion-os-studio/runtime-client'
+import { PlanReview } from '../interactions/PlanReview'
 import { useState } from 'react'
 import type { JsonValue, ToolCall } from '@reflexion-os-studio/runtime-client'
 
@@ -52,6 +54,12 @@ function ToolTraceItem(props: {
   runActive: boolean
 }): React.JSX.Element {
   const { call } = props
+  const data = call.output?.data
+  const snapshot = PlanSnapshotSchema.safeParse(
+    data && typeof data === 'object' && !Array.isArray(data)
+      ? data.planSnapshot
+      : undefined,
+  )
   const [open, setOpen] = useState(false)
   const label = TOOL_LABELS[call.toolName] ?? call.toolName
   const inFlight = props.runActive && isInFlight(call)
@@ -79,6 +87,9 @@ function ToolTraceItem(props: {
         <span className="trace-summary">{summarizeArgs(call.args)}</span>
         {showStatus && <span className="trace-status">{statusText}</span>}
       </button>
+      {call.toolName === 'exit_plan_mode' && snapshot.success && (
+        <PlanReview snapshot={snapshot.data} historical />
+      )}
       {open && detail !== '' && <pre className="trace-detail">{detail}</pre>}
     </div>
   )

@@ -8,7 +8,7 @@ Browser Surface 是桌面 Agent 内的受控网页查看区域，不是 Chat Cor
 
 ## Phase 1B
 
-可选实现只读内嵌 Surface：仅支持 https URL 的打开和有限导航，失败统一回退系统浏览器。页面与应用 UI、Runtime、文件系统隔离，不允许脚本、下载、剪贴板、持久化登录或宿主 API 访问。Renderer 发送结构化 Command，Desktop Host 管理隔离 WebContents 生命周期，所有导航可审计。
+可选实现只读内嵌 Surface：仅支持 https URL 的打开和有限导航，失败统一回退系统浏览器。页面与应用 UI、Runtime、文件系统隔离，不允许脚本、下载、剪贴板、持久化登录或宿主 API 访问。Renderer 发送结构化 Command，Tauri Desktop Host 管理隔离 WebView 生命周期，所有导航可审计。
 
 ## Phase 2
 

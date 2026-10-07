@@ -10,8 +10,9 @@ import { formatAnswers } from '../tools/ask-user.js'
 import { applyPlanApproval } from '../tools/plan-mode.js'
 
 /** 回答结构化问题；若等待来自上次进程，则补齐工具结果并续跑原 Run。 */
-export function resumeInteraction(
+export async function resumeInteraction(
   deps: {
+    system: import('../../system.js').SystemRuntimeClient | null
     store: Store
     notifier: EventNotifier
     interactions: InteractionGateway
@@ -22,7 +23,7 @@ export function resumeInteraction(
   },
   interactionId: string,
   answers: import('@reflexion-os-studio/contracts').UserQuestionAnswer[],
-): { accepted: boolean } {
+): Promise<{ accepted: boolean }> {
   const interaction = deps.store.interactions.get(interactionId)
   if (!interaction || interaction.status !== 'pending') {
     return { accepted: false }
@@ -44,24 +45,28 @@ export function resumeInteraction(
     run.providerId ?? undefined,
     run.model ?? undefined,
   )
+  const result =
+    interaction.kind === 'plan_approval' &&
+    typeof toolCall.args === 'object' &&
+    toolCall.args !== null &&
+    !Array.isArray(toolCall.args) &&
+    typeof toolCall.args.planId === 'string'
+      ? await applyPlanApproval(
+          deps.store,
+          session.id,
+          toolCall.args.planId,
+          answers,
+          interaction.questions.find(
+            (question) => question.id === 'plan-decision',
+          )?.plan,
+          deps.system,
+        )
+      : {
+          content: formatAnswers(interaction.questions, answers),
+          isError: false,
+          data: { answers },
+        }
   const assistantMessage = deps.store.transaction(() => {
-    const result =
-      interaction.kind === 'plan_approval' &&
-      typeof toolCall.args === 'object' &&
-      toolCall.args !== null &&
-      !Array.isArray(toolCall.args) &&
-      typeof toolCall.args.planId === 'string'
-        ? applyPlanApproval(
-            deps.store,
-            session.id,
-            toolCall.args.planId,
-            answers,
-          )
-        : {
-            content: formatAnswers(interaction.questions, answers),
-            isError: false,
-            data: { answers },
-          }
     const output = normalizeToolOutput(
       result,
       session.projectId,

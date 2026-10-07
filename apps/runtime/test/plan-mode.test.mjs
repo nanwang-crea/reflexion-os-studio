@@ -1,3 +1,4 @@
+import { writePlanDocument } from '../dist/agent/tools/plan-documents.js'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { mkdtempSync } from 'node:fs'
@@ -19,6 +20,9 @@ function setup() {
     runId: 'run-1',
     messageId: 'message-1',
     emitter: {},
+    system: null,
+    workspaceRoot: null,
+    projectId: null,
     interactions: {
       requestQuestions: async (request) => {
         requests.push(request)
@@ -61,6 +65,7 @@ test('exit_plan_mode requires an active plan and exits only after approval', asy
     goal: '实现计划模式',
     steps: [{ id: 'plan-mode-1', title: '实现' }],
   })
+  await writePlanDocument(context, plan, '# 实施方案\n\n完成实现并验证。')
   const tool = createExitPlanModeTool(context)
   const result = await tool.execute({
     args: { planId: plan.id },

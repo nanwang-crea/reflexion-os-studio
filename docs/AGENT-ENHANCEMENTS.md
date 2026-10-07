@@ -84,10 +84,11 @@
 - **差距**:工具集完全静态内置,无外部工具生态接入。
 - **方向**:runtime 侧 MCP client + 工具桥,contracts 增加 mcp.* 命令;大改动,单独排期。
 
-### #11 多 Agent 委派 ◐（Phase 3A 后端已完成）
+### #11 多 Agent 委派 ✅（Phase 3 动态受控委派子集）
 
-- **Phase 3 只读委派落地**：Primary 通过 `task` 委派只读 Worker/Researcher/Reviewer，并可在 `maxDepth` 内继续委派；子 Run 独立上下文与 Session，具备工具白名单、预算、单项/父级取消、持久化事件和启动恢复。运行卡、执行快照、子 Session 轨迹、Agent 启停与预算设置已接入。外部生命周期写命令仍拒绝。
-- **剩余**：可写 Coding Agent 的权限/审批交集、结构化结果聚合与完整跨层树导航。
+- **已完成**：Primary 通过 `task` 动态创建独立 Agent 实例；支持模板收窄、最大 4 层递归、整棵树共享预算、隔离上下文/Session、取消/恢复、结构化结果聚合（摘要、资源链接、Changed Files、usage）与观测 UI。
+- **可写边界已完成**：父 Run 可委派可写子 Agent，但只能继承权限与工具交集；根级 mutation coordinator 串行化兄弟写入，revision 冲突显式返回 `file_revision_conflict`，成功变更记录 receipt。外部 delegation 生命周期写命令仍拒绝。
+- **剩余**：完整跨层续跑 checkpoint、更丰富的变更归属/冲突解决体验及带 preimage 的可审计撤销。
 
 ### #12 浏览器工具 / 多模态 / 附件 ⬜（Phase 2/5）
 
@@ -107,9 +108,9 @@
 
 对应方案《Agent Loop Hardening 与 Context Engine V2 实施方案》W0–W7，按工作包独立提交：
 
-- **#13 完成状态机与 Atomic Finalizer ✅**：finish reason 严格校验（缺失/未知/不一致 → `provider_protocol`，不再默认 stop 假成功）；`AgentLoopOutcome` 改判别联合（completed/stopped+稳定 `AgentStopReason`）；`length` 默认 2 轮续写（runtime control 帧不落库）；contracts 新增 8 个稳定错误码；`run-finalizer.ts` 为全部终态唯一生产入口（单事务收尾 pending 消息/未终态 ToolCall/活动 Plan/Run 终态/失败事件/memory job 幂等入队，回调 settled 最多一次）；`max_turns` 不再映射为笼统 `internal`。
+- **#13 完成状态机与 Atomic Finalizer ✅**：finish reason 严格校验（缺失/未知/不一致 → `provider_protocol`，不再默认 stop 假成功）；`AgentLoopOutcome` 改判别联合（completed/stopped+稳定 `AgentStopReason`）；`length` 默认 2 轮续写（runtime control 帧不落库）；contracts 新增 8 个稳定错误码；`run-finalizer.ts` 为全部终态唯一生产入口（单事务收尾 pending 消息/未终态 ToolCall/活动 Plan/Run 终态/失败事件，回调 settled 最多一次）；`max_turns` 不再映射为笼统 `internal`。
 - **#14 Atomic Frames 与序列校验 ✅**：`ToolRoundFrame` 把 assistant tool calls 与全部 results 绑定不可拆分；压缩/窗口/裁剪全部按 Frame；`validateModelMessages` 请求前强制校验；损坏数据（FrameError）失败为 internal 不发 Provider；DB 重建覆盖 failed/interrupted 轮并给 cancelled/failed ToolCall 生成 error result。旧"按消息数量切割"路径删除。
 - **#15 副作用调度与 Loop Guard ✅**：`ToolExecutionPolicy`（pure/read/write/shell/state + resourceKeys）不进 ToolSpec；相邻纯读并行成批、mutation 独占串行批、结果按声明顺序回填；ToolCall 批量预建（模型轮事务内，崩溃可审计）；Loop Guard 指纹（canonicalJson + freshness epoch）、相同只读指纹第三次拦截 `no_progress`、成功 mutation 重放拦截 `duplicate_side_effect`；Run 预算四项可配置（默认 7200s / 2 亿 tokens / 1000 工具调用 / 2 续写；null = 内置默认而非无限制，取值范围以 `AgentSettingsSchema` 为唯一真源，口径详见 `docs/RELIABILITY-AND-RECOVERY.md`）。
 - **#16 增量 Checkpoint ✅**：v20 `context_checkpoints`；source hash 命中复用、watermark 增量切片（旧摘要+新增帧一次调用）、single-flight、失败缓存；结构化摘要（zod + secret 过滤）；同 source hash 摘要调用严格 ≤1。
-- **#17 持久化 Memory Job ✅**：`memory_jobs` 表 + 单 worker（空闲消费、前台抢占、重启恢复、3 次退避 5s/30s/5min）；成功 Run 终态事务幂等入队；transcript 脱敏（参数摘要、`<redacted>`、状态/errorCode）；复合召回 query（用户消息×3 + Checkpoint goal/pending + Plan）；embedding 500ms deadline 降级。
-- **Phase 3 只读委派 ✅**：`task` 受限递归委派、内置 Agent、隔离上下文、预算/取消/恢复与观测 UI 已接入；外部 delegation 生命周期写命令保持 unsupported。
+- **#17 Memory V2 边界 ✅**：自动提取、合并、召回与 `memory_jobs` 持久化链路已移除；当前只保留 AGENTS.md/MEMORY.md 四层文件注入、`memory.remember`、指令页与敏感内容拒绝规则。
+- **Phase 3 动态受控委派 ✅**：`task` 动态创建 Agent 实例；支持可写权限交集、根级 mutation coordinator、revision 冲突、结构化结果（含资源链接与 Changed Files）、预算/取消/恢复与观测 UI；外部 delegation 生命周期写命令保持 unsupported。

@@ -19,6 +19,8 @@ ReflexionOS Studio 是桌面端 Agent Runtime 与可插拔图执行平台。它�
 
 Python 不进入新 Runtime 的核心路径，仅作为迁移期旧系统。
 
+计划模式使用临时 Markdown 文档供审阅和编辑，审批绑定持久化正文快照；计划终态后按登记与内容摘要安全清理文件。详见 [计划模式设计](docs/PLAN-MODE.md)。
+
 ## 3. 进程与依赖关系
 
 ```text

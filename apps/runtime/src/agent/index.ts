@@ -344,6 +344,7 @@ export class ChatAgent {
         store: this.store,
         notifier: this.notifier,
         interactions: this.interactions,
+        system: this.system,
         skills: this.skills,
         launch: (input) => this.launch(input),
       },

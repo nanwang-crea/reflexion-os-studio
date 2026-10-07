@@ -8,6 +8,7 @@ import { SessionStore } from './chat/sessions.js'
 import { ToolCallStore } from './chat/toolCalls.js'
 import { UserInteractionStore } from './chat/interactions.js'
 import { TurnExecutionStore } from './chat/turnExecutions.js'
+import { PlanDocumentStore } from './chat/planDocuments.js'
 import { PlanStore } from './chat/plans.js'
 import { RunEventStore } from './chat/runEvents.js'
 import { AgentSettingsStore } from './agents/agentSettings.js'
@@ -44,6 +45,7 @@ export class Store {
   readonly assetStore: AssetStore
   readonly agentSettings: AgentSettingsStore
   readonly mcpServers: McpServerStore
+  readonly planDocuments: PlanDocumentStore
   readonly plans: PlanStore
   readonly agents: AgentStore
   readonly delegations: DelegationStore
@@ -76,6 +78,7 @@ export class Store {
     this.agentSettings = new AgentSettingsStore(this.db)
     this.mcpServers = new McpServerStore(this.db)
     this.plans = new PlanStore(this.db)
+    this.planDocuments = new PlanDocumentStore(this.db)
     this.agents = new AgentStore(this.db)
     this.delegations = new DelegationStore(this.db)
     this.mutationReceipts = new MutationReceiptStore(this.db)

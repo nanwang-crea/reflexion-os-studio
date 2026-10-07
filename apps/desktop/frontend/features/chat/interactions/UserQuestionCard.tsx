@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react'
+import { PlanReview } from './PlanReview'
+import type { ResourceLink } from '@reflexion-os-studio/runtime-client'
 import type { UserQuestionAnswer } from '@reflexion-os-studio/runtime-client'
 import type { PendingInteraction } from '../../../hooks/interactions/usePendingInteractions'
 
 export function UserQuestionCard(props: {
+  onResourceClick?: (link: ResourceLink) => void
   interaction: PendingInteraction
   onSubmit: (
     interactionId: string,
@@ -11,6 +14,7 @@ export function UserQuestionCard(props: {
 }): React.JSX.Element {
   const [selected, setSelected] = useState<Record<string, string[]>>({})
   const [custom, setCustom] = useState<Record<string, string>>({})
+  const [keepPlan, setKeepPlan] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const answers = useMemo(
     () =>
@@ -22,11 +26,12 @@ export function UserQuestionCard(props: {
           {
             questionId: question.id,
             selectedOptionIds,
+            ...(question.plan ? { keepPlan } : {}),
             ...(customText ? { customText } : {}),
           },
         ]
       }),
-    [custom, props.interaction.questions, selected],
+    [custom, props.interaction.questions, selected, keepPlan],
   )
 
   const submit = async (): Promise<void> => {
@@ -58,6 +63,12 @@ export function UserQuestionCard(props: {
             <span>{question.header}</span>
             {question.question}
           </legend>
+          {question.plan && (
+            <PlanReview
+              snapshot={question.plan}
+              onResourceClick={props.onResourceClick}
+            />
+          )}
           <div className="user-question-options">
             {question.options.map((option) => {
               const values = selected[question.id] ?? []
@@ -87,10 +98,24 @@ export function UserQuestionCard(props: {
               )
             })}
           </div>
+          {question.plan && (
+            <label className="plan-retain-option">
+              <input
+                type="checkbox"
+                checked={keepPlan}
+                onChange={(event) => setKeepPlan(event.target.checked)}
+              />
+              完成后保留计划文件
+            </label>
+          )}
           <textarea
             rows={2}
             maxLength={1000}
-            placeholder="其他答案（可选）"
+            placeholder={
+              props.interaction.kind === 'plan_approval'
+                ? '修改意见（可选）'
+                : '其他答案（可选）'
+            }
             value={custom[question.id] ?? ''}
             onChange={(event) =>
               setCustom((current) => ({

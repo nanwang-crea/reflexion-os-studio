@@ -1,0 +1,39 @@
+.plan-review-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+.plan-review-entry small {
+  width: 100%;
+  overflow-wrap: anywhere;
+}
+.plan-review-dialog {
+  width: min(900px, 90vw);
+  max-height: 85vh;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text);
+}
+.plan-review-dialog::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+.plan-review-dialog header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+}
+.plan-review-body {
+  overflow: auto;
+  max-height: 65vh;
+}
+.plan-retain-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+}

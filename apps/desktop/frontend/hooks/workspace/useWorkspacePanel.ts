@@ -5,6 +5,7 @@ import type {
   OpenFileTab,
   WorkspaceOpenRequest,
 } from '../../features/workspace/types'
+import { transport } from '../../lib/transport'
 import { tabIdOf } from '../../features/workspace/types'
 
 export interface WorkspacePanelState {
@@ -46,7 +47,9 @@ export interface WorkspacePanelState {
  * 标签身份是 tabId（content=path、diff=path#diff）：同一路径允许同时存在
  * content 与 diff 两个标签，互不串扰；dirtyPaths 仍按 path 键控。
  */
-export function useWorkspacePanel(): WorkspacePanelState {
+export function useWorkspacePanel(
+  projectId: string | null,
+): WorkspacePanelState {
   const [workspaceOpen, setWorkspaceOpen] = useState(
     () => localStorage.getItem('reflexion.workspacePanel') !== '0',
   )
@@ -175,6 +178,25 @@ export function useWorkspacePanel(): WorkspacePanelState {
       })
     }
   }, [])
+
+  const latest = useRef({ projectId, dirtyPaths, closeTab })
+  latest.current = { projectId, dirtyPaths, closeTab }
+  useEffect(
+    () =>
+      transport.onEvent((event) => {
+        const current = latest.current
+        if (
+          event.type !== 'workspace.changed' ||
+          event.projectId !== current.projectId ||
+          !event.kind.startsWith('Remove') ||
+          !/^\.reflexion-studio\/plans\/[a-f0-9-]{36}\.md$/i.test(event.path) ||
+          current.dirtyPaths.has(event.path)
+        )
+          return
+        current.closeTab(event.path)
+      }),
+    [],
+  )
 
   const selectTab = useCallback((id: string): void => {
     setActiveTabId(id)

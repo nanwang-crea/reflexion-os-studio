@@ -9,6 +9,13 @@ import type {
 import type { Store } from '../../store/index.js'
 import type { ToolContext } from './shared.js'
 import { requireString } from './shared.js'
+import {
+  cleanupPlanDocuments,
+  reviewPlanDocument,
+  validatePlanSnapshot,
+} from './plan-documents.js'
+import type { PlanSnapshot } from '@reflexion-os-studio/contracts'
+import type { SystemRuntimeClient } from '../../system.js'
 
 const NO_ARGS: JsonValue = {
   type: 'object',
@@ -75,6 +82,16 @@ export function createExitPlanModeTool(ctx: ToolContext): ToolDefinition {
           code: 'invalid_request',
         }
       }
+      let snapshot: PlanSnapshot
+      try {
+        snapshot = await reviewPlanDocument(ctx.store, ctx.system, plan)
+      } catch (error) {
+        return {
+          content: error instanceof Error ? error.message : String(error),
+          isError: true,
+          code: 'plan_document_required',
+        }
+      }
       const answers = await ctx.interactions.requestQuestions({
         sessionId: ctx.sessionId,
         runId: ctx.runId,
@@ -83,13 +100,14 @@ export function createExitPlanModeTool(ctx: ToolContext): ToolDefinition {
         questions: [
           {
             id: 'plan-decision',
+            plan: snapshot,
             header: '计划审批',
-            question: `是否批准执行计划“${plan.goal}”？`,
+            question: `是否批准执行计划“${plan.goal.slice(0, 400)}”？`,
             multiSelect: false,
             options: [
               {
                 id: 'approve',
-                label: '批准并开始（推荐）',
+                label: '批准并执行',
                 description: '退出只读计划模式，允许按当前权限执行计划。',
               },
               {
@@ -108,34 +126,87 @@ export function createExitPlanModeTool(ctx: ToolContext): ToolDefinition {
         emitter: ctx.emitter,
         signal,
       })
-      return applyPlanApproval(ctx.store, ctx.sessionId, planId, answers)
+      const result = await applyPlanApproval(
+        ctx.store,
+        ctx.sessionId,
+        planId,
+        answers,
+        snapshot,
+        ctx.system,
+      )
+      const current = ctx.store.plans.get(planId)
+      if (current?.status === 'cancelled')
+        ctx.emitter.next({ type: 'plan.updated', plan: current })
+      return result
     },
   }
 }
 
 /** 计划审批的确定性状态推进；实时执行与重启恢复共用，避免语义分叉。 */
-export function applyPlanApproval(
+export async function applyPlanApproval(
   store: Store,
   sessionId: string,
   planId: string,
   answers: UserQuestionAnswer[],
-): ToolResult {
+  snapshot?: PlanSnapshot,
+  system: SystemRuntimeClient | null = null,
+): Promise<ToolResult> {
   const answer = answers.find((item) => item.questionId === 'plan-decision')
   const decision = answer?.selectedOptionIds[0] ?? 'revise'
+  const plan = store.plans.get(planId)
+  if (!plan || plan.sessionId !== sessionId || plan.status !== 'active')
+    return {
+      content: '计划已失效，请重新提交审批。',
+      isError: true,
+      code: 'stale_plan',
+    }
   if (decision === 'approve') {
+    let valid = false
+    try {
+      valid =
+        snapshot !== undefined &&
+        snapshot.planId === planId &&
+        (await validatePlanSnapshot(store, system, sessionId, snapshot))
+    } catch {
+      /* fail closed */
+    }
+    if (!valid)
+      return {
+        content: '计划内容已变更或文件不可读取，请保持计划模式并重新提交审批。',
+        isError: true,
+        code: 'stale_plan',
+      }
+    const document = store.planDocuments.get(planId)
+    if (document && answer?.keepPlan)
+      store.planDocuments.save({ ...document, retained: true })
     store.sessions.setExecutionMode(sessionId, 'execute')
     return {
-      content: '用户已批准计划。已退出计划模式，可以开始执行。',
+      content: `用户已批准下列计划。已退出计划模式，按本次审批版本执行：\n\n${snapshot!.markdown}`,
       isError: false,
-      data: { approved: true, planId, mode: 'execute' },
+      data: {
+        approved: true,
+        planId,
+        mode: 'execute',
+        planSnapshot: snapshot!,
+      },
     }
   }
   if (decision === 'cancel') {
+    const document = store.planDocuments.get(planId)
+    if (document && answer?.keepPlan)
+      store.planDocuments.save({ ...document, retained: true })
     store.plans.cancel(planId, answer?.customText ?? '用户取消计划')
+    await cleanupPlanDocuments(store, system)
     return {
       content: '用户取消了计划。保持计划模式，不要执行。',
       isError: false,
-      data: { approved: false, cancelled: true, planId, mode: 'plan' },
+      data: {
+        approved: false,
+        cancelled: true,
+        planId,
+        mode: 'plan',
+        ...(snapshot ? { planSnapshot: snapshot } : {}),
+      },
     }
   }
   const feedback = answer?.customText?.trim()
@@ -149,6 +220,7 @@ export function applyPlanApproval(
       cancelled: false,
       planId,
       mode: 'plan',
+      ...(snapshot ? { planSnapshot: snapshot } : {}),
       ...(feedback ? { feedback } : {}),
     },
   }

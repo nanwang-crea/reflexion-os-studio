@@ -1,6 +1,6 @@
 # ReflexionOS Studio 分阶段路线图
 
-## 当前状态（2026-09-24）
+## 当前状态（2026-10-07）
 
 Phase 1A 全部完成；Phase 2 的技能（Skills）、记忆（Memory V2，文件即记忆）与 MCP 子集已完成，其余待办如下：
 工具（`file.*`/`shell.execute`）、审批与权限 Profile、技能斜杠激活、文件即记忆注入与 remember、MCP 工具桥（stdio,默认 ask 审批）均已接入对话链路与 UI。
@@ -26,7 +26,7 @@ Rust File/Shell Service、Workspace 边界、read-only/workspace Profile、Chat 
 ## Phase 1B：Workspace Surfaces（进行中）
 
 - **已完成第一阶段（2026-08-31）**：异步 Workspace Indexer（纯 TS worker、progress/cancel/stale/failed 状态、忽略目录与符号链接、快照落库+版本号）、文件树（按需懒加载，经 Rust 侧 workspace 边界）、文件/文档查看器（行号、复制、跳转行、分段加载、Markdown/JSON 预览）、Git 变更面（`git.status`/`git.diff`：文件状态列表 + 单文件 diff 预览，只读查看与定位）、`workspace.*` 命令与白名单、工作区页面 UI。
-- **已完成第二阶段（2026-08-31）**：Asset Store（数据目录隔离、sha256 元数据、导入/列表/预览/删除/复制引用，`asset.*` 命令）、ResourceLink（消息内 `workspace://`/`asset://`/https 引用渲染与点击分发——查看器定位行列、资产预览、系统浏览器安全打开）、Artifact 卡（Run 回复引用聚合展示）；导出/下载/系统应用打开留后续阶段（需权限）。
+- **已完成第二阶段（2026-08-31）**：Asset Store（数据目录隔离、sha256 元数据、导入/列表/预览/删除/复制引用，`asset.*` 命令）、ResourceLink（消息内 `workspace://`/`asset://`/https 引用渲染与点击分发——查看器定位行列、资产预览、系统浏览器安全打开）、会话变更文件列表（2026-10-07 收敛：仅汇总成功工具变更，文件/资产引用保留在正文，移除独立 Artifact 卡）；导出/下载/系统应用打开留后续阶段（需权限）。
 - **待完成**：安全 URL 系统浏览器打开（已就位，剩余只读内嵌 Browser 评估）。Git 写操作已交付方案 A 子集（编辑器保存 + stage/unstage/commit/fetch/push/pull(--ff-only)/分支创建与切换，UI 直接动作免审批、内存脏 buffer 三键守卫），提交历史浏览（分页 log/commit 文件/diff/基于 commit 建分支与分离切换）与远程管理（remote 增删列表、远程分支检出为本地跟踪、发布=推送）已随增补批交付；剩余 discard/amend/stash/force-push/删远程分支/revert-reset 仍待后续,须经明确命令与权限策略（集成终端已作为 Phase 2 Terminal Surface 交付，见下）。
 
 ## Phase 2：Agent Platform（进行中）
@@ -40,8 +40,9 @@ Rust File/Shell Service、Workspace 边界、read-only/workspace Profile、Chat 
 
 ## Phase 3：Multi-Agent Orchestration（进行中）
 
-- **Phase 3 只读委派已完成**：内置 Worker/Researcher/Reviewer Registry；Agent Policy；最大 4 层递归 `task`；固定 workspace-read 与策略工具交集；整棵树共享数量/并发预算；结构化结果聚合；完整跨层树导航与任意子 Session 轨迹；取消、恢复及 Agent/预算 UI。契约见 `docs/MULTI-AGENT.md`。
-- **待完成**：可写 Coding Agent 的权限交集、审批与变更归属治理。
+- **动态受控委派子集已完成**：Primary 通过 `task` 动态创建独立 Agent 实例；支持模板收窄、最大 4 层递归、整棵树共享的数量/并发/时间/token 预算、独立上下文与 Session、取消/恢复、结构化结果（摘要、资源链接、Changed Files、usage）及观测 UI。父 Run 可委派可写子 Agent，但权限、工具集和审批边界只能收窄；契约见 `docs/MULTI-AGENT.md`。
+- **写入协调已完成**：根级 mutation coordinator 串行化兄弟写入；Rust 侧以 `mtime + size + sha256` revision 拒绝陈旧写；冲突返回 `file_revision_conflict`，成功变更记录 receipt 并聚合到 Changed Files。
+- **仍待完成**：跨层树的完整续跑 checkpoint、更丰富的变更归属/冲突解决体验，以及更完整的撤销/preimage 治理；外部 delegation 生命周期写命令仍保持拒绝。
 
 > 设计延伸：「自然语言生成结构化节点（每个节点作为一个 Agent）」的契约、生成管线、存储
 > 与分步安排见 `docs/NL-TO-STRUCTURE.md`（草案，待评审）；其 S1–S3 随本阶段落地。
@@ -68,3 +69,5 @@ Prompt → Text-to-Image → Review → Image-to-Video → Export，媒体 Asset
 - 新阶段不得把后续能力反向塞入前一阶段；
 - 所有用户可见操作必须有错误、取消或恢复语义；
 - 旧 `ReflexionOS` 仅作参考，新项目不依赖旧 Python 服务。
+
+计划模式支持临时 Markdown 方案、工作区审阅入口、审批快照与终态安全清理，属于现有 Chat 的交互与恢复能力，详见 [计划模式设计](PLAN-MODE.md)。

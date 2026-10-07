@@ -1,3 +1,4 @@
+import { cleanupPlanDocuments } from './agent/tools/plan-documents.js'
 import { createInterface } from 'node:readline'
 import {
   JsonRpcMessageSchema,
@@ -90,6 +91,10 @@ const statusEmitter = new ResourceEventEmitter({ scope: 'runtime' }, notify)
 
 // 方案 A：TS Runtime 拥有 Rust System Runtime 的通道与生命周期；
 // 系统可用性第一手在此产生，经 runtime.status 事件上报（Host/前端据此投影）。
+const cleanupPlans = (): void => {
+  void cleanupPlanDocuments(store, systemRuntime).catch(() => {})
+}
+
 const agentBox: { current: ChatAgent | null } = { current: null }
 const systemRuntime = new SystemRuntimeClient(
   resolveSystemRuntimeBinary(),
@@ -99,6 +104,7 @@ const systemRuntime = new SystemRuntimeClient(
       `[runtime] system runtime ${status}${detail ? `: ${detail}` : ''}\n`,
     )
     // sidecar 离开 ready：其上的 PTY 已死，把活动终端标记 disconnected（不自动重跑）。
+    if (status === 'ready') cleanupPlans()
     if (status !== 'ready') {
       terminalServiceBox.current?.markAllDisconnected(String(status))
       workspaceWatchBox.current?.clear()
