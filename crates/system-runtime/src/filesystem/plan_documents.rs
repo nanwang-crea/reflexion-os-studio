@@ -129,10 +129,15 @@ pub fn handle(params: Value) -> Result<Value, OpError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static WORKSPACE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
     fn workspace() -> PathBuf {
         let root = std::env::temp_dir().join(format!(
-            "reflexion-plan-{}-{}",
+            "reflexion-plan-{}-{}-{}",
             std::process::id(),
+            WORKSPACE_SEQUENCE.fetch_add(1, Ordering::Relaxed),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()

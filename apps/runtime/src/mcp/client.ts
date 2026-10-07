@@ -5,6 +5,7 @@ import {
 import { join } from 'node:path'
 import spawn from 'cross-spawn'
 import { createInterface } from 'node:readline'
+import { mcpEnvironment, resolveMcpLaunch } from './launch.js'
 
 /** MCP 协议版本(2024-11-05 稳定版)。 */
 export const MCP_PROTOCOL_VERSION = '2024-11-05'
@@ -39,14 +40,23 @@ export class McpClient {
   private child: ChildProcessWithoutNullStreams | null = null
   private readonly pending = new Map<number, PendingRequest>()
   private seq = 0
+  private disposed = false
 
   constructor(private readonly config: McpServerConfig) {}
 
   async connect(): Promise<void> {
-    const child = spawn(this.config.command, this.config.args, {
+    if (this.disposed) throw new Error('mcp client disposed')
+    const env = mcpEnvironment(this.config.env)
+    const launch = await resolveMcpLaunch(
+      this.config.command,
+      this.config.args,
+      env,
+    )
+    if (this.disposed) throw new Error('mcp client disposed')
+    const child = spawn(launch.command, launch.args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
-      env: { ...process.env, ...this.config.env },
+      env,
     })
     if (!child.stdout || !child.stdin || !child.stderr) {
       throw new Error('mcp server spawn produced no stdio pipes')
@@ -152,6 +162,7 @@ export class McpClient {
   }
 
   dispose(): void {
+    this.disposed = true
     for (const [, entry] of this.pending) {
       clearTimeout(entry.timer)
       entry.reject(new Error('mcp client disposed'))

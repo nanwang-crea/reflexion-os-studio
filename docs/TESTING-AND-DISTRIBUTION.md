@@ -134,4 +134,6 @@ Windows/MSVC 构建统一使用仓库根 `.cargo/config.toml` 的 `target-featur
 
 CI 在 Windows 上执行 `scripts/windows/smoke-installed.ps1`：静默安装 NSIS，移除 PATH 中的开发工具，从安装目录启动宿主，通过日志确认两个 Runtime ready 且均使用安装资源。此检查验证启动，不代替文件树、终端与高 DPI 的真机交互验收。Linux 构建矩阵采用 Ubuntu 22.04，生成 deb/AppImage 并运行暂存资源的 workspace 冒烟；尚未覆盖 Linux 安装后 GUI 启动。
 
-MCP 命令通过 cross-spawn 适配 Windows 的 npm/npx `.cmd` shim，保持参数数组；进程创建失败立即终止握手。Windows 默认终端只查找 PATH 下的 PowerShell 可执行文件，回退系统 PowerShell 路径，不执行 shell 探测或用户 profile。
+MCP 启动层在 Windows 上验证 npm/npx 安装布局后，用明确的 Node 路径直接运行 CLI，并保持参数数组；其他命令使用原版 cross-spawn；进程创建失败立即终止握手。Windows 默认终端只查找 PATH 下的 PowerShell 可执行文件，回退系统 PowerShell 路径，不执行 shell 探测或用户 profile。
+
+MCP 不修改第三方依赖。`mcp/launch.ts` 只针对 Windows 下经过 npm 包名、bin 元数据、CLI 文件及启动器特征验证的 npm/npx `.cmd`，解析同目录安装或 `node_modules/.bin` 安装。Node 优先使用同目录 `node.exe`，其次配置 PATH，最后 Runtime 自身的 Node。官方启动器的全局 prefix 查询通过 Node 执行（5 秒超时、64KB 输出上限），全局 CLI 经过相同元数据验证；查询失败或全局安装无效时回退本地 CLI。未识别的安装布局、自定义 `.cmd/.bat` 和 Unix 命令保留原启动方式。自定义批处理的特殊字符行为由脚本与 cmd.exe 决定；需要无损传递任意参数时，请配置 Node/其他可执行文件及入口参数。回归覆盖 npm/npx 的全局、自定义安装目录和 `.bin`，保留 caret、引号、空参数等断言，并独立检查自定义脚本行为与 Windows PATH 覆盖。

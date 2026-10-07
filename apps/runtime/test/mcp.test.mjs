@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { McpClient } from '../dist/mcp/client.js'
+import { npmInstallation } from './fixtures/npm-installation.mjs'
 import { McpManager } from '../dist/mcp/manager.js'
 import { createMcpTool } from '../dist/agent/tools/mcp.js'
 import { Store } from '../dist/store/index.js'
@@ -160,30 +161,94 @@ test(
   },
 )
 
+test('MCP executable arguments preserve shell metacharacters', async (t) => {
+  const args = [
+    'space value',
+    'a&b',
+    '中文',
+    'quote"value',
+    '%PATH%',
+    '!bang!',
+    'a^b',
+    'trailing\\',
+    '(a|b)',
+    'a^^b',
+    '',
+  ]
+  const client = new McpClient({
+    command: NODE,
+    args: [FIXTURE, ...args],
+    env: {},
+  })
+  t.after(() => client.dispose())
+  await client.connect()
+  assert.deepEqual(JSON.parse(await client.callTool('argv', {})), args)
+})
+
+for (const shim of [
+  'npm.cmd',
+  'global npm/npx.cmd',
+  'node_modules/.bin/npx.cmd',
+]) {
+  test(
+    `Windows MCP preserves forwarded arguments: ${shim}`,
+    { skip: process.platform !== 'win32' },
+    async (t) => {
+      const directory = mkdtempSync(join(tmpdir(), 'mcp shim 中文 '))
+      const { launcher: command } = npmInstallation(directory, shim)
+      const clientArgs = [
+        'space value',
+        'a&b',
+        '中文',
+        'quote"value',
+        '%PATH%',
+        '!bang!',
+        'a^b',
+        'trailing\\',
+        '(a|b)',
+        'a^^b',
+        '',
+      ]
+      const client = new McpClient({
+        command,
+        args: clientArgs,
+        env: {},
+      })
+      t.after(async () => {
+        client.dispose()
+        await new Promise((resolve) => setTimeout(resolve, 500))
+        rmSync(directory, {
+          recursive: true,
+          force: true,
+          maxRetries: 3,
+          retryDelay: 100,
+        })
+      })
+      await client.connect()
+      assert.deepEqual(
+        JSON.parse(await client.callTool('argv', {})),
+        clientArgs,
+      )
+      assert.equal(
+        await client.callTool('echo', { text: 'Windows shim' }),
+        'echo:Windows shim',
+      )
+    },
+  )
+}
+
 test(
-  'Windows MCP launches cmd shim from a path containing spaces',
+  'Windows custom cmd launcher retains its batch behavior',
   { skip: process.platform !== 'win32' },
   async (t) => {
-    const directory = mkdtempSync(join(tmpdir(), 'mcp shim 中文 '))
-    const command = join(directory, 'mock server.cmd')
+    const directory = mkdtempSync(join(tmpdir(), 'mcp custom cmd '))
+    const command = join(directory, 'custom server.cmd')
     writeFileSync(
       command,
-      '@echo off\r\n"' + NODE + '" "' + FIXTURE + '" %*\r\n',
+      '@echo off\r\n"' + NODE + '" "' + FIXTURE + '" "custom prefix" %*\r\n',
     )
-    const clientArgs = [
-      'space value',
-      'a&b',
-      '中文',
-      'quote"value',
-      '%PATH%',
-      '!bang!',
-      'a^b',
-    ]
-    const client = new McpClient({
-      command,
-      args: clientArgs,
-      env: {},
-    })
+    const args = ['space value', '中文']
+    const client = new McpClient({ command, args, env: {} })
     t.after(async () => {
       client.dispose()
       await new Promise((resolve) => setTimeout(resolve, 500))
@@ -195,10 +260,16 @@ test(
       })
     })
     await client.connect()
-    assert.deepEqual(JSON.parse(await client.callTool('argv', {})), clientArgs)
-    assert.equal(
-      await client.callTool('echo', { text: 'Windows shim' }),
-      'echo:Windows shim',
-    )
+    assert.deepEqual(JSON.parse(await client.callTool('argv', {})), [
+      'custom prefix',
+      ...args,
+    ])
   },
 )
+
+test('disposing during launch preparation prevents a late MCP spawn', async () => {
+  const client = new McpClient({ command: NODE, args: [FIXTURE], env: {} })
+  const connecting = client.connect()
+  client.dispose()
+  await assert.rejects(connecting, /disposed/)
+})

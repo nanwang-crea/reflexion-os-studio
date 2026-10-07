@@ -79,7 +79,7 @@ jobs:
           pnpm --filter @reflexion-os-studio/runtime exec node --disable-warning=ExperimentalWarning --import ./test/set-test-data-dir.mjs --test test/handlers.test.mjs test/workspace-indexer.test.mjs
 
       - name: Verify MCP process launch regressions
-        run: pnpm --filter @reflexion-os-studio/runtime exec node --disable-warning=ExperimentalWarning --import ./test/set-test-data-dir.mjs --test test/mcp.test.mjs
+        run: pnpm --filter @reflexion-os-studio/runtime exec node --disable-warning=ExperimentalWarning --import ./test/set-test-data-dir.mjs --test test/mcp.test.mjs test/mcp-launch.test.mjs
 
       - name: Verify Windows CRT dependency checker
         run: node --test scripts/test/windows-crt.test.mjs
