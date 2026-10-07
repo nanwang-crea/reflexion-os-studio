@@ -33,4 +33,5 @@ if [[ -f "$SIDECAR_SRC" ]]; then
 else
   cp "$SIDECAR_SRC_EXE" "$RESOURCES/bin/"
 fi
+node "$SCRIPT_DIR/verify-windows-sidecar.mjs"
 echo "package resources staged under $RESOURCES"

@@ -58,6 +58,18 @@ readline.on('line', (line) => {
   }
   if (message.method === 'tools/call') {
     const args = message.params?.arguments ?? {}
+    if (message.params?.name === 'argv') {
+      write({
+        jsonrpc: '2.0',
+        id: message.id,
+        result: {
+          content: [
+            { type: 'text', text: JSON.stringify(process.argv.slice(2)) },
+          ],
+        },
+      })
+      return
+    }
     if (message.params?.name === 'slow') {
       // 挂起不回执：供取消闭环测试。
       return

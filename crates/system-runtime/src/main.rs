@@ -7,6 +7,16 @@
 //! `filesystem`（文件/搜索实现）、`handlers`（系统命令适配）与 `handlers_git`（git 全部方法）
 //! 分别独立成模块，本文件只留协议分发与主循环。
 
+// 禁止打出仍依赖 VCRUNTIME140.dll 的 MSVC 发布二进制，环境变量覆盖
+// Cargo rustflags 或从仓库外构建时也必须显式保留 +crt-static。
+#[cfg(all(
+    windows,
+    target_env = "msvc",
+    not(debug_assertions),
+    not(target_feature = "crt-static")
+))]
+compile_error!("Windows release sidecar requires static CRT; build from repo root with .cargo/config.toml or pass -C target-feature=+crt-static");
+
 mod filesystem;
 mod git;
 mod grant;

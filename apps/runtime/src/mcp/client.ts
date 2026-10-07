@@ -1,4 +1,9 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import {
+  execFile,
+  type ChildProcessWithoutNullStreams,
+} from 'node:child_process'
+import { join } from 'node:path'
+import spawn from 'cross-spawn'
 import { createInterface } from 'node:readline'
 
 /** MCP 协议版本(2024-11-05 稳定版)。 */
@@ -43,11 +48,12 @@ export class McpClient {
       windowsHide: true,
       env: { ...process.env, ...this.config.env },
     })
-    if (!child.stdout || !child.stdin) {
+    if (!child.stdout || !child.stdin || !child.stderr) {
       throw new Error('mcp server spawn produced no stdio pipes')
     }
-    this.child = child
+    this.child = child as ChildProcessWithoutNullStreams
     child.on('error', (error) => {
+      this.rejectPending(error)
       process.stderr.write(`[mcp] server process error: ${error.message}\n`)
     })
     const readline = createInterface({ input: child.stdout })
@@ -162,14 +168,29 @@ export class McpClient {
     } catch {
       // 管道已断。
     }
+    const child = this.child
+    this.child = null
     setTimeout(() => {
-      try {
-        this.child?.kill()
-      } catch {
-        // 已退出
+      if (!child || child.exitCode !== null || child.signalCode !== null) return
+      if (process.platform === 'win32' && child.pid) {
+        // cmd shim 的子进程也必须回收；只 kill cmd 会留下 MCP server。
+        const taskkill = join(
+          process.env.SystemRoot ?? 'C:\\Windows',
+          'System32',
+          'taskkill.exe',
+        )
+        execFile(
+          taskkill,
+          ['/PID', String(child.pid), '/T', '/F'],
+          { windowsHide: true, timeout: 5000 },
+          (error) => {
+            if (error) child.kill()
+          },
+        )
+      } else {
+        child.kill()
       }
     }, 200).unref()
-    this.child = null
   }
 
   private request(

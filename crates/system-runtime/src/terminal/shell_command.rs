@@ -21,22 +21,60 @@ pub fn default_shell_argv() -> Vec<String> {
     shell_from_env(std::env::var("SHELL").ok())
 }
 
-#[cfg(windows)]
-pub fn default_shell_argv() -> Vec<String> {
-    // 优先 pwsh.exe（PATH 探测，带/不带 .exe 都试），回退 powershell.exe。
-    // 探测本身执行一次 `-Command` 取版本号：失败/不存在即继续下一个候选。
-    for candidate in ["pwsh", "pwsh.exe", "powershell"] {
-        let probe = std::process::Command::new(candidate)
-            .args(["-NoLogo", "-Command", "$PSVersionTable.PSVersion.Major"])
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status();
-        if matches!(probe, Ok(status) if status.success()) {
-            return vec![candidate.to_string()];
+/// 查找文件即可，不运行 shell（避免窗口闪烁与用户 profile 阻塞协议线程）。
+#[cfg(any(windows, test))]
+fn windows_shell_in_path(path: &std::ffi::OsStr) -> Option<std::path::PathBuf> {
+    let directories: Vec<_> = std::env::split_paths(path)
+        .filter(|dir| dir.is_absolute())
+        .collect();
+    for name in ["pwsh.exe", "powershell.exe"] {
+        for dir in &directories {
+            let candidate = dir.join(name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
         }
     }
-    vec!["powershell.exe".to_string()]
+    None
+}
+
+#[cfg(windows)]
+pub fn default_shell_argv() -> Vec<String> {
+    if let Some(shell) = std::env::var_os("PATH").and_then(|path| windows_shell_in_path(&path)) {
+        return vec![shell.to_string_lossy().into_owned()];
+    }
+    // PATH 可以被用户精简，Windows PowerShell 仍可从系统目录找到。
+    let root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
+    vec![std::path::PathBuf::from(root)
+        .join("System32")
+        .join("WindowsPowerShell")
+        .join("v1.0")
+        .join("powershell.exe")
+        .to_string_lossy()
+        .into_owned()]
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::windows_shell_in_path;
+
+    #[test]
+    fn windows_shell_lookup_prefers_pwsh_without_executing_files() {
+        let root = std::env::temp_dir().join(format!("reflexion-shell-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("powershell.exe"), b"not executable").unwrap();
+        assert_eq!(
+            windows_shell_in_path(root.as_os_str()),
+            Some(root.join("powershell.exe"))
+        );
+        std::fs::write(root.join("pwsh.exe"), b"not executable").unwrap();
+        assert_eq!(
+            windows_shell_in_path(root.as_os_str()),
+            Some(root.join("pwsh.exe"))
+        );
+        assert_eq!(windows_shell_in_path(std::ffi::OsStr::new("")), None);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }
 
 #[cfg(all(test, unix))]

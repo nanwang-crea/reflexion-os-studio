@@ -21,9 +21,7 @@ fn resolve_runtime_entry(resources: Option<&Path>, root: &Path) -> PathBuf {
             .join(PACKAGED_RESOURCES_DIR)
             .join("runtime")
             .join("runtime.mjs");
-        if packaged.exists() {
-            return packaged;
-        }
+        return packaged;
     }
     root.join("apps")
         .join("runtime")
@@ -42,10 +40,15 @@ fn resolve_node(resources: Option<&Path>) -> PathBuf {
         let mut with_exe = base.clone().into_os_string();
         with_exe.push(".exe");
         for candidate in [base, PathBuf::from(with_exe)] {
-            if candidate.exists() {
+            if candidate.is_file() {
                 return candidate;
             }
         }
+        return resources
+            .join(PACKAGED_RESOURCES_DIR)
+            .join("node")
+            .join("bin")
+            .join(if cfg!(windows) { "node.exe" } else { "node" });
     }
     PathBuf::from("node")
 }
@@ -59,25 +62,27 @@ fn sidecar_cwd(resources: Option<&Path>, root: &Path) -> PathBuf {
 }
 
 /// Rust System Runtime 二进制解析（宿主只负责找到路径并交给 TS，
-/// spawn/监管由 TS 承担）：env 覆盖优先，其次打包资源目录（带 .exe 变体），
-/// 最后仓库相对路径（开发态）。
+/// spawn/监管由 TS 承担）：发布态只使用包内资源，开发态允许 env 与仓库回退。
 fn resolve_system_runtime(root: &Path, resources: Option<&Path>) -> Option<PathBuf> {
+    if let Some(resources) = resources {
+        let base = resources
+            .join(PACKAGED_RESOURCES_DIR)
+            .join("bin")
+            .join("reflexion-system-runtime");
+        let mut exe = base.clone().into_os_string();
+        exe.push(".exe");
+        let candidates = [base.clone(), PathBuf::from(exe)];
+        // 即使缺失也交接包内路径，让 Runtime 报降级，禁止搜索仓库产物。
+        return Some(
+            candidates
+                .into_iter()
+                .find(|path| path.is_file())
+                .unwrap_or(base),
+        );
+    }
     std::env::var_os("REFLEXION_SYSTEM_RUNTIME")
         .map(PathBuf::from)
-        .filter(|path| path.exists())
-        .or_else(|| {
-            resources.and_then(|resources| {
-                let base = resources
-                    .join(PACKAGED_RESOURCES_DIR)
-                    .join("bin")
-                    .join("reflexion-system-runtime");
-                let mut with_exe = base.clone().into_os_string();
-                with_exe.push(".exe");
-                [base, PathBuf::from(with_exe)]
-                    .into_iter()
-                    .find(|path| path.exists())
-            })
-        })
+        .filter(|path| path.is_file())
         .or_else(|| {
             [
                 "target/debug",
@@ -88,11 +93,11 @@ fn resolve_system_runtime(root: &Path, resources: Option<&Path>) -> Option<PathB
             .into_iter()
             .map(|dir| root.join(dir).join("reflexion-system-runtime"))
             .flat_map(|path| {
-                let mut with_exe = path.clone().into_os_string();
-                with_exe.push(".exe");
-                [path, PathBuf::from(with_exe)]
+                let mut exe = path.clone().into_os_string();
+                exe.push(".exe");
+                [path, PathBuf::from(exe)]
             })
-            .find(|path| path.exists())
+            .find(|path| path.is_file())
         })
 }
 
@@ -110,11 +115,17 @@ pub(super) fn resolve_runtime_launch_config(
     resources: Option<&Path>,
     root: &Path,
 ) -> Option<RuntimeLaunchConfig> {
+    if resources.is_none() && !cfg!(debug_assertions) {
+        return None;
+    }
     let runtime_entry = resolve_runtime_entry(resources, root);
-    if !runtime_entry.exists() {
+    if !runtime_entry.is_file() {
         return None;
     }
     let node = resolve_node(resources);
+    if resources.is_some() && !node.is_file() {
+        return None;
+    }
     // node:sqlite 在 Node 22 仍标 experimental：产品进程抑制该已知警告，
     // 避免被误读为真正的运行时报错（stderr 仍是日志通道）。
     let args = vec![
@@ -192,6 +203,38 @@ fn node_compatible_windows_path(path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn packaged_missing_resources_never_use_development_fallbacks() {
+        let resources =
+            std::env::temp_dir().join(format!("missing-package-{}", std::process::id()));
+        let root = repo_root();
+        assert!(resolve_runtime_entry(Some(&resources), &root).starts_with(&resources));
+        assert!(resolve_node(Some(&resources)).starts_with(&resources));
+        assert!(resolve_system_runtime(&root, Some(&resources))
+            .unwrap()
+            .starts_with(&resources));
+        assert!(resolve_runtime_launch_config(Some(&resources), &root).is_none());
+    }
+
+    #[test]
+    fn packaged_node_is_required_but_missing_system_runtime_allows_chat() {
+        let resources =
+            std::env::temp_dir().join(format!("partial-package-{}", std::process::id()));
+        let root = repo_root();
+        let entry = resolve_runtime_entry(Some(&resources), &root);
+        std::fs::create_dir_all(entry.parent().unwrap()).unwrap();
+        std::fs::write(&entry, b"// fixture").unwrap();
+        assert!(resolve_runtime_launch_config(Some(&resources), &root).is_none());
+        let node = resolve_node(Some(&resources));
+        std::fs::create_dir_all(node.parent().unwrap()).unwrap();
+        std::fs::write(&node, b"fixture").unwrap();
+        let config = resolve_runtime_launch_config(Some(&resources), &root).unwrap();
+        assert_eq!(config.node, node);
+        assert!(Path::new(&config.envs[0].1).starts_with(&resources));
+        assert!(!Path::new(&config.envs[0].1).exists());
+        std::fs::remove_dir_all(resources).unwrap();
+    }
 
     #[test]
     fn node_entry_supports_drive_unc_and_preserves_other_paths() {

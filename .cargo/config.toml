@@ -1,0 +1,4 @@
+# NSIS 的 Rust sidecar 必须自包含 CRT，不能依赖开发机预装的 VC++ DLL。
+# Cargo 从仓库根/子目录启动时，两套独立 workspace 都会读取此配置。
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-C", "target-feature=+crt-static"]

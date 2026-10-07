@@ -119,3 +119,19 @@ workspace.read_file 的 readToken 对应不可变的根目录、路径、revisio
 可在启动应用前配置环境变量：`REFLEXION_LOG_DIR` 覆盖目录，`REFLEXION_LOG_MAX_BYTES` 调整单文件上限（1024–104857600 字节），`REFLEXION_LOG_KEEP_FILES` 调整总文件数（1–20，包含当前文件）。无效值使用默认配置，重启应用生效。日志用于启动/服务诊断，分享前应检查其中的本机路径等个人信息；不得新增 Provider secret、工具参数、聊天正文或完整协议回包的日志。
 
 回归：`cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml logging::` 覆盖轮转排序/淘汰、重启续写、UTF-8 大行截断、单文件窗口与并发记录。Windows 的 NSIS 真机验收应确认无控制台窗口时仍生成 studio.log，并记录 system runtime 启动失败详情。
+
+### Windows sidecar CRT 自包含
+
+Windows/MSVC 构建统一使用仓库根 `.cargo/config.toml` 的 `target-feature=+crt-static`。此前 NSIS 内的 Rust sidecar 动态依赖 VCRUNTIME140.dll，用户未安装 VC++ 运行库时以 0xC0000135（STATUS_DLL_NOT_FOUND）退出，文件服务一直不可用；CI 开发镜像预装运行库，因此启动冒烟不能发现缺失依赖。
+
+打包脚本在复制 sidecar 后通过 `verify-windows-sidecar.mjs` 调用 MSVC dumpbin 检查实际 EXE 导入，不允许 VCRUNTIME、MSVCP、MSVCR、CONCRT 或动态 UCRT 依赖，无法检查时也失败。发布二进制有编译期守卫，禁止配置被 RUSTFLAGS 覆盖后静默打出动态 CRT 产物。CI 同时执行检查器回归和原有打包态握手/工作区冒烟。macOS/Linux 不应用该编译选项，依赖检查明确跳过。
+
+必须重新构建 Windows NSIS 并安装新版本；旧安装包不会因源码配置变更自动修复。Windows 真机验收应在未预装 VC++ 运行库的环境确认 system.ready、目录读取与文件保存正常。仅在 macOS 上执行检查器单测或构建，不能视为 Windows 导入表验证通过。
+
+### 安装后与跨平台启动回归
+
+发布态宿主只使用安装目录内的 Node、TS Runtime 和 Rust sidecar，不回退 PATH 或构建机仓库；缺失 Node/TS 入口报告启动错误，Rust sidecar 缺失保持 Chat 可用并上报工具降级。开发态仍支持 PATH、仓库产物及 Rust 路径覆盖。
+
+CI 在 Windows 上执行 `scripts/windows/smoke-installed.ps1`：静默安装 NSIS，移除 PATH 中的开发工具，从安装目录启动宿主，通过日志确认两个 Runtime ready 且均使用安装资源。此检查验证启动，不代替文件树、终端与高 DPI 的真机交互验收。Linux 构建矩阵采用 Ubuntu 22.04，生成 deb/AppImage 并运行暂存资源的 workspace 冒烟；尚未覆盖 Linux 安装后 GUI 启动。
+
+MCP 命令通过 cross-spawn 适配 Windows 的 npm/npx `.cmd` shim，保持参数数组；进程创建失败立即终止握手。Windows 默认终端只查找 PATH 下的 PowerShell 可执行文件，回退系统 PowerShell 路径，不执行 shell 探测或用户 profile。

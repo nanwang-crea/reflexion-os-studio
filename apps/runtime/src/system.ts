@@ -375,8 +375,9 @@ export class SystemRuntimeClient {
  */
 export function resolveSystemRuntimeBinary(): string | null {
   const fromEnv = process.env.REFLEXION_SYSTEM_RUNTIME_BIN
-  if (fromEnv !== undefined && fromEnv !== '' && existsSync(fromEnv)) {
-    return fromEnv
+  // 宿主指定的路径是权威来源：缺失时降级，不搜索开发机产物。
+  if (fromEnv !== undefined) {
+    return fromEnv !== '' && existsSync(fromEnv) ? fromEnv : null
   }
   const candidates = [
     'target/debug',

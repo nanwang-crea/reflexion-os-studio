@@ -6,7 +6,13 @@ import { McpClient } from '../dist/mcp/client.js'
 import { McpManager } from '../dist/mcp/manager.js'
 import { createMcpTool } from '../dist/agent/tools/mcp.js'
 import { Store } from '../dist/store/index.js'
-import { mkdtempSync, existsSync, readFileSync } from 'node:fs'
+import {
+  mkdtempSync,
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  rmSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 
 const FIXTURE = join(
@@ -139,3 +145,60 @@ test('McpClient aborts hung tool call fast and sends notifications/cancelled', a
   assert.ok(receipt, 'server should receive notifications/cancelled')
   assert.equal(receipt.reason, 'client aborted')
 })
+
+test(
+  'MCP spawn failure rejects handshake immediately',
+  { timeout: 3000 },
+  async (t) => {
+    const client = new McpClient({
+      command: join(tmpdir(), 'missing-mcp-executable-42'),
+      args: [],
+      env: {},
+    })
+    t.after(() => client.dispose())
+    await assert.rejects(client.connect(), /ENOENT|not found/i)
+  },
+)
+
+test(
+  'Windows MCP launches cmd shim from a path containing spaces',
+  { skip: process.platform !== 'win32' },
+  async (t) => {
+    const directory = mkdtempSync(join(tmpdir(), 'mcp shim 中文 '))
+    const command = join(directory, 'mock server.cmd')
+    writeFileSync(
+      command,
+      '@echo off\r\n"' + NODE + '" "' + FIXTURE + '" %*\r\n',
+    )
+    const clientArgs = [
+      'space value',
+      'a&b',
+      '中文',
+      'quote"value',
+      '%PATH%',
+      '!bang!',
+      'a^b',
+    ]
+    const client = new McpClient({
+      command,
+      args: clientArgs,
+      env: {},
+    })
+    t.after(async () => {
+      client.dispose()
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      rmSync(directory, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      })
+    })
+    await client.connect()
+    assert.deepEqual(JSON.parse(await client.callTool('argv', {})), clientArgs)
+    assert.equal(
+      await client.callTool('echo', { text: 'Windows shim' }),
+      'echo:Windows shim',
+    )
+  },
+)

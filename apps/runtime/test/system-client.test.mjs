@@ -156,9 +156,9 @@ test('binary resolver prefers env and falls back to relative search', () => {
   assert.equal(resolveSystemRuntimeBinary(), FIXTURE)
   process.env.REFLEXION_SYSTEM_RUNTIME_BIN =
     '/nonexistent/reflexion-system-runtime'
-  // 相对搜索在仓库根执行时可能命中 crates/target；此处只断言不抛异常。
-  const resolved = resolveSystemRuntimeBinary()
-  assert.ok(resolved === null || typeof resolved === 'string')
+  assert.equal(resolveSystemRuntimeBinary(), null)
+  process.env.REFLEXION_SYSTEM_RUNTIME_BIN = ''
+  assert.equal(resolveSystemRuntimeBinary(), null)
   if (previous === undefined) delete process.env.REFLEXION_SYSTEM_RUNTIME_BIN
   else process.env.REFLEXION_SYSTEM_RUNTIME_BIN = previous
 })

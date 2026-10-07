@@ -134,7 +134,7 @@ pnpm build:desktop         # 打包安装包（beforeBuildCommand 自动准备 s
 
   预期：先输出 `system.ready` 通知，再输出两个 id 对应的 result，最后干净退出。
 
-- **宿主 sidecar 监管（开发态）**：后台启动 `apps/desktop/src-tauri/target/release/reflexion-desktop`，数秒后用 `pgrep -fl` 确认 `node …/apps/runtime/dist/index.js` 与 `reflexion-system-runtime` 两个进程存在（Rust 由 TS spawn 监管，Host 只握进程树兜底收割权）；TERM 宿主后再次 pgrep 确认无孤儿进程。
+- **宿主 sidecar 监管（开发态）**：先构建 debug 宿主，后台启动 `apps/desktop/src-tauri/target/debug/reflexion-desktop`，数秒后用 `pgrep -fl` 确认 `node …/apps/runtime/dist/index.js` 与 `reflexion-system-runtime` 两个进程存在（Rust 由 TS spawn 监管，Host 只握进程树兜底收割权）；TERM 宿主后再次 pgrep 确认无孤儿进程。
 
 - **打包态启动冒烟**：`pnpm build` 后直接运行安装包内二进制（macOS：`apps/desktop/src-tauri/target/release/bundle/macos/ReflexionOS Studio.app/Contents/MacOS/reflexion-desktop`），确认 sidecar 从包内资源解析——`pgrep -fl` 应看到 `package-resources` 里的 `node`（或安装包内 `node/bin/node`）与 `reflexion-system-runtime`，且不含仓库路径；TERM 后无孤儿进程。
 

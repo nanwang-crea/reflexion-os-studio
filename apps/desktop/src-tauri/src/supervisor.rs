@@ -343,7 +343,7 @@ pub(super) fn start_sidecars(app: &tauri::AppHandle, state: Arc<SupervisorState>
             app,
             &state,
             "error",
-            Some("Runtime entry not found".to_string()),
+            Some("Runtime entry, bundled Node, or resource directory not found".to_string()),
         );
         return;
     };
