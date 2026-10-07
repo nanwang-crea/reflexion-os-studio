@@ -1,4 +1,4 @@
-name: Build Windows desktop installers
+name: Build desktop installers
 
 on:
   workflow_dispatch:
@@ -13,8 +13,19 @@ permissions:
   contents: read
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
+  build-desktop:
+    name: Build ${{ matrix.platform }} installers
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            os: windows-latest
+            artifact_name: reflexion-os-studio-windows
+          - platform: macos
+            os: macos-latest
+            artifact_name: reflexion-os-studio-macos
 
     steps:
       - name: Checkout
@@ -34,7 +45,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable-x86_64-pc-windows-msvc
+          toolchain: stable
 
       - name: Cache Rust build
         uses: actions/cache@v5
@@ -53,16 +64,27 @@ jobs:
       - name: Build workspace packages
         run: pnpm build:packages
 
-      - name: Build Windows installers
+      - name: Build desktop installers
         run: pnpm build:desktop
         env:
           CI: true
 
       - name: Upload Windows installers
+        if: matrix.platform == 'windows'
         uses: actions/upload-artifact@v4
         with:
-          name: reflexion-os-studio-windows
+          name: ${{ matrix.artifact_name }}
           if-no-files-found: error
           path: |
             apps/desktop/src-tauri/target/release/bundle/msi/*.msi
             apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
+
+      - name: Upload macOS installers
+        if: matrix.platform == 'macos'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          if-no-files-found: error
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/macos/*.app
+            apps/desktop/src-tauri/target/release/bundle/dmg/*.dmg
