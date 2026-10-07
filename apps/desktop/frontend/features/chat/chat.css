@@ -809,6 +809,7 @@
 
 .composer-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   min-height: 32px;
@@ -820,6 +821,7 @@
 
 .composer-select {
   display: inline-flex;
+  max-width: 100%;
   align-items: center;
   gap: 5px;
   color: var(--text-secondary);
@@ -1675,10 +1677,10 @@
   color: var(--danger);
 }
 .composer-run-config-panel {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 0;
-  width: 320px;
+  position: fixed;
+  width: min(320px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 4px;

@@ -1,3 +1,4 @@
+import { isComposing } from '../../../lib/keyboard'
 import type { Message } from '@reflexion-os-studio/runtime-client'
 import { CopyButton } from '../../../components/CopyButton'
 import { PencilIcon } from '../../../ui/icons'
@@ -34,6 +35,7 @@ export function UserMessage({
               value={editDraft}
               onChange={(event) => onDraftChange(event.target.value)}
               onKeyDown={(event) => {
+                if (isComposing(event.nativeEvent)) return
                 if (event.key === 'Escape') onCancel()
                 if (event.key === 'Enter' && !event.shiftKey) {
                   event.preventDefault()

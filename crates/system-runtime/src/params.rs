@@ -17,6 +17,8 @@ pub struct ReadParams {
     pub path: String,
     pub offset: Option<usize>,
     pub limit: Option<usize>,
+    #[serde(default)]
+    pub preserve_line_endings: bool,
 }
 
 #[derive(Deserialize)]

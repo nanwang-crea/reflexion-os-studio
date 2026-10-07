@@ -1,3 +1,4 @@
+import { isComposing } from '../../lib/keyboard'
 import { useCallback, useEffect, useState } from 'react'
 import type {
   AgentTemplate,
@@ -135,6 +136,7 @@ export function QueueBar(props: QueueBarProps): React.JSX.Element {
                 autoFocus
                 onChange={(event) => setDraft(event.target.value)}
                 onKeyDown={(event) => {
+                  if (isComposing(event.nativeEvent)) return
                   if (event.key === 'Enter' && !event.shiftKey) {
                     event.preventDefault()
                     void saveEdit()

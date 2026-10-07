@@ -1,6 +1,5 @@
 //! 工具执行：根据方法名把 JSON-RPC params 落到各文件/搜索/变更/Shell 模块。
-//! 写/执行类操作先经 grant（审批凭据）校验；异步操作（shell）交给工作线程回包，
-//! 避免阻塞协议主循环。git 全部方法见 handlers_git。
+//! 写/执行先校验 grant；Shell 在线程执行，Git 方法见 handlers_git。
 
 use base64::Engine;
 use serde_json::{json, Value};
@@ -58,8 +57,14 @@ pub fn handle_file_read(params: Value) -> Result<Value, OpError> {
     let params: ReadParams = serde_json::from_value(params)
         .map_err(|error| OpError::new("invalid_request", error.to_string()))?;
     let root = workspace_root(&params.workspace_root)?;
-    let result =
-        files::read(&root, &params.path, params.offset, params.limit).map_err(file_error)?;
+    let result = files::read_with_line_endings(
+        &root,
+        &params.path,
+        params.offset,
+        params.limit,
+        params.preserve_line_endings,
+    )
+    .map_err(file_error)?;
     Ok(json!({
         "content": result.content,
         "sizeBytes": result.size_bytes,
@@ -68,11 +73,7 @@ pub fn handle_file_read(params: Value) -> Result<Value, OpError> {
         "modifiedMs": result.modified_ms,
         "contentSha256": result.content_sha256,
         "readComplete": result.read_complete,
-        // revision（mtime+size+sha256 嵌套凭据）：与 files.rs L162-164 的约定对齐——
-        // 由 Rust 侧在 file.read 成功后统一计算并返回。完整读取（readComplete）
-        // 的凭据可用于 file.write 覆盖校验；分页窗口凭据只用于 file.edit
-        // 陈旧检测（TS 层按 readComplete 分档）。此前缺失此字段会切断
-        // "先读后改"链路：extractRevision 提取不到 → 不登记 → edit/write 必拒。
+        // 整读发放覆盖写凭据，分页只可用于片段编辑。
         "revision": {
             "modifiedMs": result.modified_ms,
             "sizeBytes": result.size_bytes,

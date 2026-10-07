@@ -660,7 +660,7 @@ export const FileRevisionSchema = z.object({
 })
 export type FileRevision = z.infer<typeof FileRevisionSchema>
 
-/** workspace.read_file 结果（Rust file.read 透传）。 */
+/** workspace.read_file 结果；默认 content 保留原文换行与末尾空行。 */
 export const WorkspaceReadResultSchema = z.object({
   content: z.string(),
   sizeBytes: z.number().int().nonnegative(),

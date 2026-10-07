@@ -70,11 +70,14 @@ export function unwatchDir(watchId: string): Promise<{ removed: boolean }> {
 export function readFile(
   projectId: string,
   path: string,
-  options?: { offset?: number; limit?: number },
+  options?: { offset?: number; limit?: number; preserveLineEndings?: boolean },
 ): Promise<WorkspaceReadResult> {
   return request<WorkspaceReadResult>('workspace.read_file', {
     projectId,
     path,
+    ...(options?.preserveLineEndings !== undefined
+      ? { preserveLineEndings: options.preserveLineEndings }
+      : {}),
     ...(options?.offset !== undefined ? { offset: options.offset } : {}),
     ...(options?.limit !== undefined ? { limit: options.limit } : {}),
   })

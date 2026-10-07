@@ -1,3 +1,4 @@
+import { isComposing } from '../../../lib/keyboard'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GitRemote } from '../../../api/workspace'
 import { GitRemotesSection } from './GitRemotesSection'
@@ -171,6 +172,7 @@ export function BranchPicker(props: BranchPickerProps): React.JSX.Element {
               disabled={props.busy}
               onChange={(event) => setNewName(event.target.value)}
               onKeyDown={(event) => {
+                if (isComposing(event.nativeEvent)) return
                 if (event.key === 'Enter') create()
               }}
             />

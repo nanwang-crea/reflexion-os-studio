@@ -27,6 +27,7 @@ import { transport } from '../../../lib/transport'
 import { getLanguageForFile } from './language'
 import { DEFAULT_EDITOR_OPTIONS, THEME_NAME, THEME_DATA } from './monaco'
 import { EDITOR_CONFIG } from './types'
+import { normalizeLineEndings, preserveLineEndings } from './file-format'
 import { copyTextToClipboard } from '../../../lib/clipboard'
 import { showToast } from '../../../components/Toast'
 
@@ -107,12 +108,16 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
   const [externalReloadVersion, setExternalReloadVersion] = useState(0)
   const [reloadVersion, setReloadVersion] = useState(0)
   const editorRef = useRef<MonacoEditorType.IStandaloneCodeEditor | null>(null)
+  // 保留本次加载的格式基准，保存后撤销删除仍可恢复被删行的原始分隔符。
+  const formatSourceRef = useRef('')
   const stateRef = useRef<MonacoSurfaceState | null>(null)
   const dirtyRef = useRef(false)
   const savingRef = useRef(false)
   const ignoreChangesUntilRef = useRef(0)
 
-  const dirty = content !== null && content !== baseline
+  const dirty =
+    content !== null &&
+    normalizeLineEndings(content) !== normalizeLineEndings(baseline)
   dirtyRef.current = dirty
   const language = getLanguageForFile(path)
 
@@ -129,16 +134,13 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
           limit: SURFACE_READ_LIMIT,
         })
         if (disposed) return
-        const loadedLines =
-          result.content === '' ? 0 : result.content.split('\n').length
-        // 空内容（含 Rust 对单空行文件返回 content='' 的形态）视为完整，
-        // 否则会误判截断而错误禁用编辑。
         const editable =
           readOnly !== true &&
           result.sizeBytes < EDITOR_CONFIG.EDIT_READ_ONLY_THRESHOLD &&
-          (result.content === '' || loadedLines >= result.totalLines)
+          result.readComplete
         setCanEdit(editable)
         setEditMode(editable)
+        formatSourceRef.current = result.content
         setContent(result.content)
         setBaseline(result.content)
         setLoading(false)
@@ -236,23 +238,29 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
   const handleChange = useCallback(
     (value: string | undefined) => {
       if (value === undefined) return
-      setContent(value)
-      onContentChange?.(value)
+      // Monaco 默认 getValue() 不带 BOM；原文件含 BOM 时也应保留。
+      const originalBom = baseline.startsWith('\uFEFF')
+      const next =
+        originalBom && !value.startsWith('\uFEFF') ? `\uFEFF${value}` : value
+      setContent(next)
+      onContentChange?.(next)
     },
-    [onContentChange],
+    [onContentChange, baseline],
   )
 
   const handleSave = useCallback(async (): Promise<boolean> => {
     if (content === null || saving || !canEdit) return false
     // 内容未变化视为保存成功：Cmd+S 不触发对磁盘的无意义写入。
-    if (content === baseline) return true
+    if (normalizeLineEndings(content) === normalizeLineEndings(baseline))
+      return true
     setSaving(true)
     savingRef.current = true
     setError(null)
     ignoreChangesUntilRef.current = Date.now() + 800
     try {
-      await writeFile(projectId, path, content)
-      setBaseline(content)
+      const savedContent = preserveLineEndings(formatSourceRef.current, content)
+      await writeFile(projectId, path, savedContent)
+      setBaseline(savedContent)
       setSaveVersion((version) => version + 1)
       setExternalChanged(false)
       return true

@@ -1,3 +1,4 @@
+import { isComposing } from '../../../lib/keyboard'
 import { useEffect, useRef, useState } from 'react'
 import type { GitCommitFile, GitLogEntry } from '../../../api/workspace'
 import { copyTextToClipboard } from '../../../lib/clipboard'
@@ -140,6 +141,7 @@ export function GitHistoryRow(props: GitHistoryRowProps): React.JSX.Element {
             disabled={props.busy}
             onChange={(event) => setBranchName(event.target.value)}
             onKeyDown={(event) => {
+              if (isComposing(event.nativeEvent)) return
               if (event.key === 'Enter') create()
             }}
           />

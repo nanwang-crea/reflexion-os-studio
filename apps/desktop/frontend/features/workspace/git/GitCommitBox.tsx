@@ -1,3 +1,4 @@
+import { isComposing } from '../../../lib/keyboard'
 import { IS_MAC } from '../../../lib/platform'
 
 interface GitCommitBoxProps {
@@ -19,6 +20,7 @@ export function GitCommitBox(props: GitCommitBoxProps): React.JSX.Element {
         disabled={props.busy}
         onChange={(event) => props.onMessage(event.target.value)}
         onKeyDown={(event) => {
+          if (isComposing(event.nativeEvent)) return
           if (
             (IS_MAC ? event.metaKey : event.ctrlKey) &&
             event.key === 'Enter'

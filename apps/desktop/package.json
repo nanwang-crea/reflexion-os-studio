@@ -10,7 +10,7 @@
     "prepare:package": "bash ../../scripts/prepare-package.sh",
     "dev:frontend": "vite",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "node --disable-warning=ExperimentalWarning --test test/resubmission.test.mjs test/approval-presenter.test.mjs test/permission-storage.test.mjs test/run-resources.test.mjs"
+    "test": "node --disable-warning=ExperimentalWarning --test test/keyboard.test.mjs test/markdown-read.test.mjs test/file-format.test.mjs test/resubmission.test.mjs test/approval-presenter.test.mjs test/permission-storage.test.mjs test/run-resources.test.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -22,6 +22,7 @@
     "@tauri-apps/plugin-dialog": "^2",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
+    "diff": "^9.0.0",
     "monaco-editor": "^0.56.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

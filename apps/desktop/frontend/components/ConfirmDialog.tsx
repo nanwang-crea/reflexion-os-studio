@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
+import { useModalDialog } from '../hooks/ui/useModalDialog'
 
 export interface ConfirmDialogState {
   title: string
@@ -26,27 +27,25 @@ export function ConfirmDialog(
   props: ConfirmDialogProps,
 ): React.JSX.Element | null {
   const cancelRef = useRef<HTMLButtonElement>(null)
-  const { onCancel } = props
   const open = props.state !== null
 
-  useEffect(() => {
-    if (!open) return
-    cancelRef.current?.focus()
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onCancel()
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [open, onCancel])
+  const dialogRef = useModalDialog(open, cancelRef)
 
   if (!props.state) return null
   const state = props.state
 
   return (
-    <div
-      className="dialog-overlay"
-      role="presentation"
-      onClick={props.onCancel}
+    <dialog
+      ref={dialogRef}
+      className="dialog-overlay confirm-dialog-modal"
+      aria-label={state.title}
+      onCancel={(event) => {
+        event.preventDefault()
+        props.onCancel()
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) props.onCancel()
+      }}
     >
       <div
         className="dialog"
@@ -75,6 +74,6 @@ export function ConfirmDialog(
           </button>
         </div>
       </div>
-    </div>
+    </dialog>
   )
 }

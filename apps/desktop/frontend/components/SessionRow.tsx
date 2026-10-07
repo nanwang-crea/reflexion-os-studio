@@ -1,3 +1,4 @@
+import { isComposing } from '../lib/keyboard'
 import { useEffect, useRef, useState } from 'react'
 import type { Session } from '@reflexion-os-studio/runtime-client'
 import { PencilIcon, TrashIcon } from '../ui/icons'
@@ -78,6 +79,7 @@ export function SessionRow(props: {
           onChange={(event) => setEditTitle(event.target.value)}
           onBlur={() => void submitRename()}
           onKeyDown={(event) => {
+            if (isComposing(event.nativeEvent)) return
             if (event.key === 'Enter') {
               event.preventDefault()
               void submitRename()

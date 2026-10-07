@@ -71,6 +71,8 @@ export function Select(props: Props) {
           position="popper"
           sideOffset={4}
           collisionPadding={8}
+          onMouseDown={(event) => event.stopPropagation()}
+          onEscapeKeyDown={(event) => event.stopPropagation()}
         >
           <SelectPrimitive.ScrollUpButton className="ui-select-scroll">
             ⌃

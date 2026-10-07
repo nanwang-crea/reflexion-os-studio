@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useModalDialog } from '../../../hooks/ui/useModalDialog'
 import {
   dangerDisable,
   dangerEnable,
@@ -32,7 +33,11 @@ export function DangerConfirmationDialog({
   const [prepared, setPrepared] = useState<DangerPrepareResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const enableRef = useRef<HTMLButtonElement | null>(null)
+  const cancelRef = useRef<HTMLButtonElement | null>(null)
+  const dialogRef = useModalDialog(open, cancelRef)
+  useEffect(() => {
+    if (open) cancelRef.current?.focus()
+  }, [open, step])
 
   useEffect(() => {
     if (open) {
@@ -92,15 +97,20 @@ export function DangerConfirmationDialog({
   const capabilityOk = prepared?.capability.supported ?? false
 
   return (
-    <div
-      className="danger-overlay"
-      role="presentation"
+    <dialog
+      ref={dialogRef}
+      className="danger-overlay danger-modal"
+      aria-labelledby="danger-dialog-title"
+      aria-describedby="danger-dialog-body"
+      onCancel={(event) => {
+        event.preventDefault()
+        onClose()
+      }}
       onKeyDown={(event) => {
         // 阻止 Enter 在第二步默认触发"启用"（无障碍红线：无默认提交键）。
         if (step === 'confirm' && event.key === 'Enter') {
           event.preventDefault()
         }
-        if (event.key === 'Escape') onClose()
       }}
     >
       <div
@@ -135,6 +145,7 @@ export function DangerConfirmationDialog({
               <button
                 type="button"
                 className="ghost"
+                ref={cancelRef}
                 onClick={onClose}
                 disabled={busy}
               >
@@ -183,6 +194,7 @@ export function DangerConfirmationDialog({
               <button
                 type="button"
                 className="ghost"
+                ref={cancelRef}
                 onClick={() => {
                   setStep('intro')
                   setPrepared(null)
@@ -192,7 +204,6 @@ export function DangerConfirmationDialog({
                 返回
               </button>
               <button
-                ref={enableRef}
                 type="button"
                 className="danger-enable"
                 onClick={() => void enable()}
@@ -209,7 +220,7 @@ export function DangerConfirmationDialog({
           </div>
         )}
       </div>
-    </div>
+    </dialog>
   )
 }
 

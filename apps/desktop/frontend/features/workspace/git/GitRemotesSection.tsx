@@ -1,3 +1,4 @@
+import { isComposing } from '../../../lib/keyboard'
 import { useEffect, useRef, useState } from 'react'
 import type { GitRemote } from '../../../api/workspace'
 
@@ -116,6 +117,7 @@ export function GitRemotesSection(
             disabled={props.busy}
             onChange={(event) => setName(event.target.value)}
             onKeyDown={(event) => {
+              if (isComposing(event.nativeEvent)) return
               if (event.key === 'Enter') save()
             }}
           />
@@ -126,6 +128,7 @@ export function GitRemotesSection(
             disabled={props.busy}
             onChange={(event) => setUrl(event.target.value)}
             onKeyDown={(event) => {
+              if (isComposing(event.nativeEvent)) return
               if (event.key === 'Enter') save()
             }}
           />

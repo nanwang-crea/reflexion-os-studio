@@ -4,7 +4,7 @@ import { build } from 'esbuild'
 import { mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -25,7 +25,9 @@ await build({
   platform: 'neutral',
   outfile,
 })
-const { presentApproval, actionLabelFor } = await import(`file://${outfile}`)
+const { presentApproval, actionLabelFor } = await import(
+  pathToFileURL(outfile).href
+)
 
 const SHELL_SUBJECT = {
   kind: 'shell-command',

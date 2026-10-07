@@ -4,7 +4,7 @@ import { build } from 'esbuild'
 import { mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const outDir = join(tmpdir(), 'reflexion-storage-test')
@@ -18,7 +18,7 @@ await build({
   outfile,
 })
 const { migratePreset, loadPreset, savePreset, isPermissionPreset } =
-  await import(`file://${outfile}`)
+  await import(pathToFileURL(outfile).href)
 
 function fakeStorage(initial = {}) {
   const map = new Map(Object.entries(initial))

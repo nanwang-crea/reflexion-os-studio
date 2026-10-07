@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { readFile } from '../../../api/workspace'
+import { splitReadLines } from './read-lines'
 import {
   createMdChunkerState,
   feedMdLines,
@@ -51,11 +52,14 @@ export function useMdIncrementalFeed(
   // 加载代次：重置（首批 effect 重跑）时递增；陈旧的追加请求按代次丢弃，
   // 防止在途 setFeed 覆盖重置后的新状态（竞态守卫）。
   const generationRef = useRef(0)
+  const pendingGenerationRef = useRef<number | null>(null)
 
   // 首批加载（reloadTick 变化时重置增量状态重读）。
   useEffect(() => {
     let disposed = false
     generationRef.current += 1
+    pendingGenerationRef.current = null
+    setLoadingMore(false)
     setLoading(true)
     setError(null)
     setFeed(null)
@@ -66,11 +70,10 @@ export function useMdIncrementalFeed(
         })
         if (disposed) return
         const chunker = createMdChunkerState()
-        const lines = result.content === '' ? [] : result.content.split('\n')
+        const lines = splitReadLines(result.content)
         const blocks = feedMdLines(chunker, lines)
         const nextLine = lines.length
-        // 空页视为读完：Rust 对单空行文件（"\n"）返回 content='' 但
-        // totalLines=1，若不终结会导致同 offset 无限重读（死循环）。
+        // 空窗口结束加载；有分隔符的空行仍作为一行推进 offset。
         const exhausted = lines.length === 0 || nextLine >= result.totalLines
         if (exhausted) blocks.push(...flushMdChunks(chunker))
         setFeed({
@@ -97,6 +100,8 @@ export function useMdIncrementalFeed(
   const loadMore = useCallback(async (): Promise<void> => {
     if (feed === null || feed.exhausted || loadingMore) return
     const generation = generationRef.current
+    if (pendingGenerationRef.current === generation) return
+    pendingGenerationRef.current = generation
     setLoadingMore(true)
     try {
       const result = await readFile(projectId, path, {
@@ -104,7 +109,7 @@ export function useMdIncrementalFeed(
         limit: MD_PREVIEW_BATCH_LINES,
       })
       if (generationRef.current !== generation) return
-      const lines = result.content === '' ? [] : result.content.split('\n')
+      const lines = splitReadLines(result.content)
       const blocks = [...feed.blocks, ...feedMdLines(feed.chunker, lines)]
       const nextLine = feed.nextLine + lines.length
       const capReached = nextLine >= MD_PREVIEW_MAX_LINES
@@ -124,7 +129,10 @@ export function useMdIncrementalFeed(
       setError(err instanceof Error ? err.message : String(err))
       setFeed({ ...feed, exhausted: true })
     } finally {
-      setLoadingMore(false)
+      if (pendingGenerationRef.current === generation) {
+        pendingGenerationRef.current = null
+        setLoadingMore(false)
+      }
     }
   }, [feed, loadingMore, projectId, path])
 

@@ -18,7 +18,7 @@ export function useAppHotkeys(handlers: AppHotkeyHandlers): void {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       // 按住不放产生的自动重复不触发保存/关闭（否则连开弹窗）。
-      if (event.repeat) return
+      if (event.repeat || document.querySelector('dialog[open]')) return
       const mod = IS_MAC ? event.metaKey : event.ctrlKey
       if (!mod) return
       const key = event.key.toLowerCase()

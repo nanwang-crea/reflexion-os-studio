@@ -1,3 +1,4 @@
+import { isComposing } from '../../../lib/keyboard'
 import { useEffect, useRef, useState } from 'react'
 import type {
   Project,
@@ -169,6 +170,7 @@ export function ProjectFiles(props: ProjectFilesProps): React.JSX.Element {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 onKeyDown={(event) => {
+                  if (isComposing(event.nativeEvent)) return
                   if (event.key === 'Escape') setQuery('')
                 }}
                 aria-label="搜索文件名"

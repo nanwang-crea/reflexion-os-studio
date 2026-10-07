@@ -134,6 +134,7 @@ export const workspaceCommandHandlers: Record<string, CommandHandler> = {
     const params: Record<string, unknown> = {
       workspaceRoot: project.folderPath,
       path,
+      preserveLineEndings: p.preserveLineEndings !== false,
     }
     if (typeof p.offset === 'number')
       params.offset = Math.max(0, Math.trunc(p.offset))

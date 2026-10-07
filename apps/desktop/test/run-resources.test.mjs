@@ -188,9 +188,7 @@ test('changed files open snapshot or Git Diff on click, with file fallback only 
     onOpenDiff: (path, options) => clicked.push({ path, options }),
   }
   buttonsIn(ChangedFiles(props))[0].props.onClick()
-  buttonsIn(
-    ChangedFiles({ ...props, files: [gitFile] }),
-  )[0].props.onClick()
+  buttonsIn(ChangedFiles({ ...props, files: [gitFile] }))[0].props.onClick()
   buttonsIn(
     ChangedFiles({ ...props, onOpenDiff: undefined }),
   )[0].props.onClick()

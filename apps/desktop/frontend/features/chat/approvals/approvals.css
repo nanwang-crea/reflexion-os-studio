@@ -409,3 +409,21 @@
 .approval-write-roots ul {
   padding-left: 1.5em;
 }
+
+.danger-modal {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  border: none;
+  margin: 0;
+  padding: 0;
+  color: var(--text);
+  background: transparent;
+}
+.danger-modal:not([open]) {
+  display: none;
+}
+.danger-modal::backdrop {
+  background: rgb(0 0 0 / 55%);
+}

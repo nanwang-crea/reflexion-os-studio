@@ -415,3 +415,25 @@ input:is([type='checkbox'], [type='radio']):disabled {
     transform: translateY(0);
   }
 }
+
+/* showModal 使用浏览器顶层，阻止背景交互并管理键盘焦点。 */
+.confirm-dialog-modal {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: none;
+  color: var(--text);
+  background: transparent;
+}
+.confirm-dialog-modal:not([open]) {
+  display: none;
+}
+.confirm-dialog-modal::backdrop {
+  background: var(--scrim);
+}
+.confirm-dialog-modal .dialog {
+  max-height: 100%;
+  overflow-y: auto;
+}

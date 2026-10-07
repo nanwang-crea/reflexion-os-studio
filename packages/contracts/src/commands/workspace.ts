@@ -87,6 +87,8 @@ export const workspaceCommands = {
       projectId: z.string().min(1),
       path: z.string().min(1),
       offset: z.number().int().nonnegative().optional(),
+      // 默认保留原始换行；false 仅用于兼容分行展示。
+      preserveLineEndings: z.boolean().optional(),
       limit: z.number().int().nonnegative().optional(),
     }),
     result: WorkspaceReadResultSchema,

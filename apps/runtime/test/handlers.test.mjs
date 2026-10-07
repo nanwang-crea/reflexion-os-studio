@@ -872,6 +872,11 @@ test('workspace.read_file registers revision; write_file consumes it with source
     { projectId: project.id, path: 'a.txt', content: 'hello!\n' },
     ctx,
   )
+  assert.equal(
+    calls.find((call) => call.method === 'file.read').params
+      .preserveLineEndings,
+    true,
+  )
   const write = calls.find((call) => call.method === 'file.write').params
   assert.deepEqual(write.revision, revision)
   assert.equal(write.source, 'ui')
