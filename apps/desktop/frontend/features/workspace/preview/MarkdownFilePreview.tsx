@@ -34,6 +34,8 @@ const MemoMdBlock = memo(function MemoMdBlock(props: {
 interface MarkdownFilePreviewProps {
   projectId: string
   path: string
+  initialLine?: number
+  initialLineNonce?: number
   /** 资源引用（workspace:// asset:// https://）点击回调；宿主按类型分发。 */
   onResourceClick?: (link: ResourceLink) => void
   /** 编辑内核脏状态上抛。 */
@@ -71,6 +73,12 @@ export function MarkdownFilePreview(
   const [surfaceState, setSurfaceState] = useState<MonacoSurfaceState | null>(
     null,
   )
+  useEffect(() => {
+    if (props.initialLine === undefined) return
+    setEditorOpened(true)
+    setMode('source')
+  }, [props.initialLine, props.initialLineNonce])
+
   const surfaceRef = useRef<MonacoSurfaceHandle>(null)
   const wasDirtyRef = useRef(false)
   const { feed, loading, error, loadingMore, sentinelRef } =
@@ -325,6 +333,8 @@ export function MarkdownFilePreview(
           <MonacoSurface
             projectId={projectId}
             path={path}
+            initialLine={props.initialLine}
+            initialLineNonce={props.initialLineNonce}
             ref={surfaceRef}
             onStateChange={handleSurfaceState}
             onContentChange={setDraft}

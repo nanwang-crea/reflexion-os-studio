@@ -249,15 +249,20 @@ test(
     try {
       await waitReady(client)
       const ctx = { store, system: client }
-      await dispatchCommand(
+      const read = await dispatchCommand(
         'workspace.read_file',
         { projectId: project.id, path: 'note.txt' },
         ctx,
       )
-      // 保存不带任何凭据：Runtime 查登记注入 revision，并声明 source:"ui"。
-      await dispatchCommand(
+      // 保存只带本次读取快照 token，Runtime 注入其 revision。
+      const saved = await dispatchCommand(
         'workspace.write_file',
-        { projectId: project.id, path: 'note.txt', content: 'one\ntwo!\n' },
+        {
+          projectId: project.id,
+          path: 'note.txt',
+          content: 'one\ntwo!\n',
+          readToken: read.readToken,
+        },
         ctx,
       )
       assert.equal(
@@ -265,9 +270,14 @@ test(
         'one\ntwo!\n',
       )
       // 连续保存：登记随写响应刷新，无需重读即可再存。
-      await dispatchCommand(
+      const next = await dispatchCommand(
         'workspace.write_file',
-        { projectId: project.id, path: 'note.txt', content: 'one\ntwo?\n' },
+        {
+          projectId: project.id,
+          path: 'note.txt',
+          content: 'one\ntwo?\n',
+          readToken: saved.readToken,
+        },
         ctx,
       )
       assert.equal(
@@ -276,11 +286,22 @@ test(
       )
       // 丢更新保护仍生效：磁盘被外部改动后，陈旧登记凭据必被 Rust 拒绝。
       writeFileSync(join(workspace, 'note.txt'), 'external edit\n')
+      // 另一个预览读到新版本，不得给旧编辑器提供新的覆盖凭据。
+      await dispatchCommand(
+        'workspace.read_file',
+        { projectId: project.id, path: 'note.txt' },
+        ctx,
+      )
       await assert.rejects(
         () =>
           dispatchCommand(
             'workspace.write_file',
-            { projectId: project.id, path: 'note.txt', content: 'stomp\n' },
+            {
+              projectId: project.id,
+              path: 'note.txt',
+              content: 'stomp\n',
+              readToken: next.readToken,
+            },
             ctx,
           ),
         /changed since last read|fresh full read/,

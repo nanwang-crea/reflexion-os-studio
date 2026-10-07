@@ -38,6 +38,7 @@ export type {
   WorkspaceExtStats,
   WorkspaceIndexSnapshot,
   WorkspaceReadResult,
+  WorkspaceWriteResult,
   GitChangeEntry,
   GitChangeStatus,
   AssetRef,

@@ -33,7 +33,7 @@ export interface WorkspacePanelState {
   reorderTabs: (ids: string[]) => void
   /** 切换项目时清空属于上一个项目的文件标签与聚焦。 */
   resetWorkspaceFiles: () => void
-  /** git checkout/pull 后强制所有文本标签从磁盘重载（bump nonce）。 */
+  /** git checkout/pull 后强制所有文本标签从磁盘重载（bump reloadNonce）。 */
   reloadAllTextTabs: () => void
   /** 已修改未保存的文件路径集合（按 path 键控，仅 content 标签会脏）。 */
   dirtyPaths: Set<string>
@@ -96,8 +96,9 @@ export function useWorkspacePanel(
     localStorage.setItem('reflexion.workspaceWidth', String(workspaceWidth))
   }, [workspaceWidth])
 
+  const navigationNonceRef = useRef(0)
   const openFile = useCallback((path: string, line?: number): void => {
-    const nonce = Date.now()
+    const nonce = ++navigationNonceRef.current
     setOpenTabs((tabs) => {
       // 只在 content 标签里找同路径项：仅有 diff 标签时应新建 content 标签。
       const existing = tabs.find(
@@ -221,11 +222,14 @@ export function useWorkspacePanel(
     setDirtyPaths(new Set())
   }, [])
 
-  /** git checkout/pull 后强制所有文本标签从磁盘重载（bump nonce）。 */
+  /** git checkout/pull 后强制所有文本标签从磁盘重载（bump reloadNonce）。 */
   const reloadAllTextTabs = useCallback((): void => {
-    const stamp = Date.now()
     setOpenTabs((tabs) =>
-      tabs.map((tab) => (tab.mode === 'diff' ? tab : { ...tab, nonce: stamp })),
+      tabs.map((tab) =>
+        tab.mode === 'diff'
+          ? tab
+          : { ...tab, reloadNonce: (tab.reloadNonce ?? 0) + 1 },
+      ),
     )
   }, [])
 

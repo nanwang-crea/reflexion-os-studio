@@ -5,7 +5,11 @@ export function normalizeLineEndings(content: string): string {
 }
 
 /** 保存时映射原文行：未修改行保留原分隔符，替换行沿用对应行，新行沿用邻近行。 */
-export function preserveLineEndings(original: string, edited: string): string {
+export function preserveLineEndings(
+  original: string,
+  edited: string,
+  lastSaved?: string,
+): string {
   const bom = original.startsWith('\uFEFF') ? '\uFEFF' : ''
   const source = original.replace(/^\uFEFF/, '')
   const target = normalizeLineEndings(edited.replace(/^\uFEFF/, ''))
@@ -36,8 +40,12 @@ export function preserveLineEndings(original: string, edited: string): string {
     after.slice(prefix, after.length - suffix),
     { timeout: 50, maxEditLength: 2000 },
   )
-  if (!middle)
+  if (!middle) {
+    // 大量累计编辑改用最近一次成功保存的格式基准；原始基准仍用于撤销恢复。
+    if (lastSaved !== undefined && lastSaved !== original)
+      return preserveLineEndings(lastSaved, edited)
     throw new Error('修改范围过大，无法安全保留混合换行；请分次保存。')
+  }
   const changes = [
     { value: before.slice(0, prefix), added: false, removed: false },
     ...middle,

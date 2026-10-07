@@ -6,6 +6,7 @@ export interface MonacoEditorProps {
   projectId: string
   path: string
   initialLine?: number
+  initialLineNonce?: number
   readOnly?: boolean
   onContentChange?: (content: string) => void
   onDirtyChange?: (path: string, dirty: boolean) => void

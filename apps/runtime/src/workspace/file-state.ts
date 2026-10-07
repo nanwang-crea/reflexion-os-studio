@@ -1,33 +1,41 @@
+import { randomUUID } from 'node:crypto'
 import type { FileRevision } from '@reflexion-os-studio/contracts'
 
-export interface WorkspaceFileRecord {
+interface WorkspaceFileRecord {
+  workspaceRoot: string
+  path: string
   revision: FileRevision
-  /** 凭据是否来自完整读取；分页窗口的凭据不足以授权覆盖整文件。 */
   complete: boolean
 }
 
-/**
- * 工作区文件读取凭据登记：workspace.read_file 成功后记录 revision，
- * workspace.write_file（UI 保存）查表注入、消费并回写——与 agent 链路
- * read-state.ts 同一模式，前端零凭据搬运。生命周期随 Runtime 进程；
- * Rust 侧仍以 revision 做最终陈旧校验，本登记只保证"编辑器确实读过
- * 该文件的当前版本"。
- */
+/** 不可变读取快照；其他读取不会推进旧编辑器的版本。容量有界，失效须重读。 */
 export class WorkspaceFileState {
   private readonly entries = new Map<string, WorkspaceFileRecord>()
 
-  private key(workspaceRoot: string, path: string): string {
-    return `${workspaceRoot}\u0000${path}`
+  record(
+    workspaceRoot: string,
+    path: string,
+    rec: Pick<WorkspaceFileRecord, 'revision' | 'complete'>,
+  ): string {
+    const token = randomUUID()
+    this.entries.set(token, { workspaceRoot, path, ...rec })
+    if (this.entries.size > 1024) {
+      const oldest = this.entries.keys().next().value
+      if (oldest !== undefined) this.entries.delete(oldest)
+    }
+    return token
   }
 
-  record(workspaceRoot: string, path: string, rec: WorkspaceFileRecord): void {
-    this.entries.set(this.key(workspaceRoot, path), rec)
-  }
-
-  entry(workspaceRoot: string, path: string): WorkspaceFileRecord | undefined {
-    return this.entries.get(this.key(workspaceRoot, path))
+  entry(
+    workspaceRoot: string,
+    path: string,
+    token: string,
+  ): WorkspaceFileRecord | undefined {
+    const record = this.entries.get(token)
+    return record?.workspaceRoot === workspaceRoot && record.path === path
+      ? record
+      : undefined
   }
 }
 
-/** Runtime 进程级单例（与 workspaceIndexer 同生命周期）。 */
 export const workspaceFileState = new WorkspaceFileState()

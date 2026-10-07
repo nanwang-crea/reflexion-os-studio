@@ -3,6 +3,7 @@ import {
   WorkspaceEntrySchema,
   WorkspaceIndexSnapshotSchema,
   WorkspaceReadResultSchema,
+  WorkspaceWriteResultSchema,
   GitChangeEntrySchema,
   GitChangeStatusSchema,
   ChangedFileSchema,
@@ -320,10 +321,9 @@ export const workspaceCommands = {
       projectId: z.string().min(1),
       path: z.string().min(1),
       content: z.string(),
+      readToken: z.string().min(1).optional(),
     }),
-    result: z.object({
-      writtenBytes: z.number().int().nonnegative(),
-    }),
+    result: WorkspaceWriteResultSchema,
   },
   // ---------- Asset（Phase 1B 第二阶段）：内容入 Store，引用与元数据落库 ----------
 }

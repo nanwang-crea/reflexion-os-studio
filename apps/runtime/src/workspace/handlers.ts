@@ -15,7 +15,7 @@ import {
  * 文件访问全部透传 Rust System Runtime（workspace 边界与先读后写在 Rust 侧
  * 二次校验），Runtime 这里只做前置校验与凭据簿记：路径必须相对、命令目标
  * 必须是已关联文件夹的项目；read_file 登记 revision 凭据、write_file（UI
- * 保存）按登记注入并以 source:"ui" 声明免审批来源，前端不搬运凭据。
+ * 保存）按快照 token 注入并以 source:"ui" 声明免审批来源。
  * Git 域（状态/diff/历史/写操作）在 handlers-git.ts，按域合并进本表。
  */
 export const workspaceCommandHandlers: Record<string, CommandHandler> = {
@@ -147,7 +147,7 @@ export const workspaceCommandHandlers: Record<string, CommandHandler> = {
     // 登记覆盖写凭据：编辑器/预览据 readComplete 判定能否整文件保存。
     const revision = extractRevision(result)
     if (revision !== undefined) {
-      workspaceFileState.record(project.folderPath, path, {
+      result.readToken = workspaceFileState.record(project.folderPath, path, {
         revision,
         complete: result.readComplete === true,
       })
@@ -178,7 +178,17 @@ export const workspaceCommandHandlers: Record<string, CommandHandler> = {
     const path = assertRelativePath(requireString(p, 'path'))
     const content = typeof p.content === 'string' ? p.content : ''
     const root = project.folderPath
-    const record = workspaceFileState.entry(root, path)
+    const token = typeof p.readToken === 'string' ? p.readToken : undefined
+    const record =
+      token === undefined
+        ? undefined
+        : workspaceFileState.entry(root, path, token)
+    if (token !== undefined && record === undefined) {
+      throw new CommandError(
+        'invalid_request',
+        '读取快照已失效或不属于此文件，请重新加载后保存。',
+      )
+    }
     if (record !== undefined && !record.complete) {
       throw new CommandError(
         'invalid_request',
@@ -193,14 +203,15 @@ export const workspaceCommandHandlers: Record<string, CommandHandler> = {
       // 用户直接动作：向 Rust 声明免审批来源（agent 路径才要求 grant）。
       source: 'ui',
     })) as { writtenBytes?: number; revision?: FileRevision }
-    // 回写新凭据：编辑器连续保存以最新 revision 通过陈旧校验。
+    // 新快照只返回本次保存的编辑器，不修改任何旧读取快照。
+    let readToken: string | undefined
     if (result.revision !== undefined) {
-      workspaceFileState.record(root, path, {
+      readToken = workspaceFileState.record(root, path, {
         revision: result.revision,
         complete: true,
       })
     }
-    return { writtenBytes: result.writtenBytes ?? 0 }
+    return { writtenBytes: result.writtenBytes ?? 0, readToken }
   },
   // Git 域（只读查询 + 历史 + 写操作）在 handlers-git.ts，按域合并注册。
   ...workspaceGitCommandHandlers,

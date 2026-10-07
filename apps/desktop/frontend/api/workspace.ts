@@ -6,7 +6,7 @@ import type {
   WorkspaceEntry,
   WorkspaceIndexSnapshot,
   WorkspaceReadResult,
-  FileWriteResult,
+  WorkspaceWriteResult,
 } from '@reflexion-os-studio/runtime-client'
 
 export interface WorkspaceListResult {
@@ -95,11 +95,13 @@ export function writeFile(
   projectId: string,
   path: string,
   content: string,
-): Promise<FileWriteResult> {
-  return request<FileWriteResult>('workspace.write_file', {
+  readToken?: string,
+): Promise<WorkspaceWriteResult> {
+  return request<WorkspaceWriteResult>('workspace.write_file', {
     projectId,
     path,
     content,
+    readToken,
   })
 }
 

@@ -146,7 +146,7 @@ export function FileViewerPanel(
         const active = tabIdOf(tab) === props.activeTabId
         return (
           <div
-            key={`${tab.path}#${tab.nonce ?? 0}`}
+            key={`${project.id}:${tab.path}#${tab.reloadNonce ?? 0}`}
             className="workspace-tab-page"
             style={{ display: active ? 'flex' : 'none' }}
           >
@@ -154,6 +154,8 @@ export function FileViewerPanel(
               <MarkdownFilePreview
                 projectId={project.id}
                 path={tab.path}
+                initialLine={tab.line}
+                initialLineNonce={tab.nonce}
                 onResourceClick={props.onResourceClick}
                 onDirtyChange={props.onDirtyChange}
                 registerSurface={registerSurface}
@@ -164,6 +166,7 @@ export function FileViewerPanel(
                 projectId={project.id}
                 path={tab.path}
                 initialLine={tab.line}
+                initialLineNonce={tab.nonce}
                 readOnly={false}
                 onDirtyChange={props.onDirtyChange}
                 registerSurface={registerSurface}

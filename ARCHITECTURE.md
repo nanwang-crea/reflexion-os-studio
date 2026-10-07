@@ -132,3 +132,5 @@ Agent、Memory、Skill、Context 和 Delegation/Policy 是一等领域，分别�
 权限边界：用户终端与 Agent `shell.execute` 完全隔离——`terminal.*` 不注册为 Agent 工具，终端输入输出不进上下文、记忆或工具轨迹。
 
 当前状态：**W0–W4 macOS 已验证**（切片/服务/面板/故障矩阵/性能门槛/打包冒烟，证据见 `docs/TERMINAL-SPIKE-REPORT.md`）；GUI 人工清单待执行（`docs/TERMINAL-GUI-ACCEPTANCE.md`）；Windows/Linux 待对应环境真机验收，不得宣称三平台完成。发布入口开关：构建期 `VITE_TERMINAL_DISABLED=1` 或运行期 localStorage `terminal.forceDisabled='1'`（重启生效）禁用新建终端入口，已打开的终端不受影响。
+
+工作区 UI 的覆盖保存绑定具体读取快照：Runtime 为每次读取发放不透明 readToken，按工作区根目录、相对路径与完整读取状态校验。保存使用该快照的 revision，成功后返回新 token；其他预览或分页读取不能更新编辑器的保存凭据。凭据簿有界，淘汰或 Runtime 重启后须重新加载。Rust 仍执行磁盘 revision 校验，无 token 只可走新文件创建路径。

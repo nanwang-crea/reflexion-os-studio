@@ -63,6 +63,7 @@ export interface MonacoSurfaceProps {
   projectId: string
   path: string
   initialLine?: number
+  initialLineNonce?: number
   /** 外部强制只读（与大小/截断守卫取与）。 */
   readOnly?: boolean
   /** 编辑内核状态上抛（宿主据此渲染保存/切换按钮）。 */
@@ -92,6 +93,7 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
     projectId,
     path,
     initialLine,
+    initialLineNonce,
     readOnly,
     onStateChange,
     onContentChange,
@@ -109,6 +111,7 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
   const [reloadVersion, setReloadVersion] = useState(0)
   const editorRef = useRef<MonacoEditorType.IStandaloneCodeEditor | null>(null)
   // 保留本次加载的格式基准，保存后撤销删除仍可恢复被删行的原始分隔符。
+  const readTokenRef = useRef<string | undefined>(undefined)
   const formatSourceRef = useRef('')
   const stateRef = useRef<MonacoSurfaceState | null>(null)
   const dirtyRef = useRef(false)
@@ -140,6 +143,7 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
           result.readComplete
         setCanEdit(editable)
         setEditMode(editable)
+        readTokenRef.current = result.readToken
         formatSourceRef.current = result.content
         setContent(result.content)
         setBaseline(result.content)
@@ -202,7 +206,7 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
       editor.revealLineInCenter(initialLine)
       editor.setPosition({ lineNumber: initialLine, column: 1 })
     }
-  }, [initialLine, loading])
+  }, [initialLine, initialLineNonce, loading])
 
   // 状态上抛（去重，避免宿主随键击重渲染）。
   useEffect(() => {
@@ -249,7 +253,7 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
   )
 
   const handleSave = useCallback(async (): Promise<boolean> => {
-    if (content === null || saving || !canEdit) return false
+    if (content === null || savingRef.current || !canEdit) return false
     // 内容未变化视为保存成功：Cmd+S 不触发对磁盘的无意义写入。
     if (normalizeLineEndings(content) === normalizeLineEndings(baseline))
       return true
@@ -258,8 +262,20 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
     setError(null)
     ignoreChangesUntilRef.current = Date.now() + 800
     try {
-      const savedContent = preserveLineEndings(formatSourceRef.current, content)
-      await writeFile(projectId, path, savedContent)
+      const savedContent = preserveLineEndings(
+        formatSourceRef.current,
+        content,
+        baseline,
+      )
+      if (readTokenRef.current === undefined)
+        throw new Error('读取快照不可用，请重新加载后保存。')
+      const result = await writeFile(
+        projectId,
+        path,
+        savedContent,
+        readTokenRef.current,
+      )
+      readTokenRef.current = result.readToken
       setBaseline(savedContent)
       setSaveVersion((version) => version + 1)
       setExternalChanged(false)
@@ -273,7 +289,7 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
       savingRef.current = false
       setSaving(false)
     }
-  }, [content, baseline, saving, canEdit, projectId, path])
+  }, [content, baseline, canEdit, projectId, path])
 
   const handleSaveRef = useRef(handleSave)
   handleSaveRef.current = handleSave

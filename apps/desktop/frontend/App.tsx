@@ -115,6 +115,8 @@ export default function App() {
     refreshStandaloneSessions,
     refreshDelegations,
   } = useDataRefreshers({
+    activeProjectId,
+    activeSessionId,
     sessionRequestRef,
     setSessionData,
     setProfiles,

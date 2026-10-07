@@ -862,14 +862,19 @@ test('workspace.read_file registers revision; write_file consumes it with source
     },
   }
   const ctx = { store, system }
-  await dispatchCommand(
+  const read = await dispatchCommand(
     'workspace.read_file',
     { projectId: project.id, path: 'a.txt' },
     ctx,
   )
-  await dispatchCommand(
+  const saved = await dispatchCommand(
     'workspace.write_file',
-    { projectId: project.id, path: 'a.txt', content: 'hello!\n' },
+    {
+      projectId: project.id,
+      path: 'a.txt',
+      content: 'hello!\n',
+      readToken: read.readToken,
+    },
     ctx,
   )
   assert.equal(
@@ -884,7 +889,12 @@ test('workspace.read_file registers revision; write_file consumes it with source
   // 连续保存：写响应的新凭据回登记，第二次保存必须携带它。
   await dispatchCommand(
     'workspace.write_file',
-    { projectId: project.id, path: 'a.txt', content: 'hello?\n' },
+    {
+      projectId: project.id,
+      path: 'a.txt',
+      content: 'hello?\n',
+      readToken: saved.readToken,
+    },
     ctx,
   )
   const second = calls.filter((call) => call.method === 'file.write')[1].params
@@ -936,7 +946,7 @@ test('workspace.write_file rejects overwrite when last read was paginated', asyn
     },
   }
   const ctx = { store, system }
-  await dispatchCommand(
+  const read = await dispatchCommand(
     'workspace.read_file',
     { projectId: project.id, path: 'big.txt', offset: 0, limit: 10 },
     ctx,
@@ -945,7 +955,12 @@ test('workspace.write_file rejects overwrite when last read was paginated', asyn
     () =>
       dispatchCommand(
         'workspace.write_file',
-        { projectId: project.id, path: 'big.txt', content: 'stomp\n' },
+        {
+          projectId: project.id,
+          path: 'big.txt',
+          content: 'stomp\n',
+          readToken: read.readToken,
+        },
         ctx,
       ),
     /分页窗口/,
@@ -1478,4 +1493,62 @@ test('project.create retains the native filesystem root', async () => {
   )
   assert.equal(result.project.folderPath, root)
   assert.equal(store.projects.get(result.project.id).folderPath, root)
+})
+
+test('workspace snapshot tokens isolate preview reads and bind exact paths', async () => {
+  const store = freshStore()
+  const root = mkdtempSync(join(tmpdir(), 'reflexion-snapshots-'))
+  const project = store.projects.create({ name: 'p', folderPath: root })
+  const oldRevision = { modifiedMs: 1, sizeBytes: 6, sha256: 'a'.repeat(64) }
+  let revision = oldRevision
+  let complete = true
+  const writes = []
+  const ctx = {
+    store,
+    system: {
+      available: true,
+      request: async (method, params) => {
+        if (method === 'file.read')
+          return {
+            content: 'hello\n',
+            sizeBytes: 6,
+            totalLines: 1,
+            offset: 0,
+            readComplete: complete,
+            revision,
+          }
+        writes.push(params)
+        return { writtenBytes: 6, revision }
+      },
+    },
+  }
+  const params = { projectId: project.id, path: 'a.txt' }
+  const editor = await dispatchCommand('workspace.read_file', params, ctx)
+  revision = { ...revision, modifiedMs: 2 }
+  await dispatchCommand('workspace.read_file', params, ctx)
+  complete = false
+  await dispatchCommand('workspace.read_file', params, ctx)
+  await dispatchCommand(
+    'workspace.write_file',
+    { ...params, content: 'draft', readToken: editor.readToken },
+    ctx,
+  )
+  assert.deepEqual(writes[0].revision, oldRevision)
+  for (const extra of [{ path: 'other.txt' }, { readToken: 'unknown' }]) {
+    await assert.rejects(
+      () =>
+        dispatchCommand(
+          'workspace.write_file',
+          {
+            ...params,
+            content: 'draft',
+            readToken: editor.readToken,
+            ...extra,
+          },
+          ctx,
+        ),
+      /读取快照/,
+    )
+  }
+  assert.equal(writes.length, 1)
 })

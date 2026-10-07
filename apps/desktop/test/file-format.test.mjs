@@ -77,3 +77,23 @@ test('过大的混合换行差异拒绝转换，不能静默归一化写入', ()
     /无法安全保留混合换行/,
   )
 })
+
+test('分次保存超过累计差异预算仍可成功，并保留原始撤销格式', () => {
+  const original = Array.from(
+    { length: 1100 },
+    (_, index) => `old${index}${index % 2 ? '\n' : '\r\n'}`,
+  ).join('')
+  const edit = (count) =>
+    Array.from(
+      { length: 1100 },
+      (_, index) => `${index < count ? 'new' : 'old'}${index}\n`,
+    ).join('')
+  const first = preserveLineEndings(original, edit(500), original)
+  const second = preserveLineEndings(original, edit(1100), first)
+  assert.equal(normalizeLineEndings(second), edit(1100))
+  assert.deepEqual(second.match(/\r\n|\n/g), original.match(/\r\n|\n/g))
+  assert.equal(
+    preserveLineEndings(original, normalizeLineEndings(original), second),
+    original,
+  )
+})

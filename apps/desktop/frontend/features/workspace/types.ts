@@ -3,6 +3,8 @@ export interface OpenFileTab {
   path: string
   line?: number
   nonce?: number
+  /** 仅显式重载时更新；行号跳转不得重建编辑器。 */
+  reloadNonce?: number
   mode?: 'content' | 'diff'
   staged?: boolean
   oldPath?: string

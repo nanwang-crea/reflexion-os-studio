@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type {
   Delegation,
@@ -12,6 +12,8 @@ import { listDelegations } from '../api/agents'
 import { getSessionData, listSessions, type SessionData } from '../api/sessions'
 
 export interface DataRefresherDeps {
+  activeProjectId: string | null
+  activeSessionId: string | null
   /** 会话数据请求序号：刷新期间切会话时丢弃过期响应。 */
   sessionRequestRef: MutableRefObject<number>
   setSessionData: Dispatch<SetStateAction<SessionData | null>>
@@ -46,12 +48,27 @@ export function useDataRefreshers(deps: DataRefresherDeps): DataRefreshers {
     setDelegations,
   } = deps
 
+  const active = useRef({
+    projectId: deps.activeProjectId,
+    sessionId: deps.activeSessionId,
+  })
+  active.current = {
+    projectId: deps.activeProjectId,
+    sessionId: deps.activeSessionId,
+  }
+  const projectRequestRef = useRef(0)
+  const delegationRequestRef = useRef(0)
+
   const refreshSessionData = useCallback(
     async (sessionId: string) => {
       const requestId = ++sessionRequestRef.current
       const result = await getSessionData(sessionId)
       // 请求期间可能已切换到其他会话：丢弃过期响应，避免旧会话覆盖当前页。
-      if (requestId === sessionRequestRef.current) setSessionData(result)
+      if (
+        requestId === sessionRequestRef.current &&
+        active.current.sessionId === sessionId
+      )
+        setSessionData(result)
     },
     [sessionRequestRef, setSessionData],
   )
@@ -68,8 +85,13 @@ export function useDataRefreshers(deps: DataRefresherDeps): DataRefreshers {
 
   const refreshProjectSessions = useCallback(
     async (projectId: string) => {
+      const requestId = ++projectRequestRef.current
       const result = await listSessions(projectId)
-      setProjectSessions(result.sessions)
+      if (
+        requestId === projectRequestRef.current &&
+        active.current.projectId === projectId
+      )
+        setProjectSessions(result.sessions)
     },
     [setProjectSessions],
   )
@@ -81,8 +103,13 @@ export function useDataRefreshers(deps: DataRefresherDeps): DataRefreshers {
 
   const refreshDelegations = useCallback(
     async (sessionId: string) => {
+      const requestId = ++delegationRequestRef.current
       const delegationsList = await listDelegations(sessionId)
-      setDelegations(delegationsList)
+      if (
+        requestId === delegationRequestRef.current &&
+        active.current.sessionId === sessionId
+      )
+        setDelegations(delegationsList)
     },
     [setDelegations],
   )

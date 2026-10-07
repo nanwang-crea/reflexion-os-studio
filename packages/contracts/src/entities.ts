@@ -667,10 +667,17 @@ export const WorkspaceReadResultSchema = z.object({
   totalLines: z.number().int().nonnegative(),
   offset: z.number().int().nonnegative(),
   readComplete: z.boolean(),
-  // 覆盖写凭据由 Runtime 在 workspace 域内登记与消费，前端不搬运。
+  // 前端保存携带本次读取快照的 token，不使用其他读取请求的凭据。
+  readToken: z.string().min(1).optional(),
   revision: FileRevisionSchema.optional(),
 })
 export type WorkspaceReadResult = z.infer<typeof WorkspaceReadResultSchema>
+
+export const WorkspaceWriteResultSchema = z.object({
+  writtenBytes: z.number().int().nonnegative(),
+  readToken: z.string().min(1).optional(),
+})
+export type WorkspaceWriteResult = z.infer<typeof WorkspaceWriteResultSchema>
 
 export const ToolCallSchema = z.object({
   id: z.string().min(1),

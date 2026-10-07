@@ -6,6 +6,7 @@ interface ContentViewProps {
   projectId: string
   path: string
   initialLine?: number
+  initialLineNonce?: number
   readOnly?: boolean
   onDirtyChange?: (path: string, dirty: boolean) => void
   confirm?: (state: ConfirmDialogState) => Promise<boolean>
@@ -25,6 +26,7 @@ export function ContentView(props: ContentViewProps): React.JSX.Element {
       projectId={props.projectId}
       path={props.path}
       initialLine={props.initialLine}
+      initialLineNonce={props.initialLineNonce}
       readOnly={props.readOnly ?? true}
       onDirtyChange={props.onDirtyChange}
       registerSurface={props.registerSurface}

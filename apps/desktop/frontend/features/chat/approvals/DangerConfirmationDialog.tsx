@@ -33,6 +33,8 @@ export function DangerConfirmationDialog({
   const [prepared, setPrepared] = useState<DangerPrepareResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const generationRef = useRef(0)
+  const busyRef = useRef(false)
   const cancelRef = useRef<HTMLButtonElement | null>(null)
   const dialogRef = useModalDialog(open, cancelRef)
   useEffect(() => {
@@ -40,57 +42,92 @@ export function DangerConfirmationDialog({
   }, [open, step])
 
   useEffect(() => {
+    generationRef.current += 1
+    busyRef.current = false
     if (open) {
       setStep('intro')
       setPrepared(null)
       setError(null)
       setBusy(false)
     }
-  }, [open])
+    return () => {
+      generationRef.current += 1
+      busyRef.current = false
+    }
+  }, [open, sessionId])
+
+  const close = useCallback(() => {
+    generationRef.current += 1
+    busyRef.current = false
+    onClose()
+  }, [onClose])
 
   const prepare = useCallback(async () => {
-    if (sessionId === null) return
+    if (!open || sessionId === null || busyRef.current) return
+    const generation = generationRef.current
+    busyRef.current = true
     setBusy(true)
     setError(null)
     try {
       const result = await dangerPrepare(sessionId)
+      if (generation !== generationRef.current) return
       setPrepared(result)
       setStep('confirm')
     } catch (caught) {
+      if (generation !== generationRef.current) return
       setError(describeError(caught))
     } finally {
-      setBusy(false)
+      if (generation === generationRef.current) {
+        busyRef.current = false
+        setBusy(false)
+      }
     }
-  }, [sessionId])
+  }, [open, sessionId])
 
   const enable = useCallback(async () => {
-    if (prepared === null) return
+    if (!open || prepared === null || busyRef.current) return
+    const generation = generationRef.current
+    busyRef.current = true
     setBusy(true)
     setError(null)
     try {
       await dangerEnable(prepared.challengeId)
+      if (generation !== generationRef.current) return
       onEnabled()
-      onClose()
+      close()
     } catch (caught) {
+      if (generation !== generationRef.current) return
       setError(describeError(caught))
       // challenge 已单次消费：失败回到第一步重新确认，不降级。
       setStep('intro')
       setPrepared(null)
     } finally {
-      setBusy(false)
+      if (generation === generationRef.current) {
+        busyRef.current = false
+        setBusy(false)
+      }
     }
-  }, [prepared, onClose, onEnabled])
+  }, [open, prepared, close, onEnabled])
 
   const disableActive = useCallback(async () => {
-    if (sessionId === null) return
+    if (!open || sessionId === null || busyRef.current) return
+    const generation = generationRef.current
+    busyRef.current = true
     setBusy(true)
     try {
       await dangerDisable(sessionId)
-      onClose()
+      if (generation !== generationRef.current) return
+      close()
+    } catch (caught) {
+      if (generation !== generationRef.current) return
+      setError(describeError(caught))
     } finally {
-      setBusy(false)
+      if (generation === generationRef.current) {
+        busyRef.current = false
+        setBusy(false)
+      }
     }
-  }, [sessionId, onClose])
+  }, [open, sessionId, close])
 
   if (!open) return null
 
@@ -104,7 +141,7 @@ export function DangerConfirmationDialog({
       aria-describedby="danger-dialog-body"
       onCancel={(event) => {
         event.preventDefault()
-        onClose()
+        close()
       }}
       onKeyDown={(event) => {
         // 阻止 Enter 在第二步默认触发"启用"（无障碍红线：无默认提交键）。
@@ -146,7 +183,7 @@ export function DangerConfirmationDialog({
                 type="button"
                 className="ghost"
                 ref={cancelRef}
-                onClick={onClose}
+                onClick={close}
                 disabled={busy}
               >
                 取消
