@@ -7,7 +7,13 @@
 import { spawn } from 'node:child_process'
 import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -317,7 +323,37 @@ async function checkGitDiff(runtime, projectId, wsRoot) {
         path: 'src/app.ts',
       })
       const content = read.result?.content ?? ''
-      check('read_file returns file content', content === 'export const x = 42')
+      check(
+        'read_file preserves file content and trailing LF',
+        read.error === undefined && content === 'export const x = 42\n',
+        JSON.stringify(read),
+      )
+
+      const original = 'export const x = 42\r\n\r\n'
+      writeFileSync(join(wsRoot, 'src', 'app.ts'), original)
+      const crlf = await runtime.request(13, 'workspace.read_file', {
+        projectId: project.id,
+        path: 'src/app.ts',
+      })
+      check(
+        'read_file preserves CRLF and trailing blank lines',
+        crlf.error === undefined && crlf.result?.content === original,
+        JSON.stringify(crlf),
+      )
+      const edited = original.replace('42', '43')
+      const saved = await runtime.request(14, 'workspace.write_file', {
+        projectId: project.id,
+        path: 'src/app.ts',
+        content: edited,
+        readToken: crlf.result?.readToken,
+      })
+      check(
+        'write_file saves with its read snapshot and preserves CRLF bytes',
+        saved.error === undefined &&
+          typeof saved.result?.readToken === 'string' &&
+          readFileSync(join(wsRoot, 'src', 'app.ts'), 'utf8') === edited,
+        JSON.stringify(saved),
+      )
 
       const traversal = await runtime.request(7, 'workspace.read_file', {
         projectId: project.id,
@@ -338,6 +374,8 @@ async function checkGitDiff(runtime, projectId, wsRoot) {
         cancelIdle.result?.accepted === false,
       )
 
+      // Git 断言使用原来的 LF 夹具，避免格式回归用例改变其基线。
+      writeFileSync(join(wsRoot, 'src', 'app.ts'), 'export const x = 42\n')
       await checkGitDiff(runtime, project.id, wsRoot)
 
       await runtime.request(9, 'runtime.shutdown')
