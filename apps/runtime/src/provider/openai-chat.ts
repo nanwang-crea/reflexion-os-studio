@@ -1,5 +1,4 @@
-import type { ToolSpec } from '@reflexion-os-studio/contracts'
-import type { ModelMessage } from '@reflexion-os-studio/agent-core'
+import { chatRequestBody } from './openai-chat/projection.js'
 import {
   DEFAULT_MAX_RETRIES,
   DEFAULT_TIMEOUT_MS,
@@ -19,44 +18,6 @@ import type {
   StreamChatResult,
   StreamedToolCall,
 } from './types.js'
-
-/**
- * canonical ModelMessage 投影为 OpenAI chat 方言：
- * assistant 的工具调用回到 tool_calls 数组，工具结果走 role=tool + tool_call_id。
- */
-function toProviderMessage(
-  message: ModelMessage,
-  canonicalToProvider: ReadonlyMap<string, string>,
-): Record<string, unknown> {
-  switch (message.role) {
-    case 'system':
-    case 'user':
-      return { role: message.role, content: message.content }
-    case 'assistant':
-      return {
-        role: 'assistant',
-        content: message.content,
-        ...(message.toolCalls.length > 0
-          ? {
-              tool_calls: message.toolCalls.map((call) => ({
-                id: call.id,
-                type: 'function',
-                function: {
-                  name: canonicalToProvider.get(call.name) ?? call.name,
-                  arguments: call.arguments,
-                },
-              })),
-            }
-          : {}),
-      }
-    case 'tool':
-      return {
-        role: 'tool',
-        tool_call_id: message.toolCallId,
-        content: message.content,
-      }
-  }
-}
 
 export async function streamOpenAIChat(
   options: StreamChatOptions,
@@ -93,14 +54,6 @@ export async function streamOpenAIChat(
       )
       const attemptSignal = AbortSignal.any([options.signal, attemptTimeout])
       try {
-        const tools: ToolSpec[] | undefined =
-          options.tools && options.tools.length > 0
-            ? options.tools.map((tool) => ({
-                name: canonicalToProvider.get(tool.name) ?? tool.name,
-                description: tool.description,
-                parameters: tool.parameters,
-              }))
-            : undefined
         response = await fetch(
           `${options.baseUrl.replace(/\/$/, '')}/chat/completions`,
           {
@@ -112,32 +65,7 @@ export async function streamOpenAIChat(
               'content-type': 'application/json',
               authorization: `Bearer ${options.apiKey}`,
             },
-            body: JSON.stringify({
-              model: options.model,
-              messages: options.messages.map((message) =>
-                toProviderMessage(message, canonicalToProvider),
-              ),
-              stream: true,
-              stream_options: { include_usage: true },
-              ...(options.maxTokens !== undefined
-                ? { max_tokens: options.maxTokens }
-                : {}),
-              ...(options.temperature !== undefined
-                ? { temperature: options.temperature }
-                : {}),
-              ...(tools !== undefined
-                ? {
-                    tools: tools.map((tool) => ({
-                      type: 'function',
-                      function: {
-                        name: tool.name,
-                        description: tool.description,
-                        parameters: tool.parameters,
-                      },
-                    })),
-                  }
-                : {}),
-            }),
+            body: JSON.stringify(chatRequestBody(options, canonicalToProvider)),
             signal: attemptSignal,
           },
         )
@@ -342,16 +270,10 @@ export async function streamOpenAIChat(
       }))
 
     if (finishReason === null) {
-      if (toolCalls.length > 0) {
-        finishReason = 'tool_calls'
-      } else if (content || reasoning) {
-        finishReason = 'stop'
-      } else {
-        throw new ProviderError(
-          'provider_protocol',
-          `stream ended without a valid finish_reason (raw: ${String(rawFinishReason).slice(0, 40)})`,
-        )
-      }
+      throw new ProviderError(
+        'provider_protocol',
+        `stream ended without a valid finish_reason (raw: ${String(rawFinishReason).slice(0, 40)})`,
+      )
     }
 
     return { content, reasoning, finishReason, usage, toolCalls }

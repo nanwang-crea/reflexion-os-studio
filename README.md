@@ -23,9 +23,14 @@ ReflexionOS 的下一代桌面 Agent 与可视化工作流平台。它不是现�
 pnpm dev          # 开发模式启动桌面应用
 pnpm build        # 全量构建
 pnpm clean        # 清理构建产物
-pnpm test:ts      # TypeScript 单测（contracts / agent-core / runtime）
-scripts/test-all.sh   # 全量验证（含 cargo 与冒烟）
+pnpm test:ts      # TypeScript 类型检查
+pnpm test         # 全量验证（单测、cargo 与冒烟）
 ```
+
+安装包首次构建需要联网获取官方 Node 发行版和 SHA256 校验清单，二者缓存于
+`.cache/node-dist/`。同版本后续构建可从缓存离线准备 Node，仍会校验压缩包并重新提取。
+`REFLEXION_NODE_VERSION` 可指定版本（如 `v22.21.1`），切换版本不会沿用旧的打包资源。
+全量测试会先构建 Rust sidecar，再将其明确传给 Runtime 集成测试，避免使用旧产物或因路径问题跳过用例。
 
 ## 目录
 

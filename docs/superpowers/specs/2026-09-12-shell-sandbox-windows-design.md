@@ -233,8 +233,8 @@ TS 侧零破坏：result 新字段向后兼容；params 新字段可选。工具
 | Windows 探测失败（令牌/完整性设置不可用）      | 工厂选 `none`；ready 能力位如实为 `none`                                                      |
 | 选定后执行失败（spawn/管道/Job 错误）          | 结构化错误（`execution_failed` + 明确 message），不回退无沙箱执行                             |
 | allowNetwork=true 但 grant 无 sandboxNetwork   | `network_approval_required` 错误，TS 侧不会出现（审批先行），此为绕过兜底                     |
-| macOS `sandbox-exec` 缺失/被系统移除（轮次 B） | 工厂探测失败 → `none`；Shell 请求返回 `sandbox_policy_unavailable`，不裸执行                   |
-| Linux `bwrap` 缺失 / userns 被禁（轮次 B）     | 工厂探测失败 → `none`；Shell 请求返回 `sandbox_policy_unavailable`，不做任何"半沙箱"执行       |
+| macOS `sandbox-exec` 缺失/被系统移除（轮次 B） | 工厂探测失败 → `none`；Shell 请求返回 `sandbox_policy_unavailable`，不裸执行                  |
+| Linux `bwrap` 缺失 / userns 被禁（轮次 B）     | 工厂探测失败 → `none`；Shell 请求返回 `sandbox_policy_unavailable`，不做任何"半沙箱"执行      |
 | sandbox.cancel / system.cancel                 | 现有 `running_shells` + `kill_tree` 路径不变；Job 兜底收割；bwrap 以 `--die-with-parent` 兜底 |
 
 ## 8. 测试与验证

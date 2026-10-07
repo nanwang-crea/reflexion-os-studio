@@ -171,7 +171,7 @@ test('historical results and successful partial changes survive interrupted or f
   }
 })
 
-test('changed document opens its exact edit snapshot, or opens the file when no diff is available', () => {
+test('changed files open snapshot or Git Diff on click, with file fallback only without a handler', () => {
   const file = {
     path: 'report.md',
     action: 'moved',
@@ -179,6 +179,7 @@ test('changed document opens its exact edit snapshot, or opens the file when no 
     before: 'before',
     after: 'after',
   }
+  const gitFile = { path: 'src/main.ts', action: 'modified' }
   const clicked = []
   const props = {
     projectId: 'project',
@@ -187,6 +188,9 @@ test('changed document opens its exact edit snapshot, or opens the file when no 
     onOpenDiff: (path, options) => clicked.push({ path, options }),
   }
   buttonsIn(ChangedFiles(props))[0].props.onClick()
+  buttonsIn(
+    ChangedFiles({ ...props, files: [gitFile] }),
+  )[0].props.onClick()
   buttonsIn(
     ChangedFiles({ ...props, onOpenDiff: undefined }),
   )[0].props.onClick()
@@ -198,6 +202,12 @@ test('changed document opens its exact edit snapshot, or opens the file when no 
         oldPath: 'old.md',
         before: 'before',
         after: 'after',
+      },
+    },
+    {
+      path: 'src/main.ts',
+      options: {
+        source: 'chat',
       },
     },
     reference('report.md').link,

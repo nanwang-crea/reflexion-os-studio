@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$ROOT"
+
 [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
 
 # clean checkout 下各包 dist 不存在，而单元测试与 smoke 脚本都从 dist 导入；
@@ -13,6 +17,14 @@ scripts/build-ts.sh
 
 pnpm lint
 pnpm test:ts
+node --test scripts/test/*.test.mjs
+# Runtime 集成测试须使用当前源码构建的真实 sidecar，不能命中旧产物或静默跳过。
+cargo build --manifest-path crates/Cargo.toml
+REFLEXION_SYSTEM_RUNTIME_BIN="$ROOT/crates/target/debug/reflexion-system-runtime"
+if [[ -f "$REFLEXION_SYSTEM_RUNTIME_BIN.exe" ]]; then
+  REFLEXION_SYSTEM_RUNTIME_BIN="$REFLEXION_SYSTEM_RUNTIME_BIN.exe"
+fi
+export REFLEXION_SYSTEM_RUNTIME_BIN
 pnpm --filter @reflexion-os-studio/contracts test
 pnpm --filter @reflexion-os-studio/agent-core test
 pnpm --filter @reflexion-os-studio/runtime-client test
@@ -20,8 +32,6 @@ pnpm --filter @reflexion-os-studio/runtime test
 pnpm --filter @reflexion-os-studio/desktop typecheck
 pnpm --filter @reflexion-os-studio/desktop test
 cargo test --manifest-path crates/Cargo.toml
-# cargo test 只链测试 harness，不保证产出可执行 bin；冒烟前显式构建。
-cargo build --manifest-path crates/Cargo.toml
 node --disable-warning=ExperimentalWarning scripts/smoke-system-channel.mjs
 node --disable-warning=ExperimentalWarning scripts/smoke-chat.mjs
 node --disable-warning=ExperimentalWarning scripts/smoke-workspace.mjs

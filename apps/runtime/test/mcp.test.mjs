@@ -126,10 +126,9 @@ test('McpClient aborts hung tool call fast and sends notifications/cancelled', a
   setTimeout(() => controller.abort(), 100)
   // 快速失败：不等 30s 协议超时，立即以 AbortError 拒绝。
   await assert.rejects(pending, (error) => error.name === 'AbortError')
-  // 回执：mock server 收到 notifications/cancelled 并落盘。
-  for (let i = 0; i < 80 && !existsSync(marker); i += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 25))
-  }
+  // 同一 stdio 按序处理：echo 回应证明前面的取消通知已完成落盘，
+  // 同时验证取消后连接仍可用。仅等待文件出现会撞上 create/write 竞态。
+  assert.equal(await client.callTool('echo', { text: '续' }), 'echo:续')
   const receipts = existsSync(marker)
     ? readFileSync(marker, 'utf8')
         .trim()
@@ -139,6 +138,4 @@ test('McpClient aborts hung tool call fast and sends notifications/cancelled', a
   const receipt = receipts.find((entry) => typeof entry.requestId === 'number')
   assert.ok(receipt, 'server should receive notifications/cancelled')
   assert.equal(receipt.reason, 'client aborted')
-  // 取消后连接仍可用（pending 表未被污染）。
-  assert.equal(await client.callTool('echo', { text: '续' }), 'echo:续')
 })

@@ -87,7 +87,7 @@ interface ChangedFilesProps {
   files: ChangedFile[]
   projectId: string
   onResourceClick?: (link: ResourceLink) => void
-  /** 有快照时打开本次编辑 Diff，否则降级 onResourceClick。 */
+  /** 点击变更文件打开 Diff；无快照时由查看器读取当前 Git diff。 */
   onOpenDiff?: (
     path: string,
     options: {
@@ -132,17 +132,20 @@ export function ChangedFiles(
               className="changed-file"
               key={file.path}
               onClick={() => {
-                // 有编辑前后快照时展示「本次编辑」双栏 Diff；否则降级打开文件。
-                if (
-                  props.onOpenDiff !== undefined &&
-                  (file.before !== undefined || file.after !== undefined)
-                ) {
-                  props.onOpenDiff(file.path, {
-                    source: 'chat',
-                    before: file.before,
-                    after: file.after,
-                    oldPath: file.oldPath,
-                  })
+                // 有快照时展示「本次编辑」双栏 Diff；无快照时读取当前 Git diff。
+                if (props.onOpenDiff !== undefined) {
+                  const diffOptions: {
+                    source: 'chat'
+                    before?: string
+                    after?: string
+                    oldPath?: string
+                  } = { source: 'chat' }
+                  if (file.before !== undefined)
+                    diffOptions.before = file.before
+                  if (file.after !== undefined) diffOptions.after = file.after
+                  if (file.oldPath !== undefined)
+                    diffOptions.oldPath = file.oldPath
+                  props.onOpenDiff(file.path, diffOptions)
                   return
                 }
                 props.onResourceClick?.(link)
