@@ -1,3 +1,4 @@
+import { Select } from '../../components/forms/Select'
 import type {
   Project,
   Session,
@@ -90,11 +91,9 @@ export function LandingView(props: LandingViewProps): React.JSX.Element {
           <div className="landing-context-selectors">
             <label className="composer-select" title="新会话项目">
               <span>项目</span>
-              <select
+              <Select
                 value={props.selectedProjectId ?? ''}
-                onChange={(event) =>
-                  props.onProjectChange(event.target.value || null)
-                }
+                onValueChange={(value) => props.onProjectChange(value || null)}
               >
                 <option value="">独立对话</option>
                 {props.projects.map((item) => (
@@ -102,8 +101,7 @@ export function LandingView(props: LandingViewProps): React.JSX.Element {
                     {item.name}
                   </option>
                 ))}
-              </select>
-              <span>⌄</span>
+              </Select>
             </label>
           </div>
           <Composer

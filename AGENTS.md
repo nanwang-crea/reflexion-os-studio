@@ -147,6 +147,7 @@ pnpm build:desktop         # 打包安装包（beforeBuildCommand 自动准备 s
 - **进程生命周期**：`SIGTERM` 在 Windows 上不存在，`kill()` 等价于 TerminateProcess；优雅关闭必须依赖协议 shutdown（如 `runtime.shutdown`）而非信号，信号只作兜底。
 - **权限与密钥落盘**：POSIX 的 0600 权限在 Windows（NTFS ACL）上语义不同——密钥存储代码要把平台差异收敛在 `secrets` 模块内，不散落调用点。
 - **编码与换行**：文件与协议统一 UTF-8 无 BOM；协议换行固定 `\n`（newline-delimited JSON），读取侧不要依赖 CRLF/LF 平台默认。
+- **UI 控件一致性**：Select 等系统原生外观随操作系统/WebView 变化的控件，必须使用 `components/forms/` 共享组件；下拉弹层采用成熟无障碍基础组件（当前 Radix Select），统一主题、字体、尺寸、焦点、禁用与选中样式，禁止业务页新增原生 `<select>` 或各自实现一套。Checkbox/Radio 保留原生 input 的语义、表单和键盘行为，通过统一 CSS 自定义外观。必须支持关联标签、键盘导航、Escape 关闭、关闭后焦点恢复、禁用项与滚动；弹层需处理视口边界和遮挡，不被父级 overflow 裁剪。验收覆盖三平台、窄窗口、长选项、高 DPI 与键盘操作；未做真机验证需明确说明。系统文件/目录选择器等 OS 集成功能继续使用系统对话框。
 - **系统依赖**：Linux 运行需要 `webkit2gtk`，Windows 依赖 WebView2（Win10/11 多数自带）；新增系统依赖时在文档记录三平台差异。
 - **脚本**：bash 脚本仅用于开发编排；产品逻辑不得写成 bash-only。跨平台工具逻辑进 Node/Rust。
 - **分发**：安装包（.app/.dmg、NSIS .exe、.deb/AppImage）在对应平台分别构建（CI 矩阵），Tauri 不支持交叉打包；`pnpm build` 即产出安装包（`bundle.active = true`），打包前需先拉取随包 Node 发行版（脚本自动完成，需联网）。签名/公证、自动更新、激活码许可仍属 Phase 6。

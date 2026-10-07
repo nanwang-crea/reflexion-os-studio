@@ -1,3 +1,4 @@
+import { Select } from '../../components/forms/Select'
 import { useEffect, useMemo, useState } from 'react'
 import type {
   ApiFormat,
@@ -247,10 +248,10 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
 
       <label className="field">
         API 格式
-        <select
+        <Select
           value={draft.apiFormat}
-          onChange={(event) =>
-            updateDraft({ apiFormat: event.target.value as ApiFormat })
+          onValueChange={(value) =>
+            updateDraft({ apiFormat: value as ApiFormat })
           }
         >
           <option value="openai-chat">
@@ -262,7 +263,7 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
           <option value="anthropic">
             Anthropic Messages API (/v1/messages)
           </option>
-        </select>
+        </Select>
       </label>
 
       <label className="field">

@@ -328,7 +328,7 @@
   color: var(--text-secondary);
 }
 
-.settings-view .field select {
+.settings-view .field .ui-select {
   appearance: none;
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
@@ -339,7 +339,7 @@
   cursor: pointer;
 }
 
-.settings-view .field select:focus-visible {
+.settings-view .field .ui-select:focus-visible {
   outline: 1px solid var(--border);
 }
 
@@ -950,24 +950,24 @@
   font-size: 17px;
 }
 
-.settings-view input,
+.settings-view input:not([type='checkbox']):not([type='radio']),
 .settings-view textarea,
-.settings-view .field select {
+.settings-view .field .ui-select {
   min-height: 36px;
   border-color: var(--border);
   border-radius: 8px;
   background: var(--bg-inset);
 }
 
-.settings-view input:hover,
+.settings-view input:not([type='checkbox']):not([type='radio']):hover,
 .settings-view textarea:hover,
-.settings-view .field select:hover {
+.settings-view .field .ui-select:hover {
   border-color: #5b5b5b;
 }
 
-.settings-view input:focus-visible,
+.settings-view input:not([type='checkbox']):not([type='radio']):focus-visible,
 .settings-view textarea:focus-visible,
-.settings-view .field select:focus-visible {
+.settings-view .field .ui-select:focus-visible {
   outline: none;
   border-color: #6a6a6a;
   box-shadow: 0 0 0 1px #6a6a6a;

@@ -2,6 +2,8 @@
 
 .workspace-panel {
   width: 340px;
+  /* 按主区实际宽度为聊天保留 360px，窄窗口至少保留一半。 */
+  max-width: min(900px, calc(100% - min(360px, 50%) - 7px));
   flex: none;
   min-width: 0;
   min-height: 0;

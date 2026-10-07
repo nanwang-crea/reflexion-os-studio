@@ -1,3 +1,4 @@
+import { Select } from './forms/Select'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
   AgentTemplate,
@@ -242,12 +243,11 @@ export function Composer(props: ComposerProps): React.JSX.Element {
             }
           >
             <ShieldIcon />
-            <select
+            <Select
+              aria-label="权限档位"
               value={props.permissionValue}
-              onChange={(event) =>
-                props.onPermissionChange?.(
-                  event.target.value as PermissionPreset,
-                )
+              onValueChange={(value) =>
+                props.onPermissionChange?.(value as PermissionPreset)
               }
             >
               <option value="workspace-read">
@@ -259,7 +259,7 @@ export function Composer(props: ComposerProps): React.JSX.Element {
               <option value="workspace-full">
                 {PERMISSION_PRESET_LABELS['workspace-full']}
               </option>
-            </select>
+            </Select>
             <ChevronIcon />
           </label>
         )}
@@ -288,9 +288,10 @@ export function Composer(props: ComposerProps): React.JSX.Element {
         <span className="bar-spacer" />
         {showModelSelect && (
           <label className="composer-select model" title="对话使用的模型">
-            <select
+            <Select
+              aria-label="对话模型"
               value={props.selectedModelKey ?? ''}
-              onChange={(event) => props.onModelChange?.(event.target.value)}
+              onValueChange={(value) => props.onModelChange?.(value)}
             >
               {groups.map((group) => (
                 <optgroup key={group.group} label={group.group}>
@@ -301,7 +302,7 @@ export function Composer(props: ComposerProps): React.JSX.Element {
                   ))}
                 </optgroup>
               ))}
-            </select>
+            </Select>
             <ChevronIcon />
           </label>
         )}

@@ -18,7 +18,7 @@
   align-items: center;
   margin-bottom: 16px;
 }
-.instructions-toolbar select {
+.instructions-toolbar .ui-select {
   margin-left: 4px;
   appearance: none;
   background: var(--bg-elevated);
@@ -29,7 +29,7 @@
   font: inherit;
   cursor: pointer;
 }
-.instructions-toolbar select:focus-visible {
+.instructions-toolbar .ui-select:focus-visible {
   outline: 1px solid var(--border);
 }
 .instructions-toolbar .primary {

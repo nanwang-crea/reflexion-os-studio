@@ -1,3 +1,4 @@
+import { Select } from '../../components/forms/Select'
 import { useCallback, useEffect, useState } from 'react'
 import { open } from '@tauri-apps/plugin-dialog'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
@@ -196,23 +197,23 @@ export function PluginInstaller(
       <div className="plugin-scope-picker">
         <label>
           安装范围
-          <select
+          <Select
             value={scope}
-            onChange={(event) => {
-              setScope(event.target.value as 'global' | 'project')
+            onValueChange={(value) => {
+              setScope(value as 'global' | 'project')
             }}
           >
             <option value="global">全局 · 所有会话可用</option>
             <option value="project">项目 · 仅指定项目可用</option>
-          </select>
+          </Select>
         </label>
         {scope === 'project' && (
           <label>
             项目
-            <select
+            <Select
               value={projectId}
-              onChange={(event) => {
-                setProjectId(event.target.value)
+              onValueChange={(value) => {
+                setProjectId(value)
               }}
             >
               {projects.map((project) => (
@@ -220,7 +221,7 @@ export function PluginInstaller(
                   {project.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
       </div>

@@ -31,8 +31,8 @@ export function AppShell(props: AppShellProps): React.JSX.Element {
     <div className="app-shell">
       <Sidebar {...props.sidebar} width={props.sidebarWidth} />
       <ResizeHandle
-        onResize={(delta) =>
-          props.setSidebarWidth((width) =>
+        onResize={(delta, width) =>
+          props.setSidebarWidth(() =>
             Math.max(200, Math.min(560, width + delta)),
           )
         }

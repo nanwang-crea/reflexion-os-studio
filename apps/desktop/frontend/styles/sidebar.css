@@ -2,6 +2,8 @@
 
 .sidebar {
   width: 272px;
+  /* 窗口缩小或 DPI 改变时，保留主区空间；内联宽度只代表用户偏好。 */
+  max-width: min(560px, 30%);
   flex-shrink: 0;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border-subtle);

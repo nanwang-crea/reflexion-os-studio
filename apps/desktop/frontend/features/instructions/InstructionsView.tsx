@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Select } from '../../components/forms/Select'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Project } from '@reflexion-os-studio/runtime-client'
 import type { ConfirmDialogState } from '../../components/ConfirmDialog'
 import { listProjects } from '../../api/projects'
@@ -179,7 +180,6 @@ export function InstructionsView(
     agents: false,
     memory: false,
   })
-  const selectRef = useRef<HTMLSelectElement | null>(null)
   useEffect(() => {
     let alive = true
     void listProjects()
@@ -270,20 +270,13 @@ export function InstructionsView(
         >
           项目
         </button>
-        <select
-          ref={selectRef}
+        <Select
           aria-label="选择项目"
           value={projectId ?? ''}
-          onChange={(event) => {
-            const next = event.target.value || null
+          onValueChange={(value) => {
+            const next = value || null
             if (next === projectId) return
-            // 取消时 React 不会把同值写回 DOM，手动回弹选择框。
-            guarded(
-              () => setProjectId(next),
-              () => {
-                if (selectRef.current) selectRef.current.value = projectId ?? ''
-              },
-            )
+            guarded(() => setProjectId(next))
           }}
           disabled={scope !== 'project'}
         >
@@ -293,7 +286,7 @@ export function InstructionsView(
               {project.name}
             </option>
           ))}
-        </select>
+        </Select>
         <button
           type="button"
           className="ghost"

@@ -65,15 +65,36 @@
 
 .plugin-scope-picker {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   margin-top: 12px;
 }
 
 .plugin-scope-picker label {
   display: grid;
+  min-width: 0;
+  max-width: 100%;
   gap: 4px;
   color: var(--text-secondary);
   font-size: 12px;
+}
+
+/* 原生菜单保留系统交互，折叠控件统一字体、尺寸和深色主题。 */
+.plugin-scope-picker .ui-select {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-height: 34px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 6px 10px;
+}
+
+.plugin-scope-picker .ui-select:focus-visible {
+  outline: 2px solid var(--accent-border);
+  outline-offset: 2px;
 }
 
 .plugin-installer-head {

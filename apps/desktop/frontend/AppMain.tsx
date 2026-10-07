@@ -126,10 +126,9 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
           }}
         >
           <ResizeHandle
-            onResize={(delta) =>
-              workspace.setWidth((width) =>
-                Math.max(280, Math.min(900, width - delta)),
-              )
+            resizeSide="next"
+            onResize={(delta, width) =>
+              workspace.setWidth(Math.max(280, Math.min(900, width - delta)))
             }
           />
           <FileViewerPanel {...workspace.panel} />

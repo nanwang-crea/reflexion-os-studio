@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
+    "@radix-ui/react-select": "^2.3.8",
     "@reflexion-os-studio/contracts": "workspace:*",
     "@reflexion-os-studio/runtime-client": "workspace:^",
     "@tauri-apps/api": "^2.8.0",

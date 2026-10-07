@@ -1,3 +1,4 @@
+import { Select } from './forms/Select'
 import { useEffect, useRef, useState } from 'react'
 import type { AgentTemplate } from '@reflexion-os-studio/runtime-client'
 import { SparkIcon } from '../ui/icons'
@@ -64,11 +65,9 @@ export function ComposerRunConfig(
               <small>设置本次任务优先使用的子 Agent 模板。</small>
               <label className="run-config-field">
                 <span>委派策略</span>
-                <select
+                <Select
                   value={props.agentTemplateId}
-                  onChange={(event) =>
-                    props.onAgentTemplateChange(event.target.value)
-                  }
+                  onValueChange={(value) => props.onAgentTemplateChange(value)}
                 >
                   <option value="">自动选择</option>
                   {enabledTemplates.map((template) => (
@@ -76,7 +75,7 @@ export function ComposerRunConfig(
                       {template.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
             </section>
           )}
