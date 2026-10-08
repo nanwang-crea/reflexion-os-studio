@@ -1,3 +1,5 @@
+import { useTheme } from '../../../lib/theme/useTheme'
+import { getResolvedTheme } from '../../../lib/theme'
 /**
  * 无头 Monaco 单文件编辑内核：加载（行数上限内）、编辑、脏跟踪、保存。
  * 不含头部工具栏，由宿主提供界面——MonacoEditor（完整视图）与
@@ -25,7 +27,7 @@ import {
 } from '../../../api/workspace'
 import { transport } from '../../../lib/transport'
 import { getLanguageForFile } from './language'
-import { DEFAULT_EDITOR_OPTIONS, THEME_NAME, THEME_DATA } from './monaco'
+import { DEFAULT_EDITOR_OPTIONS, registerThemes } from './monaco'
 import { EDITOR_CONFIG } from './types'
 import { normalizeLineEndings, preserveLineEndings } from './file-format'
 import { copyTextToClipboard } from '../../../lib/clipboard'
@@ -89,6 +91,7 @@ function sameState(a: MonacoSurfaceState, b: MonacoSurfaceState): boolean {
 }
 
 export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
+  const { resolved } = useTheme()
   const {
     projectId,
     path,
@@ -296,8 +299,8 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
 
   const handleEditorMount: OnMount = useCallback((editor, monaco) => {
     editorRef.current = editor
-    monaco.editor.defineTheme(THEME_NAME, THEME_DATA)
-    monaco.editor.setTheme(THEME_NAME)
+    registerThemes(monaco)
+    monaco.editor.setTheme(`reflexion-${getResolvedTheme()}`)
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
       void handleSaveRef.current()
     })
@@ -341,7 +344,8 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
         <Editor
           language={language}
           value={content ?? ''}
-          theme={THEME_NAME}
+          theme={`reflexion-${resolved}`}
+          beforeMount={registerThemes}
           options={{
             ...DEFAULT_EDITOR_OPTIONS,
             readOnly: !editMode,

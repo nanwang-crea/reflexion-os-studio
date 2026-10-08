@@ -1,6 +1,7 @@
 import './features/workspace/editor/monaco-worker'
 import { createRoot } from 'react-dom/client'
 import App from './App'
+import { initializeTheme } from './lib/theme'
 import './styles/style.css'
 import './styles/sidebar.css'
 import './features/chat/chat.css'
@@ -12,6 +13,9 @@ import './features/workspace/workspace.css'
 import '@xterm/xterm/css/xterm.css'
 import './features/terminal/terminal.css'
 import './styles/product-surfaces.css'
+import './styles/themes.css'
+
+initializeTheme()
 
 const rootElement = document.getElementById('root')
 if (!rootElement) throw new Error('#root not found')

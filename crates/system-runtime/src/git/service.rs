@@ -1,16 +1,12 @@
-//! Git Service：workspace 内只读 Git 状态与 diff（Phase 1B Git Changes 第一阶段）。
-//! 仅查看与定位；编辑/暂存/提交等写操作后续阶段经权限策略接入。
-//! git 为外部二进制：未安装返回 git_unavailable，非仓库返回 repo=false，
-//! 其余失败 git_failed。
-//! 实现拆分：状态解析在 status.rs、diff 内容读取在 diff.rs、进程执行在 exec.rs、
-//! 写子命令见 writes.rs。
+//! Git 服务：状态、历史与写操作使用 Git CLI，分支与对象读取使用 gix。
+//! 未安装 CLI 返回 git_unavailable，非仓库返回 repo=false，其余失败 git_failed。
+//! 原生读取在 native/，状态在 status.rs，diff 在 diff.rs，写操作在 writes.rs。
 
 use std::path::Path;
 
 use serde::Serialize;
 
 use super::diff::{commit_diff as commit_diff_impl, diff as diff_impl, DiffOutcome};
-use super::exec::{first_line, run_git};
 use super::status::{status as status_impl, StatusOutcome};
 
 /// git 子系统统一错误分类：git_unavailable / git_failed / path_outside_workspace。
@@ -63,99 +59,7 @@ pub fn commit_diff(
 /// 本地分支列表（refs/heads/*）与当前分支；非仓库返回 repo=false，HEAD detached
 /// 视为"无当前分支"（dialog 下可能发生在切换 commit 时）。
 pub fn branches(workspace_root: &Path) -> Result<BranchesOutcome, GitError> {
-    let current_output = run_git(workspace_root, &["--no-pager", "branch", "--show-current"])?;
-    if current_output.timed_out {
-        return Err(GitError::new(
-            "git_failed",
-            "git branch timed out".to_string(),
-        ));
-    }
-    // 非仓库：branch 也报 fatal(exit 128,小写"not a git repository")。
-    if current_output.exit_code != Some(0) {
-        if super::status::is_not_a_repo(&current_output) {
-            return Ok(BranchesOutcome {
-                repo: false,
-                current: None,
-                branches: Vec::new(),
-                remote_branches: Vec::new(),
-            });
-        }
-        return Err(GitError::new(
-            "git_failed",
-            first_line(&current_output.stderr),
-        ));
-    }
-    let current = trim_to_none(&current_output.stdout);
-    let list_output = run_git(
-        workspace_root,
-        &[
-            "--no-pager",
-            "for-each-ref",
-            "--format=%(refname:short)",
-            "refs/heads",
-        ],
-    )?;
-    if list_output.timed_out {
-        return Err(GitError::new(
-            "git_failed",
-            "git branch list timed out".to_string(),
-        ));
-    }
-    if list_output.exit_code != Some(0) {
-        return Err(GitError::new("git_failed", first_line(&list_output.stderr)));
-    }
-    let branches = list_output
-        .stdout
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(str::to_string)
-        .collect();
-    // 远程跟踪分支：origin/HEAD 是"远端默认分支"指针（非可检出分支），剔除。
-    let remote_output = run_git(
-        workspace_root,
-        &[
-            "--no-pager",
-            "for-each-ref",
-            "--format=%(refname:short)",
-            "refs/remotes",
-        ],
-    )?;
-    if remote_output.timed_out {
-        return Err(GitError::new(
-            "git_failed",
-            "git remote branch list timed out".to_string(),
-        ));
-    }
-    if remote_output.exit_code != Some(0) {
-        return Err(GitError::new(
-            "git_failed",
-            first_line(&remote_output.stderr),
-        ));
-    }
-    let remote_branches = remote_output
-        .stdout
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty() && !line.ends_with("/HEAD"))
-        .map(str::to_string)
-        .collect();
-    Ok(BranchesOutcome {
-        repo: true,
-        current,
-        branches,
-        remote_branches,
-    })
-}
-
-/// inner trim 后非空则返回，空串 → None（用于 --show-current 的输出）。
-fn trim_to_none(text: &str) -> Option<String> {
-    let trimmed = text.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
+    super::native::branches(workspace_root)
 }
 
 #[cfg(test)]

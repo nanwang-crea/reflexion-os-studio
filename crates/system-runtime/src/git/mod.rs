@@ -8,6 +8,7 @@
 mod diff;
 mod exec;
 mod log;
+mod native;
 mod remotes;
 pub mod service;
 mod status;

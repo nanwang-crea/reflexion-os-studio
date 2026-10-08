@@ -1,15 +1,18 @@
+import { useTheme } from '../../../lib/theme/useTheme'
+import { getResolvedTheme } from '../../../lib/theme'
 import { useCallback, useEffect, useState } from 'react'
 import { DiffEditor } from '@monaco-editor/react'
 import type { DiffOnMount } from '@monaco-editor/react'
 import { gitDiff } from '../../../api/workspace'
 import { getLanguageForFile, getFileName } from './language'
-import { THEME_NAME, THEME_DATA } from './monaco'
+import { registerThemes } from './monaco'
 import type { MonacoDiffEditorProps } from './types'
 
 /** 只读 Monaco DiffEditor：展示 Git diff 或 before/after 内容对比。 */
 export function MonacoDiffEditor(
   props: MonacoDiffEditorProps,
 ): React.JSX.Element {
+  const { resolved } = useTheme()
   const {
     projectId,
     path,
@@ -75,8 +78,8 @@ export function MonacoDiffEditor(
   }, [loadDiff])
 
   const handleMount: DiffOnMount = useCallback((_editor, monaco) => {
-    monaco.editor.defineTheme(THEME_NAME, THEME_DATA)
-    monaco.editor.setTheme(THEME_NAME)
+    registerThemes(monaco)
+    monaco.editor.setTheme(`reflexion-${getResolvedTheme()}`)
   }, [])
 
   const headerTitle =
@@ -120,7 +123,8 @@ export function MonacoDiffEditor(
             original={original}
             modified={modified}
             language={language}
-            theme={THEME_NAME}
+            theme={`reflexion-${resolved}`}
+            beforeMount={registerThemes}
             options={{
               readOnly: true,
               renderSideBySide: true,

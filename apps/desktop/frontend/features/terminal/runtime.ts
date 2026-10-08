@@ -1,3 +1,5 @@
+import { subscribeTheme } from '../../lib/theme'
+import { terminalTheme } from './theme'
 import { Terminal as XTerminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import {
@@ -35,13 +37,6 @@ const HOST_DEFAULT_HEIGHT = 300
 /** attach not_found 竞态：无 state 事件到达时判定标签失效的等待窗口。 */
 const ATTACH_EXPIRY_MS = 2000
 
-const XTERM_THEME = {
-  background: '#1e1e1e', // 与 --bg-editor 同值
-  foreground: '#ececec',
-  cursor: '#d0d0d0',
-  selectionBackground: '#3a3a3a',
-}
-
 export interface TerminalRuntimeOptions {
   /** 状态变化上抛（manager 快照失效 + React 通知）。 */
   notify: () => void
@@ -64,6 +59,11 @@ export class TerminalRuntime {
   init(): void {
     this.ensureHost()
     transport.onEvent(this.handleEvent)
+    subscribeTheme(() => {
+      for (const inst of this.instances.values()) {
+        if (inst.term) inst.term.options.theme = terminalTheme()
+      }
+    })
   }
 
   get(terminalId: string): TerminalInstance | undefined {
@@ -172,7 +172,7 @@ export class TerminalRuntime {
       fontSize: 12,
       fontFamily:
         "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
-      theme: XTERM_THEME,
+      theme: terminalTheme(),
     })
     const fit = new FitAddon()
     term.loadAddon(fit)

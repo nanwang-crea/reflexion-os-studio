@@ -1,5 +1,10 @@
+import { GitInstallNotice } from './GitInstallNotice'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { errorInfoOf, type GitErrorInfo } from '../../../lib/git-errors'
+import {
+  errorInfoOf,
+  isGitUnavailable,
+  type GitErrorInfo,
+} from '../../../lib/git-errors'
 import {
   gitBranchCreate,
   gitBranchSwitch,
@@ -199,17 +204,20 @@ export function GitHistory(props: GitHistoryProps): React.JSX.Element {
     })
   }
 
-  const errorBanner = (info: GitErrorInfo): React.JSX.Element => (
-    <div className="git-hint git-hint-error">
-      <strong>{info.message}</strong>
-      {info.detail !== null && (
-        <div className="git-error-detail">{info.detail}</div>
-      )}
-      <button className="ghost" onClick={() => void refresh()}>
-        重试
-      </button>
-    </div>
-  )
+  const errorBanner = (info: GitErrorInfo): React.JSX.Element =>
+    isGitUnavailable(info.detail ?? info.message) ? (
+      <GitInstallNotice onRetry={() => void refresh()} />
+    ) : (
+      <div className="git-hint git-hint-error">
+        <strong>{info.message}</strong>
+        {info.detail !== null && (
+          <div className="git-error-detail">{info.detail}</div>
+        )}
+        <button className="ghost" onClick={() => void refresh()}>
+          重试
+        </button>
+      </div>
+    )
 
   if (!props.systemReady) {
     return (

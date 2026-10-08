@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 base64 = "0.22"
 globset = "0.4"
+gix = { version = "0.87.1", default-features = false, features = ["revision", "index", "sha1"] }
 ignore = "0.4"
 notify = "8.2"
 portable-pty = "0.8"

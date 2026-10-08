@@ -1,4 +1,4 @@
-//! 单文件 diff 两侧内容读取：git 对象（`git show`）+ 工作树文件。
+//! 单文件 diff 两侧内容读取：git 对象（gix）+ 工作树文件。
 //! checkout 侧 EOL 归一化（autocrlf / eol=crlf）在此处理，避免 Windows
 //! 场景把未变更文件逐行误报为已修改。
 
@@ -9,7 +9,7 @@ use serde::Serialize;
 
 use crate::filesystem::paths::resolve_in_workspace;
 
-use super::exec::{first_line, run_git};
+use super::exec::run_git;
 use super::log::commit_files;
 use super::service::GitError;
 
@@ -31,7 +31,7 @@ impl Default for BlobContent {
     }
 }
 
-/// `git show` 结果分类：有内容 / 路径不在该树（视为空基线）/ 非仓库。
+/// 原生对象读取结果分类：有内容 / 路径不在该树（视为空基线）/ 非仓库。
 enum BlobLookup {
     Content(BlobContent),
     Absent,
@@ -279,34 +279,9 @@ fn limit_bytes(bytes: Vec<u8>, pipe_truncated: bool) -> BlobContent {
 /// - 报 not a git repository：非仓库；
 /// - 其余为 git_failed。
 fn read_git_blob(workspace_root: &Path, query: &str) -> Result<BlobLookup, GitError> {
-    let output = run_git(workspace_root, &["--no-pager", "show", query])?;
-    if output.timed_out {
-        return Err(GitError::new(
-            "git_failed",
-            "git show timed out".to_string(),
-        ));
-    }
-    match output.exit_code {
-        Some(0) => Ok(BlobLookup::Content(limit_bytes(
-            output.stdout.into_bytes(),
-            output.truncated,
-        ))),
-        Some(128)
-            if output.stderr.contains("does not exist")
-                || output.stderr.contains("not in the working tree")
-                || output.stderr.contains("exists on disk, but not in")
-                || output.stderr.contains("unknown revision or path not in")
-                || output.stderr.contains("invalid object name") =>
-        {
-            Ok(BlobLookup::Absent)
-        }
-        _ if output
-            .stderr
-            .to_lowercase()
-            .contains("not a git repository") =>
-        {
-            Ok(BlobLookup::NotARepo)
-        }
-        _ => Err(GitError::new("git_failed", first_line(&output.stderr))),
+    match super::native::blob(workspace_root, query)? {
+        None => Ok(BlobLookup::NotARepo),
+        Some(None) => Ok(BlobLookup::Absent),
+        Some(Some(bytes)) => Ok(BlobLookup::Content(limit_bytes(bytes, false))),
     }
 }

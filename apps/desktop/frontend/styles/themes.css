@@ -1,0 +1,85 @@
+/* Dark remains the default for existing installations. */
+:root {
+  --on-accent: #171717;
+  --selection-bg: #345082;
+  --selection-text: #fff;
+}
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #ffffff;
+  --bg-sidebar: #f7f7f8;
+  --bg-elevated: #ffffff;
+  --bg-hover: #eeeeef;
+  --bg-active: #e3e3e6;
+  --bg-inset: #f9f9fa;
+  --bg-editor: #ffffff;
+  --surface-overlay: rgba(255, 255, 255, 0.94);
+  --surface-translucent: rgba(255, 255, 255, 0.82);
+  --scrim: rgba(0, 0, 0, 0.3);
+  --border: #d4d4d8;
+  --border-subtle: #e7e7eb;
+  --text: #202123;
+  --text-secondary: #55565c;
+  --text-muted: #686a73;
+  --accent: #202123;
+  --accent-hover: #3a3b3f;
+  --on-accent: #ffffff;
+  --accent-soft: rgba(37, 99, 235, 0.07);
+  --accent-border: rgba(37, 99, 235, 0.5);
+  --focus-ring: #2563eb;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.07);
+  --danger: #c42b32;
+  --warning-bg: rgba(180, 83, 9, 0.08);
+  --warning-text: #96510b;
+  --info: #2563b8;
+  --ok: #167545;
+  --selection-bg: #dbeafe;
+  --selection-text: #202123;
+}
+::selection {
+  background: var(--selection-bg);
+  color: var(--selection-text);
+}
+.composer-send,
+.composer-stop,
+.edit-resend-actions .primary {
+  color: var(--on-accent);
+}
+:root[data-theme='light'] input[type='checkbox']:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m3 8 3 3 7-7' fill='none' stroke='%23fff' stroke-width='2'/%3E%3C/svg%3E");
+}
+:root[data-theme='light'] .settings-view {
+  --settings-surface: rgba(0, 0, 0, 0.025);
+  --settings-surface-strong: rgba(0, 0, 0, 0.045);
+  --settings-border: var(--border-subtle);
+  --settings-accent: #3b52ad;
+}
+:root[data-theme='light'] .settings-primary:hover:not(:disabled),
+:root[data-theme='light'] .form-actions .primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+:root[data-theme='light'] .skill-card-actions .primary,
+:root[data-theme='light'] .instructions-toolbar .primary,
+:root[data-theme='light'] .instruction-actions .primary {
+  color: #fff;
+}
+:root[data-theme='light']
+  .settings-view
+  input:not([type='checkbox']):not([type='radio']):hover,
+:root[data-theme='light'] .settings-view textarea:hover,
+:root[data-theme='light'] .settings-view .field .ui-select:hover {
+  border-color: var(--text-muted);
+}
+:root[data-theme='light']
+  .settings-view
+  input:not([type='checkbox']):not([type='radio']):focus-visible,
+:root[data-theme='light'] .settings-view textarea:focus-visible,
+:root[data-theme='light'] .settings-view .field .ui-select:focus-visible {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 1px var(--focus-ring);
+}
+:root[data-theme='light'] .approval-card {
+  --elevated-text: #a54912;
+}

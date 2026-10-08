@@ -1,3 +1,4 @@
+import { GitInstallNotice } from './GitInstallNotice'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GitChangeEntry } from '@reflexion-os-studio/runtime-client'
 import {
@@ -15,7 +16,7 @@ import {
   gitUnstage,
   type GitRemote,
 } from '../../../api/workspace'
-import { classifyGitError } from '../../../lib/git-errors'
+import { classifyGitError, isGitUnavailable } from '../../../lib/git-errors'
 import { BranchPicker } from './BranchPicker'
 import { GitChangeList } from './GitChangeList'
 import { GitCommitBox } from './GitCommitBox'
@@ -308,6 +309,8 @@ export function GitChanges(props: GitChangesProps): React.JSX.Element {
 
   // 已知 git 报错给中文引导主行 + 原文小字详情；未识别时原样展示。
   const errorBanner = (text: string): React.JSX.Element => {
+    if (isGitUnavailable(text))
+      return <GitInstallNotice onRetry={() => void refresh()} />
     const friendly = classifyGitError(text)
     return (
       <div className="git-hint git-hint-error">

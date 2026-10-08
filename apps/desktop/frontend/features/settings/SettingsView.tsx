@@ -6,14 +6,16 @@ import { AgentRuntimePanel } from './AgentRuntimePanel'
 import { McpPanel } from './McpPanel'
 import { ProviderEditor } from './ProviderEditor'
 import { ProviderList } from './ProviderList'
+import { AppearancePanel } from './appearance/AppearancePanel'
 
-type SettingsSection = 'models' | 'runtime' | 'mcp'
+type SettingsSection = 'models' | 'runtime' | 'mcp' | 'appearance'
 
 const SECTIONS: {
   id: SettingsSection
   label: string
   icon: React.ReactNode
 }[] = [
+  { id: 'appearance', label: '外观', icon: <GearIcon size={15} /> },
   {
     id: 'models',
     label: '模型供应商',
@@ -75,7 +77,7 @@ export function SettingsView(props: SettingsViewProps): React.JSX.Element {
         </button>
         <div>
           <h2>设置</h2>
-          <p>管理模型、Agent 行为与工具连接</p>
+          <p>管理外观、模型、Agent 行为与工具连接</p>
         </div>
       </header>
 
@@ -98,6 +100,7 @@ export function SettingsView(props: SettingsViewProps): React.JSX.Element {
         </nav>
 
         <div className="settings-content">
+          {section === 'appearance' && <AppearancePanel />}
           {section === 'models' && (
             <>
               <div className="settings-panel-head settings-page-heading">

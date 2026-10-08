@@ -40,3 +40,10 @@ export function errorInfoOf(error: unknown): GitErrorInfo {
     ? { message: raw, detail: null }
     : { message: friendly, detail: raw }
 }
+
+/** Only missing executables trigger installation guidance, not repository/auth errors. */
+export function isGitUnavailable(message: string): boolean {
+  return /git_unavailable|git not found|git is not installed|git executable.*not found/i.test(
+    message,
+  )
+}

@@ -32,4 +32,14 @@ Phase 1B 支持语法高亮、行号、折叠、复制、跳转行，以及 Mark
 
 ## Git
 
-Git Changes 作为按需 Context Surface 展示文件状态和 diff。第一阶段只支持查看和定位；编辑、暂存、提交等操作必须经过明确命令和权限策略。
+Git Changes 提供状态、单文件 diff、暂存、提交和同步；历史面提供提交浏览、分支与远程管理。所有操作经 Rust workspace 边界。
+
+采用混合实现：`gix` 读取本地/远程引用、HEAD/提交树和索引中的 blob，为分支列表及 diff 提供内容；原生读取禁用用户、系统及环境 Git 配置读取。状态、历史、重命名检测、换行属性查询、暂存/提交/分支写入和网络操作仍调用外部 Git，保持 Git 配置、认证与工具链兼容。当前不额外创建内部快照或基线。
+
+安装包尚未内置 Git。未找到 Git 时，变更与历史面板显示安装指引、官方入口及重试按钮：
+
+- macOS：运行 `xcode-select --install`，或从 [Git 官方下载页](https://git-scm.com/downloads) 安装。
+- Windows：安装 [Git for Windows](https://gitforwindows.org/)，选择将 Git 加入 PATH。
+- Linux：使用发行版包管理器，如 `sudo apt install git` 或 `sudo dnf install git`。
+
+安装后重启应用并重试。可通过 `REFLEXION_GIT_PATH` 指定 Git 可执行文件；路径问题与未安装应分别排查。

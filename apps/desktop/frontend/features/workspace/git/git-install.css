@@ -1,0 +1,29 @@
+.git-install-notice {
+  margin: 12px;
+  padding: 16px;
+  border: 1px solid var(--accent-border);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  line-height: 1.6;
+  font-size: 13px;
+}
+
+.git-install-notice strong {
+  font-size: 14px;
+}
+
+.git-install-notice p,
+.git-install-notice ul {
+  color: var(--text-secondary);
+  margin: 10px 0;
+}
+
+.git-install-notice ul {
+  padding-left: 18px;
+}
+
+.git-install-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

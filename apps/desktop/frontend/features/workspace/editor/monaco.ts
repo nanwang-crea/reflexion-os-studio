@@ -59,3 +59,23 @@ export const DEFAULT_EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOptions
     automaticLayout: true,
     tabSize: 2,
   }
+
+/** Both themes are registered before the editor is created. */
+export function registerThemes(monaco: typeof import('monaco-editor')): void {
+  monaco.editor.defineTheme(THEME_NAME, THEME_DATA)
+  monaco.editor.defineTheme('reflexion-light', {
+    base: 'vs',
+    inherit: true,
+    rules: [],
+    colors: {
+      'editor.background': '#ffffff',
+      'editor.foreground': '#202123',
+      'editor.lineHighlightBackground': '#f7f7f8',
+      'editor.selectionBackground': '#dbeafe',
+      'editorCursor.foreground': '#202123',
+      'editorLineNumber.foreground': '#686a73',
+      'diffEditor.insertedTextBackground': '#16803c20',
+      'diffEditor.removedTextBackground': '#c42b3220',
+    },
+  })
+}
