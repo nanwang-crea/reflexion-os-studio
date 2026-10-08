@@ -6,7 +6,6 @@ import {
   gitBranches,
   gitBranchSwitch,
   gitCommit,
-  gitFetch,
   gitPull,
   gitPush,
   gitRemoteAdd,
@@ -97,30 +96,41 @@ export function GitChanges(props: GitChangesProps): React.JSX.Element {
     setBehind(snapshot.behind)
   }, [props.statusSnapshot, busy])
 
-  const loadStatus = useCallback(async (): Promise<void> => {
-    const [status, branchList, remoteList] = await Promise.all([
-      loadGitStatus(),
-      gitBranches(props.projectId).catch(() => ({
-        repo: false,
-        current: null,
-        branches: [] as string[],
-        remoteBranches: [] as string[],
-      })),
-      gitRemotes(props.projectId).catch(() => ({
-        repo: false,
-        remotes: [] as GitRemote[],
-      })),
-    ])
-    setRepo(status.repo)
-    setEntries(status.entries)
-    setTruncated(status.truncated)
-    setBranch(status.branch)
-    setAhead(status.ahead)
-    setBehind(status.behind)
-    setBranches(branchList.branches)
-    setRemoteBranches(branchList.remoteBranches)
-    setRemotes(remoteList.remotes)
-  }, [loadGitStatus, props.projectId])
+  const loadStatus = useCallback(
+    async (includeRefs = true): Promise<void> => {
+      const [status, branchList, remoteList] = await Promise.all([
+        loadGitStatus(),
+        (includeRefs
+          ? gitBranches(props.projectId)
+          : Promise.resolve(null)
+        ).catch(() => ({
+          repo: false,
+          current: null,
+          branches: [] as string[],
+          remoteBranches: [] as string[],
+        })),
+        (includeRefs
+          ? gitRemotes(props.projectId)
+          : Promise.resolve(null)
+        ).catch(() => ({
+          repo: false,
+          remotes: [] as GitRemote[],
+        })),
+      ])
+      setRepo(status.repo)
+      setEntries(status.entries)
+      setTruncated(status.truncated)
+      setBranch(status.branch)
+      setAhead(status.ahead)
+      setBehind(status.behind)
+      if (branchList !== null) {
+        setBranches(branchList.branches)
+        setRemoteBranches(branchList.remoteBranches)
+      }
+      if (remoteList !== null) setRemotes(remoteList.remotes)
+    },
+    [loadGitStatus, props.projectId],
+  )
 
   // 远端增删只动本地 config/refs：branches（remote remove 会删 refs/remotes/*）+
   // remotes 轻量重载即可；工作树与 status 不变，不走全量 refresh、不联动徽章。
@@ -137,28 +147,27 @@ export function GitChanges(props: GitChangesProps): React.JSX.Element {
   }, [props.projectId])
 
   const refresh = useCallback(
-    async (withFetch = false): Promise<void> => {
+    async (
+      options: { preserveError?: boolean; includeRefs?: boolean } = {},
+    ): Promise<void> => {
       if (!props.systemReady) return
       setLoading(true)
-      setError(null)
+      if (!options.preserveError) setError(null)
       try {
-        await loadStatus()
+        await loadStatus(options.includeRefs ?? true)
       } catch (error_) {
-        setError(error_ instanceof Error ? error_.message : String(error_))
+        const message =
+          error_ instanceof Error ? error_.message : String(error_)
+        setError((previous) =>
+          options.preserveError ? (previous ?? message) : message,
+        )
       } finally {
         setLoading(false)
         // 每次完成刷新（含失败）都通知宿主联动文件树徽章；身份经 latest-ref 读取。
         onAfterMutationRef.current?.()
       }
-      // 静默 fetch 只由用户动作触发；fetch 后的二次刷新直接走 loadStatus，
-      // 不再触发 fetch，杜绝循环。失败静默：ahead/behind 是尽力而为的指示器。
-      if (withFetch) {
-        void gitFetch(props.projectId)
-          .then(() => loadStatus())
-          .catch(() => {})
-      }
     },
-    [props.projectId, props.systemReady, loadStatus],
+    [props.systemReady, loadStatus],
   )
 
   useEffect(() => {
@@ -172,7 +181,7 @@ export function GitChanges(props: GitChangesProps): React.JSX.Element {
     setRemotes([])
     setLoading(true)
     setError(null)
-    void refresh(true)
+    void refresh()
   }, [props.projectId, props.systemReady, refresh])
 
   const { guardDirtyBuffersThen, reloadAllTextTabs } = props
@@ -186,7 +195,6 @@ export function GitChanges(props: GitChangesProps): React.JSX.Element {
       setBusy(kind)
       setError(null)
       let attempted = false
-      let succeeded = false
       try {
         if (options.guard) {
           const proceed = await guardDirtyBuffersThen()
@@ -194,7 +202,6 @@ export function GitChanges(props: GitChangesProps): React.JSX.Element {
         }
         attempted = true
         await action()
-        succeeded = true
         if (options.reloadTabs) reloadAllTextTabs?.()
         return true
       } catch (error_) {
@@ -202,8 +209,12 @@ export function GitChanges(props: GitChangesProps): React.JSX.Element {
         return false
       } finally {
         // 复合动作（如提交并推送）部分失败时状态已变：成败都要重载
-        // status+branches，面板不留陈旧视图；静默 fetch 只在成功时触发。
-        if (attempted) await refresh(succeeded)
+        // 状态，保留操作错误；暂存不触发网络或引用刷新。
+        if (attempted)
+          await refresh({
+            preserveError: true,
+            includeRefs: kind !== 'stage' && kind !== 'unstage',
+          })
         setBusy(null)
       }
     },
@@ -298,7 +309,7 @@ export function GitChanges(props: GitChangesProps): React.JSX.Element {
     props.onOpenFile(entry.path)
   }
 
-  // runAction 成败都会刷新（成功含静默 fetch）；纯刷新动作以空 action 表达。
+  // runAction 成败都会刷新本地状态；纯刷新动作以空 action 表达。
   const busyRefresh = runActionWith('refresh', async () => {})
 
   const retryButton = (

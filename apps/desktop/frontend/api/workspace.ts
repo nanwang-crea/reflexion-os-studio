@@ -277,7 +277,18 @@ function gitWrite(
   projectId: string,
   extra: Record<string, unknown> = {},
 ): Promise<GitOk> {
-  return request<GitOk>(method, { projectId, ...extra })
+  // Rust 本地写 30s / 网络 120s，Runtime 分别 35s / 130s；
+  // 前端必须最后超时，不能先遗弃仍在执行的命令。
+  const network = [
+    'workspace.git_fetch',
+    'workspace.git_push',
+    'workspace.git_pull',
+  ].includes(method)
+  return request<GitOk>(
+    method,
+    { projectId, ...extra },
+    network ? 140_000 : 45_000,
+  )
 }
 
 /** 暂存指定路径到索引区。 */

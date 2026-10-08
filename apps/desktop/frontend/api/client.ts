@@ -1,11 +1,19 @@
 import { newRequestId, transport } from '../lib/transport'
 
 /** 统一入口：自动注入 requestId，调用方不再手写。 */
-export function request<T>(method: string, params?: object): Promise<T> {
-  return transport.request<T>(method, {
-    requestId: newRequestId(),
-    ...params,
-  } as Record<string, unknown>)
+export function request<T>(
+  method: string,
+  params?: object,
+  timeoutMs?: number,
+): Promise<T> {
+  return transport.request<T>(
+    method,
+    {
+      requestId: newRequestId(),
+      ...params,
+    } as Record<string, unknown>,
+    timeoutMs,
+  )
 }
 
 /** 列表类读请求：偶发事件丢失时自动重试一次，避免闪现超时错误。 */
