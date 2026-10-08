@@ -11,6 +11,7 @@ import './features/instructions/instructions.css'
 import './features/workspace/workspace.css'
 import '@xterm/xterm/css/xterm.css'
 import './features/terminal/terminal.css'
+import './styles/product-surfaces.css'
 
 const rootElement = document.getElementById('root')
 if (!rootElement) throw new Error('#root not found')

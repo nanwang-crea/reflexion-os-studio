@@ -18,18 +18,14 @@ export function AutomationsView(): React.JSX.Element {
         </div>
         <h2>Workflow 引擎尚未开放</h2>
         <p className="placeholder-text">
-          “自动化”将以可拖拽的节点图呈现：触发器 → Agent 节点 → 工具节点 →
-          文件输出。你可以提前在 Composer 里执行单步任务，自动化会在你能
-          稳定复现的时候把流程沉淀下来。
+          定时执行与工作流编排尚未开放。当前可以在对话中完成任务，
+          并使用技能复用工作方法。
         </p>
         <ul className="placeholder-list">
           <li>⏰ 定时任务：按 cron / 间隔触发 Run</li>
           <li>🔁 工作流：顺序 / 并行 / 条件分支</li>
           <li>📦 产物：把结果落到文件 / 通知 / 数据库</li>
         </ul>
-        <button type="button" className="ghost" disabled>
-          订阅版本更新
-        </button>
       </div>
     </div>
   )

@@ -101,16 +101,18 @@ export function ComposerRunConfig(
             {enabledTemplates.length > 0 && (
               <section className="run-config-section">
                 <strong>任务委派</strong>
-                <small>设置本次任务优先使用的子 Agent 模板。</small>
+                <small>
+                  模型根据任务决定是否委派；选择模板不会立即启动子 Agent。
+                </small>
                 <label className="run-config-field">
-                  <span>委派策略</span>
+                  <span>默认子 Agent 模板</span>
                   <Select
                     value={props.agentTemplateId}
                     onValueChange={(value) =>
                       props.onAgentTemplateChange(value)
                     }
                   >
-                    <option value="">自动选择</option>
+                    <option value="">自动选择模板</option>
                     {enabledTemplates.map((template) => (
                       <option key={template.id} value={template.id}>
                         {template.name}

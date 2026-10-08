@@ -1,0 +1,188 @@
+/* Shared product presentation: navigation, page hierarchy and interaction.
+   Feature-specific layouts remain owned by their feature stylesheets. */
+:root {
+  --page-width: 1040px;
+  --page-padding: clamp(20px, 4vw, 48px);
+  --focus-ring: #85abff;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: #345082;
+  color: #fff;
+}
+
+.topbar {
+  min-height: 56px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sidebar-head {
+  min-height: 64px;
+  padding: 14px 16px;
+}
+
+.brand-mark {
+  background: #c5d7ff;
+  color: #192438;
+}
+
+.panel-search {
+  height: 38px;
+  border-color: var(--border-subtle);
+}
+
+.panel-search input:not([type='checkbox']):not([type='radio']) {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  box-shadow: none;
+}
+
+.panel-search:focus-within {
+  border-color: var(--accent-border);
+}
+
+.session-row.active,
+.project-row.active,
+.nav-item.active,
+.settings-nav-item.active {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--focus-ring);
+}
+
+.session-row:focus-within .row-action,
+.project-row:focus-within .row-action {
+  opacity: 1;
+}
+
+.nav-item {
+  min-height: 38px;
+}
+
+.skills-view,
+.automations-view,
+.instructions-view {
+  width: 100%;
+  max-width: var(--page-width);
+  padding: 32px var(--page-padding) 48px;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.skills-view .panel-head,
+.automations-view .panel-head,
+.instructions-view header {
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.skills-view h1,
+.automations-view h1,
+.instructions-view header h2,
+.settings-head h2 {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.35;
+}
+
+.panel-sub,
+.instructions-view header p,
+.settings-head p {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.instructions-toolbar {
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+
+.instruction-pane,
+.plugin-installer,
+.placeholder-card {
+  background: var(--bg-inset);
+  border-color: var(--border-subtle);
+  border-radius: 14px;
+  padding: 24px;
+}
+
+.settings-head {
+  padding: 20px var(--page-padding);
+}
+
+.settings-content {
+  padding: 28px var(--page-padding) 48px;
+}
+
+.runtime-group {
+  padding: 20px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-inset);
+}
+
+.composer {
+  border-radius: 18px;
+  border-color: var(--border-subtle);
+  box-shadow: var(--shadow-lg);
+}
+
+.composer:focus-within {
+  border-color: var(--accent-border);
+  box-shadow:
+    0 0 0 2px var(--accent-soft),
+    var(--shadow-lg);
+}
+
+.landing-title {
+  font-size: clamp(26px, 3vw, 36px);
+  letter-spacing: -0.035em;
+}
+
+.delegation-row {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-inset);
+}
+
+.workspace-panel {
+  background: var(--bg-inset);
+}
+
+@media (max-width: 760px) {
+  .settings-head {
+    padding: 16px;
+  }
+
+  .settings-content,
+  .skills-view,
+  .automations-view,
+  .instructions-view {
+    padding: 20px 16px 32px;
+  }
+
+  .instruction-pane,
+  .plugin-installer,
+  .placeholder-card {
+    padding: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

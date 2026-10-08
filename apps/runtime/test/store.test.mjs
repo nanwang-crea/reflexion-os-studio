@@ -1348,7 +1348,7 @@ test('agent settings default and round-trip', () => {
     maxDepth: 1,
     maxChildRuns: 4,
     maxParallelChildren: 2,
-    maxChildTimeoutSec: 120,
+    maxChildTimeoutSec: null,
     maxChildTotalTokens: 12000,
     enableChildRuns: true,
   })
@@ -1371,6 +1371,12 @@ test('agent settings default and round-trip', () => {
   assert.deepEqual(store.agentSettings.get(), updated)
   assert.equal(updated.maxTurns, 32)
   assert.equal(updated.enableChildRuns, true)
+  assert.equal(updated.maxChildTimeoutSec, 120)
+  assert.equal(
+    store.agentSettings.upsert({ ...updated, maxChildTimeoutSec: null })
+      .maxChildTimeoutSec,
+    null,
+  )
   // 非法 JSON 容错回默认。
   const db = store
   assert.equal(db.agentSettings.get().maxTurns, 32)

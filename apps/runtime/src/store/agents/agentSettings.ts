@@ -14,7 +14,7 @@ export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   maxDepth: 1,
   maxChildRuns: 4,
   maxParallelChildren: 2,
-  maxChildTimeoutSec: 120,
+  maxChildTimeoutSec: null,
   maxChildTotalTokens: 12000,
   enableChildRuns: true,
 }
@@ -81,7 +81,7 @@ export class AgentSettingsStore {
           typeof parsed.maxContinuationTurns === 'number'
             ? parsed.maxContinuationTurns
             : null,
-        // 治理极限优先安全：旧数据/缺失时回退到内置保守默认，绝不落入"不限制"。
+        // 数量与深度缺失时回退保守默认；子任务超时默认不单独限制。
         maxDepth:
           typeof parsed.maxDepth === 'number'
             ? parsed.maxDepth

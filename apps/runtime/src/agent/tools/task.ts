@@ -7,7 +7,7 @@ export function createTaskTool(ctx: ToolContext): ToolDefinition {
   return {
     name: 'task',
     description:
-      '启动一个独立子 Run 完成指定子任务，并返回其最终结果。仅用于确实需要委派的工作。',
+      '启动一个独立子 Run 完成指定子任务，并返回其最终结果。用户明确要求子 Agent 时使用；复杂任务中的独立调研、实现或验证工作优先委派。task 应包含目标、范围、上下文和预期交付。',
     parameters: {
       type: 'object',
       properties: {

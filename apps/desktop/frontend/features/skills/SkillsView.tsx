@@ -96,7 +96,7 @@ export function SkillsView(props: SkillsViewProps): React.JSX.Element {
   return (
     <div className="skills-view">
       <header className="panel-head">
-        <h1>Skills</h1>
+        <h1>技能</h1>
         <p className="panel-sub">
           内置技能随应用发布；外部技能从数据目录发现。技能声明的工具不授予权限，
           实际调用仍受当前权限策略与审批约束。

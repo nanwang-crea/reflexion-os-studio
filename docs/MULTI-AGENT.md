@@ -14,7 +14,8 @@ Primary 通过 `task` 工具提交任务和可选的 `templateId/name/role/instr
 - 子 Run 的有效权限和工具集是父 Run、模板限制及 Runtime 硬拒绝策略的交集。可写父 Run 可以委派可写实例，但模板不能扩大父边界；只有 Policy 允许且低于 `maxDepth` 才开放 `task`，管理、机密、长期记忆等能力始终排除。
 - 父会话可复用的精确路径/命令规则在根权限域内共享；一次授权、待处理审批、审批覆盖项和 Danger 租约不继承。每次需要审批的调用仍独立经过 PermissionGate，卡片展示动态 Agent、层级和根任务。
 - 根级 mutation coordinator 串行执行兄弟写入，Rust 侧以 `mtime + size + sha256` revision 拒绝陈旧写。冲突返回 `file_revision_conflict`，Agent 必须重新读取并重新合并；不做静默自动合并。
-- 默认限制：深度 1（硬上限 4）、整棵委派树最多 4 个子 Run、树级最多并行 2 个、单子 Run 120 秒、总 token 12000。根级协调器由所有后代共享，超过时返回稳定错误码。
+- 默认限制：深度 1（硬上限 4）、整棵委派树最多 4 个子 Run、树级最多并行 2 个、单子 Run 输出 token 12000。子 Run 默认不设置独立超时（`maxChildTimeoutSec: null`），仍受父任务取消与 Run 自身预算约束；设置页可填写秒数启用独立超时，留空保存即可关闭。已有显式保存的超时值继续生效。根级协调器由所有后代共享，超过时返回稳定错误码。
+- 用户明确要求子 Agent 时，Primary 提示词要求实际调用 `task`；复杂任务中的独立调研、实现和验证工作优先委派。此规则是模型行为指导，并非确定性任务拆分器。Composer 的“默认子 Agent 模板”仅决定委派实例模板，不是启动开关；子任务状态展示于最终回复之前。
 - 内部子 Session 不出现在普通会话列表，但 Run、Message、ToolCall、Delegation 均持久化；父 Run 卡片可查看实时状态、执行快照、子 Session 轨迹与下级委派，并可取消活动子 Run。
 - Delegation 保存 `rootRunId`、`parentAgentId`、`childSessionId`，并以版本化 `execution` 快照冻结实际深度、Provider/模型、Agent Policy、权限预设、工具白名单及预算；`delegation.tree` 一次返回完整树，UI 可选择任意节点查看子 Session 轨迹。
 

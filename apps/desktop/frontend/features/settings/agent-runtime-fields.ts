@@ -78,8 +78,8 @@ export const AGENT_RUNTIME_FIELDS: AgentRuntimeField[] = [
   [
     'maxChildTimeoutSec',
     '单个子 Agent 超时（秒）',
-    '120（默认）',
-    '到点后以 child_timeout 失败并停止该子 Run。',
+    '不限时（默认）',
+    '留空不设置独立超时；仍随父任务停止或取消。填写秒数后，到点以 child_timeout 停止。',
   ],
   [
     'maxChildTotalTokens',

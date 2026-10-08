@@ -139,6 +139,11 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
           )}
         </div>
       )}
+      <DelegationList
+        items={props.delegations}
+        runActive={props.runActive}
+        attentionByAgentId={props.delegationAttention}
+      />
       {props.finalItem && (
         <AssistantMessage
           message={props.finalItem.message}
@@ -163,11 +168,6 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
         projectId={props.projectId}
         onResourceClick={props.onResourceClick}
         onOpenDiff={props.onOpenDiff}
-      />
-      <DelegationList
-        items={props.delegations}
-        runActive={props.runActive}
-        attentionByAgentId={props.delegationAttention}
       />
     </div>
   )
