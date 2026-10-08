@@ -68,6 +68,7 @@ for (const mode of [
     })
     const result = await dispatchCommand('run.retry', params, {
       agent: f.agent,
+      store: f.store,
     })
     const expectedProvider =
       mode === 'legacy' || mode === 'same-provider'
@@ -102,6 +103,7 @@ test('edit resend uses current provider and model', async (t) => {
   })
   const result = await dispatchCommand('message.edit_resend', params, {
     agent: f.agent,
+    store: f.store,
   })
   assert.equal(f.store.runs.get(result.runId).providerId, f.providers[1].id)
   assert.equal(f.store.runs.get(result.runId).model, 'new-model')

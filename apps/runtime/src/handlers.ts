@@ -1,3 +1,5 @@
+import { CoreMutationMethodSchema } from '@reflexion-os-studio/contracts'
+import { operationsFor } from './operations/index.js'
 import { basename } from 'node:path'
 import { normalizeProjectFolderPath } from './store/chat/project-path.js'
 import type {
@@ -328,6 +330,12 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
 }
 
 export const commandHandlers: Record<string, CommandHandler> = {
+  'operation.get': (p, { store }) => ({
+    operation: operationsFor(store).get(
+      String(p.method),
+      String(p.targetRequestId),
+    ),
+  }),
   ...chatCommandHandlers,
   ...instructionsCommandHandlers,
   ...workspaceCommandHandlers,
@@ -386,5 +394,12 @@ export async function dispatchCommand(
   if (!handler) {
     throw new CommandError('unsupported', `unsupported command: ${method}`)
   }
-  return handler(params, ctx)
+  if (
+    !CoreMutationMethodSchema.safeParse(method).success ||
+    typeof params.requestId !== 'string'
+  )
+    return handler(params, ctx)
+  return operationsFor(ctx.store).execute(method, params, async () =>
+    handler(params, ctx),
+  )
 }

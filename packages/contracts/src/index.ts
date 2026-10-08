@@ -14,3 +14,5 @@ export * from './json-schemas.js'
 export * from './plugins.js'
 export * from './semver.js'
 export * from './providers/index.js'
+
+export * from './operations.js'

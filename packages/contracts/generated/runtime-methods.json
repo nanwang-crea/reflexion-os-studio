@@ -37,6 +37,7 @@
     "message.edit_resend",
     "message.send",
     "mutation_receipt.list",
+    "operation.get",
     "permission.approval_override.get",
     "permission.approval_override.set",
     "plugin.install",

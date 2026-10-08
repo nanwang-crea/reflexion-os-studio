@@ -1,3 +1,5 @@
+import { CoreMutationMethodSchema } from '@reflexion-os-studio/contracts'
+import { performMutation } from './operations'
 import { newRequestId, transport } from '../lib/transport'
 
 /** 统一入口：自动注入 requestId，调用方不再手写。 */
@@ -6,6 +8,13 @@ export function request<T>(
   params?: object,
   timeoutMs?: number,
 ): Promise<T> {
+  const mutation = CoreMutationMethodSchema.safeParse(method)
+  if (mutation.success)
+    return performMutation<T>(
+      mutation.data,
+      (params ?? {}) as Record<string, unknown>,
+      timeoutMs,
+    )
   return transport.request<T>(
     method,
     {
@@ -21,6 +30,8 @@ export async function requestList<T>(
   method: string,
   params?: object,
 ): Promise<T> {
+  if (CoreMutationMethodSchema.safeParse(method).success)
+    return request<T>(method, params)
   try {
     return await request<T>(method, params)
   } catch (error) {

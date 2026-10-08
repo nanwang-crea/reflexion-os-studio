@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { execFile } from 'node:child_process'
@@ -76,7 +77,7 @@ test(
       await waitReady(client)
       const ctx = { store, system: client }
       const call = (method, params) =>
-        dispatchCommand(method, { requestId: 'req-gite2e', ...params }, ctx)
+        dispatchCommand(method, { requestId: randomUUID(), ...params }, ctx)
 
       const first = await call('workspace.git_status', {
         projectId: project.id,

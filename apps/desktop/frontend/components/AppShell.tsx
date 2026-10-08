@@ -1,3 +1,4 @@
+import { OperationHost } from './operations/OperationHost'
 import type { ComponentProps } from 'react'
 import { AppMain } from '../AppMain'
 import { DangerConfirmationDialog } from '../features/chat/approvals/DangerConfirmationDialog'
@@ -51,6 +52,7 @@ export function AppShell(props: AppShellProps): React.JSX.Element {
         onTertiary={props.confirm.onTertiary}
       />
       <ToastHost />
+      <OperationHost />
     </div>
   )
 }

@@ -1,3 +1,4 @@
+import { refreshOperationView } from '../../../api/operations'
 import { GitInstallNotice } from './GitInstallNotice'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GitChangeEntry } from '@reflexion-os-studio/runtime-client'
@@ -210,15 +211,19 @@ export function GitChanges(props: GitChangesProps): React.JSX.Element {
       } finally {
         // 复合动作（如提交并推送）部分失败时状态已变：成败都要重载
         // 状态，保留操作错误；暂存不触发网络或引用刷新。
-        if (attempted)
-          await refresh({
-            preserveError: true,
-            includeRefs: kind !== 'stage' && kind !== 'unstage',
-          })
+        if (attempted) {
+          setBusy('refresh')
+          await refreshOperationView(`git:${props.projectId}`, () =>
+            refresh({
+              preserveError: true,
+              includeRefs: kind !== 'stage' && kind !== 'unstage',
+            }),
+          )
+        }
         setBusy(null)
       }
     },
-    [guardDirtyBuffersThen, reloadAllTextTabs, refresh],
+    [guardDirtyBuffersThen, reloadAllTextTabs, refresh, props.projectId],
   )
 
   const canCommit =

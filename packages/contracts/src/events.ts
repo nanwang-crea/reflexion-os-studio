@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { OperationSnapshotSchema } from './operations.js'
 import {
   JsonValueSchema,
   ApprovalOperationSchema,
@@ -83,6 +84,11 @@ const TerminalEnvelopeSchema = RuntimeEventEnvelopeSchema.extend({
 })
 
 export const RuntimeEventSchema = z.discriminatedUnion('type', [
+  RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('operation.changed'),
+    scope: z.literal('runtime'),
+    operation: OperationSnapshotSchema,
+  }),
   RuntimeEventEnvelopeSchema.extend({
     type: z.literal('runtime.status'),
     scope: z.literal('runtime'),

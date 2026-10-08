@@ -1,0 +1,52 @@
+.operation-host {
+  position: fixed;
+  bottom: 18px;
+  right: 18px;
+  z-index: 80;
+  width: min(380px, calc(100vw - 36px));
+  max-height: 45vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.operation-notice {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg);
+  pointer-events: auto;
+  font-size: 12px;
+}
+.operation-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.operation-heading span {
+  color: var(--text-secondary);
+}
+.operation-notice p {
+  margin: 8px 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.operation-failed {
+  border-color: var(--danger);
+}
+.operation-uncertain {
+  border-color: var(--warning-text);
+}
+.operation-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+.operation-actions:empty {
+  display: none;
+}

@@ -1,3 +1,4 @@
+import { OperationRegistry, registerOperations } from './operations/index.js'
 import { cleanupPlanDocuments } from './agent/tools/plan-documents.js'
 import { createInterface } from 'node:readline'
 import {
@@ -129,6 +130,12 @@ function getStatus(): RuntimeStatus {
 }
 
 const store = new Store(resolveDataDir())
+registerOperations(
+  store,
+  new OperationRegistry((operation) =>
+    statusEmitter.next({ type: 'operation.changed', operation }),
+  ),
+)
 const skillPlugins = new SkillPluginService(store, resolveDataDir(), notify)
 const mcpManager = new McpManager(store, notify)
 const agent = new ChatAgent(

@@ -1,3 +1,4 @@
+import { initializeOperations } from './api/operations'
 import './features/workspace/editor/monaco-worker'
 import { createRoot } from 'react-dom/client'
 import App from './App'
@@ -16,6 +17,7 @@ import './styles/product-surfaces.css'
 import './styles/themes.css'
 
 initializeTheme()
+initializeOperations()
 
 const rootElement = document.getElementById('root')
 if (!rootElement) throw new Error('#root not found')
