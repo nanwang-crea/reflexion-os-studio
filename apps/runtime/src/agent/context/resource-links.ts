@@ -112,7 +112,7 @@ function normalizeUri(
   const project = store.projects.get(session.projectId)
   if (!project || project.folderPath === '')
     throw new Error('Project workspace unavailable')
-  const normalized = target.replaceAll('\\', '/')
+  const normalized = decodeURIComponent(target).replaceAll('\\', '/')
   // Windows drive-letter and UNC forms are absolute paths on that platform,
   // never workspace-relative names; reject them up front across platforms.
   if (/^[a-zA-Z]:/.test(normalized) || normalized.startsWith('//'))

@@ -16,6 +16,7 @@ type MessagePart = { type: 'text'; text: string } | ResourcePart
 function resourceFromPart(part: ResourcePart): ResourceLink {
   return 'link' in part ? part.link : part.resource_link
 }
+import { messageResourceUri } from './resource-links'
 import { CopyButton } from '../../../components/CopyButton'
 import { AlertIcon } from '../../../ui/icons'
 import { MarkdownCore } from '../../../components/markdown/md-core'
@@ -77,13 +78,19 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
         : [],
     [props.message.parts, props.streamingText],
   )
-  const structuredText = structuredParts
-    .map((part) =>
-      part.type === 'text'
-        ? part.text
-        : `[${'label' in part ? part.label : resourceFromPart(part).uri}](${resourceFromPart(part).uri})`,
-    )
-    .join('')
+  const structuredText = useMemo(
+    () =>
+      structuredParts
+        .map((part) => {
+          if (part.type === 'text') return part.text
+          const link = resourceFromPart(part)
+          const label = 'label' in part ? part.label : link.uri
+          const uri = messageResourceUri(link, label, props.message.content)
+          return `[${label}](${uri})`
+        })
+        .join(''),
+    [structuredParts, props.message.content],
+  )
   const reasoningText = props.streamingReasoning ?? props.message.reasoning
   // 正文流式光标：只看该消息是否仍在流式增量（不参与阶段判断）。
   const answerStreaming = props.runActive && props.streamingText !== undefined

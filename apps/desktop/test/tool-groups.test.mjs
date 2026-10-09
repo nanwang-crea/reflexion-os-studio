@@ -16,6 +16,9 @@ await build({
     contents: `
       import { createElement } from 'react'
       import { renderToStaticMarkup } from 'react-dom/server'
+      import { RunBlock } from './frontend/features/chat/run/RunBlock'
+      export { buildChatBlocks } from './frontend/features/chat/chat-blocks'
+      export const renderRun = props => renderToStaticMarkup(createElement(RunBlock, props))
       import { RunProcess } from './frontend/features/chat/run/RunProcess'
       export { groupToolCalls, describeToolGroup } from './frontend/features/chat/message/tool-groups'
       export const render = props => renderToStaticMarkup(createElement(RunProcess, props))
@@ -31,9 +34,13 @@ await build({
   },
   outfile,
 })
-const { groupToolCalls, describeToolGroup, render } = await import(
-  pathToFileURL(outfile).href
-)
+const {
+  groupToolCalls,
+  describeToolGroup,
+  render,
+  renderRun,
+  buildChatBlocks,
+} = await import(pathToFileURL(outfile).href)
 const call = (id, toolName, path, status = 'completed', errorCode = null) => ({
   id,
   toolName,
@@ -170,4 +177,125 @@ test('successful time lookup is kept in collapsed auxiliary details', () => {
     groupToolCalls([call('1', 'get_current_time', '', 'failed')])[0].kind,
     'single',
   )
+})
+
+test('final answer remains unique while completed message streaming buffers are retained', () => {
+  const finalMessage = {
+    id: 'final',
+    role: 'assistant',
+    runId: 'r',
+    status: 'completed',
+    content: 'UniqueAnswer',
+    reasoning: 'UniqueThought',
+    parts: [],
+  }
+  const messages = [
+    { id: 'tool', role: 'assistant', runId: 'r', content: '', reasoning: '' },
+    finalMessage,
+  ]
+  const blocks = buildChatBlocks(
+    messages,
+    new Map([['tool', [call('read', 'file.read', 'a')]]]),
+  )
+  assert.equal(blocks.length, 1)
+  const block = blocks[0]
+  assert.equal(block.finalItem.message.id, 'final')
+  assert.deepEqual(
+    block.processItems.map((item) => item.message.id),
+    ['tool'],
+  )
+  for (const streaming of [{}, { final: 'UniqueAnswer' }]) {
+    const html = renderRun({
+      ...block,
+      delegations: [],
+      runActive: true,
+      streaming,
+      streamingReasoning: { final: 'UniqueThought' },
+      runDurationMs: null,
+      runUsage: null,
+      runFailed: false,
+      canRetry: false,
+      onRetry() {},
+      projectId: 'p',
+    })
+    assert.equal((html.match(/UniqueAnswer/g) ?? []).length, 1)
+    assert.equal((html.match(/UniqueThought/g) ?? []).length, 1)
+  }
+})
+
+test('process commentary resource links use the same controlled file routing as final answers', () => {
+  const html = renderRun({
+    processItems: [
+      {
+        message: {
+          id: 'process',
+          content: '[file](workspace:///src/a.ts#L3)',
+          reasoning: '',
+        },
+        toolCalls: [],
+      },
+    ],
+    finalItem: null,
+    delegations: [],
+    runActive: true,
+    streaming: {},
+    streamingReasoning: {},
+    runDurationMs: null,
+    runUsage: null,
+    runFailed: false,
+    canRetry: false,
+    onRetry() {},
+    onResourceClick() {},
+    projectId: 'p',
+  })
+  assert.match(
+    html,
+    /<button[^>]*class="md-resource md-resource-workspaceFile"/,
+  )
+  assert.doesNotMatch(html, /href="workspace:/)
+})
+
+test('historical final messages repair proven line fragments during rendering', () => {
+  for (const [source, expected] of [
+    ['src/a.ts#L3-L5', 'workspace://p/src/a.ts#L3'],
+    ['src/a.ts%23L3-L5', 'workspace://p/src/a.ts%23L3-L5'],
+  ]) {
+    const html = renderRun({
+      processItems: [],
+      finalItem: {
+        message: {
+          id: 'final',
+          status: 'completed',
+          reasoning: '',
+          content: `[file](${source})`,
+          parts: [
+            {
+              type: 'resource_link',
+              label: 'file',
+              link: {
+                kind: 'workspaceFile',
+                projectId: 'p',
+                path: 'src/a.ts#L3-L5',
+                uri: 'workspace://p/src/a.ts%23L3-L5',
+              },
+            },
+          ],
+        },
+        toolCalls: [],
+      },
+      delegations: [],
+      runActive: false,
+      streaming: {},
+      streamingReasoning: {},
+      runDurationMs: null,
+      runUsage: null,
+      runFailed: false,
+      canRetry: false,
+      onRetry() {},
+      onResourceClick() {},
+      projectId: 'p',
+    })
+    assert.ok(html.includes(`title="${expected}"`))
+    assert.match(html, /class="md-resource md-resource-workspaceFile"/)
+  }
 })

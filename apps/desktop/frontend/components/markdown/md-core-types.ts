@@ -19,12 +19,7 @@ export interface MarkdownCoreProps {
 /** 解析消息内资源引用协议；非资源协议（http 等）返回 null 保持普通链接。 */
 export function parseResourceLink(href: string): ResourceLink | null {
   try {
-    // Older messages encoded a line fragment as part of the workspace filename.
-    const normalized =
-      href.startsWith('workspace://') && !href.includes('#')
-        ? href.replace(/%23(L[1-9]\d*(?:-L?[1-9]\d*)?)$/i, '#$1')
-        : href
-    return parseResourceUri(normalized)
+    return parseResourceUri(href)
   } catch {
     return null
   }

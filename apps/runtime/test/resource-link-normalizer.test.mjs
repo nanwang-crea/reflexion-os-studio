@@ -60,6 +60,15 @@ test('normalizes explicit and filesystem resource links', () => {
     assert.equal(link.uri.endsWith('#L197'), true)
     assert.equal(link.uri.includes('%23'), false)
   }
+  writeFileSync(join(nested, 'with space#L197.ts'), 'encoded\n')
+  const encoded = normalizeContent(
+    '[encoded](src/agent/with%20space%23L197.ts#L2-L3)',
+    session,
+    store,
+  ).parts[0].link
+  assert.equal(encoded.path, 'src/agent/with space#L197.ts')
+  assert.equal(encoded.line, 2)
+  assert.equal(readFileSync(join(workspace, encoded.path), 'utf8'), 'encoded\n')
   // Windows-style single backslashes normalize to forward slashes.
   const backslash = normalizeContent(
     '[bs](workspace:///src\\agent\\runner.ts#L1)',
@@ -89,6 +98,11 @@ test('rejects unsupported, escaping, and standalone-session links', () => {
   const standalone = store.sessions.create(null)
   for (const target of [
     '../secret',
+    '%2e%2e/secret',
+    'src%2f..%2fsecret',
+    'src%5c..%5csecret',
+    '%43%3a/Users/foo',
+    '%',
     'src\\..\\secret',
     'C:\\Users\\foo',
     'C:/Users/foo',

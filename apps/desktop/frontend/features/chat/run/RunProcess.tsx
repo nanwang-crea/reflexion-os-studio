@@ -1,4 +1,8 @@
-import type { Message, ToolCall } from '@reflexion-os-studio/runtime-client'
+import type {
+  Message,
+  ResourceLink,
+  ToolCall,
+} from '@reflexion-os-studio/runtime-client'
 import { MarkdownCore } from '../../../components/markdown/md-core'
 import { ReasoningBlock } from '../message/ReasoningBlock'
 import { ToolTrace } from '../message/ToolTrace'
@@ -14,6 +18,7 @@ interface RunProcessProps {
   streamingReasoning: Record<string, string>
   runActive: boolean
   reasoningOnlyMessageIds?: Set<string>
+  onResourceClick?: (link: ResourceLink) => void
 }
 
 export function RunProcess(props: RunProcessProps): React.JSX.Element {
@@ -53,7 +58,10 @@ export function RunProcess(props: RunProcessProps): React.JSX.Element {
           )}
           {part.text !== '' && (
             <div className="run-process-text">
-              <MarkdownCore text={part.text} />
+              <MarkdownCore
+                text={part.text}
+                onResourceClick={props.onResourceClick}
+              />
             </div>
           )}
           <ToolTrace calls={part.calls} runActive={props.runActive} />

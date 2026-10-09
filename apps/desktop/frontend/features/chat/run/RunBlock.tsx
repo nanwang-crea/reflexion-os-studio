@@ -134,6 +134,7 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
                 streamingReasoning={props.streamingReasoning}
                 runActive={props.runActive}
                 reasoningOnlyMessageIds={reasoningOnlyIds}
+                onResourceClick={props.onResourceClick}
               />
             </div>
           )}
