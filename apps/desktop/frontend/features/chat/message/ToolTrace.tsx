@@ -1,6 +1,7 @@
 import { PlanSnapshotSchema } from '@reflexion-os-studio/runtime-client'
 import { PlanReview } from '../interactions/PlanReview'
 import { useState } from 'react'
+import { groupToolCalls, describeToolGroup } from './tool-groups'
 import type { JsonValue, ToolCall } from '@reflexion-os-studio/runtime-client'
 
 const TOOL_LABELS: Record<string, string> = {
@@ -42,9 +43,33 @@ export function ToolTrace(props: ToolTraceProps): React.JSX.Element {
   if (props.calls.length === 0) return <></>
   return (
     <div className="tool-trace">
-      {props.calls.map((call) => (
-        <ToolTraceItem key={call.id} call={call} runActive={props.runActive} />
-      ))}
+      {groupToolCalls(props.calls).map((group) =>
+        group.kind === 'single' ? (
+          <ToolTraceItem
+            key={group.calls[0].id}
+            call={group.calls[0]}
+            runActive={props.runActive}
+          />
+        ) : (
+          <details
+            className={`tool-trace-group ${group.kind}`}
+            key={group.calls[0].id}
+          >
+            <summary className="tool-trace-row">
+              {describeToolGroup(group)}
+            </summary>
+            <div className="tool-trace-group-body">
+              {group.calls.map((call) => (
+                <ToolTraceItem
+                  key={call.id}
+                  call={call}
+                  runActive={props.runActive}
+                />
+              ))}
+            </div>
+          </details>
+        ),
+      )}
     </div>
   )
 }

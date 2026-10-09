@@ -1906,3 +1906,20 @@
   color: var(--danger);
   overflow-wrap: anywhere;
 }
+
+/* Consecutive filesystem operations keep their full trace behind a summary. */
+.tool-trace-group > summary {
+  display: list-item;
+  list-style-position: inside;
+}
+
+.tool-trace-group.edit > summary {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.tool-trace-group-body {
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+  margin-left: 8px;
+}

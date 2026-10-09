@@ -124,3 +124,70 @@ test('data 非数组/为空时保留原 message（不误伤其他错误码）', 
     return true
   })
 })
+
+test('request deadline includes a Host acknowledgement that never arrives', async () => {
+  const transport = new RuntimeTransport({
+    invoke: () => new Promise(() => {}),
+    listen: async () => () => {},
+  })
+  await assert.rejects(
+    transport.request('project.list', {}, 10),
+    /runtime request timeout/,
+  )
+  transport.dispose()
+})
+
+test('late Host acknowledgement cannot turn a timed-out request into success', async () => {
+  let acknowledge
+  let handler
+  const transport = new RuntimeTransport({
+    invoke: () =>
+      new Promise((resolve) => {
+        acknowledge = resolve
+      }),
+    listen: async (_event, next) => {
+      handler = next
+      return () => {}
+    },
+  })
+  await transport.attach()
+  const request = transport.request('project.list', {}, 10)
+  await assert.rejects(request, /runtime request timeout/)
+  handler({
+    payload: { name: 'runtime', message: { id: 7, result: { projects: [] } } },
+  })
+  acknowledge(7)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  transport.dispose()
+})
+
+test('dispose rejects requests still waiting for Host acknowledgement', async () => {
+  const transport = new RuntimeTransport({
+    invoke: () => new Promise(() => {}),
+    listen: async () => () => {},
+  })
+  const request = transport.request('project.list')
+  transport.dispose()
+  await assert.rejects(request, /transport disposed/)
+})
+
+test('Host acknowledgement and Runtime response share one timeout budget', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  let acknowledge
+  const transport = new RuntimeTransport({
+    invoke: () =>
+      new Promise((resolve) => {
+        acknowledge = resolve
+      }),
+    listen: async () => () => {},
+  })
+  const request = transport.request('project.list', {}, 100)
+  const rejected = assert.rejects(request, /runtime request timeout/)
+  await Promise.resolve()
+  t.mock.timers.tick(60)
+  acknowledge(3)
+  for (let i = 0; i < 5; i++) await Promise.resolve()
+  t.mock.timers.tick(40)
+  await rejected
+  transport.dispose()
+})

@@ -17,35 +17,48 @@ interface RunProcessProps {
 }
 
 export function RunProcess(props: RunProcessProps): React.JSX.Element {
+  const parts: Array<{
+    key: string
+    text: string
+    reasoning: string
+    thinking: boolean
+    calls: ToolCall[]
+  }> = []
+  for (const { message, toolCalls } of props.items) {
+    const text = props.reasoningOnlyMessageIds?.has(message.id)
+      ? ''
+      : (props.streaming[message.id] ?? message.content)
+    const reasoning = props.streamingReasoning[message.id] ?? message.reasoning
+    const previous = parts.at(-1)
+    // Only invisible message boundaries can be merged; commentary keeps its place.
+    if (text === '' && reasoning === '' && previous) {
+      previous.calls.push(...toolCalls)
+    } else if (text !== '' || reasoning !== '' || toolCalls.length > 0) {
+      parts.push({
+        key: message.id,
+        text,
+        reasoning,
+        thinking:
+          props.runActive && props.streamingReasoning[message.id] !== undefined,
+        calls: [...toolCalls],
+      })
+    }
+  }
   return (
     <div className="run-process-timeline">
-      {props.items.map(({ message, toolCalls }) => {
-        const text = props.streaming[message.id] ?? message.content
-        const reasoning =
-          props.streamingReasoning[message.id] ?? message.reasoning
-        if (text === '' && reasoning === '' && toolCalls.length === 0) {
-          return null
-        }
-        return (
-          <div className="run-process-part" key={message.id}>
-            {reasoning !== '' && (
-              <ReasoningBlock
-                text={reasoning}
-                active={
-                  props.runActive &&
-                  props.streamingReasoning[message.id] !== undefined
-                }
-              />
-            )}
-            {text !== '' && !props.reasoningOnlyMessageIds?.has(message.id) && (
-              <div className="run-process-text">
-                <MarkdownCore text={text} />
-              </div>
-            )}
-            <ToolTrace calls={toolCalls} runActive={props.runActive} />
-          </div>
-        )
-      })}
+      {parts.map((part) => (
+        <div className="run-process-part" key={part.key}>
+          {part.reasoning !== '' && (
+            <ReasoningBlock text={part.reasoning} active={part.thinking} />
+          )}
+          {part.text !== '' && (
+            <div className="run-process-text">
+              <MarkdownCore text={part.text} />
+            </div>
+          )}
+          <ToolTrace calls={part.calls} runActive={props.runActive} />
+        </div>
+      ))}
     </div>
   )
 }

@@ -22,8 +22,8 @@ export function HistoryLoader({
     pending.current = true
     setBusy(true)
     setError(null)
-    onStart?.()
     try {
+      onStart?.()
       await onLoad(sessionId, before)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))

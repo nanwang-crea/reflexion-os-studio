@@ -72,6 +72,7 @@ const NON_EVENT_NOTIFICATION_METHODS = new Set(['runtime.ready'])
  */
 export class RuntimeTransport {
   private readonly pending = new Map<number, PendingRequest>()
+  private readonly awaitingAcks = new Set<(error: TransportError) => void>()
   private readonly earlyResponses = new Map<number, EarlyResponse>()
   private readonly eventHandlers = new Set<(event: RuntimeEvent) => void>()
   private unlisten?: () => void
@@ -104,6 +105,9 @@ export class RuntimeTransport {
       pending.reject(new TransportError('transport disposed'))
     }
     this.pending.clear()
+    for (const reject of this.awaitingAcks)
+      reject(new TransportError('transport disposed'))
+    this.awaitingAcks.clear()
     this.earlyResponses.clear()
     this.eventHandlers.clear()
   }
@@ -120,41 +124,62 @@ export class RuntimeTransport {
     params?: Record<string, unknown>,
     timeoutMs = 30_000,
   ): Promise<R> {
-    const id = await this.options.invoke<number>('runtime_request', {
-      method,
-      params: params ?? {},
-    })
-    // invoke 回执可能晚于响应事件到达 webview（宿主与 Runtime 往返竞态）：
-    // 若响应已先到，立即补交，避免伪超时。
-    const early = this.earlyResponses.get(id)
-    if (early) {
-      this.earlyResponses.delete(id)
-      if (early.error) {
-        return Promise.reject(
-          new TransportError(early.error.message, early.error),
-        )
-      }
-      return Promise.resolve(this.validateResult(method, early.result))
-    }
     return new Promise<R>((resolve, reject) => {
+      let id: number | undefined
+      let settled = false
+      const finish = (): void => {
+        settled = true
+        clearTimeout(timer)
+        if (id !== undefined) this.pending.delete(id)
+        this.awaitingAcks.delete(fail)
+      }
+      const fail = (error: unknown): void => {
+        if (settled) return
+        finish()
+        reject(error)
+      }
+      const accept = (result: unknown): void => {
+        if (settled) return
+        try {
+          const validated = this.validateResult<R>(method, result)
+          finish()
+          resolve(validated)
+        } catch (error) {
+          fail(error)
+        }
+      }
+      // The deadline includes Host acknowledgement, not just Runtime response.
       const timer = setTimeout(() => {
-        this.pending.delete(id)
-        reject(new TransportError(`runtime request timeout: ${method}`))
+        fail(new TransportError(`runtime request timeout: ${method}`))
       }, timeoutMs)
-      this.pending.set(id, {
-        resolve: (result) => {
-          let validated: R
-          try {
-            validated = this.validateResult(method, result)
-          } catch (error) {
-            reject(error instanceof Error ? error : new Error(String(error)))
+      this.awaitingAcks.add(fail)
+      Promise.resolve()
+        .then(() => {
+          if (settled) return undefined
+          return this.options.invoke<number>('runtime_request', {
+            method,
+            params: params ?? {},
+          })
+        })
+        .then((receipt) => {
+          if (receipt === undefined) return
+          id = receipt
+          this.awaitingAcks.delete(fail)
+          if (settled) {
+            this.earlyResponses.delete(id)
             return
           }
-          resolve(validated)
-        },
-        reject,
-        timer,
-      })
+          // Responses may arrive before the Host acknowledgement.
+          const early = this.earlyResponses.get(id)
+          if (early) {
+            this.earlyResponses.delete(id)
+            if (early.error)
+              fail(new TransportError(early.error.message, early.error))
+            else accept(early.result)
+            return
+          }
+          this.pending.set(id, { resolve: accept, reject: fail, timer })
+        }, fail)
     })
   }
 
