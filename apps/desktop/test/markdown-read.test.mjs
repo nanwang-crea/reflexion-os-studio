@@ -13,7 +13,8 @@ const outfile = join(directory, 'read-lines.mjs')
 await build({
   absWorkingDir: root,
   stdin: {
-    contents: `export { splitReadLines } from './frontend/features/workspace/preview/read-lines'
+    contents: `export { parseResourceLink } from './frontend/components/markdown/md-core-types'
+      export { splitReadLines } from './frontend/features/workspace/preview/read-lines'
       export { createMdChunkerState, feedMdLines, flushMdChunks } from './frontend/features/workspace/preview/md-chunks'`,
     resolveDir: root,
   },
@@ -21,8 +22,13 @@ await build({
   format: 'esm',
   outfile,
 })
-const { splitReadLines, createMdChunkerState, feedMdLines, flushMdChunks } =
-  await import(pathToFileURL(outfile).href)
+const {
+  parseResourceLink,
+  splitReadLines,
+  createMdChunkerState,
+  feedMdLines,
+  flushMdChunks,
+} = await import(pathToFileURL(outfile).href)
 
 test('原文分页不把末尾分隔符算作额外一行，保留真实空行', () => {
   for (const separator of ['\n', '\r\n']) {
@@ -61,4 +67,22 @@ test('围栏跨分页时不跳过代码或闭合行', () => {
     assert.match(rendered, /const a = 1\nconst b = 2\n```/)
     assert.match(rendered, /尾段/)
   }
+})
+
+test('message links recover historical encoded line fragments', () => {
+  for (const suffix of ['#L197-L217', '%23L197-L217', '%23L197-217']) {
+    const link = parseResourceLink(
+      `workspace://project/apps/desktop/frontend/features/chat/ChatView.tsx${suffix}`,
+    )
+    assert.equal(link.path, 'apps/desktop/frontend/features/chat/ChatView.tsx')
+    assert.equal(link.line, 197)
+  }
+  assert.equal(
+    parseResourceLink('workspace://project/file%23notes.ts').path,
+    'file#notes.ts',
+  )
+  assert.equal(
+    parseResourceLink('https://example.com/file%23L197').uri,
+    'https://example.com/file%23L197',
+  )
 })

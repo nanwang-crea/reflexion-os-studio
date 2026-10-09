@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { test } from 'node:test'
@@ -47,6 +47,19 @@ test('normalizes explicit and filesystem resource links', () => {
     store,
   )
   assert.equal(repoStyle.parts[0].link.path, 'src/agent/runner.ts')
+  for (const target of [
+    'src/agent/runner.ts#L197-L217',
+    'src\\agent\\runner.ts#L197-L217',
+    `${join(workspace, 'src', 'agent', 'runner.ts')}#L197-L217`,
+  ]) {
+    const link = normalizeContent(`[file](${target})`, session, store).parts[0]
+      .link
+    assert.equal(link.path, 'src/agent/runner.ts')
+    assert.equal(readFileSync(join(workspace, link.path), 'utf8'), 'x\n')
+    assert.equal(link.line, 197)
+    assert.equal(link.uri.endsWith('#L197'), true)
+    assert.equal(link.uri.includes('%23'), false)
+  }
   // Windows-style single backslashes normalize to forward slashes.
   const backslash = normalizeContent(
     '[bs](workspace:///src\\agent\\runner.ts#L1)',
