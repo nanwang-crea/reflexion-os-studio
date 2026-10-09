@@ -1,3 +1,6 @@
+import { ChatBlockView } from './transcript/ChatBlockView'
+import { VirtualTranscript } from './transcript/VirtualTranscript'
+import { HistoryLoader } from './transcript/HistoryLoader'
 import { EmptyState } from '../../components/feedback/EmptyState'
 import type { ChatViewProps } from './chat-view-types'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -8,30 +11,20 @@ import type {
   RunEvent,
 } from '@reflexion-os-studio/runtime-client'
 import { Composer } from '../../components/Composer'
-import { UserMessage } from './message/UserMessage'
 import { ArrowDownIcon, SparkIcon } from '../../ui/icons'
 import './approvals/approvals.css'
 import { ApprovalQueue } from './approvals/ApprovalQueue'
 import { DangerLeaseBanner } from './approvals/DangerLeaseBanner'
-import { AssistantMessage } from './message/AssistantMessage'
-import { RunBlock } from './run/RunBlock'
 import type { DelegationAttention } from './run/DelegationList'
 import { QueueBar } from './QueueBar'
 import { PlanCard } from './run/PlanCard'
-import { RunEventCard } from './run/RunEventCard'
-import {
-  buildChatBlocks,
-  computeRunDurationMs,
-  isLastEditableUserMessage,
-} from './chat-blocks'
+import { buildChatBlocks } from './chat-blocks'
 import { InteractionQueue } from './interactions/InteractionQueue'
 
 /** 距底部小于该值视为“贴底”，流式期间继续跟随滚动。 */
 const PIN_THRESHOLD_PX = 80
 
 /** Map 未命中时复用同一空数组，避免每帧给子组件新身份。 */
-const EMPTY_DELEGATIONS: Delegation[] = []
-const EMPTY_FAILED_EVENTS: RunEvent[] = []
 
 export function ChatView(props: ChatViewProps): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -259,6 +252,15 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
       {currentPlan && <PlanCard key={currentPlan.id} plan={currentPlan} />}
       <div className="chat-scroll" ref={scrollRef} onScroll={handleScroll}>
         <div className="transcript">
+          {sessionId && props.sessionData?.nextBefore && (
+            <HistoryLoader
+              key={sessionId}
+              sessionId={sessionId}
+              before={props.sessionData.nextBefore}
+              onLoad={props.onLoadOlder}
+              onStart={() => setPinned(false)}
+            />
+          )}
           {messages.length === 0 && (
             <div className="chat-empty">
               <EmptyState
@@ -268,113 +270,33 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
               />
             </div>
           )}
-          {chatBlocks.map((block) => {
-            if (block.kind === 'run') {
-              const run = runById.get(block.runId) ?? null
-              const finalMessage =
-                block.finalItem?.message ??
-                block.processItems[block.processItems.length - 1]?.message
-              // 重试事件只作内联活状态，不进时间线；失败事件渲染为失败卡。
-              const runEvents =
-                failedEventsByRun.get(block.runId) ?? EMPTY_FAILED_EVENTS
-              const failureDetail = runEvents[0]
-              return (
-                <div key={block.runId}>
-                  {runEvents.map((event) => (
-                    <RunEventCard key={event.id} event={event} />
-                  ))}
-                  <RunBlock
-                    processItems={block.processItems}
-                    finalItem={block.finalItem}
-                    delegations={
-                      delegationsByRun.get(block.runId) ?? EMPTY_DELEGATIONS
-                    }
-                    delegationAttention={delegationAttention}
-                    runActive={activeRunIds.has(block.runId)}
-                    runActivity={props.runActivities[block.runId]}
-                    streaming={props.streaming}
-                    streamingReasoning={props.streamingReasoning}
-                    runDurationMs={
-                      finalMessage
-                        ? computeRunDurationMs(run, finalMessage)
-                        : null
-                    }
-                    runUsage={run?.usage ?? null}
-                    runFailed={run?.status === 'failed'}
-                    failureDetail={failureDetail?.errorMessage ?? null}
-                    canRetry={
-                      lastRetryableRun !== undefined &&
-                      lastRetryableRun.id === block.runId
-                    }
-                    onRetry={handleRetry}
-                    onResourceClick={props.onResourceClick}
-                    onOpenDiff={props.onOpenDiff}
-                    projectId={props.sessionData?.session?.projectId ?? ''}
-                  />
-                </div>
-              )
-            }
-
-            const { message, toolCalls } = block.item
-
-            if (
-              message.role === 'assistant' &&
-              message.status === 'completed' &&
-              message.content === '' &&
-              message.reasoning === '' &&
-              toolCalls.length === 0
-            ) {
-              return null
-            }
-            if (message.role === 'user') {
-              const lastUserMsg = isLastEditableUserMessage(
-                message,
-                messages,
-                runActive,
-              )
-              return (
-                <UserMessage
-                  key={message.id}
-                  message={message}
-                  editing={editMessageId === message.id}
-                  editable={lastUserMsg}
-                  editDraft={editDraft}
-                  editSaving={editSaving}
-                  onDraftChange={setEditDraft}
-                  onCancel={cancelEdit}
-                  onSave={saveEdit}
-                  onEdit={() => startEdit(message.id)}
-                />
-              )
-            }
-            if (message.role === 'assistant') {
-              return (
-                <AssistantMessage
-                  key={message.id}
-                  message={message}
-                  toolCalls={toolCalls}
-                  runActive={activeRunIds.has(message.runId ?? '')}
-                  runActivity={
-                    message.runId !== null
-                      ? props.runActivities[message.runId]
-                      : undefined
-                  }
-                  streamingText={props.streaming[message.id]}
-                  streamingReasoning={props.streamingReasoning[message.id]}
-                  runDurationMs={null}
-                  runUsage={null}
-                  canRetry={false}
-                  onRetry={handleRetry}
-                  onResourceClick={props.onResourceClick}
-                />
-              )
-            }
-            return (
-              <div key={message.id} className="msg-system">
-                {message.content}
-              </div>
-            )
-          })}
+          <VirtualTranscript
+            key={sessionId}
+            blocks={chatBlocks}
+            scrollRef={scrollRef}
+            pinned={pinned}
+            renderBlock={(block) => (
+              <ChatBlockView
+                block={block}
+                view={props}
+                runById={runById}
+                failedEventsByRun={failedEventsByRun}
+                delegationsByRun={delegationsByRun}
+                delegationAttention={delegationAttention}
+                activeRunIds={activeRunIds}
+                lastRetryableRun={lastRetryableRun}
+                runActive={runActive}
+                editMessageId={editMessageId}
+                editDraft={editDraft}
+                editSaving={editSaving}
+                onDraftChange={setEditDraft}
+                cancelEdit={cancelEdit}
+                saveEdit={saveEdit}
+                startEdit={startEdit}
+                handleRetry={handleRetry}
+              />
+            )}
+          />
         </div>
       </div>
 

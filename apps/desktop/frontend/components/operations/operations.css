@@ -12,11 +12,8 @@
   pointer-events: none;
 }
 .operation-notice {
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow-lg);
+  display: block;
+  padding: 8px 14px;
   pointer-events: auto;
   font-size: 12px;
 }
@@ -34,9 +31,6 @@
   overflow-wrap: anywhere;
   color: var(--text-secondary);
   line-height: 1.6;
-}
-.operation-failed {
-  border-color: var(--danger);
 }
 .operation-uncertain {
   border-color: var(--warning-text);

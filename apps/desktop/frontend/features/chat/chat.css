@@ -12,6 +12,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-anchor: none;
 }
 
 .transcript {
@@ -1579,6 +1580,7 @@
 }
 
 .child-trace-body {
+  overflow-anchor: none;
   flex: 1;
   overflow: auto;
   padding: 16px;
@@ -1885,4 +1887,22 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.virtual-transcript {
+  overflow-anchor: none;
+}
+
+.transcript-row {
+  display: flow-root;
+  padding-bottom: 22px;
+}
+
+.history-loader {
+  text-align: center;
+}
+
+.history-loader p {
+  color: var(--danger);
+  overflow-wrap: anywhere;
 }

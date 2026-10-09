@@ -6,6 +6,7 @@ import {
   type Message,
   type MessageRole,
   type MessageStatus,
+  type HistoryCursor,
 } from '@reflexion-os-studio/contracts'
 import { nowIso, type Row } from '../shared.js'
 
@@ -30,6 +31,44 @@ export class MessageStore {
       )
       .all(sessionId)
       .map((row) => this.toMessage(row as Row))
+  }
+
+  /** A turn starts at a user message; never cut assistant/tool rounds in half. */
+  listPage(sessionId: string, turns: number, before?: HistoryCursor) {
+    const boundary = before ? 'AND (created_at, rowid) < (?, ?)' : ''
+    const boundaryParams = before ? [before.createdAt, before.rowId] : []
+    const anchors = this.db
+      .prepare(
+        `SELECT rowid AS sequence, created_at FROM messages
+       WHERE session_id = ? AND role = 'user' AND status <> 'superseded' ${boundary}
+       ORDER BY created_at DESC, rowid DESC LIMIT ?`,
+      )
+      .all(sessionId, ...boundaryParams, turns + 1) as Row[]
+    const hasMore = anchors.length > turns
+    const start = hasMore ? anchors[turns - 1] : undefined
+    const page = this.db
+      .prepare(
+        `SELECT rowid AS sequence, * FROM messages
+       WHERE session_id = ? AND status <> 'superseded' ${boundary}
+       ${start ? 'AND (created_at, rowid) >= (?, ?)' : ''}
+       ORDER BY created_at ASC, rowid ASC`,
+      )
+      .all(
+        sessionId,
+        ...boundaryParams,
+        ...(start ? [String(start.created_at), Number(start.sequence)] : []),
+      ) as Row[]
+    const cursor = (row: Row): HistoryCursor => ({
+      createdAt: String(row.created_at),
+      rowId: Number(row.sequence),
+    })
+    return {
+      messages: page.map((row) => this.toMessage(row)),
+      positions: Object.fromEntries(
+        page.map((row) => [String(row.id), cursor(row)]),
+      ),
+      nextBefore: start ? cursor(start) : null,
+    }
   }
 
   /** 某 Run 内仍未终态（pending/streaming）的消息；Finalizer 收扫用。 */

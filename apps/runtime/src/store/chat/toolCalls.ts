@@ -96,6 +96,18 @@ export class ToolCallStore {
       .map((row) => this.toToolCall(row as Row))
   }
 
+  listForPage(messageIds: string[], runIds: string[]): ToolCall[] {
+    if (messageIds.length === 0) return []
+    return this.db
+      .prepare(
+        `SELECT * FROM tool_calls WHERE message_id IN (SELECT value FROM json_each(?))
+       OR (message_id IS NULL AND run_id IN (SELECT value FROM json_each(?)))
+       ORDER BY created_at ASC, rowid ASC`,
+      )
+      .all(JSON.stringify(messageIds), JSON.stringify(runIds))
+      .map((row) => this.toToolCall(row as Row))
+  }
+
   /** 状态推进：进入运行、权限等待或用户输入等待。 */
   markStatus(
     id: string,

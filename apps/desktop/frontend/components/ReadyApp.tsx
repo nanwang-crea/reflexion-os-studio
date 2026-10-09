@@ -58,6 +58,7 @@ export function ReadyApp(props: ReadyAppProps): React.JSX.Element {
         },
         chat: {
           sessionData: props.sessionData,
+          onLoadOlder: props.loadOlderHistory,
           delegations: props.delegations,
           streaming: props.streaming,
           streamingReasoning: props.streamingReasoning,

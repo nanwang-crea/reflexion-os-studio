@@ -7,7 +7,6 @@ import { newRequestId, transport } from '../lib/transport'
 
 export type OperationFeedback = OperationSnapshot & {
   key: string
-  refreshing: boolean
   unconfirmed: boolean
   canAcknowledge?: boolean
 }
@@ -16,8 +15,16 @@ let snapshot: readonly OperationFeedback[] = []
 const listeners = new Set<() => void>()
 const STORAGE_KEY = 'operations.unconfirmed'
 let initialized = false
+const completionListeners = new Set<
+  (item: OperationFeedback, previous: OperationFeedback | undefined) => void
+>()
 
 function publish(): void {
+  const settled = [...records.values()].filter((item) =>
+    ['succeeded', 'failed'].includes(item.phase),
+  )
+  const previous = snapshot
+  for (const item of settled) records.delete(item.key)
   snapshot = [...records.values()]
   try {
     localStorage.setItem(
@@ -34,6 +41,10 @@ function publish(): void {
     /* Runtime receipts still protect the current session. */
   }
   for (const listener of listeners) listener()
+  for (const item of settled) {
+    const prior = previous.find((record) => record.requestId === item.requestId)
+    for (const listener of completionListeners) listener(item, prior)
+  }
 }
 function keyFor(
   method: CoreMutationMethod,
@@ -70,7 +81,6 @@ export function initializeOperations(): void {
           method: method.data,
           phase: 'uncertain',
           error: '上次请求未确认，请核对结果；应用不会自动重做。',
-          refreshing: false,
           unconfirmed: true,
         })
       }
@@ -107,15 +117,15 @@ export function subscribeOperations(listener: () => void): () => void {
     listeners.delete(listener)
   }
 }
-export function dismissOperation(key: string): void {
-  const current = records.get(key)
-  if (
-    current &&
-    ['succeeded', 'failed'].includes(current.phase) &&
-    !current.refreshing
-  ) {
-    records.delete(key)
-    publish()
+export function subscribeOperationCompletions(
+  listener: (
+    item: OperationFeedback,
+    previous: OperationFeedback | undefined,
+  ) => void,
+): () => void {
+  completionListeners.add(listener)
+  return () => {
+    completionListeners.delete(listener)
   }
 }
 
@@ -126,25 +136,16 @@ export async function performMutation<T>(
 ): Promise<T> {
   const key = keyFor(method, params)
   const existing = records.get(key)
-  if (
-    existing &&
-    (['queued', 'running', 'uncertain'].includes(existing.phase) ||
-      existing.refreshing)
-  )
+  if (existing)
     throw new Error(
       '该资源已有操作尚未完成或确认，请先检查结果，避免重复写入。',
     )
-  if (existing?.phase === 'failed') {
-    const failureKey = `${key}:failed:${existing.requestId}`
-    records.set(failureKey, { ...existing, key: failureKey })
-  }
   const current: OperationFeedback = {
     key,
     requestId: newRequestId(),
     method,
     phase: 'queued',
     error: null,
-    refreshing: false,
     unconfirmed: false,
   }
   records.set(key, current)
@@ -202,7 +203,7 @@ export async function checkOperation(key: string): Promise<void> {
       result.operation &&
       ['succeeded', 'failed'].includes(result.operation.phase)
     ) {
-      records.set(key, { ...current, ...result.operation, refreshing: false })
+      records.set(key, { ...current, ...result.operation })
     } else {
       records.set(key, {
         ...current,
@@ -224,26 +225,6 @@ export async function checkOperation(key: string): Promise<void> {
       error: `无法确认结果：${error instanceof Error ? error.message : String(error)}`,
     })
     publish()
-  }
-}
-
-export async function refreshOperationView(
-  key: string,
-  action: () => Promise<void>,
-): Promise<void> {
-  const current = records.get(key)
-  if (current?.phase === 'succeeded') {
-    records.set(key, { ...current, refreshing: true })
-    publish()
-  }
-  try {
-    await action()
-  } finally {
-    const next = records.get(key)
-    if (next?.requestId === current?.requestId && next) {
-      records.set(key, { ...next, refreshing: false })
-      publish()
-    }
   }
 }
 

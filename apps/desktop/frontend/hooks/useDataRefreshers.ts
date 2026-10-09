@@ -1,4 +1,6 @@
 import { useCallback, useRef } from 'react'
+import { mergeLatestHistory, prependHistory } from './session/history-pages'
+import type { HistoryCursor } from '@reflexion-os-studio/runtime-client'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type {
   Delegation,
@@ -26,6 +28,7 @@ export interface DataRefresherDeps {
 
 export interface DataRefreshers {
   refreshSessionData: (sessionId: string) => Promise<void>
+  loadOlderHistory: (sessionId: string, before: HistoryCursor) => Promise<void>
   refreshProfiles: () => Promise<void>
   refreshProjects: () => Promise<void>
   refreshProjectSessions: (projectId: string) => Promise<void>
@@ -68,9 +71,26 @@ export function useDataRefreshers(deps: DataRefresherDeps): DataRefreshers {
         requestId === sessionRequestRef.current &&
         active.current.sessionId === sessionId
       )
-        setSessionData(result)
+        setSessionData((current) => mergeLatestHistory(current, result))
     },
     [sessionRequestRef, setSessionData],
+  )
+
+  const loadOlderHistory = useCallback(
+    async (sessionId: string, before: HistoryCursor) => {
+      const result = await getSessionData(sessionId, before)
+      if (active.current.sessionId !== sessionId) return
+      setSessionData((current) => {
+        if (
+          current?.session?.id !== sessionId ||
+          current.nextBefore?.rowId !== before.rowId ||
+          current.nextBefore?.createdAt !== before.createdAt
+        )
+          return current
+        return prependHistory(current, result)
+      })
+    },
+    [setSessionData],
   )
 
   const refreshProfiles = useCallback(async () => {
@@ -116,6 +136,7 @@ export function useDataRefreshers(deps: DataRefresherDeps): DataRefreshers {
 
   return {
     refreshSessionData,
+    loadOlderHistory,
     refreshProfiles,
     refreshProjects,
     refreshProjectSessions,

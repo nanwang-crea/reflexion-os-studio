@@ -16,3 +16,5 @@ export * from './semver.js'
 export * from './providers/index.js'
 
 export * from './operations.js'
+
+export * from './session-history.js'

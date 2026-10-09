@@ -127,3 +127,8 @@ export {
   closeTerminal,
   type TerminalClientRequestOptions,
 } from './terminal.js'
+
+export type {
+  HistoryCursor,
+  SessionHistory,
+} from '@reflexion-os-studio/contracts'

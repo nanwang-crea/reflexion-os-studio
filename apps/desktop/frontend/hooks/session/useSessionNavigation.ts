@@ -50,6 +50,8 @@ export function useSessionNavigation(
     // 新建对话入口能"救回来"，正是因为 newStandaloneChat 里执行了 setView('chat')。
     deps.setView('chat')
     deps.setActiveSessionId(sessionId)
+    deps.setSessionData(null)
+    deps.setDelegations([])
     deps.resetStreaming()
     void deps.refreshSessionData(sessionId)
     void deps.refreshDelegations(sessionId)

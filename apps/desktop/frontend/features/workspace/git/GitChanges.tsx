@@ -1,4 +1,3 @@
-import { refreshOperationView } from '../../../api/operations'
 import { GitInstallNotice } from './GitInstallNotice'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GitChangeEntry } from '@reflexion-os-studio/runtime-client'
@@ -213,17 +212,15 @@ export function GitChanges(props: GitChangesProps): React.JSX.Element {
         // 状态，保留操作错误；暂存不触发网络或引用刷新。
         if (attempted) {
           setBusy('refresh')
-          await refreshOperationView(`git:${props.projectId}`, () =>
-            refresh({
-              preserveError: true,
-              includeRefs: kind !== 'stage' && kind !== 'unstage',
-            }),
-          )
+          await refresh({
+            preserveError: true,
+            includeRefs: kind !== 'stage' && kind !== 'unstage',
+          })
         }
         setBusy(null)
       }
     },
-    [guardDirtyBuffersThen, reloadAllTextTabs, refresh, props.projectId],
+    [guardDirtyBuffersThen, reloadAllTextTabs, refresh],
   )
 
   const canCommit =

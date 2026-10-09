@@ -157,3 +157,57 @@ test('项目和委派乱序响应、清空会话后的旧响应不会覆盖当�
   await oldSession
   assert.equal(shown.session, undefined)
 })
+
+test('旧历史页不会写入其他会话或覆盖已移动的分页游标', async () => {
+  const h = harness()
+  const cursor = (rowId) => ({ createdAt: '2026-10-09T00:00:00.000Z', rowId })
+  const page = (id, rowId) => ({
+    session: { id },
+    messages: [{ id: String(rowId), runId: null }],
+    positions: { [rowId]: cursor(rowId) },
+    nextBefore: cursor(rowId),
+    runs: [],
+    toolCalls: [],
+    runEvents: [],
+    plans: [],
+  })
+  let data = page('a', 2)
+  const noop = () => {}
+  const deps = {
+    activeProjectId: null,
+    activeSessionId: 'a',
+    sessionRequestRef: { current: 0 },
+    setSessionData: (value) => {
+      data = typeof value === 'function' ? value(data) : value
+    },
+    setProjectSessions: noop,
+    setDelegations: noop,
+    setProfiles: noop,
+    setProjects: noop,
+    setStandaloneSessions: noop,
+  }
+  let refresh = h.render(() => useDataRefreshers(deps))
+  const old = refresh.loadOlderHistory('a', cursor(2))
+  deps.activeSessionId = 'b'
+  data = page('b', 3)
+  refresh = h.render(() => useDataRefreshers(deps))
+  h.pending[0].resolve(page('a', 1))
+  await old
+  assert.equal(data.session.id, 'b')
+  deps.activeSessionId = 'a'
+  data = page('a', 2)
+  refresh = h.render(() => useDataRefreshers(deps))
+  const moved = refresh.loadOlderHistory('a', cursor(2))
+  data = page('a', 1)
+  h.pending[1].resolve(page('a', 0))
+  await moved
+  assert.equal(data.messages[0].id, '1')
+  const accepted = refresh.loadOlderHistory('a', cursor(1))
+  h.pending[2].resolve({ ...page('a', 0), nextBefore: null })
+  await accepted
+  assert.deepEqual(
+    data.messages.map((m) => m.id),
+    ['0', '1'],
+  )
+  assert.equal(data.nextBefore, null)
+})

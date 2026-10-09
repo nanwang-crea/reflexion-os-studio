@@ -20,6 +20,10 @@ import type { RunActivity } from '../../hooks/session/useRunActivity'
 
 export interface ChatViewProps {
   sessionData: SessionData | null
+  onLoadOlder: (
+    sessionId: string,
+    before: import('@reflexion-os-studio/runtime-client').HistoryCursor,
+  ) => Promise<void>
   delegations: Delegation[]
   streaming: Record<string, string>
   streamingReasoning: Record<string, string>

@@ -142,6 +142,17 @@ export class PlanStore {
       .filter(Boolean)
   }
 
+  listCurrent(sessionId: string): Plan[] {
+    const active = this.getActive(sessionId)
+    const row = this.db
+      .prepare(
+        "SELECT id FROM plans WHERE session_id = ? AND status = 'completed' ORDER BY created_at DESC, rowid DESC LIMIT 1",
+      )
+      .get(sessionId) as Row | undefined
+    const completed = row ? this.get(String(row.id)) : null
+    return [completed, active].filter((plan): plan is Plan => plan !== null)
+  }
+
   /** 当前会话的活动计划；create 的事务内检查保证会话级最多一个，此处取第一个即唯一。 */
   getActive(sessionId: string): Plan | null {
     const row = this.db

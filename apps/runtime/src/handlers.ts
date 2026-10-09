@@ -1,3 +1,4 @@
+import { CommandSchemaRegistry } from '@reflexion-os-studio/contracts'
 import { CoreMutationMethodSchema } from '@reflexion-os-studio/contracts'
 import { operationsFor } from './operations/index.js'
 import { basename } from 'node:path'
@@ -94,14 +95,30 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
     }
   },
   'session.get': (p, { store }) => {
-    const sessionId = requireString(p, 'sessionId')
+    const { sessionId, turns, before } =
+      CommandSchemaRegistry['session.get'].params.parse(p)
+    const page = store.messages.listPage(sessionId, turns, before)
+    const runIds = [
+      ...new Set(
+        page.messages.flatMap((message) =>
+          message.runId ? [message.runId] : [],
+        ),
+      ),
+    ]
+    const runs = runIds.flatMap((id) => {
+      const run = store.runs.get(id)
+      return run ? [run] : []
+    })
     return {
       session: store.sessions.get(sessionId),
-      messages: store.messages.listBySession(sessionId),
-      runs: store.runs.listBySession(sessionId),
-      toolCalls: store.toolCalls.listBySession(sessionId),
-      plans: store.plans.listBySession(sessionId),
-      runEvents: store.runEvents.listBySession(sessionId),
+      ...page,
+      runs,
+      toolCalls: store.toolCalls.listForPage(
+        page.messages.map((message) => message.id),
+        runIds,
+      ),
+      plans: store.plans.listCurrent(sessionId),
+      runEvents: store.runEvents.listByRuns(runIds),
     }
   },
   'session.rename': (p, { store, agent }) => {

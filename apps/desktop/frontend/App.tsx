@@ -109,6 +109,7 @@ export default function App() {
 
   const {
     refreshSessionData,
+    loadOlderHistory,
     refreshProfiles,
     refreshProjects,
     refreshProjectSessions,
@@ -418,6 +419,7 @@ export default function App() {
       guardDirtyBuffersThen={guardDirtyBuffersThen}
       guardedResetWorkspaceFiles={guardedResetWorkspaceFiles}
       reloadAllTextTabs={reloadAllTextTabs}
+      loadOlderHistory={loadOlderHistory}
       refreshSessionData={refreshSessionData}
       refreshStandaloneSessions={refreshStandaloneSessions}
       refreshProfiles={refreshProfiles}

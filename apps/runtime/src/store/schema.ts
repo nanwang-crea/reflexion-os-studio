@@ -30,6 +30,10 @@ CREATE TABLE IF NOT EXISTS messages (
   created_at TEXT NOT NULL,
   completed_at TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_messages_history
+  ON messages(session_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_messages_turn_anchors
+  ON messages(session_id, created_at) WHERE role = 'user' AND status <> 'superseded';
 CREATE TABLE IF NOT EXISTS runs (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -285,6 +289,9 @@ CREATE TABLE IF NOT EXISTS context_checkpoints (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_tool_calls_message ON tool_calls(message_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_run ON tool_calls(run_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_run_events_run ON run_events(run_id, created_at);
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */

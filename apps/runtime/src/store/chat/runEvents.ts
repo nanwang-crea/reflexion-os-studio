@@ -58,6 +58,18 @@ export class RunEventStore {
     return rows.map(toRunEvent)
   }
 
+  listByRuns(runIds: string[]): RunEvent[] {
+    if (!runIds.length) return []
+    return (
+      this.db
+        .prepare(
+          `SELECT * FROM run_events WHERE run_id IN (SELECT value FROM json_each(?))
+       ORDER BY created_at ASC, rowid ASC`,
+        )
+        .all(JSON.stringify(runIds)) as unknown as RunEventRow[]
+    ).map(toRunEvent)
+  }
+
   private insert(input: {
     sessionId: string
     runId: string

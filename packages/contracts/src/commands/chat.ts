@@ -1,13 +1,12 @@
 import { z } from 'zod'
 import {
-  MessageSchema,
-  RunEventSchema,
+  HistoryCursorSchema,
+  SessionHistorySchema,
+} from '../session-history.js'
+import {
   ProjectSchema,
-  RunSchema,
   SessionSchema,
-  ToolCallSchema,
   QueueEntrySchema,
-  PlanSchema,
   ExecutionModeSchema,
 } from '../entities.js'
 import {
@@ -88,19 +87,10 @@ export const chatCommands = {
     params: z.object({
       requestId: RequestIdSchema,
       sessionId: z.string().min(1),
+      before: HistoryCursorSchema.optional(),
+      turns: z.number().int().min(1).max(50).default(10),
     }),
-    result: z.object({
-      session: SessionSchema.nullable(),
-      messages: z.array(MessageSchema),
-      runs: z.array(RunSchema),
-      // 会话内全部工具调用（跨 Run 汇总），供 UI 呈现工具轨迹。
-      toolCalls: z.array(ToolCallSchema),
-      // 会话内全部计划（跨 Run 汇总），供 UI 呈现计划轨迹。
-      plans: z.array(PlanSchema),
-      // 运行事件（重试/失败）。旧版 Runtime snapshot 缺该字段：默认空数组，
-      // 避免响应校验失败导致整个会话数据被丢弃（前端消息消失）。
-      runEvents: z.array(RunEventSchema).default([]),
-    }),
+    result: SessionHistorySchema,
   },
   'message.send': {
     params: MessageSendParamsSchema,

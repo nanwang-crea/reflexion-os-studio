@@ -1,9 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Delegation } from '@reflexion-os-studio/runtime-client'
 import { getDelegationTree } from '../../../api/agents'
 import { getSessionData, type SessionData } from '../../../api/sessions'
 import { buildChatBlocks, computeRunDurationMs } from '../chat-blocks'
 import { DelegationTree } from './DelegationTree'
+import { HistoryLoader } from '../transcript/HistoryLoader'
+import { VirtualTranscript } from '../transcript/VirtualTranscript'
+import {
+  mergeLatestHistory,
+  prependHistory,
+} from '../../../hooks/session/history-pages'
+import type { HistoryCursor } from '@reflexion-os-studio/runtime-client'
 import { RunBlock } from './RunBlock'
 
 interface ChildAgentTraceProps {
@@ -16,6 +23,7 @@ export function ChildAgentTrace({
   delegation,
   onClose,
 }: ChildAgentTraceProps): React.JSX.Element {
+  const scrollRef = useRef<HTMLDivElement>(null)
   const [data, setData] = useState<SessionData | null>(null)
   const [selected, setSelected] = useState(delegation)
   const [tree, setTree] = useState<Delegation[]>([])
@@ -41,14 +49,17 @@ export function ChildAgentTrace({
     const sessionId = selected.childSessionId
     if (sessionId === null) return
     let disposed = false
+    let requestId = 0
+    setData((current) => (current?.session?.id === sessionId ? current : null))
     const refresh = (): void => {
+      const request = ++requestId
       void Promise.all([
         getSessionData(sessionId),
         getDelegationTree(rootRunId),
       ])
         .then(([next, nextTree]) => {
-          if (!disposed) {
-            setData(next)
+          if (!disposed && request === requestId) {
+            setData((current) => mergeLatestHistory(current, next))
             setTree(nextTree)
             setSelected(
               (current) =>
@@ -69,6 +80,21 @@ export function ChildAgentTrace({
       if (timer !== undefined) window.clearInterval(timer)
     }
   }, [rootRunId, running, selected.childSessionId])
+
+  const loadOlder = useCallback(
+    async (sessionId: string, before: HistoryCursor): Promise<void> => {
+      const older = await getSessionData(sessionId, before)
+      setData((current) => {
+        if (
+          current?.session?.id !== sessionId ||
+          current.nextBefore?.rowId !== before.rowId
+        )
+          return current
+        return prependHistory(current, older)
+      })
+    },
+    [],
+  )
 
   const activeRunIds = useMemo(
     () =>
@@ -155,7 +181,7 @@ export function ChildAgentTrace({
             关闭
           </button>
         </header>
-        <div className="child-trace-body">
+        <div className="child-trace-body" ref={scrollRef}>
           <DelegationTree
             items={tree.length > 0 ? tree : [delegation]}
             rootRunId={rootRunId}
@@ -171,34 +197,48 @@ export function ChildAgentTrace({
             <p>加载轨迹…</p>
           )}
           <div className="child-trace-stream">
-            {chatBlocks.map((block) => {
-              if (block.kind !== 'run') return null
-              const run = runById.get(block.runId) ?? null
-              const finalMessage =
-                block.finalItem?.message ??
-                block.processItems[block.processItems.length - 1]?.message
-              return (
-                <RunBlock
-                  key={block.runId}
-                  processItems={block.processItems}
-                  finalItem={block.finalItem}
-                  delegations={[]}
-                  runActive={activeRunIds.has(block.runId)}
-                  streaming={streaming}
-                  streamingReasoning={streamingReasoning}
-                  runDurationMs={
-                    finalMessage
-                      ? computeRunDurationMs(run, finalMessage)
-                      : null
-                  }
-                  runUsage={run?.usage ?? null}
-                  runFailed={run?.status === 'failed'}
-                  canRetry={false}
-                  onRetry={() => undefined}
-                  projectId={data?.session?.projectId ?? ''}
-                />
-              )
-            })}
+            {data?.session && data.nextBefore && (
+              <HistoryLoader
+                key={data.session.id}
+                sessionId={data.session.id}
+                before={data.nextBefore}
+                onLoad={loadOlder}
+              />
+            )}
+            <VirtualTranscript
+              key={selected.childSessionId}
+              blocks={chatBlocks}
+              scrollRef={scrollRef}
+              pinned={false}
+              renderBlock={(block) => {
+                if (block.kind !== 'run') return null
+                const run = runById.get(block.runId) ?? null
+                const finalMessage =
+                  block.finalItem?.message ??
+                  block.processItems[block.processItems.length - 1]?.message
+                return (
+                  <RunBlock
+                    key={block.runId}
+                    processItems={block.processItems}
+                    finalItem={block.finalItem}
+                    delegations={[]}
+                    runActive={activeRunIds.has(block.runId)}
+                    streaming={streaming}
+                    streamingReasoning={streamingReasoning}
+                    runDurationMs={
+                      finalMessage
+                        ? computeRunDurationMs(run, finalMessage)
+                        : null
+                    }
+                    runUsage={run?.usage ?? null}
+                    runFailed={run?.status === 'failed'}
+                    canRetry={false}
+                    onRetry={() => undefined}
+                    projectId={data?.session?.projectId ?? ''}
+                  />
+                )
+              }}
+            />
           </div>
         </div>
       </section>

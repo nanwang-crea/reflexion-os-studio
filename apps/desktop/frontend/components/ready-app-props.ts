@@ -101,6 +101,10 @@ export interface ReadyAppProps {
   guardDirtyBuffersThen: () => Promise<boolean>
   guardedResetWorkspaceFiles: () => Promise<boolean>
   reloadAllTextTabs: Panel['reloadAllTextTabs']
+  loadOlderHistory: (
+    sessionId: string,
+    before: import('@reflexion-os-studio/runtime-client').HistoryCursor,
+  ) => Promise<void>
   refreshSessionData: (sessionId: string) => Promise<void>
   refreshStandaloneSessions: () => Promise<void>
   refreshProfiles: () => Promise<void>
