@@ -962,15 +962,15 @@
 .settings-view input:not([type='checkbox']):not([type='radio']):hover,
 .settings-view textarea:hover,
 .settings-view .field .ui-select:hover {
-  border-color: #5b5b5b;
+  border-color: var(--text-muted);
 }
 
 .settings-view input:not([type='checkbox']):not([type='radio']):focus-visible,
 .settings-view textarea:focus-visible,
 .settings-view .field .ui-select:focus-visible {
   outline: none;
-  border-color: #6a6a6a;
-  box-shadow: 0 0 0 1px #6a6a6a;
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 1px var(--focus-ring);
 }
 
 .settings-view .field {
@@ -1008,7 +1008,7 @@
 }
 
 .form-actions .primary:hover:not(:disabled) {
-  background: #fff;
+  background: var(--accent-hover);
 }
 
 .settings-list-toolbar h4,
@@ -1113,8 +1113,8 @@
 }
 
 .settings-primary:hover:not(:disabled) {
-  background: #fff;
-  border-color: #fff;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .mcp-item {

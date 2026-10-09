@@ -1,3 +1,4 @@
+import { EmptyState } from '../../../components/feedback/EmptyState'
 import { useCallback, useImperativeHandle, useRef } from 'react'
 import type { Ref } from 'react'
 import type { Project, ResourceLink } from '@reflexion-os-studio/runtime-client'
@@ -108,8 +109,11 @@ export function FileViewerPanel(
     return (
       <div className="workspace-panel" style={{ width: props.width }}>
         <div className="workspace-panel-empty">
-          <FolderIcon />
-          <p>在左侧选择项目后，可在这里浏览工作区文件。</p>
+          <EmptyState
+            icon={<FolderIcon />}
+            title="还未选择项目"
+            description="从左侧选择项目，或新建项目以浏览文件、查看差异和编辑内容。"
+          />
         </div>
       </div>
     )
@@ -128,8 +132,11 @@ export function FileViewerPanel(
         />
       ) : (
         <div className="workspace-panel-empty">
-          <FolderIcon />
-          <p>在左侧项目文件工作区中选择文件，可在右侧打开预览。</p>
+          <EmptyState
+            icon={<FolderIcon />}
+            title="选择文件开始查看"
+            description="在项目文件树中点击文件，内容会在这里打开；Git 变更可切换到差异预览。"
+          />
         </div>
       )}
 

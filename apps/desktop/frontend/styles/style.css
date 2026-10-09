@@ -1,4 +1,21 @@
 :root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --font-caption: 13px;
+  --font-body: 14px;
+  --font-title: 24px;
+  --control-height: 36px;
+  --danger-solid: #b4232c;
+  --danger-hover: #961c24;
+  --on-danger: #ffffff;
+
   color-scheme: dark;
   --bg: #191c22;
   --bg-sidebar: #13161b;
@@ -41,7 +58,8 @@
     'PingFang SC',
     'Microsoft YaHei',
     sans-serif;
-  font-size: 14px;
+  font-size: var(--font-body);
+  line-height: 1.5;
 }
 
 * {
@@ -322,11 +340,11 @@ input:is([type='checkbox'], [type='radio']):disabled {
 
 .dialog {
   width: min(420px, 100%);
-  background: var(--bg-hover);
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
   padding: 20px 22px;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-lg);
 }
 
 .dialog-title {
@@ -344,16 +362,17 @@ input:is([type='checkbox'], [type='radio']):disabled {
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
+  gap: var(--space-2);
+  flex-wrap: wrap;
 }
 
 .dialog-danger {
-  background: var(--danger);
-  color: #ffffff;
+  background: var(--danger-solid);
+  color: var(--on-danger);
 }
 
 .dialog-danger:hover:not(:disabled) {
-  background: #ef4444;
+  background: var(--danger-hover);
 }
 
 /* ---------- 响应式 ---------- */
@@ -393,12 +412,12 @@ input:is([type='checkbox'], [type='radio']):disabled {
   background: var(--bg-elevated);
   color: var(--text);
   font-size: 13px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-lg);
   animation: toast-in 0.16s ease-out;
 }
 
 .toast-success svg {
-  color: #22c55e;
+  color: var(--ok);
 }
 
 .toast-error svg {

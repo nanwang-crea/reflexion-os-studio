@@ -67,7 +67,7 @@ export function ConfirmDialog(
               </button>
             )}
           <button
-            className={state.danger ? 'dialog-danger' : ''}
+            className={state.danger ? 'dialog-danger' : 'primary'}
             onClick={props.onConfirm}
           >
             {state.confirmLabel ?? '确定'}

@@ -1,3 +1,4 @@
+import { EmptyState } from '../../components/feedback/EmptyState'
 import { Select } from '../../components/forms/Select'
 import { useEffect, useMemo, useState } from 'react'
 import type {
@@ -197,7 +198,14 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
   }
 
   if (!(draft && (profile || isNew))) {
-    return <div className="provider-empty">选择或添加一个供应商</div>
+    return (
+      <div className="provider-empty">
+        <EmptyState
+          title="配置你的模型供应商"
+          description="点击左侧“添加”配置服务地址、API Key 和模型；已有配置可从列表中选择。"
+        />
+      </div>
+    )
   }
 
   return (

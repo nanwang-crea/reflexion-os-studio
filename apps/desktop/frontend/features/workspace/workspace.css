@@ -543,8 +543,8 @@
 }
 
 .git-source-tabs button.active {
-  color: var(--text-primary);
-  background: var(--surface-hover);
+  color: var(--text);
+  background: var(--bg-hover);
 }
 
 .git-list {

@@ -1,3 +1,4 @@
+import { EmptyState } from '../../../components/feedback/EmptyState'
 import { isComposing } from '../../../lib/keyboard'
 import { useEffect, useRef, useState } from 'react'
 import type {
@@ -120,8 +121,11 @@ export function ProjectFiles(props: ProjectFilesProps): React.JSX.Element {
     return (
       <div className="project-files">
         <div className="project-files-empty">
-          <FolderIcon />
-          <p>点击项目旁的文件夹图标，可在这里浏览工作区文件。</p>
+          <EmptyState
+            icon={<FolderIcon />}
+            title="浏览项目文件"
+            description="点击项目旁的文件夹图标，打开对应工作区的文件树。"
+          />
         </div>
       </div>
     )

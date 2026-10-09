@@ -1,3 +1,4 @@
+import { EmptyState } from '../../components/feedback/EmptyState'
 import type { ChatViewProps } from './chat-view-types'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
@@ -260,10 +261,11 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
         <div className="transcript">
           {messages.length === 0 && (
             <div className="chat-empty">
-              <div className="chat-empty-icon" aria-hidden="true">
-                <SparkIcon size={20} />
-              </div>
-              发送第一条消息开始对话。输入 / 可选用技能。
+              <EmptyState
+                icon={<SparkIcon size={20} />}
+                title="开始这段对话"
+                description="在下方描述你想完成的任务。输入 / 可选择技能；项目对话会使用对应工作区上下文。"
+              />
             </div>
           )}
           {chatBlocks.map((block) => {

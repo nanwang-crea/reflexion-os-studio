@@ -1,3 +1,4 @@
+import { EmptyState } from '../../components/feedback/EmptyState'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { McpServer, McpTool } from '@reflexion-os-studio/runtime-client'
 import {
@@ -253,7 +254,12 @@ export function McpPanel(props: McpPanelProps): React.JSX.Element {
           </li>
         ))}
         {servers.length === 0 && (
-          <li className="mcp-empty">还没有 MCP 服务器</li>
+          <li className="mcp-empty">
+            <EmptyState
+              title="还没有 MCP 服务器"
+              description="在下方添加服务器以连接外部工具。添加后可查看连接状态和工具列表。"
+            />
+          </li>
         )}
       </ul>
 

@@ -19,7 +19,7 @@
   white-space: nowrap;
 }
 .ui-select:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 .ui-select-arrow {
@@ -39,7 +39,7 @@
   color: var(--text);
   font: inherit;
   font-size: 13px;
-  box-shadow: 0 8px 24px #0004;
+  box-shadow: var(--shadow-lg);
 }
 .ui-select-item {
   position: relative;

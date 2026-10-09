@@ -60,11 +60,6 @@
   background: var(--accent-hover);
   border-color: var(--accent-hover);
 }
-:root[data-theme='light'] .skill-card-actions .primary,
-:root[data-theme='light'] .instructions-toolbar .primary,
-:root[data-theme='light'] .instruction-actions .primary {
-  color: #fff;
-}
 :root[data-theme='light']
   .settings-view
   input:not([type='checkbox']):not([type='radio']):hover,

@@ -13,8 +13,8 @@ a:focus-visible {
 }
 
 ::selection {
-  background: #345082;
-  color: #fff;
+  background: var(--selection-bg);
+  color: var(--selection-text);
 }
 
 .topbar {
@@ -87,7 +87,7 @@ a:focus-visible {
 .automations-view h1,
 .instructions-view header h2,
 .settings-head h2 {
-  font-size: 24px;
+  font-size: var(--font-title);
   font-weight: 600;
   letter-spacing: -0.025em;
   line-height: 1.35;
@@ -116,7 +116,9 @@ a:focus-visible {
 }
 
 .settings-head {
-  padding: 20px var(--page-padding);
+  padding: var(--space-4) var(--space-6);
+  height: auto;
+  min-height: 76px;
 }
 
 .settings-content {
@@ -185,4 +187,71 @@ a:focus-visible {
     transition: none !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Shared action hierarchy. Compact icon buttons retain their feature sizes. */
+button.primary,
+button.settings-primary,
+.form-actions button.primary,
+.skill-card-actions button.primary,
+.instructions-toolbar button.primary,
+.instruction-actions button.primary,
+.approval-actions button.primary {
+  min-height: var(--control-height);
+  padding: 7px 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+button.primary:hover:not(:disabled),
+button.settings-primary:hover:not(:disabled),
+.form-actions button.primary:hover:not(:disabled),
+.skill-card-actions button.primary:hover:not(:disabled),
+.instructions-toolbar button.primary:hover:not(:disabled),
+.instruction-actions button.primary:hover:not(:disabled),
+.approval-actions button.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+.dialog-message {
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+.settings-toolbar-actions,
+.mcp-add-actions {
+  flex-wrap: wrap;
+}
+.settings-panel h3 {
+  font-size: 18px;
+  line-height: 1.4;
+}
+.settings-head p {
+  max-width: 65ch;
+}
+.workspace-panel-empty > .empty-state {
+  padding: 0;
+}
+.provider-empty {
+  min-height: 220px;
+  height: auto;
+}
+.chat-empty {
+  margin-top: clamp(24px, 12vh, 104px);
+}
+
+.dialog-actions > button,
+.form-actions > button,
+.settings-toolbar-actions > button,
+.mcp-add-actions > button {
+  min-height: var(--control-height);
+}
+.project-files-empty > .empty-state {
+  padding: 0;
 }

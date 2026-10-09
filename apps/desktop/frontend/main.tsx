@@ -13,6 +13,7 @@ import './features/instructions/instructions.css'
 import './features/workspace/workspace.css'
 import '@xterm/xterm/css/xterm.css'
 import './features/terminal/terminal.css'
+import './components/feedback/empty-state.css'
 import './styles/product-surfaces.css'
 import './styles/themes.css'
 

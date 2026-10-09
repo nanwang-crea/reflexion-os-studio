@@ -245,7 +245,7 @@
 
 .edit-resend-actions .primary {
   background: var(--accent);
-  color: #171717;
+  color: var(--on-accent);
 }
 
 .edit-resend-actions .primary:hover:not(:disabled) {
@@ -731,7 +731,7 @@
 }
 
 .composer:focus-within {
-  border-color: #5a5a5a;
+  border-color: var(--accent-border);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
 }
 
@@ -873,7 +873,7 @@
   display: grid;
   place-items: center;
   background: var(--accent);
-  color: #171717;
+  color: var(--on-accent);
   box-shadow: none;
 }
 
@@ -1310,7 +1310,7 @@
   overflow-wrap: anywhere;
 }
 .changed-file:hover {
-  background: var(--surface-hover);
+  background: var(--bg-hover);
   color: var(--text);
 }
 .changed-file-action {
@@ -1416,7 +1416,7 @@
   padding: 0 8px;
   border-radius: 999px;
   color: var(--text-muted);
-  background: var(--surface-hover);
+  background: var(--bg-hover);
 }
 
 .delegation-status.running,
@@ -1427,12 +1427,12 @@
 
 .delegation-status.completed {
   color: var(--ok, #4ade80);
-  background: color-mix(in srgb, #4ade80 16%, transparent);
+  background: color-mix(in srgb, var(--ok) 16%, transparent);
 }
 
 .delegation-status.failed {
   color: var(--danger, #f87171);
-  background: color-mix(in srgb, #f87171 16%, transparent);
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
 }
 
 .delegation-status.cancelled {
@@ -1482,7 +1482,7 @@
   margin: 6px 0;
   padding: 8px;
   border-radius: 7px;
-  background: var(--surface-hover);
+  background: var(--bg-hover);
   font-size: 11.5px;
 }
 
@@ -1629,7 +1629,7 @@
   padding: 1px 7px;
   border-radius: 999px;
   color: var(--text-muted);
-  background: var(--surface-hover);
+  background: var(--bg-hover);
   font-size: 11px;
 }
 

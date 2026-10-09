@@ -34,7 +34,7 @@
 }
 .instructions-toolbar .primary {
   background: var(--info);
-  color: #0c1828;
+  color: var(--on-accent);
   border: none;
   padding: 5px 12px;
   border-radius: 8px;
@@ -81,7 +81,7 @@
 }
 .instruction-actions .primary {
   background: var(--info);
-  color: #0c1828;
+  color: var(--on-accent);
   border: none;
   padding: 6px 12px;
   border-radius: 8px;
