@@ -94,7 +94,7 @@ function transcriptOf(frames: ContextFrame[]): string {
       case 'user':
       case 'assistant_text':
         lines.push(
-          `${frame.kind === 'user' ? 'user' : 'assistant'}: ${frame.content.slice(0, 400)}`,
+          `${frame.kind === 'user' ? 'user' : 'assistant'}: ${frame.content.slice(0, 400)}${frame.kind === 'user' && frame.images?.length ? ` [附带 ${frame.images.length} 张图片，原图已随历史归档]` : ''}`,
         )
         break
       case 'tool_round': {

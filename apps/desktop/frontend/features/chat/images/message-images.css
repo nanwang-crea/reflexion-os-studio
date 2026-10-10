@@ -1,0 +1,51 @@
+.message-images {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.message-image {
+  margin: 0;
+  max-width: 280px;
+}
+.message-image img {
+  display: block;
+  max-width: 100%;
+  max-height: 240px;
+  border-radius: 8px;
+  object-fit: contain;
+}
+.message-image figcaption {
+  font-size: 11px;
+  max-width: 280px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0.7;
+}
+.message-image-state {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.message-image-open {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+.message-image-dialog {
+  max-width: 92vw;
+  max-height: 92vh;
+  padding: 16px;
+  border-radius: 12px;
+}
+.message-image-dialog img {
+  max-width: 85vw;
+  max-height: 75vh;
+  display: block;
+  object-fit: contain;
+}
+.message-image-dialog::backdrop {
+  background: rgb(0 0 0 / 60%);
+}

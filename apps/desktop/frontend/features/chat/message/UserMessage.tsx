@@ -1,3 +1,4 @@
+import { MessageImage } from '../images/MessageImage'
 import { isComposing } from '../../../lib/keyboard'
 import type { Message } from '@reflexion-os-studio/runtime-client'
 import { CopyButton } from '../../../components/CopyButton'
@@ -27,6 +28,13 @@ export function UserMessage({
   return (
     <div className="msg-user">
       <div className={`user-bubble${editing ? ' user-bubble-editing' : ''}`}>
+        <div className="message-images">
+          {message.parts
+            .filter((part) => part.type === 'image')
+            .map((part) => (
+              <MessageImage key={part.assetId} assetId={part.assetId} />
+            ))}
+        </div>
         {editing ? (
           <div className="edit-resend-inline">
             <textarea

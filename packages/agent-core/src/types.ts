@@ -3,6 +3,7 @@ import type {
   JsonValue,
   ResourceLink,
   ToolProvenance,
+  ImagePart,
 } from '@reflexion-os-studio/contracts'
 
 /**
@@ -17,7 +18,12 @@ export interface AssistantToolCall {
 }
 
 export type ModelMessage =
-  | { role: 'system' | 'user'; content: string }
+  | { role: 'system'; content: string }
+  | {
+      role: 'user'
+      content: string
+      images?: (ImagePart & { base64?: string })[]
+    }
   | { role: 'assistant'; content: string; toolCalls: AssistantToolCall[] }
   | { role: 'tool'; toolCallId: string; content: string; isError: boolean }
 

@@ -13,6 +13,7 @@ export interface SendMessageResult {
 export function sendMessage(input: {
   sessionId: string
   content: string
+  imageAssetIds?: string[]
   providerId?: string
   model?: string
   /** 本次发送的权限预设快照；缺省 workspace-read（Runtime 侧默认）。 */

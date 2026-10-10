@@ -43,7 +43,11 @@ export interface ChatViewProps {
   agentTemplates: AgentTemplate[]
   composerPrefill?: { skillId: string; nonce: number } | null
   onPrefillConsumed?: () => void
-  onSend: (content: string, agentTemplateId?: string) => Promise<void>
+  onSend: (
+    content: string,
+    agentTemplateId?: string,
+    images?: File[],
+  ) => Promise<void>
   onStop: () => Promise<void>
   onRetry: () => Promise<void>
   onGoSettings: () => void

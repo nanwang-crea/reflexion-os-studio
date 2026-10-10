@@ -1,3 +1,4 @@
+import { resolveModelImages } from '../context/model-images.js'
 import {
   ModelProtocolError,
   requireModelTurnDisposition,
@@ -93,7 +94,12 @@ export async function executeModelTurn(
       apiKey: provider.apiKey,
       model: provider.model,
       headers: provider.headers,
-      messages,
+      messages: await resolveModelImages(
+        store,
+        run.sessionId,
+        messages,
+        signal,
+      ),
       tools: registry.specs(),
       ...(provider.temperature !== undefined
         ? { temperature: provider.temperature }

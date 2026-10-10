@@ -54,7 +54,8 @@ export class Store {
   readonly contextCheckpoints: ContextCheckpointStore
   readonly plugins: PluginStore
 
-  constructor(dir: string) {
+  constructor(readonly dataDir: string) {
+    const dir = dataDir
     mkdirSync(dir, { recursive: true })
     this.db = new DatabaseSync(join(dir, 'reflexion.db'))
     this.db.exec('PRAGMA foreign_keys = ON')

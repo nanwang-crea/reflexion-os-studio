@@ -1,3 +1,4 @@
+import { userImageContent } from '../image-content.js'
 import type { ModelMessage } from '@reflexion-os-studio/agent-core'
 import type { StreamChatOptions } from '../types.js'
 
@@ -11,8 +12,9 @@ function toProviderMessage(
 ): Record<string, unknown> {
   switch (message.role) {
     case 'system':
-    case 'user':
       return { role: message.role, content: message.content }
+    case 'user':
+      return { role: 'user', content: userImageContent(message, 'openai-chat') }
     case 'assistant':
       return {
         role: 'assistant',

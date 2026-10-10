@@ -1,3 +1,5 @@
+import { ImageUploadSchema } from '@reflexion-os-studio/contracts'
+import { CommandError } from '../agent/errors.js'
 import { requireString, type CommandHandler } from '../command-utils.js'
 
 /**
@@ -6,6 +8,9 @@ import { requireString, type CommandHandler } from '../command-utils.js'
  * 导出/下载/系统应用打开属后续阶段。
  */
 export const assetCommandHandlers: Record<string, CommandHandler> = {
+  'asset.upload_image': async (p, { assets }) => ({
+    asset: await assets.uploadImage(ImageUploadSchema.parse(p)),
+  }),
   'asset.import': async (p, { assets }) => ({
     asset: await assets.importWorkspace(
       requireString(p, 'projectId'),
@@ -17,7 +22,17 @@ export const assetCommandHandlers: Record<string, CommandHandler> = {
   }),
   'asset.read': async (p, { assets }) =>
     assets.read(requireString(p, 'assetId')),
-  'asset.delete': async (p, { assets }) => ({
-    removed: await assets.delete(requireString(p, 'assetId')),
-  }),
+  'asset.delete': async (p, { assets, store, agent }) => {
+    const assetId = requireString(p, 'assetId')
+    const asset = store.assetStore.get(assetId)
+    if (
+      asset?.sessionId &&
+      agent
+        .listQueue(asset.sessionId)
+        .items.some((item) => item.imageAssetIds?.includes(assetId))
+    ) {
+      throw new CommandError('invalid_request', '图片正在排队发送，不能删除')
+    }
+    return { removed: await assets.delete(assetId) }
+  },
 }

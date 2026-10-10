@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { MAX_MESSAGE_IMAGES } from '../images.js'
 import { PermissionPresetSchema } from '../entities.js'
 export const RequestIdSchema = z.string().min(1)
 export type RequestId = z.infer<typeof RequestIdSchema>
@@ -32,6 +33,7 @@ export const MessageSendParamsSchema = z.object({
   requestId: RequestIdSchema,
   sessionId: z.string().min(1),
   content: z.string().min(1),
+  imageAssetIds: z.array(z.string().min(1)).max(MAX_MESSAGE_IMAGES).optional(),
   // 不传则使用启用的 Provider 及其第一个模型。
   providerId: z.string().min(1).optional(),
   model: z.string().min(1).optional(),

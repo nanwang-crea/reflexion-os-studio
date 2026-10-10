@@ -37,8 +37,13 @@ export function reconstructSessionFramesWithIds(
       .map((part) => part.text)
       .join('')
     if (message.role === 'user') {
-      if (text !== '') {
-        frames.push({ kind: 'user', content: text })
+      const images = message.parts.filter((part) => part.type === 'image')
+      if (text !== '' || images.length > 0) {
+        frames.push({
+          kind: 'user',
+          content: text,
+          ...(images.length ? { images } : {}),
+        })
         messageIds.push(message.id)
       }
       continue
@@ -109,7 +114,13 @@ function projectFrames(frames: ContextFrame[]): ModelMessage[] {
         messages.push({ role: 'system', content: frame.content })
         break
       case 'user':
-        messages.push({ role: 'user', content: frame.content })
+        messages.push({
+          role: 'user',
+          content: frame.content,
+          ...('images' in frame && frame.images?.length
+            ? { images: frame.images }
+            : {}),
+        })
         break
       case 'assistant_text':
         messages.push({

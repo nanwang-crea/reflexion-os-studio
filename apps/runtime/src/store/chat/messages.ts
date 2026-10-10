@@ -87,8 +87,9 @@ export class MessageStore {
     role: MessageRole
     content: string
     status: MessageStatus
+    parts?: ContentPart[]
   }): Message {
-    const parts = textParts(input.content)
+    const parts = input.parts ?? textParts(input.content)
     const message: Message = {
       id: randomUUID(),
       sessionId: input.sessionId,
@@ -140,6 +141,18 @@ export class MessageStore {
         nowIso(),
         id,
       )
+  }
+
+  referencesAsset(assetId: string): boolean {
+    return (
+      this.db
+        .prepare(
+          `SELECT 1 FROM messages, json_each(messages.parts_json) AS part
+      WHERE json_extract(part.value, '$.type') = 'image'
+        AND json_extract(part.value, '$.assetId') = ? LIMIT 1`,
+        )
+        .get(assetId) !== undefined
+    )
   }
 
   markStreaming(id: string): void {

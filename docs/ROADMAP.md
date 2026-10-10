@@ -53,9 +53,11 @@ Rust File/Shell Service、Workspace 边界、read-only/workspace Profile、Chat 
 
 Node SDK、Workflow Definition、DAG 校验、调度、checkpoint、React Flow 画布以及 Asset/File/Document/Browser 节点。NL 生成结构化定义（节点/Agent 的自然语言生成）按 `docs/NL-TO-STRUCTURE.md` 的 S4–S6 随本阶段落地。
 
-## Phase 5：Multimodal Workflow（未开始）
+## Phase 5：Multimodal Workflow（图片 Chat 子集已接入，Workflow 未开始）
 
-Prompt → Text-to-Image → Review → Image-to-Video → Export，媒体 Asset、异步任务、预览、版本和 ComfyUI Backend。
+图片 Chat 子集（2026-10-09 用户明确请求）：图片选择/粘贴、Asset 会话存储、消息预览、OpenAI Chat/Responses 与 Anthropic 原生视觉输入、历史/队列/重试/编辑重发；边界与验收见 [多模态 Chat](MULTIMODAL-CHAT.md)。
+
+仍未开始：Prompt → Text-to-Image → Review → Image-to-Video → Export，媒体生成、音频/视频输入、异步任务、版本和 ComfyUI Backend。
 
 ## Phase 6：Desktop Hardening（未开始）
 

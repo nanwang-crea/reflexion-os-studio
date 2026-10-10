@@ -1,3 +1,5 @@
+import { useComposerImages } from './composer/useComposerImages'
+import { ImageAttachments } from './composer/ImageAttachments'
 import { isComposing } from '../lib/keyboard'
 import { Select } from './forms/Select'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -57,7 +59,11 @@ interface ComposerProps {
    * 主要给 SkillsView 的"在对话中使用"按钮触发，回到 chat 时把斜杠带上。
    */
   prefill?: { skillId: string; nonce: number } | null
-  onSend: (content: string, agentTemplateId?: string) => Promise<void> | void
+  onSend: (
+    content: string,
+    agentTemplateId?: string,
+    images?: File[],
+  ) => Promise<void> | void
   onStop?: () => Promise<void> | void
 }
 
@@ -66,6 +72,9 @@ const SLASH_QUERY_RE = /^\/([a-z0-9-]*)$/
 
 export function Composer(props: ComposerProps): React.JSX.Element {
   const [draft, setDraft] = useState('')
+  const attachments = useComposerImages()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [sendError, setSendError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
   const [slashIndex, setSlashIndex] = useState(0)
   const [slashDismissed, setSlashDismissed] = useState(false)
@@ -75,7 +84,7 @@ export function Composer(props: ComposerProps): React.JSX.Element {
   const busy = props.busy ?? false
   // 单按钮状态机：busy 且输入框无内容 → 停止当前回复；一旦输入（或清空）
   // 按钮在停止/发送间切换，发送在 busy 下的语义是入队排队。
-  const hasDraft = draft.trim().length > 0
+  const hasDraft = draft.trim().length > 0 || attachments.images.length > 0
   const showStop = busy && !hasDraft
   const showModelSelect =
     props.modelOptions !== undefined &&
@@ -130,16 +139,24 @@ export function Composer(props: ComposerProps): React.JSX.Element {
   }
 
   const submit = async (): Promise<void> => {
-    const content = draft.trim()
-    // busy 时仍允许发送:消息进入会话队列,上一条回复结束后自动发出。
+    const content =
+      draft.trim() || (attachments.images.length ? '请分析这些图片。' : '')
     if (!content || props.disabled || sending) return
-    setDraft('')
-    setSlashIndex(0)
-    setSlashDismissed(false)
-    if (textareaRef.current) textareaRef.current.style.height = 'auto'
     setSending(true)
+    setSendError(null)
     try {
-      await props.onSend(content, agentTemplateId || undefined)
+      await props.onSend(
+        content,
+        agentTemplateId || undefined,
+        attachments.images.map((image) => image.file),
+      )
+      setDraft('')
+      attachments.clear()
+      setSlashIndex(0)
+      setSlashDismissed(false)
+      if (textareaRef.current) textareaRef.current.style.height = 'auto'
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : '发送失败，请重试')
     } finally {
       setSending(false)
     }
@@ -178,11 +195,51 @@ export function Composer(props: ComposerProps): React.JSX.Element {
           ))}
         </div>
       )}
+      <ImageAttachments
+        images={attachments.images}
+        disabled={sending}
+        onRemove={attachments.remove}
+      />
+      {(attachments.error || sendError) && (
+        <div className="composer-image-error" role="alert">
+          {attachments.error || sendError}
+        </div>
+      )}
+      {attachments.images.length > 0 && (
+        <div className="composer-image-hint">
+          请使用支持视觉的模型 · 最多 4 张，每张 4MB
+        </div>
+      )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        disabled={props.disabled || sending}
+        hidden
+        multiple
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        onChange={(event) => {
+          attachments.add(Array.from(event.target.files ?? []))
+          event.target.value = ''
+        }}
+      />
       <textarea
         ref={textareaRef}
         rows={1}
         placeholder={props.placeholder}
-        disabled={props.disabled}
+        disabled={props.disabled || sending}
+        onPaste={(event) => {
+          if (sending || props.disabled) return
+          const files = Array.from(event.clipboardData.items)
+            .filter((item) => item.type.startsWith('image/'))
+            .flatMap((item) => {
+              const file = item.getAsFile()
+              return file ? [file] : []
+            })
+          if (files.length) {
+            event.preventDefault()
+            attachments.add(files)
+          }
+        }}
         autoFocus={props.autoFocus}
         value={draft}
         onChange={(event) => {
@@ -278,6 +335,15 @@ export function Composer(props: ComposerProps): React.JSX.Element {
             <span aria-hidden>×</span>
           </button>
         )}
+        <button
+          type="button"
+          className="ghost composer-attach"
+          disabled={props.disabled || sending}
+          title="添加图片（最多 4 张，每张 4MB）；请使用支持视觉的模型"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          添加图片
+        </button>
         <span className="bar-spacer" />
         {showModelSelect && (
           <label className="composer-select model" title="对话使用的模型">

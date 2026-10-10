@@ -1,3 +1,4 @@
+import { userImageContent } from './image-content.js'
 import type { ModelMessage } from '@reflexion-os-studio/agent-core'
 import {
   DEFAULT_MAX_RETRIES,
@@ -37,7 +38,10 @@ function toAnthropicMessages(
       continue
     }
     if (message.role === 'user') {
-      result.push({ role: 'user', content: message.content })
+      result.push({
+        role: 'user',
+        content: userImageContent(message, 'anthropic'),
+      })
       continue
     }
     if (message.role === 'assistant') {

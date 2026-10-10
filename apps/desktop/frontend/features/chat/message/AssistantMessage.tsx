@@ -1,3 +1,4 @@
+import { MessageImage } from '../images/MessageImage'
 import { memo, useMemo } from 'react'
 import type {
   Message,
@@ -74,7 +75,9 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
   const structuredParts = useMemo<MessagePart[]>(
     () =>
       props.streamingText === undefined
-        ? (props.message.parts as unknown as MessagePart[])
+        ? (props.message.parts.filter(
+            (part) => part.type !== 'image',
+          ) as unknown as MessagePart[])
         : [],
     [props.message.parts, props.streamingText],
   )
@@ -116,6 +119,13 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
 
   return (
     <div className="msg-assistant">
+      <div className="message-images">
+        {props.message.parts
+          .filter((part) => part.type === 'image')
+          .map((part) => (
+            <MessageImage key={part.assetId} assetId={part.assetId} />
+          ))}
+      </div>
       <div className="assistant-main">
         {reasoningText !== '' && !props.hideReasoning && (
           <ReasoningBlock

@@ -1,3 +1,7 @@
+import { readAssetContent } from './content.js'
+import { touchesSensitive } from '../agent/permissions/escalation.js'
+import { uploadImageAsset } from './images/upload.js'
+import type { ImageUpload } from '@reflexion-os-studio/contracts'
 import { createHash, randomUUID } from 'node:crypto'
 import {
   lstat,
@@ -136,6 +140,9 @@ export class AssetService {
         '导入路径超出工作区范围（符号链接越界）',
       )
     }
+    if (touchesSensitive(rawSource) || touchesSensitive(realSource)) {
+      throw new CommandError('invalid_request', '禁止导入机密文件')
+    }
     const info = await lstat(realSource).catch(() => null)
     if (info === null || !info.isFile()) {
       throw new CommandError('invalid_request', `文件不存在：${path}`)
@@ -191,6 +198,16 @@ export class AssetService {
     }
   }
 
+  uploadImage(input: ImageUpload): Promise<AssetRef> {
+    return uploadImageAsset(this.store, this.dataDir, input)
+  }
+
+  private contentPath(asset: AssetRef): string {
+    return asset.sessionId
+      ? join(this.dataDir, 'assets', 'sessions', asset.sessionId, asset.assetId)
+      : this.pathFor(asset.projectId!, asset.assetId)
+  }
+
   list(projectId: string): AssetRef[] {
     return this.store.assetStore.list(projectId)
   }
@@ -206,9 +223,12 @@ export class AssetService {
     if (asset.preview !== 'ready' || asset.kind === 'file') {
       return { asset, text: null, base64: null }
     }
-    const content = await readFile(
-      this.pathFor(asset.projectId, asset.assetId),
-    ).catch(() => null)
+    const limit = asset.kind === 'image' ? MAX_IMAGE_BYTES : MAX_TEXT_BYTES
+    const content = await readAssetContent(
+      this.dataDir,
+      this.contentPath(asset),
+      limit,
+    )
     if (content === null) {
       return {
         asset: { ...asset, preview: 'failed' },
@@ -229,20 +249,37 @@ export class AssetService {
   }
 
   /**
-   * 删除 Asset：先清内容文件，再删 DB 行。
-   * DOS（like）失败时保留 DB 行（内容仍在，状态一致）并以 CommandError 上抛；
-   * DB 删行失败/行已失时保留孤立内容文件，交由启动巡检补偿清理。
+   * 同步移除元数据后再清理内容，避免 IO 期间被新消息引用。
+   * 内容清理失败留下孤立文件，由启动巡检补偿清理。
    */
   async delete(assetId: string): Promise<boolean> {
     const asset = this.store.assetStore.get(assetId)
     if (asset === null) return false
-    const destPath = this.pathFor(asset.projectId, asset.assetId)
+    if (this.store.messages.referencesAsset(assetId)) {
+      throw new CommandError(
+        'invalid_request',
+        '图片已用于消息，不能删除；可删除所属会话',
+      )
+    }
+    const destPath = this.contentPath(asset)
+    const removed = this.store.assetStore.delete(assetId)
     try {
       await rm(destPath, { force: true })
     } catch {
       throw new CommandError('delete_failed', `删除内容文件失败：${assetId}`)
     }
-    return this.store.assetStore.delete(assetId)
+    return removed
+  }
+
+  async deleteSessionDir(sessionId: string): Promise<void> {
+    await rm(join(this.dataDir, 'assets', 'sessions', sessionId), {
+      recursive: true,
+      force: true,
+    }).catch(() => {
+      process.stderr.write(
+        '[runtime] session image cleanup failed; startup recovery will retry\n',
+      )
+    })
   }
 
   /**
@@ -271,6 +308,29 @@ export class AssetService {
     const dirs = await readdir(root, { withFileTypes: true }).catch(() => [])
     for (const dir of dirs) {
       if (!dir.isDirectory()) continue
+      if (dir.name === 'sessions') {
+        const sessions = await readdir(join(root, 'sessions')).catch(() => [])
+        for (const sessionId of sessions) {
+          if (!this.store.sessions.get(sessionId)) {
+            await rm(join(root, 'sessions', sessionId), {
+              recursive: true,
+              force: true,
+            })
+            continue
+          }
+          const files = await readdir(join(root, 'sessions', sessionId)).catch(
+            () => [],
+          )
+          for (const assetId of files) {
+            if (!this.store.assetStore.get(assetId)) {
+              await rm(join(root, 'sessions', sessionId, assetId), {
+                force: true,
+              })
+            }
+          }
+        }
+        continue
+      }
       const projectDir = join(root, dir.name)
       const files = await readdir(projectDir).catch(() => [])
       for (const assetId of files) {
@@ -280,9 +340,7 @@ export class AssetService {
       }
     }
     for (const asset of this.store.assetStore.all()) {
-      const info = await stat(
-        this.pathFor(asset.projectId, asset.assetId),
-      ).catch(() => null)
+      const info = await stat(this.contentPath(asset)).catch(() => null)
       if (info === null || !info.isFile()) {
         if (asset.preview !== 'failed') {
           this.store.assetStore.setPreview(asset.assetId, 'failed')

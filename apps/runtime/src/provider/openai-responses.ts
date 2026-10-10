@@ -1,3 +1,4 @@
+import { userImageContent } from './image-content.js'
 import type { ModelMessage } from '@reflexion-os-studio/agent-core'
 import {
   DEFAULT_MAX_RETRIES,
@@ -41,7 +42,10 @@ function toResponsesInput(
       continue
     }
     if (message.role === 'user') {
-      input.push({ role: 'user', content: message.content })
+      input.push({
+        role: 'user',
+        content: userImageContent(message, 'openai-responses'),
+      })
       continue
     }
     if (message.role === 'assistant') {

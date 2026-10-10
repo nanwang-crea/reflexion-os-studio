@@ -1,0 +1,44 @@
+.composer-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+}
+.composer-image {
+  position: relative;
+  width: 88px;
+}
+.composer-image img {
+  width: 88px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.composer-image span {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 11px;
+}
+.composer-image button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  border-radius: 50%;
+}
+.composer-image-error {
+  padding: 4px 12px;
+  color: var(--danger, #c44);
+  font-size: 12px;
+}
+.composer-attach {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.composer-image-hint {
+  padding: 0 12px 8px;
+  font-size: 11px;
+  opacity: 0.7;
+}

@@ -13,6 +13,7 @@
     "asset.import",
     "asset.list",
     "asset.read",
+    "asset.upload_image",
     "danger.disable",
     "danger.enable",
     "danger.prepare",

@@ -138,7 +138,7 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
     agent.emitSessionUpdated(sessionId)
     return { session: store.sessions.get(sessionId) }
   },
-  'session.delete': (p, { store, agent, approvals, danger }) => {
+  'session.delete': async (p, { store, agent, assets, approvals, danger }) => {
     const sessionId = requireString(p, 'sessionId')
     // 有进行中的 Run 时拒绝删除，避免流式写入悬空会话。
     if (store.runs.activeForSession(sessionId)) {
@@ -153,6 +153,7 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
       agent.clearSessionResources(sessionId)
       approvals.clearSession(sessionId)
       danger.revoke(sessionId, 'session-deleted')
+      await assets?.deleteSessionDir(sessionId)
     }
     return { removed }
   },
@@ -188,6 +189,7 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
       for (const session of sessions) {
         approvals.clearSession(session.id)
         danger.revoke(session.id, 'session-deleted')
+        await assets.deleteSessionDir(session.id)
       }
       // Asset 内容目录同步清掉（DB 行已随项目级联删除，事务已提交）；
       // 失败不回滚项目删除，孤立文件由启动巡检补偿清理。

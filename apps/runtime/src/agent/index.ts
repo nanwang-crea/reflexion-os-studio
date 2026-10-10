@@ -1,3 +1,4 @@
+import { userContentParts } from './context/image-parts.js'
 import { randomUUID } from 'node:crypto'
 import type {
   AgentSettings,
@@ -111,6 +112,12 @@ export class ChatAgent {
     position: number | null
   } {
     const session = requireSession(this.store, params.sessionId)
+    userContentParts(
+      this.store,
+      params.sessionId,
+      params.content,
+      params.imageAssetIds,
+    )
     // 入队前先校验技能与 Provider/模型配置,参数错误当场反馈。
     resolveSkillInvocation(
       params.content,
@@ -125,6 +132,7 @@ export class ChatAgent {
     }
     const rest: Omit<ChatCommand, 'requestId' | 'sessionId'> = {
       content: params.content,
+      imageAssetIds: params.imageAssetIds,
       providerId: params.providerId,
       model: params.model,
       temperature: params.temperature,
@@ -250,6 +258,12 @@ export class ChatAgent {
     const sampling = resolveSampling(profile, params)
     requireIdleSession(this.store, params.sessionId)
 
+    const parts = userContentParts(
+      this.store,
+      params.sessionId,
+      params.content,
+      params.imageAssetIds,
+    )
     const run = this.store.runs.create({
       sessionId: params.sessionId,
       providerId: profile.id,
@@ -262,6 +276,7 @@ export class ChatAgent {
       runId: run.id,
       role: 'user',
       content: params.content,
+      parts,
       status: 'completed',
     })
     const placeholderTitle =

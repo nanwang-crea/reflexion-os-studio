@@ -620,6 +620,8 @@ test('session.get result carries session, messages, runs, toolCalls, plans and r
   assert.equal(
     result.safeParse({
       session: null,
+      positions: {},
+      nextBefore: null,
       messages: [],
       runs: [],
       toolCalls: [],
@@ -632,7 +634,13 @@ test('session.get result carries session, messages, runs, toolCalls, plans and r
   assert.equal(result.safeParse({ messages: [], runs: [] }).success, false)
   // toolCalls 为必填：无工具调用时是空数组，而不是缺字段。
   assert.equal(
-    result.safeParse({ session: null, messages: [], runs: [] }).success,
+    result.safeParse({
+      session: null,
+      positions: {},
+      nextBefore: null,
+      messages: [],
+      runs: [],
+    }).success,
     false,
   )
   // runEvents 向后兼容可选：旧 Runtime snapshot 缺字段时接受并默认空数组，
@@ -641,6 +649,8 @@ test('session.get result carries session, messages, runs, toolCalls, plans and r
   assert.equal(
     result.safeParse({
       session: null,
+      positions: {},
+      nextBefore: null,
       messages: [],
       runs: [],
       toolCalls: [],
@@ -675,6 +685,8 @@ test('session.get result carries session, messages, runs, toolCalls, plans and r
   assert.equal(
     result.safeParse({
       session: null,
+      positions: {},
+      nextBefore: null,
       messages: [],
       runs: [],
       toolCalls: [],
@@ -692,6 +704,8 @@ test('session.get result tolerates missing runEvents from legacy runtimes', () =
   const result = CommandSchemaRegistry['session.get'].result
   const parsed = result.safeParse({
     session: null,
+    positions: {},
+    nextBefore: null,
     messages: [],
     runs: [],
     toolCalls: [],

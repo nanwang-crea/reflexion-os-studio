@@ -1,3 +1,5 @@
+import { uploadMessageImages } from '../../features/chat/images/upload-message-images'
+import { deleteAsset } from '../../api/assets'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import { open } from '@tauri-apps/plugin-dialog'
 import type { Project, Session } from '@reflexion-os-studio/runtime-client'
@@ -52,7 +54,11 @@ export function useSessionActions(deps: SessionActionsDeps): {
   deleteProject: (projectId: string) => Promise<void>
   renameSession: (sessionId: string, title: string) => Promise<void>
   deleteSession: (sessionId: string) => Promise<void>
-  sendMessage: (content: string) => Promise<void>
+  sendMessage: (
+    content: string,
+    agentTemplateId?: string,
+    images?: File[],
+  ) => Promise<void>
   editResendMessage: (messageId: string, content: string) => Promise<void>
   stopRun: () => Promise<void>
   retryRun: () => Promise<void>
@@ -168,6 +174,7 @@ export function useSessionActions(deps: SessionActionsDeps): {
   const sendMessage = async (
     content: string,
     agentTemplateId?: string,
+    images: File[] = [],
   ): Promise<void> => {
     deps.setNotice(null)
     // 模型选择形如 `${providerId}::${model}`；未选择时由 Runtime 回退默认。
@@ -179,22 +186,16 @@ export function useSessionActions(deps: SessionActionsDeps): {
       modelKey && separator > 0 ? modelKey.slice(separator + 2) : undefined
     // 队列/即时发送都携带档位快照（badge 与实际执行一致）。
     const permissionPreset = deps.permissionPreset
+    let accepted = false
     try {
       let sessionId = deps.activeSessionId
       if (!sessionId) {
         // 落地页直接发言：选中项目则在项目内建会话，否则建独立会话。
         const created = await sessionsApi.createSession(deps.activeProjectId)
-        await chatApi.sendMessage({
-          sessionId: created.session.id,
-          content,
-          providerId,
-          model,
-          permissionPreset,
-          agentTemplateId,
-        })
         sessionId = created.session.id
-        deps.setActiveSessionId(sessionId)
-      } else {
+      }
+      const imageAssetIds = await uploadMessageImages(sessionId, images)
+      try {
         await chatApi.sendMessage({
           sessionId,
           content,
@@ -202,15 +203,29 @@ export function useSessionActions(deps: SessionActionsDeps): {
           model,
           permissionPreset,
           agentTemplateId,
+          imageAssetIds,
         })
+      } catch (error) {
+        await Promise.allSettled(imageAssetIds.map(deleteAsset))
+        throw error
       }
-      await deps.refreshSessionData(sessionId)
+      accepted = true
+      // Uploads may finish after the user navigates to another conversation.
+      if (
+        deps.activeSessionRef.current === deps.activeSessionId &&
+        deps.activeProjectRef.current === deps.activeProjectId
+      ) {
+        deps.setActiveSessionId(sessionId)
+        await deps.refreshSessionData(sessionId)
+      }
       await deps.refreshStandaloneSessions()
       if (deps.activeProjectId) {
         await deps.refreshProjectSessions(deps.activeProjectId)
       }
     } catch (error) {
       fail(error)
+      // An accepted message must clear the draft even if refreshing fails.
+      if (!accepted) throw error
     }
   }
 

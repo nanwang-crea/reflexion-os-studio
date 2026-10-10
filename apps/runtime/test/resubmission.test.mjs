@@ -110,3 +110,35 @@ test('edit resend uses current provider and model', async (t) => {
   assert.equal(f.launches[0].model, 'new-model')
   assert.equal(f.launches[0].profile.id, f.providers[1].id)
 })
+
+test('image references survive retry and editing without copying image bytes', (t) => {
+  const f = fixture(t)
+  const parts = [
+    { type: 'text', text: f.user.content },
+    { type: 'image', assetId: 'stored-image', mimeType: 'image/png' },
+  ]
+  f.store.messages.finalize(f.user.id, f.user.content, 'completed', '', parts)
+  f.agent.startRetry({ requestId: 'retry-image', runId: f.original.id })
+  assert.deepEqual(
+    f.store.messages
+      .listBySession(f.session.id)
+      .find((message) => message.role === 'user').parts,
+    parts,
+  )
+  const active = f.store.runs.activeForSession(f.session.id)
+  f.store.runs.finalize(active.id, 'failed')
+  f.agent.startEditResend({
+    requestId: 'edit-image',
+    sessionId: f.session.id,
+    messageId: f.user.id,
+    content: 'revised question',
+  })
+  const user = f.store.messages
+    .listBySession(f.session.id)
+    .find((message) => message.role === 'user')
+  assert.equal(user.content, 'revised question')
+  assert.deepEqual(user.parts, [
+    { type: 'text', text: 'revised question' },
+    parts[1],
+  ])
+})

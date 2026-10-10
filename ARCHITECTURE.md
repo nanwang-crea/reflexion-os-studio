@@ -89,6 +89,7 @@ Runtime 的 SQLite 实现统一收敛在 `apps/runtime/src/store/`：根层负�
 - Event：不可变事件日志。
 - WorkspaceFile：Workspace 中真实存在的文件实体，使用受保护的 workspace-relative path。
 - Asset：Asset Store 中的内容存储实体，AI 生成媒体或导出内容使用 `AssetRef`。
+- 多模态 Chat 的图片输入复用 Asset Store，并支持会话级资产与独立会话；消息仅持有 image 引用，Provider 调用边界才解析为原生图片块，设计见 [图片对话](docs/MULTIMODAL-CHAT.md)。
 - Artifact：一次 Run 产生的面向用户的结果语义，可引用 Asset 或 WorkspaceFile。
 - ResourceLink：UI 导航引用，不拥有内容，可指向 WorkspaceFile、Asset 或 ExternalUrl；由 Resource Router 决定查看器、Browser Surface 或系统打开方式。
 - ToolOutput：工具结果的版本化 canonical envelope，同时保存回填模型的 `content`、结构化 `data`、`resourceLinks` 与 `changedFiles`。`tool_calls.result_json` 新记录统一写入该结构；旧任意 JSON 在 Store 读取边界按需包装，不做破坏性迁移。模型上下文与 Artifact UI 必须从同一 ToolOutput 投影，禁止各自猜测工具私有字段。

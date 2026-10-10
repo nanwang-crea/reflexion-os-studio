@@ -216,7 +216,7 @@ test(
       await waitReady(client)
       const ctx = { store, system: client }
       const call = (method, params) =>
-        dispatchCommand(method, { requestId: 'req-histe2e', ...params }, ctx)
+        dispatchCommand(method, { requestId: randomUUID(), ...params }, ctx)
 
       // git_log：全量 → 3 条、最新在前、无 hasMore、非 merge、时间戳与哈希形态。
       const log = await call('workspace.git_log', { projectId: project.id })
@@ -393,7 +393,7 @@ test(
       await waitReady(client)
       const ctx = { store, system: client }
       const call = (method, params) =>
-        dispatchCommand(method, { requestId: 'req-reme2e', ...params }, ctx)
+        dispatchCommand(method, { requestId: randomUUID(), ...params }, ctx)
 
       // 已提交仓库、尚无 remote。
       assert.deepEqual(

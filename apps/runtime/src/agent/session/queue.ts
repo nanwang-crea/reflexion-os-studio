@@ -130,6 +130,7 @@ export class QueueService {
       id: entry.id,
       sessionId,
       content: entry.params.content,
+      imageAssetIds: entry.params.imageAssetIds,
       providerId: entry.params.providerId ?? null,
       model: entry.params.model ?? null,
       // 发送时固化的档位快照（入队即解析；badge 与实际执行一致）。

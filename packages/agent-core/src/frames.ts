@@ -16,6 +16,7 @@ export interface SystemFrame {
 export interface UserFrame {
   kind: 'user'
   content: string
+  images?: Extract<ModelMessage, { role: 'user' }>['images']
 }
 
 export interface AssistantTextFrame {
@@ -51,7 +52,13 @@ export function framesToMessages(frames: ContextFrame[]): ModelMessage[] {
         messages.push({ role: 'system', content: frame.content })
         break
       case 'user':
-        messages.push({ role: 'user', content: frame.content })
+        messages.push({
+          role: 'user',
+          content: frame.content,
+          ...('images' in frame && frame.images?.length
+            ? { images: frame.images }
+            : {}),
+        })
         break
       case 'assistant_text':
         messages.push({
@@ -81,7 +88,9 @@ export function estimateFrameTokens(frames: ContextFrame[]): number {
       case 'user':
       case 'assistant_text':
       case 'runtime_control':
-        total += estimateTokens(frame.content)
+        total +=
+          estimateTokens(frame.content) +
+          (frame.kind === 'user' ? (frame.images?.length ?? 0) * 4096 : 0)
         break
       case 'tool_round': {
         total += estimateTokens(frame.assistant.content)
@@ -137,7 +146,11 @@ export function messagesToFrames(messages: ModelMessage[]): ContextFrame[] {
       frames.push({ kind: 'system', content: message.content })
       continue
     }
-    frames.push({ kind: 'user', content: message.content })
+    frames.push({
+      kind: 'user',
+      content: message.content,
+      ...(message.images?.length ? { images: message.images } : {}),
+    })
   }
   // 悬空声明：assistant 声明了 tool call 但没有对应 result。
   for (const [callId, index] of openCalls) {

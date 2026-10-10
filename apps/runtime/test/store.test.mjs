@@ -1177,12 +1177,12 @@ test('v23 migration drops legacy memories/FTS/memory_jobs tables', () => {
     .map((row) => row.name)
   assert.deepEqual(names, [])
   const version = after.prepare('PRAGMA user_version').get()
-  assert.equal(Number(version.user_version), 38)
+  assert.equal(Number(version.user_version), 39)
   after.close()
   store.close()
 })
 
-test('fresh store schema has dynamic agent governance and version 38', () => {
+test('fresh store schema has dynamic agent governance and version 39', () => {
   const dir = mkdtempSync(join(tmpdir(), 'reflexion-v23-fresh-'))
   const store = new Store(dir)
   store.close()
@@ -1195,7 +1195,7 @@ test('fresh store schema has dynamic agent governance and version 38', () => {
     .map((row) => row.name)
   assert.deepEqual(names, [])
   const version = db.prepare('PRAGMA user_version').get()
-  assert.equal(Number(version.user_version), 38)
+  assert.equal(Number(version.user_version), 39)
   const plugins = db
     .prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'plugins'",

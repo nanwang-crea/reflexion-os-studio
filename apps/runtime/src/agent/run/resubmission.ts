@@ -172,6 +172,10 @@ export class RunResubmissionService {
           runId: newRun.id,
           role: 'user',
           content,
+          parts: [
+            { type: 'text', text: content },
+            ...lastUserMessage.parts.filter((part) => part.type === 'image'),
+          ],
           status: 'completed',
         })
         const newAssistantMessage = createPendingAssistantMessage(

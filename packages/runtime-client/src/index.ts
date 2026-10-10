@@ -1,3 +1,9 @@
+export {
+  MAX_IMAGE_BYTES,
+  MAX_MESSAGE_IMAGES,
+  ImageUploadSchema,
+} from '@reflexion-os-studio/contracts'
+export type { ImageUpload, ImagePart } from '@reflexion-os-studio/contracts'
 export { PlanSnapshotSchema } from '@reflexion-os-studio/contracts'
 
 export type {

@@ -28,7 +28,11 @@ interface LandingViewProps {
   agentTemplates: AgentTemplate[]
   composerPrefill?: { skillId: string; nonce: number } | null
   onPrefillConsumed?: () => void
-  onSend: (content: string, agentTemplateId?: string) => Promise<void>
+  onSend: (
+    content: string,
+    agentTemplateId?: string,
+    images?: File[],
+  ) => Promise<void>
   onSelectSession: (sessionId: string) => void
   onRenameSession: (sessionId: string, title: string) => Promise<void>
   onDeleteSession: (sessionId: string) => Promise<void>

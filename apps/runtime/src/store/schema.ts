@@ -262,7 +262,8 @@ CREATE TABLE IF NOT EXISTS mutation_receipts (
 CREATE INDEX IF NOT EXISTS idx_mutation_receipts_root ON mutation_receipts(root_run_id, created_at);
 CREATE TABLE IF NOT EXISTS assets (
   id TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE,
   run_id TEXT,
   node_run_id TEXT,
   file_name TEXT NOT NULL,
@@ -295,4 +296,4 @@ CREATE INDEX IF NOT EXISTS idx_run_events_run ON run_events(run_id, created_at);
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 38
+export const LATEST_SCHEMA_VERSION = 39

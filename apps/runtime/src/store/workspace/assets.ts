@@ -3,7 +3,8 @@ import type { AssetRef } from '@reflexion-os-studio/contracts'
 
 interface AssetRow {
   id: string
-  project_id: string
+  project_id: string | null
+  session_id: string | null
   run_id: string | null
   node_run_id: string | null
   file_name: string
@@ -22,6 +23,7 @@ function toAsset(row: AssetRow): AssetRef {
   return {
     assetId: row.id,
     projectId: row.project_id,
+    ...(row.session_id ? { sessionId: row.session_id } : {}),
     uri: row.uri,
     kind: row.kind as AssetRef['kind'],
     mimeType: row.mime_type,
@@ -48,13 +50,14 @@ export class AssetStore {
     this.db
       .prepare(
         `INSERT INTO assets (
-          id, project_id, run_id, node_run_id, file_name, kind, mime_type,
+          id, project_id, session_id, run_id, node_run_id, file_name, kind, mime_type,
           size, hash, uri, created_by, preview_status, metadata_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         asset.assetId,
         asset.projectId,
+        asset.sessionId ?? null,
         asset.runId,
         asset.nodeRunId,
         asset.fileName,
