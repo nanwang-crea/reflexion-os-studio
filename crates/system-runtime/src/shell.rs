@@ -24,7 +24,8 @@ pub struct ShellOutcome {
     pub truncated: bool,
 }
 
-pub fn execute(
+#[cfg(all(test, unix))]
+fn execute(
     command: &str,
     cwd: &std::path::Path,
     timeout_ms: u64,
@@ -114,6 +115,7 @@ fn run_command(
     })
 }
 
+#[cfg(all(test, unix))]
 fn build_command(command: &str) -> Command {
     #[cfg(unix)]
     {

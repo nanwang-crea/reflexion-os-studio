@@ -100,7 +100,8 @@ impl OutputQueue {
     }
 
     /// 纯谓词：窗口满且未关闭 → 生产者应暂停 PTY 读取。
-    pub fn wants_reader_pause(&self) -> bool {
+    #[cfg(test)]
+    fn wants_reader_pause(&self) -> bool {
         reader_should_pause(&self.lock())
     }
 

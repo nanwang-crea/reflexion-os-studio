@@ -16,7 +16,6 @@ pub(super) struct GitOutput {
     pub exit_code: Option<i32>,
     pub stdout: String,
     pub stderr: String,
-    pub truncated: bool,
     pub timed_out: bool,
 }
 
@@ -103,14 +102,12 @@ pub(super) fn run_git_opts(
             }
         }
     };
-    let (stdout, stdout_truncated) = stdout_handle.join().unwrap_or_default();
-    let (stderr, stderr_truncated) = stderr_handle.join().unwrap_or_default();
-    let truncated = stdout_truncated || stderr_truncated;
+    let stdout = stdout_handle.join().unwrap_or_default();
+    let stderr = stderr_handle.join().unwrap_or_default();
     Ok(GitOutput {
         exit_code: status.and_then(|value| value.code()),
         stdout,
         stderr,
-        truncated,
         timed_out,
     })
 }
@@ -164,13 +161,10 @@ fn find_git_in_path(path: &std::ffi::OsStr, windows: bool) -> Option<std::path::
 }
 
 /// 后台排空子进程管道：受限收集，避免子进程写满管道而阻塞。
-fn drain_pipe<T: Read + Send + 'static>(
-    pipe: &mut Option<T>,
-) -> std::thread::JoinHandle<(String, bool)> {
+fn drain_pipe<T: Read + Send + 'static>(pipe: &mut Option<T>) -> std::thread::JoinHandle<String> {
     let mut pipe = pipe.take();
     std::thread::spawn(move || {
         let mut collected: Vec<u8> = Vec::new();
-        let mut truncated = false;
         if let Some(pipe) = pipe.as_mut() {
             let mut buffer = [0u8; 8192];
             loop {
@@ -179,20 +173,16 @@ fn drain_pipe<T: Read + Send + 'static>(
                     Ok(read) => {
                         let remaining = MAX_DIFF_BYTES.saturating_sub(collected.len());
                         if remaining == 0 {
-                            truncated = true;
                             continue;
                         }
                         let take = read.min(remaining);
                         collected.extend_from_slice(&buffer[..take]);
-                        if take < read {
-                            truncated = true;
-                        }
                     }
                     Err(_) => break,
                 }
             }
         }
-        (String::from_utf8_lossy(&collected).into_owned(), truncated)
+        String::from_utf8_lossy(&collected).into_owned()
     })
 }
 

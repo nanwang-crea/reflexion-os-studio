@@ -79,6 +79,7 @@ pub fn canonical_digest_from_parts(parts: &[String]) -> String {
 }
 
 /// 构造侧便捷函数（operation + 资源部分 → digest）；测试与 Runtime 对齐用。
+#[cfg(test)]
 pub fn canonical_digest(operation: &str, parts: &[&str]) -> String {
     let mut all = vec!["v2".to_string(), operation.to_string()];
     all.extend(parts.iter().map(|part| part.to_string()));
@@ -100,7 +101,6 @@ fn parse_grant(grant: &str) -> Result<ApprovalGrant, OpError> {
 pub struct GrantFacts {
     pub sandbox: String,
     pub source: String,
-    pub sandbox_network: bool,
     /// escalated 档的审批提权根（参与 digest 绑定；handler 再独立复核）。
     pub escalation_roots: Vec<String>,
 }
@@ -169,13 +169,12 @@ pub fn require_grant(
     Ok(GrantFacts {
         sandbox: parsed.sandbox,
         source: parsed.source,
-        sandbox_network: parsed.sandbox_network,
         escalation_roots: parsed.escalation_roots,
     })
 }
 
 /// 兼容入口：仅结构校验（无资源复核）。UI 来源与无需 digest 绑定的场景使用。
-pub fn require_grant_shape(grant: &str) -> Result<ApprovalGrant, OpError> {
+fn require_grant_shape(grant: &str) -> Result<ApprovalGrant, OpError> {
     let parsed = parse_grant(grant)?;
     if parsed.version != 2 || !parsed.subject_digest.starts_with("sha256:") {
         return Err(OpError::new(
