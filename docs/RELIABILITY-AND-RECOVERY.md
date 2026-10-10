@@ -14,6 +14,8 @@ MVP 取消从 Renderer → Tauri Host → TypeScript Runtime → Provider 传播
 
 MVP 应用重启后以 SQLite canonical state 为准，将未完成 Run 标记为 interrupted。未完成模型回复保留 partial 内容，不假装完整。Retry 创建新的 Run，并关联 `retryOfRunId`；MVP 不自动重试有副作用的操作。
 
+Runtime 在打开业务数据库、迁移及启动恢复之前，必须持有数据目录内 `runtime-lock.db` 的 SQLite 独占事务锁。macOS / Windows / Linux 共用 SQLite 文件锁：同目录第二个 Runtime 立即启动失败，不发布 ready、不改写活动轮次；不同目录可并行运行。锁连接保持至进程退出，正常退出或崩溃后由操作系统释放，无需删除锁文件。锁文件不能在运行期间删除或替换。该保护要求所有实例使用带此检查的版本，升级时应先退出旧版实例。
+
 ## Agent Loop Hardening 与 Atomic Finalizer（2026-09）
 
 - **完成状态机**：只有 `finish_reason=stop` 且无工具调用的轮次才能完成 Run；`length` 在续写预算内（默认 2 轮）继续，耗尽为 `output_truncated`；`content_filter` 失败且草稿落 failed（不伪造 completed）；finish reason 缺失/未知或与 toolCalls 不一致失败为 `provider_protocol`。稳定错误码：`max_turns` / `output_truncated` / `content_filtered` / `provider_protocol` / `no_progress` / `run_timeout` / `run_token_budget` / `tool_call_budget`。

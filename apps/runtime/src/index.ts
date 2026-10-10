@@ -25,6 +25,7 @@ import { WorkspaceWatchService } from './workspace/watch-service.js'
 import { AssetService } from './assets/service.js'
 import { TerminalService } from './terminal/service.js'
 import { SkillPluginService } from './skills/service.js'
+import { acquireDataDirectoryLock } from './lifecycle/data-directory-lock.js'
 
 const RUNTIME_VERSION = '0.1.0'
 
@@ -129,7 +130,11 @@ function getStatus(): RuntimeStatus {
   }
 }
 
-const store = new Store(resolveDataDir())
+// Lock before migrations and recovery can touch another Runtime's active turns.
+const dataDir = resolveDataDir()
+const releaseDataDirectoryLock = acquireDataDirectoryLock(dataDir)
+process.once('exit', releaseDataDirectoryLock)
+const store = new Store(dataDir)
 registerOperations(
   store,
   new OperationRegistry((operation) =>

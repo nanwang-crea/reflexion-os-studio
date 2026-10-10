@@ -5,23 +5,19 @@ import type {
   ApiFormat,
   ProviderProfile,
 } from '@reflexion-os-studio/runtime-client'
-import {
-  configureProvider,
-  deleteProvider,
-  testProvider,
-} from '../../api/providers'
+import { configureProvider, deleteProvider } from '../../api/providers'
 import type { ConfirmDialogState } from '../../components/ConfirmDialog'
 import { EyeIcon, PlusIcon } from '../../ui/icons'
 import {
   draftFromProfile,
   EMPTY_DRAFT,
   preflightProviderSave,
-  preflightProviderTest,
   preflightProviderToggle,
   samplingHint,
   type Draft,
 } from './provider-form'
 import { ProviderHeadersEditor } from './ProviderHeadersEditor'
+import { ProviderConnectionTest } from './ProviderConnectionTest'
 
 interface ProviderEditorProps {
   /** 当前选中供应商；isNew 时必为 null。 */
@@ -44,11 +40,6 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
     props.profile ? draftFromProfile(props.profile) : EMPTY_DRAFT,
   )
   const [showSecret, setShowSecret] = useState(false)
-  const [testing, setTesting] = useState(false)
-  const [testState, setTestState] = useState<{
-    ok: boolean
-    text: string
-  } | null>(null)
   const [busy, setBusy] = useState(false)
   const [savedAt, setSavedAt] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -65,12 +56,10 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
   useEffect(() => {
     if (isNew) {
       setDraft({ ...EMPTY_DRAFT, models: [''] })
-      setTestState(null)
       setSavedAt(null)
       return
     }
     setDraft(snapshot === null ? null : { ...snapshot })
-    setTestState(null)
   }, [isNew, snapshot])
 
   const updateDraft = (patch: Partial<Draft>): void => {
@@ -164,36 +153,6 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
       setError(caught instanceof Error ? caught.message : String(caught))
     } finally {
       setBusy(false)
-    }
-  }
-
-  /** 连接测试：Provider 的鉴权/网络/模型错误直接回显到界面。 */
-  const testConnection = async (): Promise<void> => {
-    if (!draft || testing) return
-    const preflight = preflightProviderTest(draft)
-    if (!preflight.ok) {
-      setTestState({ ok: false, text: preflight.error })
-      return
-    }
-    setTesting(true)
-    setTestState(null)
-    try {
-      const result = await testProvider(preflight.payload)
-      setTestState(
-        result.ok
-          ? {
-              ok: true,
-              text: `连接正常 · ${result.model} · ${result.latencyMs}ms`,
-            }
-          : { ok: false, text: result.error ?? '连接失败' },
-      )
-    } catch (caught) {
-      setTestState({
-        ok: false,
-        text: caught instanceof Error ? caught.message : String(caught),
-      })
-    } finally {
-      setTesting(false)
     }
   }
 
@@ -409,6 +368,12 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
         </label>
       </div>
 
+      <ProviderConnectionTest
+        key={profile?.id ?? 'new'}
+        draft={draft}
+        busy={busy}
+      />
+
       <div className="form-actions">
         <button
           className="primary"
@@ -417,20 +382,8 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
         >
           {busy ? '保存中…' : profile ? '保存修改' : '创建供应商'}
         </button>
-        <button
-          className="ghost"
-          disabled={testing || busy}
-          onClick={() => void testConnection()}
-        >
-          {testing ? '测试中…' : '测试连接'}
-        </button>
         {savedAt && <span className="saved">已保存 {savedAt}</span>}
         {error && <span className="error">{error}</span>}
-        {testState && (
-          <span className={testState.ok ? 'saved' : 'error'}>
-            {testState.text}
-          </span>
-        )}
       </div>
     </div>
   )
