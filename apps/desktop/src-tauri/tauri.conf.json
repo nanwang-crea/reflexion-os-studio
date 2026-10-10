@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.reflexionos.studio",
   "build": {
-    "beforeDevCommand": "pnpm dev:frontend",
+    "beforeDevCommand": "pnpm -w build:system && pnpm dev:frontend",
     "beforeBuildCommand": "pnpm prepare:package && pnpm build:frontend",
     "devUrl": "http://localhost:5173",
     "frontendDist": "../dist-frontend"
