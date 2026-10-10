@@ -59,9 +59,9 @@ function describeStop(reason: AgentStopReason, maxTurns: number): string {
     case 'max_turns':
       return `任务在 ${maxTurns} 轮内未完成，已停止执行`
     case 'output_truncated':
-      return '模型输出连续超长被截断，续写预算已用尽'
+      return '模型生成达到输出上限，自动续写或推理恢复次数已用尽；已保留当前记录'
     case 'output_empty':
-      return '模型达到输出上限但未生成正文，请检查最大输出额度；已保留当前记录'
+      return '模型达到输出上限，但未返回正文、可见思考或工具调用；已保留当前记录'
     case 'tool_output_truncated':
       return '工具参数截断且有限重试仍未恢复，截断轮的工具未执行'
     case 'context_limit':

@@ -136,7 +136,10 @@ export interface AgentLoopOptions {
   /** length 续写最大连续轮次；缺省 2。 */
   maxContinuationTurns?: number
   /** 自动恢复诊断，不传入正文或工具参数。 */
-  onRecovery?: (recovery: { kind: 'text' | 'tools'; attempt: number }) => void
+  onRecovery?: (recovery: {
+    kind: 'text' | 'reasoning' | 'tools'
+    attempt: number
+  }) => void
   /** 工具失败累计次数达到该值后注入反思消息；缺省 2，传 0 禁用。 */
   reflectionThreshold?: number
 }

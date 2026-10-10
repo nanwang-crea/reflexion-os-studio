@@ -17,12 +17,13 @@ function buildReflectionMessage(failedTools: string[]): string {
 }
 
 /** length 续写控制帧：仅存在于当前 Run 的内存消息流，不落库。 */
-function buildContinuationMessage(): ModelMessage {
+function buildContinuationMessage(hasContent: boolean): ModelMessage {
   return {
     role: 'user',
     control: 'continuation',
-    content:
-      '[续写] 上一条回复因长度限制被截断。请从截断点继续输出，不要重复已有内容，也不要重新开始；完成后正常结束。',
+    content: hasContent
+      ? '[续写] 上一条回复因长度限制被截断。请从截断点继续输出，不要重复已有内容，也不要重新开始；完成后正常结束。'
+      : '[恢复] 上一轮因输出上限停止，仅返回思考，尚未生成正文或工具调用。请继续处理原任务，分步输出答案或完整工具调用；不要重复此前已成功执行的操作。',
   }
 }
 
@@ -138,9 +139,18 @@ export async function runAgentLoop(
     }
 
     if (disposition.kind === 'truncated') {
+      const hasContent = turn.content.trim() !== ''
+      const hasReasoning = (turn.reasoning ?? '').trim() !== ''
       // 即使额度耗尽，最后一个片段也必须保留。
-      messages.push({ role: 'assistant', content: turn.content, toolCalls: [] })
-      if (turn.content.trim() === '') {
+      // 空正文不回填 assistant，避免供应商拒绝空消息；思考由 Runtime 保存。
+      if (hasContent) {
+        messages.push({
+          role: 'assistant',
+          content: turn.content,
+          toolCalls: [],
+        })
+      }
+      if (!hasContent && !hasReasoning) {
         return { status: 'stopped', turns, reason: 'output_empty', messages }
       }
       if (continuationTurns >= maxContinuationTurns) {
@@ -152,8 +162,11 @@ export async function runAgentLoop(
         }
       }
       continuationTurns += 1
-      options.onRecovery?.({ kind: 'text', attempt: continuationTurns })
-      messages.push(buildContinuationMessage())
+      options.onRecovery?.({
+        kind: hasContent ? 'text' : 'reasoning',
+        attempt: continuationTurns,
+      })
+      messages.push(buildContinuationMessage(hasContent))
       continue
     }
 

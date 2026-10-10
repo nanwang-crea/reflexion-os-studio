@@ -60,10 +60,64 @@ test('continuation allowance exhaustion preserves the final fragment', async () 
   assert.equal(outcome.messages.at(-1).content, 'a')
 })
 
-test('reasoning-only truncation stops without a blind continuation', async () => {
-  const { outcome, calls } = await run([{ ...text(''), reasoning: 'thinking' }])
+test('fully empty truncation stops without continuation', async () => {
+  const { outcome, calls } = await run([{ ...text('  '), reasoning: '  ' }])
   assert.equal(outcome.reason, 'output_empty')
   assert.equal(calls, 1)
+})
+
+test('reasoning-only truncation recovers without sending empty assistant or raw thinking', async () => {
+  const recoveries = []
+  const { outcome, calls, seen } = await run(
+    [{ ...text(''), reasoning: 'private thinking' }, text('answer', 'stop')],
+    { onRecovery: (recovery) => recoveries.push(recovery) },
+  )
+  assert.equal(outcome.status, 'completed')
+  assert.equal(calls, 2)
+  assert.deepEqual(recoveries, [{ kind: 'reasoning', attempt: 1 }])
+  assert.equal(
+    seen[1].some((m) => m.role === 'assistant'),
+    false,
+  )
+  assert.equal(JSON.stringify(seen[1]).includes('private thinking'), false)
+  assert.equal(seen[1].at(-1).control, 'continuation')
+  assert.match(seen[1].at(-1).content, /尚未生成正文/)
+})
+
+test('repeated reasoning-only truncation uses the existing bounded allowance', async () => {
+  const { outcome, calls } = await run(
+    Array.from({ length: 3 }, () => ({ ...text(''), reasoning: 'thinking' })),
+  )
+  assert.equal(outcome.reason, 'output_truncated')
+  assert.equal(calls, 3)
+})
+
+test('reasoning recovery can be disabled and obeys maxTurns', async () => {
+  for (const [options, reason] of [
+    [{ maxContinuationTurns: 0 }, 'output_truncated'],
+    [{ maxTurns: 1 }, 'max_turns'],
+  ]) {
+    const { outcome, calls } = await run(
+      [{ ...text(''), reasoning: 'thinking' }],
+      options,
+    )
+    assert.equal(outcome.reason, reason)
+    assert.equal(calls, 1)
+  }
+})
+
+test('reasoning and text truncations share allowance and tools reset it', async () => {
+  const thinking = () => ({ ...text(''), reasoning: 'thinking' })
+  const limited = await run([thinking(), text('partial')], {
+    maxContinuationTurns: 1,
+  })
+  assert.equal(limited.outcome.reason, 'output_truncated')
+  const recovered = await run(
+    [thinking(), tool(), thinking(), text('answer', 'stop')],
+    { maxContinuationTurns: 1 },
+  )
+  assert.equal(recovered.outcome.status, 'completed')
+  assert.equal(recovered.executed, 1)
 })
 
 test('truncated tool batch retries once without executing or replaying prior tools', async () => {

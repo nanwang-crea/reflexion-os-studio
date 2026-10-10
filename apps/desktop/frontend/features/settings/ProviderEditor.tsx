@@ -318,17 +318,25 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
           </span>
         </label>
         <label className="field">
-          最大输出 tokens（留空默认）
+          最大输出 tokens（
+          {draft.apiFormat === 'anthropic'
+            ? '留空固定默认 4096'
+            : '留空使用服务端默认'}
+          ）
           <input
             type="number"
             min={1}
             step={1}
             value={draft.maxTokens}
-            placeholder="服务端默认"
+            placeholder={
+              draft.apiFormat === 'anthropic' ? '4096' : '服务端默认'
+            }
             onChange={(event) => updateDraft({ maxTokens: event.target.value })}
           />
           <span className="field-hint">
             {samplingHint('maxTokens', '输入 0 或非法值会被保存拦截')}
+            {draft.apiFormat === 'anthropic' &&
+              '；留空时应用固定传入 4096，可填写其他值覆盖默认值，实际支持上限以模型为准'}
           </span>
         </label>
         <label className="field sampling-wide">

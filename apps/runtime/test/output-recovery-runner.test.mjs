@@ -13,7 +13,13 @@ import {
 import { ToolRegistry } from '@reflexion-os-studio/agent-core'
 import { startServer } from './fixtures/provider-server.mjs'
 
-for (const mode of ['text', 'tools', 'empty']) {
+for (const mode of [
+  'text',
+  'tools',
+  'empty',
+  'reasoning',
+  'reasoning-success',
+]) {
   test(`runner persists ${mode} truncation without executing partial tools`, async () => {
     const directory = mkdtempSync(join(tmpdir(), 'output-recovery-'))
     let store = new Store(directory)
@@ -61,11 +67,16 @@ for (const mode of ['text', 'tools', 'empty']) {
               ],
             }
           : {
-              content: mode === 'text' ? 'last fragment' : '',
-              reasoning_content: 'thinking',
+              content:
+                mode === 'text'
+                  ? 'last fragment'
+                  : mode === 'reasoning-success' && requests === 2
+                    ? 'answer'
+                    : '',
+              reasoning_content: mode === 'empty' ? '' : 'thinking',
             }
       response.end(
-        `data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'length' }], usage: { prompt_tokens: 2, completion_tokens: 3 } })}\n\ndata: [DONE]\n\n`,
+        `data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: mode === 'reasoning-success' && requests === 2 ? 'stop' : 'length' }], usage: { prompt_tokens: 2, completion_tokens: 3 } })}\n\ndata: [DONE]\n\n`,
       )
     })
     try {
@@ -87,7 +98,9 @@ for (const mode of ['text', 'tools', 'empty']) {
           dangerActive: () => false,
         }),
         approvals: new ApprovalGateway(),
-        settings: { maxContinuationTurns: 0 },
+        settings: {
+          maxContinuationTurns: mode.startsWith('reasoning') ? 1 : 0,
+        },
         controller: new AbortController(),
         emitter: new RunEventEmitter(run.id, () => {}),
         firstAssistantMessage: message,
@@ -95,7 +108,10 @@ for (const mode of ['text', 'tools', 'empty']) {
         permissionDomainId: run.id,
       })
       assert.equal(executed, 0)
-      assert.equal(requests, mode === 'tools' ? 2 : 1)
+      assert.equal(
+        requests,
+        mode === 'tools' || mode.startsWith('reasoning') ? 2 : 1,
+      )
       assert.equal(store.toolCalls.listByRun(run.id).length, 0)
       assert.equal(
         store.runs.get(run.id).errorCode,
@@ -103,11 +119,13 @@ for (const mode of ['text', 'tools', 'empty']) {
           ? 'tool_output_truncated'
           : mode === 'empty'
             ? 'output_empty'
-            : 'output_truncated',
+            : mode === 'reasoning-success'
+              ? null
+              : 'output_truncated',
       )
       assert.equal(
         store.turnExecutions.latestForRun(run.id).runtimeState.finishReason,
-        'length',
+        mode === 'reasoning-success' ? 'stop' : 'length',
       )
       assert.equal(
         store.turnExecutions.latestForRun(run.id).modelRequest.outputReserve,
@@ -119,7 +137,17 @@ for (const mode of ['text', 'tools', 'empty']) {
       assert.equal(persisted.length, requests)
       assert.equal(
         persisted.at(-1).content,
-        mode === 'tools' ? 'partial' : mode === 'text' ? 'last fragment' : '',
+        mode === 'tools'
+          ? 'partial'
+          : mode === 'text'
+            ? 'last fragment'
+            : mode === 'reasoning-success'
+              ? 'answer'
+              : '',
+      )
+      assert.equal(
+        persisted[0].reasoning,
+        mode === 'tools' || mode === 'empty' ? '' : 'thinking',
       )
       assert.equal(store.runs.get(run.id).usage.completionTokens, requests * 3)
     } finally {
