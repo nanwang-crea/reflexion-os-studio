@@ -1,3 +1,4 @@
+import { resolveOutputBudget } from '../../provider/output-budget.js'
 import type { SystemRuntimeClient } from '../../system.js'
 import {
   runAgentLoop,
@@ -59,6 +60,12 @@ function describeStop(reason: AgentStopReason, maxTurns: number): string {
       return `任务在 ${maxTurns} 轮内未完成，已停止执行`
     case 'output_truncated':
       return '模型输出连续超长被截断，续写预算已用尽'
+    case 'output_empty':
+      return '模型达到输出上限但未生成正文，请检查最大输出额度；已保留当前记录'
+    case 'tool_output_truncated':
+      return '工具参数截断且有限重试仍未恢复，截断轮的工具未执行'
+    case 'context_limit':
+      return '模型上下文空间不足，已停止并保留当前结果'
     case 'content_filtered':
       return '模型拒绝回答或内容被安全策略拦截'
     case 'no_progress':
@@ -176,6 +183,11 @@ export class RunRunner {
           prepareMessages: (messages) => compactInRun(messages, input.provider),
           maxTurns,
           maxContinuationTurns: budgets.maxContinuationTurns,
+          onRecovery: (recovery) => {
+            process.stderr.write(
+              `${JSON.stringify({ type: 'model.recovery', runId: run.id, ...recovery })}\n`,
+            )
+          },
           reflectionThreshold: input.settings.reflectionThreshold ?? undefined,
           callModel: async (messages, signal) => {
             modelTurnsUsed += 1
@@ -187,6 +199,10 @@ export class RunRunner {
               modelRequest: {
                 model: input.provider.model,
                 messageCount: messages.length,
+                requestMaxTokens:
+                  resolveOutputBudget(input.provider).requestMaxTokens ?? null,
+                outputReserve: resolveOutputBudget(input.provider)
+                  .outputReserve,
               },
             })
             state.currentTurnId = turnExecution.id

@@ -1,3 +1,4 @@
+import { resolveOutputBudget } from '../../provider/output-budget.js'
 import {
   FrameError,
   type ContextFrame,
@@ -101,7 +102,7 @@ export function contextBudgetFor(provider: ProviderRuntimeConfig): number {
   if (window === undefined || window === null || window <= 0) {
     return limit
   }
-  const outputReserve = provider.maxTokens ?? 0
+  const { outputReserve } = resolveOutputBudget(provider)
   const windowBudget = Math.floor(window * 0.75) - outputReserve
   return Math.max(1024, Math.min(limit, windowBudget))
 }

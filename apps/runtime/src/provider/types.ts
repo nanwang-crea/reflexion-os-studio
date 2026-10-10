@@ -46,6 +46,7 @@ export interface StreamChatResult {
   content: string
   reasoning: string
   /** 严格校验后的终止原因；缺失/未知值以 provider_protocol 失败，不会出现。 */
+  rawStopReason?: string
   finishReason: ModelFinishReason
   usage?: Usage
   toolCalls: StreamedToolCall[]

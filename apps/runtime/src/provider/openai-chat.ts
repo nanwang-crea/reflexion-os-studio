@@ -276,6 +276,13 @@ export async function streamOpenAIChat(
       )
     }
 
-    return { content, reasoning, finishReason, usage, toolCalls }
+    return {
+      content,
+      reasoning,
+      finishReason,
+      rawStopReason: finishReason,
+      usage,
+      toolCalls,
+    }
   }
 }

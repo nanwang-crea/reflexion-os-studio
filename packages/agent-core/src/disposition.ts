@@ -46,13 +46,9 @@ export function classifyModelTurn(
       return { kind: 'tools' }
     }
     case 'length':
-      if (hasToolCalls) {
-        return {
-          kind: 'protocol_error',
-          detail: `finish_reason=length with ${toolCalls.length} tool calls is not continuable`,
-        }
-      }
-      return { kind: 'truncated' }
+      return { kind: hasToolCalls ? 'tool_truncated' : 'truncated' }
+    case 'context_limit':
+      return { kind: 'context_limit' }
     case 'content_filter':
       if (hasToolCalls) {
         return {

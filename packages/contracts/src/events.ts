@@ -40,6 +40,7 @@ export type { Usage } from './entities.js'
 export const FinishReasonSchema = z.enum([
   'stop',
   'length',
+  'context_limit',
   'content_filter',
   // 模型请求工具调用；Agent 工具循环据此继续本轮 Run。
   'tool_calls',

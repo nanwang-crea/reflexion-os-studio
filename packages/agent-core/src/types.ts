@@ -21,6 +21,8 @@ export type ModelMessage =
   | { role: 'system'; content: string }
   | {
       role: 'user'
+      /** 仅用于 Runtime 控制，不投影到 Provider 请求。 */
+      control?: 'continuation' | 'tool_recovery' | 'reflection'
       content: string
       images?: (ImagePart & { base64?: string })[]
     }
@@ -32,6 +34,8 @@ export interface ModelTurn {
   content: string
   /** 思考内容仅用于持久化展示，不回传给模型。 */
   reasoning: string
+  /** 供应商原始停止原因，仅用于诊断。 */
+  rawStopReason?: string
   toolCalls: AssistantToolCall[]
   /** Provider 已校验的终止原因；未知/缺失值不允许进入循环。 */
   finishReason: ModelFinishReason
@@ -45,7 +49,7 @@ export interface ModelTurn {
 
 /** Provider 终止原因（严格校验后的联合类型）。 */
 export type ModelFinishReason =
-  'stop' | 'length' | 'content_filter' | 'tool_calls'
+  'stop' | 'length' | 'context_limit' | 'content_filter' | 'tool_calls'
 
 export interface ToolCallRequest {
   id: string
@@ -131,6 +135,8 @@ export interface AgentLoopOptions {
   maxTurns?: number
   /** length 续写最大连续轮次；缺省 2。 */
   maxContinuationTurns?: number
+  /** 自动恢复诊断，不传入正文或工具参数。 */
+  onRecovery?: (recovery: { kind: 'text' | 'tools'; attempt: number }) => void
   /** 工具失败累计次数达到该值后注入反思消息；缺省 2，传 0 禁用。 */
   reflectionThreshold?: number
 }
@@ -140,6 +146,8 @@ export type ModelTurnDisposition =
   | { kind: 'final' }
   | { kind: 'tools' }
   | { kind: 'truncated' }
+  | { kind: 'tool_truncated' }
+  | { kind: 'context_limit' }
   | { kind: 'blocked'; reason: 'content_filtered' }
   | { kind: 'protocol_error'; detail: string }
 
@@ -147,6 +155,9 @@ export type ModelTurnDisposition =
 export type AgentStopReason =
   | 'max_turns'
   | 'output_truncated'
+  | 'output_empty'
+  | 'tool_output_truncated'
+  | 'context_limit'
   | 'content_filtered'
   | 'provider_protocol'
   | 'no_progress'

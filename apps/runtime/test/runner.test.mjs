@@ -235,3 +235,5 @@ test('tool budget rejects the whole batch and fails the run immediately', async 
     'rejected batch left as cancelled audit rows, never executed',
   )
 })
+
+import './output-recovery-runner.test.mjs'

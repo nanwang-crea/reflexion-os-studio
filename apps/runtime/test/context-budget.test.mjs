@@ -26,7 +26,7 @@ test('contextBudgetFor scales with model window and reserves output tokens', () 
     }),
     DEFAULT_CONTEXT_BUDGET_LIMIT,
   )
-  // 16k 窗口：min(64k, 12k) → 12k。
+  // 服务端默认未知时仍保守预留 4096。
   assert.equal(
     contextBudgetFor({
       baseUrl: 'http://x',
@@ -34,7 +34,7 @@ test('contextBudgetFor scales with model window and reserves output tokens', () 
       model: 'm',
       contextWindow: 16_000,
     }),
-    12_000,
+    7904,
   )
   // 8k 窗口且 maxTokens=4096：窗口预算 6k − 4k 预留 = 1.9k。
   assert.equal(
@@ -91,6 +91,6 @@ test('contextBudgetFor honors configured budget limit', () => {
       contextWindow: 8_000,
       contextBudget: 96_000,
     }),
-    6_000,
+    1904,
   )
 })

@@ -1,3 +1,4 @@
+import { resolveOutputBudget } from '../../provider/output-budget.js'
 import { resolveModelImages } from '../context/model-images.js'
 import {
   ModelProtocolError,
@@ -88,6 +89,7 @@ export async function executeModelTurn(
     store.messages.markStreaming(draft.id)
   }
 
+  const outputBudget = resolveOutputBudget(provider)
   const result = await streamChat(
     {
       baseUrl: provider.baseUrl,
@@ -104,8 +106,8 @@ export async function executeModelTurn(
       ...(provider.temperature !== undefined
         ? { temperature: provider.temperature }
         : {}),
-      ...(provider.maxTokens !== undefined
-        ? { maxTokens: provider.maxTokens }
+      ...(outputBudget.requestMaxTokens !== undefined
+        ? { maxTokens: outputBudget.requestMaxTokens }
         : {}),
       ...(provider.maxRetries !== undefined
         ? { maxRetries: provider.maxRetries }
@@ -164,6 +166,18 @@ export async function executeModelTurn(
     },
   )
 
+  process.stderr.write(
+    `${JSON.stringify({
+      type: 'model.output',
+      runId: run.id,
+      turnId: state.currentTurnId,
+      requestMaxTokens: outputBudget.requestMaxTokens ?? null,
+      outputReserve: outputBudget.outputReserve,
+      finishReason: result.finishReason,
+      rawStopReason: result.rawStopReason ?? result.finishReason,
+      usage: result.usage ?? null,
+    })}\n`,
+  )
   const session = store.sessions.get(run.sessionId)
   const normalized = session
     ? normalizeContent(result.content, session, store)
@@ -206,6 +220,7 @@ export async function executeModelTurn(
       turn: {
         content: result.content,
         reasoning: result.reasoning,
+        rawStopReason: result.rawStopReason,
         toolCalls: result.toolCalls,
         finishReason: result.finishReason,
         usage: result.usage,
@@ -217,7 +232,10 @@ export async function executeModelTurn(
   store.messages.finalize(
     draft.id,
     normalized.content,
-    'completed',
+    disposition.kind === 'tool_truncated' ||
+      disposition.kind === 'context_limit'
+      ? 'failed'
+      : 'completed',
     result.reasoning,
     normalized.parts,
   )
@@ -236,7 +254,7 @@ export async function executeModelTurn(
   // W3 ToolCall 批量预建：provider 返回合法 tool_calls 后，一个事务内
   // 按声明顺序创建全部 ToolCall（初始 pending）并在提交后发 tool.requested。
   // 即使进程在第一个工具开始前退出，全部声明过的调用仍可审计。
-  if (result.toolCalls.length > 0) {
+  if (disposition.kind === 'tools') {
     state.precreatedToolCallRows.clear()
     precreateToolCalls(store, state, run, emitter, result.toolCalls)
     if (state.currentTurnId !== null) {
@@ -249,10 +267,28 @@ export async function executeModelTurn(
       })
     }
   } else if (state.currentTurnId !== null) {
-    store.turnExecutions.transition(state.currentTurnId, 'completed', {
-      continuationReason:
-        disposition.kind === 'truncated' ? 'output_truncated' : null,
-    })
+    store.turnExecutions.transition(
+      state.currentTurnId,
+      disposition.kind === 'tool_truncated' ||
+        disposition.kind === 'context_limit'
+        ? 'failed'
+        : 'completed',
+      {
+        runtimeState: {
+          finishReason: result.finishReason,
+          rawStopReason: result.rawStopReason ?? result.finishReason,
+          usage: result.usage ?? null,
+        },
+        continuationReason:
+          disposition.kind === 'truncated'
+            ? 'output_truncated'
+            : disposition.kind === 'tool_truncated'
+              ? 'tool_output_truncated'
+              : disposition.kind === 'context_limit'
+                ? 'context_limit'
+                : null,
+      },
+    )
   }
   state.turn = null
   // Run 累计 token 预算（Provider usage 累计；W4）：以稳定错误码中止。
@@ -288,6 +324,7 @@ export async function executeModelTurn(
     turn: {
       content: result.content,
       reasoning: result.reasoning,
+      rawStopReason: result.rawStopReason,
       toolCalls: result.toolCalls,
       finishReason: result.finishReason,
       usage: result.usage,

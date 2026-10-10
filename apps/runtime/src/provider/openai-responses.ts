@@ -1,3 +1,5 @@
+import { ResponsesToolCalls } from './openai-responses/tool-calls.js'
+import { responsesStopReason } from './stop-reasons.js'
 import { userImageContent } from './image-content.js'
 import type { ModelMessage } from '@reflexion-os-studio/agent-core'
 import {
@@ -209,16 +211,13 @@ export async function streamOpenAIResponses(
 
     let content = ''
     let reasoning = ''
-    let finishReason:
-      'stop' | 'length' | 'content_filter' | 'tool_calls' | null = null
+    let finishReason: StreamChatResult['finishReason'] | null = null
+    let rawStopReason: string | undefined
     let inputTokens = 0
     let outputTokens = 0
     let cachedTokens: number | undefined
     const toolCalls: StreamedToolCall[] = []
-    const toolCallByCallId = new Map<
-      string,
-      { id: string; name: string; arguments: string }
-    >()
+    const streamedCalls = new ResponsesToolCalls()
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
@@ -258,67 +257,18 @@ export async function streamOpenAIResponses(
         return
       }
 
-      if (eventType === 'response.function_call_arguments.delta') {
-        const callId = String(parsed.call_id ?? '')
-        const delta = String(parsed.delta ?? '')
-        const existing = toolCallByCallId.get(callId) ?? {
-          id: callId,
-          name: '',
-          arguments: '',
-        }
-        existing.arguments += delta
-        toolCallByCallId.set(callId, existing)
-        return
-      }
+      if (streamedCalls.handle(parsed)) return
 
-      if (eventType === 'response.function_call_arguments.done') {
-        const callId = String(parsed.call_id ?? '')
-        const arguments_ = String(parsed.arguments ?? '')
-        const existing = toolCallByCallId.get(callId) ?? {
-          id: callId,
-          name: '',
-          arguments: '',
-        }
-        existing.arguments = arguments_
-        toolCallByCallId.set(callId, existing)
-        return
-      }
-
-      if (eventType === 'response.output_item.done') {
-        const item = parsed.item as Record<string, unknown> | undefined
-        if (item?.type === 'function_call') {
-          const callId = String(item.call_id ?? '')
-          const name = String(item.name ?? '')
-          const existing = toolCallByCallId.get(callId)
-          if (existing) {
-            existing.name = name
-          } else {
-            toolCallByCallId.set(callId, {
-              id: callId,
-              name,
-              arguments: String(item.arguments ?? ''),
-            })
-          }
-        }
-        return
-      }
-
-      if (eventType === 'response.completed') {
-        const item = parsed.item as Record<string, unknown> | undefined
+      if (
+        eventType === 'response.completed' ||
+        eventType === 'response.incomplete'
+      ) {
+        const item = (parsed.response ?? parsed.item) as
+          Record<string, unknown> | undefined
         if (item) {
-          const status = String(item.status ?? '')
-          if (status === 'incomplete') {
-            const incomplete = item.incomplete_details as
-              Record<string, unknown> | undefined
-            const reason = String(incomplete?.reason ?? '')
-            if (reason === 'max_output_tokens') {
-              finishReason = 'length'
-            } else if (reason === 'content_filter') {
-              finishReason = 'content_filter'
-            }
-          } else if (status === 'completed') {
-            finishReason = 'stop'
-          }
+          const terminal = responsesStopReason(item)
+          finishReason = terminal.finishReason
+          rawStopReason = terminal.rawStopReason
           const usage = item.usage as Record<string, unknown> | undefined
           if (typeof usage?.input_tokens === 'number')
             inputTokens = usage.input_tokens
@@ -336,11 +286,6 @@ export async function streamOpenAIResponses(
               cachedTokens = details.cached_tokens
           }
         }
-        return
-      }
-
-      if (eventType === 'response.incomplete') {
-        finishReason = 'length'
         return
       }
 
@@ -368,6 +313,7 @@ export async function streamOpenAIResponses(
     } catch (error) {
       if (error instanceof StreamCallbackError) throw error.cause
       if (isAbort(error)) throw error
+      if (error instanceof ProviderError) throw error
       if (attempt < maxRetries) {
         attempt += 1
         await backoffAfterRetry({
@@ -386,15 +332,15 @@ export async function streamOpenAIResponses(
     }
 
     // 将 toolCalls 从 map 转换为数组，并还原 canonical 名。
-    for (const [, toolCall] of toolCallByCallId) {
-      if (toolCall.name) {
-        toolCalls.push({
-          ...toolCall,
-          name: providerToCanonical.get(toolCall.name) ?? toolCall.name,
-        })
-      }
+    for (const toolCall of streamedCalls.values()) {
+      toolCalls.push({
+        ...toolCall,
+        name: providerToCanonical.get(toolCall.name) ?? toolCall.name,
+      })
     }
 
+    if (finishReason === 'stop' && toolCalls.length > 0)
+      finishReason = 'tool_calls'
     if (finishReason === null) {
       throw new ProviderError(
         'provider_protocol',
@@ -406,6 +352,7 @@ export async function streamOpenAIResponses(
       content,
       reasoning,
       finishReason,
+      rawStopReason,
       usage: {
         promptTokens: inputTokens,
         completionTokens: outputTokens,

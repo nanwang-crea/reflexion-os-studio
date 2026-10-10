@@ -16,6 +16,9 @@ export const RuntimeErrorCodeSchema = z.enum([
   // Agent Loop Hardening：完成状态机的稳定停止原因（统一映射为 failed + errorCode）。
   'max_turns',
   'output_truncated',
+  'output_empty',
+  'tool_output_truncated',
+  'context_limit',
   'content_filtered',
   'provider_protocol',
   'no_progress',

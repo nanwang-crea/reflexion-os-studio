@@ -1,3 +1,5 @@
+import { shrinkLargestFrameContent } from './context/shrink.js'
+import { continuationFrames } from './context/continuation.js'
 import type { ModelMessage } from './types.js'
 import { estimateMessageTokens, estimateTokens } from './context.js'
 
@@ -33,6 +35,7 @@ export interface ToolRoundFrame {
 
 export interface RuntimeControlFrame {
   kind: 'runtime_control'
+  control?: Extract<ModelMessage, { role: 'user' }>['control']
   content: string
 }
 
@@ -72,7 +75,11 @@ export function framesToMessages(frames: ContextFrame[]): ModelMessage[] {
         messages.push(...frame.results)
         break
       case 'runtime_control':
-        messages.push({ role: 'user', content: frame.content })
+        messages.push({
+          role: 'user',
+          content: frame.content,
+          ...(frame.control ? { control: frame.control } : {}),
+        })
         break
     }
   }
@@ -144,6 +151,14 @@ export function messagesToFrames(messages: ModelMessage[]): ContextFrame[] {
     }
     if (message.role === 'system') {
       frames.push({ kind: 'system', content: message.content })
+      continue
+    }
+    if (message.control) {
+      frames.push({
+        kind: 'runtime_control',
+        control: message.control,
+        content: message.content,
+      })
       continue
     }
     frames.push({
@@ -233,16 +248,32 @@ export function boundFramesForModel(
   const system = head === 1 ? current[0] : null
   const body = current.slice(head)
   const keep = Math.min(keepRecentFrames, body.length)
+  const continuation = continuationFrames(current)
+  const recent = body.slice(body.length - keep)
   const bounded: ContextFrame[] = [
     ...(system ? [system] : []),
     { kind: 'user', content: '[更早的历史已因上下文超长被截断]' },
-    ...body.slice(body.length - keep),
+    ...(continuation.task && !recent.includes(continuation.task)
+      ? [continuation.task]
+      : []),
+    ...(continuation.tail && !recent.includes(continuation.tail)
+      ? [continuation.tail]
+      : []),
+    ...recent,
   ]
+  const protectedIndices = new Set(
+    bounded.flatMap((frame, index) =>
+      frame === continuation.task || frame === continuation.control
+        ? [index]
+        : [],
+    ),
+  )
+  const tailIndex = continuation.tail ? bounded.indexOf(continuation.tail) : -1
   // 窗口内单 Frame 仍超预算（如粘贴巨文）：收缩最大非 system Frame。
   let shrinkPasses = 0
   while (estimateFrameTokens(bounded) > budgetTokens && shrinkPasses < 48) {
     shrinkPasses += 1
-    if (!shrinkLargestFrameContent(bounded)) break
+    if (!shrinkLargestFrameContent(bounded, protectedIndices, tailIndex)) break
   }
   return bounded
 }
@@ -268,65 +299,6 @@ function foldOldestToolRoundFrame(
     return kept
   }
   return null
-}
-
-interface ShrinkTarget {
-  frameIndex: number
-  resultIndex: number | null
-  text: string
-}
-
-/** 收缩最大正文；工具结果只改 content，保持 call/result 配对与错误状态。 */
-function shrinkLargestFrameContent(frames: ContextFrame[]): boolean {
-  let target: ShrinkTarget | null = null
-  for (let i = 0; i < frames.length; i += 1) {
-    const frame = frames[i]
-    if (frame.kind === 'system') continue
-    if (frame.kind !== 'tool_round') {
-      if (target === null || frame.content.length > target.text.length) {
-        target = { frameIndex: i, resultIndex: null, text: frame.content }
-      }
-      continue
-    }
-    if (
-      target === null ||
-      frame.assistant.content.length > target.text.length
-    ) {
-      target = {
-        frameIndex: i,
-        resultIndex: null,
-        text: frame.assistant.content,
-      }
-    }
-    for (let j = 0; j < frame.results.length; j += 1) {
-      const text = frame.results[j].content
-      if (target === null || text.length > target.text.length) {
-        target = { frameIndex: i, resultIndex: j, text }
-      }
-    }
-  }
-  if (target === null || target.text.length < 32) return false
-  const half = target.text.slice(0, Math.floor(target.text.length / 2))
-  const truncated = `${half}…（因上下文超长被截断）`
-  const frame = frames[target.frameIndex]
-  if (frame.kind !== 'tool_round') {
-    frames[target.frameIndex] = { ...frame, content: truncated }
-    return true
-  }
-  if (target.resultIndex === null) {
-    frames[target.frameIndex] = {
-      ...frame,
-      assistant: { ...frame.assistant, content: truncated },
-    }
-    return true
-  }
-  frames[target.frameIndex] = {
-    ...frame,
-    results: frame.results.map((result, index) =>
-      index === target.resultIndex ? { ...result, content: truncated } : result,
-    ),
-  }
-  return true
 }
 
 // 供按消息估算的旧接口兼容使用（诊断口径）。

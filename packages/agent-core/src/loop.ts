@@ -20,6 +20,7 @@ function buildReflectionMessage(failedTools: string[]): string {
 function buildContinuationMessage(): ModelMessage {
   return {
     role: 'user',
+    control: 'continuation',
     content:
       '[续写] 上一条回复因长度限制被截断。请从截断点继续输出，不要重复已有内容，也不要重新开始；完成后正常结束。',
   }
@@ -45,14 +46,21 @@ export async function runAgentLoop(
   const reflectionThreshold =
     options.reflectionThreshold ?? DEFAULT_REFLECTION_THRESHOLD
   const messages: ModelMessage[] = [...history]
+  const taskMessage = [...history]
+    .reverse()
+    .find((message) => message.role === 'user' && message.control === undefined)
   let turns = 0
   let failuresSinceReflection = 0
   let failedToolNames: string[] = []
   let continuationTurns = 0
+  let toolRecoveryAttempts = 0
 
   while (true) {
     if (signal.aborted) {
       throw new DOMException('The operation was aborted.', 'AbortError')
+    }
+    if (turns >= maxTurns) {
+      return { status: 'stopped', turns, reason: 'max_turns', messages }
     }
     if (
       reflectionThreshold > 0 &&
@@ -60,10 +68,26 @@ export async function runAgentLoop(
     ) {
       messages.push({
         role: 'user',
+        control: 'reflection',
         content: buildReflectionMessage(failedToolNames),
       })
       failuresSinceReflection = 0
       failedToolNames = []
+    }
+    // 旧工具轮可能已裁掉任务消息；续写前重新带入同一 Run 的原任务。
+    const lastMessage = messages.at(-1)
+    if (
+      lastMessage?.role === 'user' &&
+      lastMessage.control === 'continuation' &&
+      taskMessage &&
+      !messages.some(
+        (message) =>
+          message.role === 'user' &&
+          message.control === undefined &&
+          message.content === taskMessage.content,
+      )
+    ) {
+      messages.splice(Math.max(0, messages.length - 2), 0, taskMessage)
     }
     if (options.prepareMessages !== undefined) {
       const prepared = options.prepareMessages(messages)
@@ -88,7 +112,37 @@ export async function runAgentLoop(
       return { status: 'completed', turns, finalTurn: turn, messages }
     }
 
+    if (disposition.kind === 'context_limit') {
+      return { status: 'stopped', turns, reason: 'context_limit', messages }
+    }
+
+    if (disposition.kind === 'tool_truncated') {
+      // 本轮没有执行工具；拒绝把不完整调用加入合法历史，重试不重放旧工具。
+      if (toolRecoveryAttempts >= 1) {
+        return {
+          status: 'stopped',
+          turns,
+          reason: 'tool_output_truncated',
+          messages,
+        }
+      }
+      toolRecoveryAttempts += 1
+      options.onRecovery?.({ kind: 'tools', attempt: toolRecoveryAttempts })
+      messages.push({
+        role: 'user',
+        control: 'tool_recovery',
+        content:
+          '[续写] 上一轮工具参数因输出上限被截断，整批工具均未执行。请重新生成完整工具调用，缩小单次参数和操作批次，必要时分步执行。不要重做此前已成功的操作。',
+      })
+      continue
+    }
+
     if (disposition.kind === 'truncated') {
+      // 即使额度耗尽，最后一个片段也必须保留。
+      messages.push({ role: 'assistant', content: turn.content, toolCalls: [] })
+      if (turn.content.trim() === '') {
+        return { status: 'stopped', turns, reason: 'output_empty', messages }
+      }
       if (continuationTurns >= maxContinuationTurns) {
         return {
           status: 'stopped',
@@ -98,12 +152,7 @@ export async function runAgentLoop(
         }
       }
       continuationTurns += 1
-      // 截断片段作为已完成模型轮保留在消息流中，追加续写控制帧后继续。
-      messages.push({
-        role: 'assistant',
-        content: turn.content,
-        toolCalls: [],
-      })
+      options.onRecovery?.({ kind: 'text', attempt: continuationTurns })
       messages.push(buildContinuationMessage())
       continue
     }
@@ -117,6 +166,9 @@ export async function runAgentLoop(
       }
     }
 
+    // 完整工具轮打断连续截断；工具执行错误不改变模型轮的完整性。
+    continuationTurns = 0
+    toolRecoveryAttempts = 0
     // disposition.kind === 'tools'
     messages.push({
       role: 'assistant',

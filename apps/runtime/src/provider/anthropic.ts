@@ -1,3 +1,5 @@
+import { resolveOutputBudget } from './output-budget.js'
+import { anthropicStopReason } from './stop-reasons.js'
 import { userImageContent } from './image-content.js'
 import type { ModelMessage } from '@reflexion-os-studio/agent-core'
 import {
@@ -107,15 +109,6 @@ function tryParseJson(str: string): unknown {
   }
 }
 
-function mapStopReason(
-  reason: string | null | undefined,
-): 'stop' | 'length' | 'content_filter' | 'tool_calls' {
-  if (reason === 'end_turn' || reason === 'stop_sequence') return 'stop'
-  if (reason === 'max_tokens') return 'length'
-  if (reason === 'tool_use') return 'tool_calls'
-  return 'stop'
-}
-
 export async function streamAnthropic(
   options: StreamChatOptions,
   onDelta: (delta: string) => void,
@@ -179,7 +172,10 @@ export async function streamAnthropic(
             body: JSON.stringify({
               model: options.model,
               messages,
-              max_tokens: options.maxTokens ?? 4096,
+              max_tokens: resolveOutputBudget({
+                ...options,
+                apiFormat: 'anthropic',
+              }).requestMaxTokens,
               stream: true,
               ...(system !== undefined ? { system } : {}),
               ...(options.temperature !== undefined
@@ -243,8 +239,8 @@ export async function streamAnthropic(
 
     let content = ''
     let reasoning = ''
-    let finishReason:
-      'stop' | 'length' | 'content_filter' | 'tool_calls' | null = null
+    let finishReason: StreamChatResult['finishReason'] | null = null
+    let rawStopReason: string | undefined
     let inputTokens = 0
     let outputTokens = 0
     let cachedTokens: number | undefined
@@ -329,7 +325,8 @@ export async function streamAnthropic(
       if (eventType === 'message_delta') {
         const delta = parsed.delta as Record<string, unknown> | undefined
         if (delta?.stop_reason) {
-          finishReason = mapStopReason(String(delta.stop_reason))
+          rawStopReason = String(delta.stop_reason)
+          finishReason = anthropicStopReason(rawStopReason)
         }
         const usage = parsed.usage as Record<string, unknown> | undefined
         if (typeof usage?.output_tokens === 'number')
@@ -366,6 +363,7 @@ export async function streamAnthropic(
     } catch (error) {
       if (error instanceof StreamCallbackError) throw error.cause
       if (isAbort(error)) throw error
+      if (error instanceof ProviderError) throw error
       if (attempt < maxRetries) {
         attempt += 1
         await backoffAfterRetry({
@@ -402,6 +400,7 @@ export async function streamAnthropic(
       content,
       reasoning,
       finishReason,
+      rawStopReason,
       usage: {
         promptTokens: inputTokens,
         completionTokens: outputTokens,
