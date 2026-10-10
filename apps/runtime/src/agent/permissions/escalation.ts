@@ -46,23 +46,25 @@ function normalizeSlashes(path: string): string[] {
   return segments
 }
 
+/** Credential-name checks, without the blanket denial of runtime data roots. */
+export function hasSensitivePathSegments(path: string): boolean {
+  const segments = normalizeSlashes(path).map((s) => s.toLowerCase())
+  return segments.some(
+    (segment) =>
+      SENSITIVE_DIR_NAMES.has(segment) ||
+      segment.startsWith('.env') ||
+      segment.startsWith('id_rsa') ||
+      segment.startsWith('id_ed25519') ||
+      ['credentials.json', 'secrets.json', 'id_token'].includes(segment) ||
+      /\.(pem|key|token)$/.test(segment),
+  )
+}
+
 /** 目标与敏感根双向重叠（互为前缀）即拒绝；空路径（'/'）交由深度规则处理。 */
 export function touchesSensitive(path: string): boolean {
   const segments = normalizeSlashes(path).map((s) => s.toLowerCase())
   if (segments.length === 0) return false
-  if (
-    segments.some(
-      (segment) =>
-        SENSITIVE_DIR_NAMES.has(segment) ||
-        segment.startsWith('.env') ||
-        segment.startsWith('id_rsa') ||
-        segment.startsWith('id_ed25519') ||
-        ['credentials.json', 'secrets.json', 'id_token'].includes(segment) ||
-        /\.(pem|key|token)$/.test(segment),
-    )
-  ) {
-    return true
-  }
+  if (hasSensitivePathSegments(path)) return true
   for (const root of sensitiveRoots()) {
     const guard = normalizeSlashes(root).map((s) => s.toLowerCase())
     const overlaps =

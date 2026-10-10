@@ -1,5 +1,5 @@
-import { useModalDialog } from '../../../hooks/ui/useModalDialog'
-import { useEffect, useRef, useState } from 'react'
+import { ImagePreview } from '../../../components/images/ImagePreview'
+import { useEffect, useState } from 'react'
 import { readAsset } from '../../../api/assets'
 import './message-images.css'
 
@@ -15,12 +15,11 @@ export function MessageImage({
     size: number
   } | null>(null)
   const [expanded, setExpanded] = useState(false)
-  const closeRef = useRef<HTMLButtonElement>(null)
-  const dialogRef = useModalDialog(expanded, closeRef)
   const [failed, setFailed] = useState(false)
   useEffect(() => {
     let active = true
     setImage(null)
+    setExpanded(false)
     setFailed(false)
     void readAsset(assetId)
       .then(({ asset, base64 }) => {
@@ -67,6 +66,7 @@ export function MessageImage({
           loading="lazy"
           onError={() => {
             setImage(null)
+            setExpanded(false)
             setFailed(true)
           }}
         />
@@ -75,24 +75,11 @@ export function MessageImage({
         {image.name} · {Math.ceil(image.size / 1024)} KB
       </figcaption>
       {expanded && (
-        <dialog
-          ref={dialogRef}
-          className="message-image-dialog"
-          onCancel={(event) => {
-            event.preventDefault()
-            setExpanded(false)
-          }}
-        >
-          <button
-            type="button"
-            ref={closeRef}
-            onClick={() => setExpanded(false)}
-          >
-            关闭
-          </button>
-          <img src={image.src} alt={image.name} />
-          <p>{image.name}</p>
-        </dialog>
+        <ImagePreview
+          src={image.src}
+          name={image.name}
+          onClose={() => setExpanded(false)}
+        />
       )}
     </figure>
   )

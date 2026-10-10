@@ -1,7 +1,7 @@
 import { constants } from 'node:fs'
 import { lstat, open, realpath } from 'node:fs/promises'
-import { isAbsolute, relative } from 'node:path'
-import { touchesSensitive } from '../agent/permissions/escalation.js'
+import { isAbsolute, relative, sep } from 'node:path'
+import { hasSensitivePathSegments } from '../agent/permissions/escalation.js'
 
 /** Bound allocation and IO before decoding any preview or model image. */
 export async function readAssetContent(
@@ -17,13 +17,16 @@ export async function readAssetContent(
       realpath(dataDir),
       realpath(path),
     ])
+    // Internal assets must be readable inside the otherwise protected data root.
+    // Keep containment and credential-name denial rather than granting that root.
     const rel = relative(root, target)
     if (
       rel === '..' ||
       rel.startsWith('../') ||
       rel.startsWith('..\\') ||
       isAbsolute(rel) ||
-      touchesSensitive(target)
+      rel.split(sep)[0] !== 'assets' ||
+      hasSensitivePathSegments(rel)
     )
       return null
     // Windows has no O_NOFOLLOW; lstat/realpath checks still apply there.

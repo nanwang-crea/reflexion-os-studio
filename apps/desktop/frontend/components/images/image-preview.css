@@ -1,0 +1,15 @@
+.image-preview-dialog {
+  max-width: 92vw;
+  max-height: 92vh;
+  padding: 16px;
+  border-radius: 12px;
+}
+.image-preview-dialog img {
+  max-width: 85vw;
+  max-height: 75vh;
+  display: block;
+  object-fit: contain;
+}
+.image-preview-dialog::backdrop {
+  background: rgb(0 0 0 / 60%);
+}

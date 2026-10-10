@@ -21,7 +21,7 @@
   text-overflow: ellipsis;
   font-size: 11px;
 }
-.composer-image button {
+.composer-image-remove {
   position: absolute;
   top: 0;
   right: 0;
@@ -41,4 +41,12 @@
   padding: 0 12px 8px;
   font-size: 11px;
   opacity: 0.7;
+}
+
+.composer-image-open {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
 }

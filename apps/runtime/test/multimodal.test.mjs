@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   mkdtempSync,
+  realpathSync,
   rmSync,
   existsSync,
   symlinkSync,
@@ -411,4 +412,33 @@ test('image reads reject oversized content and symbolic links', async (t) => {
     throw error
   }
   assert.equal((await f.assets.read(image.assetId)).base64, null)
+})
+
+test('uploaded screenshots remain readable when Store uses the configured data directory', async (t) => {
+  const f = fixture(t)
+  const previous = process.env.REFLEXION_DATA_DIR
+  process.env.REFLEXION_DATA_DIR = realpathSync(f.dir)
+  try {
+    const image = await f.assets.uploadImage(upload(f.session.id))
+    assert.equal((await f.assets.read(image.assetId)).base64, png)
+    const messages = [
+      {
+        role: 'user',
+        content: 'describe screenshot',
+        images: [
+          { type: 'image', assetId: image.assetId, mimeType: image.mimeType },
+        ],
+      },
+    ]
+    const hydrated = await resolveModelImages(
+      f.store,
+      f.session.id,
+      messages,
+      new AbortController().signal,
+    )
+    assert.equal(hydrated[0].images[0].base64, png)
+  } finally {
+    if (previous === undefined) delete process.env.REFLEXION_DATA_DIR
+    else process.env.REFLEXION_DATA_DIR = previous
+  }
 })
