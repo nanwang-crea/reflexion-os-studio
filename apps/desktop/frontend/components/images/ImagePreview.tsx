@@ -1,3 +1,4 @@
+import { CloseButton } from '../dialogs/CloseButton'
 import { useRef } from 'react'
 import { useModalDialog } from '../../hooks/ui/useModalDialog'
 import './image-preview.css'
@@ -19,14 +20,20 @@ export function ImagePreview({
       ref={dialogRef}
       className="image-preview-dialog"
       aria-label={`预览 ${name}`}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
       onCancel={(event) => {
         event.preventDefault()
         onClose()
       }}
     >
-      <button type="button" ref={closeRef} onClick={onClose}>
-        关闭
-      </button>
+      <CloseButton
+        ref={closeRef}
+        className="image-preview-close"
+        label="关闭图片预览"
+        onClick={onClose}
+      />
       <img src={src} alt={name} />
       <p>{name}</p>
     </dialog>

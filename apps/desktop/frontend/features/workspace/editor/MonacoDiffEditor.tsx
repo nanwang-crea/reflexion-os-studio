@@ -1,3 +1,4 @@
+import { CloseButton } from '../../../components/dialogs/CloseButton'
 import { useTheme } from '../../../lib/theme/useTheme'
 import { getResolvedTheme } from '../../../lib/theme'
 import { useCallback, useEffect, useState } from 'react'
@@ -88,14 +89,6 @@ export function MonacoDiffEditor(
   return (
     <div className="content-view monaco-editor-container">
       <header className="content-head">
-        <button
-          className="ghost content-close"
-          onClick={onClose}
-          aria-label="关闭 Diff"
-          title="关闭 Diff"
-        >
-          ×
-        </button>
         <span className="content-name" title={title}>
           {fileName}
         </span>
@@ -108,6 +101,7 @@ export function MonacoDiffEditor(
         >
           刷新
         </button>
+        <CloseButton label="关闭 Diff" onClick={onClose} />
       </header>
       <div className="content-body monaco-body">
         {loading ? (

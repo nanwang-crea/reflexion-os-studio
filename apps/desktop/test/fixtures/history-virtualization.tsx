@@ -77,6 +77,12 @@ function Fixture() {
   return (
     <>
       <h1>历史虚拟列表验收</h1>
+      <button onClick={() => window.historyFixture.prepend()}>前插历史</button>
+      <button onClick={() => window.historyFixture.append()}>追加消息</button>
+      <button onClick={() => window.historyFixture.expand('3')}>
+        展开长消息
+      </button>
+      <button onClick={() => setPinned((current) => !current)}>切换贴底</button>
       <div
         ref={scrollRef}
         id="scroll"

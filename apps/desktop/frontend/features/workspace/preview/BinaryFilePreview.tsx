@@ -1,3 +1,5 @@
+import { ImagePreview } from '../../../components/images/ImagePreview'
+import './image-preview.css'
 import { useEffect, useMemo, useState } from 'react'
 import type { RuntimeEvent } from '@reflexion-os-studio/runtime-client'
 import { readBinary, unwatchDir, watchDir } from '../../../api/workspace'
@@ -15,6 +17,7 @@ export function BinaryFilePreview(
   props: BinaryFilePreviewProps,
 ): React.JSX.Element {
   const [reload, setReload] = useState(0)
+  const [expanded, setExpanded] = useState(false)
   const [state, setState] = useState<
     | { status: 'loading' }
     | { status: 'error'; message: string }
@@ -30,6 +33,7 @@ export function BinaryFilePreview(
   useEffect(() => {
     let cancelled = false
     setState({ status: 'loading' })
+    setExpanded(false)
     void readBinary(props.projectId, props.path)
       .then((result) => {
         if (cancelled) return
@@ -94,7 +98,21 @@ export function BinaryFilePreview(
   if (props.kind === 'image') {
     return (
       <div className="binary-preview binary-preview-image">
-        <img src={state.dataUrl} alt={fileName} />
+        <button
+          type="button"
+          className="workspace-image-open"
+          aria-label={`预览 ${fileName}`}
+          onClick={() => setExpanded(true)}
+        >
+          <img src={state.dataUrl} alt={fileName} />
+        </button>
+        {expanded && (
+          <ImagePreview
+            src={state.dataUrl}
+            name={fileName}
+            onClose={() => setExpanded(false)}
+          />
+        )}
         <span>{formatBytes(state.sizeBytes)}</span>
       </div>
     )

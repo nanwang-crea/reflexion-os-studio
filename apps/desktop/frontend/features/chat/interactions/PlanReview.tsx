@@ -5,6 +5,7 @@ import type {
 } from '@reflexion-os-studio/runtime-client'
 import { workspaceFileUri } from '@reflexion-os-studio/runtime-client'
 import { MarkdownCore } from '../../../components/markdown/md-core'
+import { ReadOnlyDialog } from '../../../components/dialogs/ReadOnlyDialog'
 import './plan-review.css'
 
 /** 正文独立审阅；审批卡只提供入口。历史快照不依赖已清理的文件。 */
@@ -14,7 +15,6 @@ export function PlanReview(props: {
   onResourceClick?: (link: ResourceLink) => void
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
-  const dialog = useRef<HTMLDialogElement>(null)
   const latest = useRef(props)
   latest.current = props
   const { planId, sha256 } = props.snapshot
@@ -29,10 +29,6 @@ export function PlanReview(props: {
       })
     }
   }, [planId, sha256])
-  useEffect(() => {
-    if (open) dialog.current?.showModal()
-    else dialog.current?.close()
-  }, [open])
   const openFile = (): void => {
     const { snapshot, onResourceClick } = props
     if (snapshot.path && snapshot.projectId && onResourceClick) {
@@ -57,32 +53,21 @@ export function PlanReview(props: {
       {!props.historical && props.snapshot.path && (
         <small>{props.snapshot.path}</small>
       )}
-      <dialog
-        ref={dialog}
-        className="plan-review-dialog"
-        onCancel={() => setOpen(false)}
-        onClose={() => setOpen(false)}
-      >
-        <header>
-          <strong>{props.snapshot.goal}</strong>
-          <button
-            type="button"
-            className="ghost"
-            onClick={() => setOpen(false)}
-          >
-            关闭
-          </button>
-        </header>
-        <p>审批时保存的计划 · 此版本只读</p>
-        <div className="plan-review-body">
-          {open && (
+      {open && (
+        <ReadOnlyDialog
+          label="计划审阅"
+          title={<strong>{props.snapshot.goal}</strong>}
+          onClose={() => setOpen(false)}
+        >
+          <div className="plan-review-content">
+            <p>审批时保存的计划 · 此版本只读</p>
             <MarkdownCore
               text={props.snapshot.markdown}
               onResourceClick={props.onResourceClick}
             />
-          )}
-        </div>
-      </dialog>
+          </div>
+        </ReadOnlyDialog>
+      )}
     </div>
   )
 }

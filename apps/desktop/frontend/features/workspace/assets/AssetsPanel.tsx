@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { ImagePreview } from '../../../components/images/ImagePreview'
+import './asset-preview.css'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AssetRef } from '@reflexion-os-studio/runtime-client'
 import {
   deleteAsset,
@@ -6,7 +8,7 @@ import {
   listAssets,
   readAsset,
 } from '../../../api/assets'
-import { RefreshIcon } from '../../../ui/icons'
+import { RefreshIcon, TrashIcon } from '../../../ui/icons'
 import { ConfirmDialog } from '../../../components/ConfirmDialog'
 import { copyTextToClipboard } from '../../../lib/clipboard'
 import { showToast } from '../../../components/Toast'
@@ -52,6 +54,9 @@ export function AssetsPanel(props: AssetsPanelProps): React.JSX.Element {
   const [importPath, setImportPath] = useState('')
   const [importing, setImporting] = useState(false)
   const [preview, setPreview] = useState<PreviewState | null>(null)
+  const [expanded, setExpanded] = useState(false)
+  const focusLatest = useRef(props)
+  focusLatest.current = props
   const [copied, setCopied] = useState(false)
   const [confirmId, setConfirmId] = useState<string | null>(null)
 
@@ -70,10 +75,12 @@ export function AssetsPanel(props: AssetsPanelProps): React.JSX.Element {
 
   useEffect(() => {
     setPreview(null)
+    setExpanded(false)
     void refresh()
   }, [props.projectId, refresh])
 
   const openPreview = useCallback(async (asset: AssetRef): Promise<void> => {
+    setExpanded(false)
     setPreview({
       asset,
       text: null,
@@ -111,9 +118,12 @@ export function AssetsPanel(props: AssetsPanelProps): React.JSX.Element {
   useEffect(() => {
     const assetId = props.focusAssetId
     if (assetId === null || assetId === undefined) return
+    let disposed = false
+    setExpanded(false)
     void (async () => {
       try {
         const result = await readAsset(assetId)
+        if (disposed) return
         setPreview({
           asset: result.asset,
           text: result.text,
@@ -122,6 +132,7 @@ export function AssetsPanel(props: AssetsPanelProps): React.JSX.Element {
           error: null,
         })
       } catch (error_) {
+        if (disposed) return
         setPreview({
           asset: {
             assetId,
@@ -144,10 +155,14 @@ export function AssetsPanel(props: AssetsPanelProps): React.JSX.Element {
           loading: false,
           error: error_ instanceof Error ? error_.message : String(error_),
         })
+      } finally {
+        if (!disposed) focusLatest.current.onFocusConsumed?.()
       }
     })()
-    props.onFocusConsumed?.()
-  }, [props.focusAssetId, props.projectId, props])
+    return () => {
+      disposed = true
+    }
+  }, [props.focusAssetId, props.projectId])
 
   const doImport = async (
     event: React.FormEvent<HTMLFormElement>,
@@ -219,11 +234,18 @@ export function AssetsPanel(props: AssetsPanelProps): React.JSX.Element {
           ) : preview.error !== null ? (
             <div className="asset-hint asset-hint-error">{preview.error}</div>
           ) : preview.base64 !== null ? (
-            <img
-              className="asset-image"
-              src={`data:${preview.asset.mimeType};base64,${preview.base64}`}
-              alt={preview.asset.fileName}
-            />
+            <button
+              type="button"
+              className="asset-image-open"
+              aria-label={`预览 ${preview.asset.fileName}`}
+              onClick={() => setExpanded(true)}
+            >
+              <img
+                className="asset-image"
+                src={`data:${preview.asset.mimeType};base64,${preview.base64}`}
+                alt={preview.asset.fileName}
+              />
+            </button>
           ) : preview.text !== null ? (
             <pre className="asset-text">{preview.text}</pre>
           ) : (
@@ -232,6 +254,13 @@ export function AssetsPanel(props: AssetsPanelProps): React.JSX.Element {
             </div>
           )}
         </div>
+        {expanded && preview.base64 && (
+          <ImagePreview
+            src={`data:${preview.asset.mimeType};base64,${preview.base64}`}
+            name={preview.asset.fileName}
+            onClose={() => setExpanded(false)}
+          />
+        )}
       </div>
     )
   }
@@ -287,7 +316,7 @@ export function AssetsPanel(props: AssetsPanelProps): React.JSX.Element {
                 aria-label={`删除 ${asset.fileName}`}
                 onClick={() => setConfirmId(asset.assetId)}
               >
-                ×
+                <TrashIcon />
               </button>
             </li>
           ))}

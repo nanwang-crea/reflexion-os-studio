@@ -8,7 +8,7 @@ import {
 } from 'react'
 import type { RefObject, ReactNode } from 'react'
 import type { ChatBlock } from '../chat-blocks'
-import { buildOffsets, indexAt, visibleRange } from './virtual-layout'
+import { buildOffsets, anchoredTop, visibleRange } from './virtual-layout'
 
 interface Props {
   blocks: ChatBlock[]
@@ -55,8 +55,6 @@ export function VirtualTranscript({
   const listRef = useRef<HTMLDivElement>(null)
   const [heights, setHeights] = useState(new Map<string, number>())
   const [viewport, setViewport] = useState({ top: 0, height: 600, width: 0 })
-  const latest = useRef({ pinned })
-  latest.current = { pinned }
   const keys = useMemo(
     () =>
       blocks.map((block) =>
@@ -66,13 +64,22 @@ export function VirtualTranscript({
   )
   const offsets = useMemo(() => buildOffsets(keys, heights), [keys, heights])
   const total = offsets.at(-1) ?? 0
-  const top = pinned ? Math.max(0, total - viewport.height) : viewport.top
-  const [start, end] = visibleRange(offsets, top, viewport.height)
   const previous = useRef<{
     keys: string[]
     offsets: number[]
     origin: number
+    top: number
   } | null>(null)
+
+  // Resolve the anchor before selecting rows, so prepending history never
+  // temporarily unmounts the message the user is reading.
+  const old = previous.current
+  const top = pinned
+    ? Math.max(0, total - viewport.height)
+    : old
+      ? anchoredTop(old.keys, old.offsets, keys, offsets, old.top)
+      : viewport.top
+  const [start, end] = visibleRange(offsets, top, viewport.height)
 
   const listTop = useCallback((): number => {
     const container = scrollRef.current
@@ -94,33 +101,34 @@ export function VirtualTranscript({
   useLayoutEffect(() => {
     const container = scrollRef.current
     if (!container) return
-    const old = previous.current
     if (pinned) container.scrollTop = container.scrollHeight
-    else if (old && old.keys.length) {
-      const oldTop = Math.max(0, container.scrollTop - old.origin)
-      const anchor = indexAt(old.offsets, oldTop)
-      const nextIndex = keys.indexOf(old.keys[anchor])
-      if (nextIndex >= 0)
-        container.scrollTop =
-          listTop() + offsets[nextIndex] + oldTop - old.offsets[anchor]
+    else container.scrollTop = listTop() + top
+    previous.current = {
+      keys,
+      offsets,
+      origin: listTop(),
+      top: Math.max(0, container.scrollTop - listTop()),
     }
-    previous.current = { keys, offsets, origin: listTop() }
     setViewport({
       top: Math.max(0, container.scrollTop - listTop()),
       height: container.clientHeight,
       width: container.clientWidth,
     })
-  }, [keys, offsets, pinned, listTop, scrollRef])
+  }, [keys, offsets, pinned, top, listTop, scrollRef])
 
   useEffect(() => {
     const container = scrollRef.current
     if (!container) return
     let frame = 0
     const update = (): void => {
+      // Capture scroll input immediately, before a measurement render can
+      // replace spacers and the browser clamps scrollTop to the new height.
+      const snapshot = previous.current
+      if (snapshot)
+        snapshot.top = Math.max(0, container.scrollTop - snapshot.origin)
       if (frame) return
       frame = requestAnimationFrame(() => {
         frame = 0
-        if (latest.current.pinned) container.scrollTop = container.scrollHeight
         setViewport({
           top: Math.max(0, container.scrollTop - listTop()),
           height: container.clientHeight,

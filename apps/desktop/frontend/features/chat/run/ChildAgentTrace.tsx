@@ -11,6 +11,7 @@ import {
   prependHistory,
 } from '../../../hooks/session/history-pages'
 import type { HistoryCursor } from '@reflexion-os-studio/runtime-client'
+import { ReadOnlyDialog } from '../../../components/dialogs/ReadOnlyDialog'
 import { RunBlock } from './RunBlock'
 
 interface ChildAgentTraceProps {
@@ -157,91 +158,80 @@ export function ChildAgentTrace({
   }, [activeRunIds, data])
 
   return (
-    <div className="child-trace-backdrop" role="presentation" onClick={onClose}>
-      <section
-        className="child-trace-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-label="子 Agent 执行轨迹"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header className="child-trace-head">
-          <div>
-            <div className="child-trace-title">
-              <strong>
-                {selected.agentInstance?.name ?? selected.agentId}
-              </strong>
-              <span className={`delegation-status ${selected.status}`}>
-                {selectedStatus}
-              </span>
-            </div>
-            <span>{selected.task}</span>
-          </div>
-          <button type="button" className="ghost" onClick={onClose}>
-            关闭
-          </button>
-        </header>
-        <div className="child-trace-body" ref={scrollRef}>
-          <DelegationTree
-            items={tree.length > 0 ? tree : [delegation]}
-            rootRunId={rootRunId}
-            selectedId={selected.id}
-            onSelect={(item) => {
-              setData(null)
-              setSelected(item)
+    <ReadOnlyDialog
+      drawer
+      label="子 Agent 执行轨迹"
+      onClose={onClose}
+      title={
+        <div>
+          <strong>{selected.agentInstance?.name ?? selected.agentId}</strong>
+          <span className={`delegation-status ${selected.status}`}>
+            {selectedStatus}
+          </span>
+          <div>{selected.task}</div>
+        </div>
+      }
+    >
+      <div className="child-trace-body" ref={scrollRef}>
+        <DelegationTree
+          items={tree.length > 0 ? tree : [delegation]}
+          rootRunId={rootRunId}
+          selectedId={selected.id}
+          onSelect={(item) => {
+            setData(null)
+            setSelected(item)
+          }}
+        />
+        {selected.childSessionId === null && <p>子会话尚未创建。</p>}
+        {error && <p className="delegation-error">{error}</p>}
+        {!data && selected.childSessionId !== null && !error && (
+          <p>加载轨迹…</p>
+        )}
+        <div className="child-trace-stream">
+          {data?.session && data.nextBefore && (
+            <HistoryLoader
+              key={data.session.id}
+              sessionId={data.session.id}
+              before={data.nextBefore}
+              onLoad={loadOlder}
+            />
+          )}
+          <VirtualTranscript
+            key={selected.childSessionId}
+            blocks={chatBlocks}
+            scrollRef={scrollRef}
+            pinned={false}
+            renderBlock={(block) => {
+              if (block.kind !== 'run') return null
+              const run = runById.get(block.runId) ?? null
+              const finalMessage =
+                block.finalItem?.message ??
+                block.processItems[block.processItems.length - 1]?.message
+              return (
+                <RunBlock
+                  key={block.runId}
+                  processItems={block.processItems}
+                  finalItem={block.finalItem}
+                  delegations={[]}
+                  runActive={activeRunIds.has(block.runId)}
+                  streaming={streaming}
+                  streamingReasoning={streamingReasoning}
+                  runDurationMs={
+                    finalMessage
+                      ? computeRunDurationMs(run, finalMessage)
+                      : null
+                  }
+                  runUsage={run?.usage ?? null}
+                  runFailed={run?.status === 'failed'}
+                  canRetry={false}
+                  onRetry={() => undefined}
+                  projectId={data?.session?.projectId ?? ''}
+                />
+              )
             }}
           />
-          {selected.childSessionId === null && <p>子会话尚未创建。</p>}
-          {error && <p className="delegation-error">{error}</p>}
-          {!data && selected.childSessionId !== null && !error && (
-            <p>加载轨迹…</p>
-          )}
-          <div className="child-trace-stream">
-            {data?.session && data.nextBefore && (
-              <HistoryLoader
-                key={data.session.id}
-                sessionId={data.session.id}
-                before={data.nextBefore}
-                onLoad={loadOlder}
-              />
-            )}
-            <VirtualTranscript
-              key={selected.childSessionId}
-              blocks={chatBlocks}
-              scrollRef={scrollRef}
-              pinned={false}
-              renderBlock={(block) => {
-                if (block.kind !== 'run') return null
-                const run = runById.get(block.runId) ?? null
-                const finalMessage =
-                  block.finalItem?.message ??
-                  block.processItems[block.processItems.length - 1]?.message
-                return (
-                  <RunBlock
-                    key={block.runId}
-                    processItems={block.processItems}
-                    finalItem={block.finalItem}
-                    delegations={[]}
-                    runActive={activeRunIds.has(block.runId)}
-                    streaming={streaming}
-                    streamingReasoning={streamingReasoning}
-                    runDurationMs={
-                      finalMessage
-                        ? computeRunDurationMs(run, finalMessage)
-                        : null
-                    }
-                    runUsage={run?.usage ?? null}
-                    runFailed={run?.status === 'failed'}
-                    canRetry={false}
-                    onRetry={() => undefined}
-                    projectId={data?.session?.projectId ?? ''}
-                  />
-                )
-              }}
-            />
-          </div>
         </div>
-      </section>
-    </div>
+      </div>
+    </ReadOnlyDialog>
   )
 }

@@ -18,6 +18,7 @@ const {
   buildOffsets,
   visibleRange,
   indexAt,
+  anchoredTop,
 } = await import(
   'data:text/javascript;base64,' +
     Buffer.from(compiled.outputFiles[0].text).toString('base64')
@@ -104,4 +105,24 @@ test('a long transcript mounts a bounded window and uses measured dynamic height
   assert.ok(last - first < 20)
   assert.equal(last, 10000)
   assert.deepEqual(visibleRange([0], 0, 800), [0, 0])
+})
+
+test('prepending and measuring history keep the same long message mounted', () => {
+  const oldKeys = ['a', 'b', 'c']
+  const heights = new Map([['b', 2400]])
+  const oldOffsets = buildOffsets(oldKeys, heights)
+  const top = oldOffsets[1] + 1200
+  const keys = ['older', ...oldKeys]
+  const offsets = buildOffsets(keys, heights)
+  const nextTop = anchoredTop(oldKeys, oldOffsets, keys, offsets, top)
+  assert.equal(nextTop, offsets[2] + 1200)
+  const [start, end] = visibleRange(offsets, nextTop, 600)
+  assert.ok(start <= 2 && end > 2)
+  heights.set('older', 3000)
+  const measured = buildOffsets(keys, heights)
+  assert.equal(
+    anchoredTop(keys, offsets, keys, measured, nextTop),
+    measured[2] + 1200,
+  )
+  assert.equal(anchoredTop([], [0], keys, measured, 0), 0)
 })

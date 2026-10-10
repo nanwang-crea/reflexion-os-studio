@@ -1,0 +1,11 @@
+.asset-image-open {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+.asset-image-open:hover:not(:disabled) {
+  background: transparent;
+}

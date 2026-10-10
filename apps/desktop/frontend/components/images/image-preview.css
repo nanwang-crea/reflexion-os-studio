@@ -1,15 +1,65 @@
 .image-preview-dialog {
-  max-width: 92vw;
-  max-height: 92vh;
-  padding: 16px;
-  border-radius: 12px;
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 64px 32px 32px;
+  border: 0;
+  box-sizing: border-box;
+  background: transparent;
+  color: #fff;
+}
+.image-preview-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
 }
 .image-preview-dialog img {
-  max-width: 85vw;
-  max-height: 75vh;
+  max-width: 100%;
+  max-height: calc(100vh - 140px);
+  max-height: calc(100dvh - 140px);
   display: block;
   object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 12px 48px rgb(0 0 0 / 25%);
+}
+.image-preview-dialog p {
+  margin: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  opacity: 0.75;
+}
+.image-preview-dialog .image-preview-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 50%;
+  background: rgb(255 255 255 / 8%);
+  color: #fff;
+  cursor: pointer;
+}
+.image-preview-dialog .image-preview-close:hover:not(:disabled) {
+  background: rgb(255 255 255 / 18%);
+}
+.image-preview-close:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
 }
 .image-preview-dialog::backdrop {
-  background: rgb(0 0 0 / 60%);
+  background: rgb(0 0 0 / 80%);
 }

@@ -32,3 +32,17 @@ export function visibleRange(
     Math.min(offsets.length - 1, indexAt(offsets, top + height + OVERSCAN) + 1),
   ]
 }
+
+/** Preserve the visible message and its intra-message offset across layout changes. */
+export function anchoredTop(
+  oldKeys: string[],
+  oldOffsets: number[],
+  keys: string[],
+  offsets: number[],
+  top: number,
+): number {
+  if (!oldKeys.length) return top
+  const anchor = indexAt(oldOffsets, top)
+  const nextIndex = keys.indexOf(oldKeys[anchor])
+  return nextIndex < 0 ? top : offsets[nextIndex] + top - oldOffsets[anchor]
+}
