@@ -72,7 +72,12 @@ export interface ChatViewProps {
     },
   ) => void
   /** 编辑最后一条用户消息的回调：提交后由 Runtime 处理 superseded 与新 Run 创建。 */
-  onEditResend: (messageId: string, content: string) => Promise<void>
+  onEditResend: (
+    messageId: string,
+    content: string,
+    imageAssetIds: string[],
+    images: File[],
+  ) => Promise<void>
   /** 资源引用（工作区文件/资产/外链）点击后按类型分发。 */
   onResourceClick?: (link: ResourceLink) => void
 }

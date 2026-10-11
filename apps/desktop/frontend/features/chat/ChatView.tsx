@@ -20,6 +20,9 @@ import { QueueBar } from './QueueBar'
 import { PlanCard } from './run/PlanCard'
 import { buildChatBlocks } from './chat-blocks'
 import { InteractionQueue } from './interactions/InteractionQueue'
+import type { DraftImage } from '../../components/composer/useComposerImages'
+import { MAX_MESSAGE_IMAGES } from '@reflexion-os-studio/runtime-client'
+import { validateImageFile } from './images/upload-message-images'
 
 /** 距底部小于该值视为“贴底”，流式期间继续跟随滚动。 */
 const PIN_THRESHOLD_PX = 80
@@ -31,6 +34,10 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
   const [pinned, setPinned] = useState(true)
   const [editMessageId, setEditMessageId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState('')
+  const [editImageAssetIds, setEditImageAssetIds] = useState<string[]>([])
+  const [editImages, setEditImages] = useState<DraftImage[]>([])
+  const editImagesRef = useRef<DraftImage[]>([])
+  const [editImageError, setEditImageError] = useState<string | null>(null)
   const [editSaving, setEditSaving] = useState(false)
   const sessionId = props.sessionData?.session?.id ?? null
 
@@ -195,11 +202,21 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
     )
   }, [])
 
-  // 切换会话时回到贴底状态。
+  // 切换会话时回到贴底状态，并清理旧会话的编辑草稿与临时图片。
   useEffect(() => {
     setPinned(true)
+    setEditMessageId(null)
+    setEditDraft('')
+    setEditImageAssetIds([])
+    setEditImages([])
+    setEditImageError(null)
     const el = scrollRef.current
     if (el) el.scrollTop = el.scrollHeight
+    return () => {
+      const images = editImagesRef.current
+      editImagesRef.current = []
+      images.forEach((image) => URL.revokeObjectURL(image.url))
+    }
   }, [sessionId])
 
   // 流式期间仅在贴底时跟随，用户回看历史时不打断。
@@ -214,20 +231,82 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
     void onRetry()
   }, [onRetry])
 
+  const clearEditImages = (): void => {
+    const images = editImagesRef.current
+    editImagesRef.current = []
+    images.forEach((image) => URL.revokeObjectURL(image.url))
+    setEditImages([])
+    setEditImageError(null)
+  }
+
+  const addEditImages = (files: File[]): void => {
+    try {
+      const current = editImagesRef.current
+      if (editImageAssetIds.length + current.length + files.length > MAX_MESSAGE_IMAGES) {
+        throw new Error('每条消息最多 4 张图片')
+      }
+      files.forEach(validateImageFile)
+      const next = [
+        ...current,
+        ...files.map((file) => ({
+          id: crypto.randomUUID(),
+          file,
+          url: URL.createObjectURL(file),
+        })),
+      ]
+      editImagesRef.current = next
+      setEditImages(next)
+      setEditImageError(null)
+    } catch (error) {
+      setEditImageError(error instanceof Error ? error.message : '图片添加失败')
+    }
+  }
+
+  const removeEditImage = (id: string): void => {
+    const image = editImagesRef.current.find((item) => item.id === id)
+    if (image) URL.revokeObjectURL(image.url)
+    const next = editImagesRef.current.filter((item) => item.id !== id)
+    editImagesRef.current = next
+    setEditImages(next)
+  }
+
+  const removeEditAsset = (assetId: string): void => {
+    setEditImageAssetIds((current) => current.filter((id) => id !== assetId))
+  }
+
   const startEdit = (messageId: string): void => {
     const message = messages.find((m) => m.id === messageId)
     if (!message || message.role !== 'user') return
     setEditMessageId(messageId)
     setEditDraft(message.content)
+    clearEditImages()
+    setEditImageError(null)
+    setEditImageAssetIds(
+      message.parts
+        .filter((part) => part.type === 'image')
+        .map((part) => part.assetId),
+    )
   }
 
   const saveEdit = async (): Promise<void> => {
-    if (editMessageId === null || editDraft.trim() === '') return
+    if (
+      editMessageId === null ||
+      (editDraft.trim() === '' &&
+        editImageAssetIds.length === 0 &&
+        editImages.length === 0)
+    ) return
     try {
       setEditSaving(true)
-      await props.onEditResend(editMessageId, editDraft.trim())
+      await props.onEditResend(
+        editMessageId,
+        editDraft.trim(),
+        editImageAssetIds,
+        editImages.map((image) => image.file),
+      )
       setEditMessageId(null)
       setEditDraft('')
+      setEditImageAssetIds([])
+      clearEditImages()
     } catch {
       // 全局 notice 由 useSessionActions 统一展示；保留草稿供用户修正或重试。
     } finally {
@@ -238,6 +317,8 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
   const cancelEdit = (): void => {
     setEditMessageId(null)
     setEditDraft('')
+    setEditImageAssetIds([])
+    clearEditImages()
   }
 
   const scrollToBottom = (): void => {
@@ -249,9 +330,9 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
 
   return (
     <div className="chat-view">
-      {currentPlan && <PlanCard key={currentPlan.id} plan={currentPlan} />}
       <div className="chat-scroll" ref={scrollRef} onScroll={handleScroll}>
         <div className="transcript">
+          {currentPlan && <PlanCard key={currentPlan.id} plan={currentPlan} />}
           {sessionId && props.sessionData?.nextBefore && (
             <HistoryLoader
               key={sessionId}
@@ -289,7 +370,13 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
                 editMessageId={editMessageId}
                 editDraft={editDraft}
                 editSaving={editSaving}
+                editImageAssetIds={editImageAssetIds}
+                editImages={editImages}
+                editImageError={editImageError}
                 onDraftChange={setEditDraft}
+                onAddImages={addEditImages}
+                onRemoveImage={removeEditImage}
+                onRemoveAsset={removeEditAsset}
                 cancelEdit={cancelEdit}
                 saveEdit={saveEdit}
                 startEdit={startEdit}

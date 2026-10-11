@@ -9,6 +9,7 @@ import { CommandError } from '../errors.js'
 import { createPendingAssistantMessage, type RunLauncher } from '../launcher.js'
 import { DEFAULT_PRESET, resolveInputPreset } from '../permissions/index.js'
 import { resolveProvider, resolveSampling } from '../provider-resolver.js'
+import { userContentParts } from '../context/image-parts.js'
 import {
   requireSession,
   requireIdleSession,
@@ -116,8 +117,8 @@ export class RunResubmissionService {
     const session = requireSession(this.store, params.sessionId)
     requireIdleSession(this.store, params.sessionId)
     const content = params.content.trim()
-    if (content === '') {
-      throw new CommandError('invalid_request', '消息内容不能为空')
+    if (content === '' && (params.imageAssetIds?.length ?? 0) === 0) {
+      throw new CommandError('invalid_request', '消息内容或图片不能为空')
     }
     const messages = this.store.messages.listBySession(params.sessionId)
     const lastUserMessage = [...messages]
@@ -174,10 +175,12 @@ export class RunResubmissionService {
           runId: newRun.id,
           role: 'user',
           content,
-          parts: [
-            { type: 'text', text: content },
-            ...lastUserMessage.parts.filter((part) => part.type === 'image'),
-          ],
+          parts: userContentParts(
+            this.store,
+            params.sessionId,
+            content,
+            params.imageAssetIds,
+          ),
           status: 'completed',
         })
         const newAssistantMessage = createPendingAssistantMessage(

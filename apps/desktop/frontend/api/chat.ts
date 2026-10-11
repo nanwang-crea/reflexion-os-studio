@@ -70,6 +70,7 @@ export function editResendMessage(input: {
   sessionId: string
   messageId: string
   content: string
+  imageAssetIds?: string[]
   providerId?: string
   model?: string
   reasoningEffort?: ReasoningEffort | null

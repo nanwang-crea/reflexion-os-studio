@@ -1,4 +1,5 @@
 import type { ChatViewProps } from '../chat-view-types'
+import type { DraftImage } from '../../../components/composer/useComposerImages'
 import type { ChatBlock } from '../chat-blocks'
 import { computeRunDurationMs, isLastEditableUserMessage } from '../chat-blocks'
 import type {
@@ -28,7 +29,13 @@ interface Props {
   editMessageId: string | null
   editDraft: string
   editSaving: boolean
+  editImageAssetIds: string[]
+  editImages: DraftImage[]
+  editImageError: string | null
   onDraftChange: (value: string) => void
+  onAddImages: (files: File[]) => void
+  onRemoveImage: (id: string) => void
+  onRemoveAsset: (assetId: string) => void
   cancelEdit: () => void
   saveEdit: () => Promise<void>
   startEdit: (id: string) => void
@@ -48,7 +55,13 @@ export function ChatBlockView({
   editMessageId,
   editDraft,
   editSaving,
+  editImageAssetIds,
+  editImages,
+  editImageError,
   onDraftChange,
+  onAddImages,
+  onRemoveImage,
+  onRemoveAsset,
   cancelEdit,
   saveEdit,
   startEdit,
@@ -120,7 +133,13 @@ export function ChatBlockView({
         editable={lastUserMsg}
         editDraft={editDraft}
         editSaving={editSaving}
+        editImageAssetIds={editImageAssetIds}
+        editImages={editImages}
+        editImageError={editImageError}
         onDraftChange={onDraftChange}
+        onAddImages={onAddImages}
+        onRemoveImage={onRemoveImage}
+        onRemoveAsset={onRemoveAsset}
         onCancel={cancelEdit}
         onSave={saveEdit}
         onEdit={() => startEdit(message.id)}

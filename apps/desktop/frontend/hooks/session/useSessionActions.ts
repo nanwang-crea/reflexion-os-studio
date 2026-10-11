@@ -1,5 +1,6 @@
-import { uploadMessageImages } from '../../features/chat/images/upload-message-images'
+
 import { deleteAsset } from '../../api/assets'
+import { uploadMessageImages } from '../../features/chat/images/upload-message-images'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import { open } from '@tauri-apps/plugin-dialog'
 import type {
@@ -64,7 +65,12 @@ export function useSessionActions(deps: SessionActionsDeps): {
     agentTemplateId?: string,
     images?: File[],
   ) => Promise<void>
-  editResendMessage: (messageId: string, content: string) => Promise<void>
+  editResendMessage: (
+    messageId: string,
+    content: string,
+    imageAssetIds: string[],
+    images: File[],
+  ) => Promise<void>
   stopRun: () => Promise<void>
   retryRun: () => Promise<void>
 } {
@@ -263,29 +269,41 @@ export function useSessionActions(deps: SessionActionsDeps): {
   const editResendMessage = async (
     messageId: string,
     content: string,
+    imageAssetIds: string[],
+    images: File[],
   ): Promise<void> => {
     const sessionId = deps.activeSessionId
     if (!sessionId) return
     const modelKey = deps.selectedModelKey
     const separator = modelKey ? modelKey.indexOf('::') : -1
+    let uploadedImageIds: string[] = []
     try {
-      await chatApi.editResendMessage({
-        sessionId,
-        messageId,
-        content,
-        providerId:
-          modelKey && separator > 0 ? modelKey.slice(0, separator) : undefined,
-        reasoningEffort: deps.requestedReasoningEffort,
-        model:
-          modelKey && separator > 0 ? modelKey.slice(separator + 2) : undefined,
-        permissionPreset: deps.permissionPreset,
-      })
+      uploadedImageIds =
+        images.length > 0 ? await uploadMessageImages(sessionId, images) : []
+      try {
+        await chatApi.editResendMessage({
+          sessionId,
+          messageId,
+          content,
+          imageAssetIds: [...imageAssetIds, ...uploadedImageIds],
+          providerId:
+            modelKey && separator > 0 ? modelKey.slice(0, separator) : undefined,
+          reasoningEffort: deps.requestedReasoningEffort,
+          model:
+            modelKey && separator > 0 ? modelKey.slice(separator + 2) : undefined,
+          permissionPreset: deps.permissionPreset,
+        })
+      } catch (error) {
+        await Promise.allSettled(uploadedImageIds.map(deleteAsset))
+        throw error
+      }
       await deps.refreshSessionData(sessionId)
       await deps.refreshStandaloneSessions()
       if (deps.activeProjectId) {
         await deps.refreshProjectSessions(deps.activeProjectId)
       }
     } catch (error) {
+      await Promise.allSettled(uploadedImageIds.map(deleteAsset))
       fail(error)
       throw error
     }
