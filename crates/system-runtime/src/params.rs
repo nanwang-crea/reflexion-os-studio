@@ -141,7 +141,7 @@ pub struct EditParams {
 }
 
 #[derive(Deserialize, Clone)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum FileEditOperation {
     Replace {
         #[serde(rename = "oldText")]

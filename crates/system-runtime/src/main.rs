@@ -101,7 +101,7 @@ fn handle_request(request: &Value) -> (Value, bool) {
                 error_id,
                 -32000,
                 &error.message,
-                Some(json!({ "code": error.code })),
+                Some(json!({ "code": error.code, "details": error.details })),
             ),
             false,
         ),

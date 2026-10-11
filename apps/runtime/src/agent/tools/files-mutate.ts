@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto'
 import type { ToolDefinition } from '@reflexion-os-studio/agent-core'
 import type { SystemRuntimeClient } from '../../system.js'
 import {
-  argsRecord,
   callSystem,
   optionalNumber,
   optionalString,
@@ -10,7 +9,7 @@ import {
   requireText,
 } from './shared.js'
 import { recordResultRevision, type FileReadState } from './read-state.js'
-import { parseEditOperation } from './edit-operations.js'
+export { createFileEditTool } from './files-edit.js'
 
 /**
  * 整文件写入的字符数预检：超过即折叠为自纠错误，引导模型改用 file.edit。
@@ -152,115 +151,6 @@ export function createFileWriteStreamTool(
           return result
         },
       )
-    },
-  }
-}
-
-export function createFileEditTool(
-  system: SystemRuntimeClient,
-  workspaceRoot: string,
-  readState: FileReadState,
-): ToolDefinition {
-  return {
-    name: 'file.edit',
-    description:
-      '原子编辑工作区内单个文本文件。优先传 edits 数组，可组合 replace、insert_before、insert_after、replace_range；全部操作基于同一原始快照校验，任一失败或重叠则完全不写入。replace_range 的 startLine/endLine 均为 1 起始且包含首尾，直接使用 file.read 的 L 行号，不要减 1；必须同时提供 expectedText，不能只凭行号修改。旧版 oldText/newText 参数仍兼容。匹配文本可直接复制 file.read 返回内容，运行时会安全去除 L<行号>: 前缀。需要用户审批。',
-    parameters: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: '工作区相对路径' },
-        oldText: {
-          type: 'string',
-          description: '要被替换的原文片段（需与文件内容逐字符一致）',
-        },
-        newText: {
-          type: 'string',
-          description: '替换后的内容，可为空串表示删除',
-        },
-        expectedCount: {
-          type: 'number',
-          description: 'oldText 应出现的次数，缺省 1；多处相同片段时必须写明',
-        },
-        edits: {
-          type: 'array',
-          description: '同一文件上的原子编辑列表；与 oldText/newText 二选一',
-          items: {
-            type: 'object',
-            properties: {
-              kind: {
-                type: 'string',
-                enum: [
-                  'replace',
-                  'insert_before',
-                  'insert_after',
-                  'replace_range',
-                ],
-              },
-              oldText: { type: 'string' },
-              newText: { type: 'string' },
-              anchor: { type: 'string' },
-              content: { type: 'string' },
-              expectedCount: { type: 'number' },
-              startLine: {
-                type: 'integer',
-                minimum: 1,
-                description:
-                  'replace_range 起始行（1 起，包含）；直接使用 file.read 的 L 行号，不要减 1',
-              },
-              endLine: {
-                type: 'integer',
-                minimum: 1,
-                description:
-                  'replace_range 结束行（1 起，包含），必须 >= startLine；L93–L94 对应 startLine=93、endLine=94',
-              },
-              expectedText: {
-                type: 'string',
-                description:
-                  'replace_range 范围内的完整原文，行间保留换行，不含结束行后的换行；可复制 file.read 的 L 行号前缀，校验不匹配则完全不写入',
-              },
-            },
-            required: ['kind'],
-          },
-        },
-      },
-      required: ['path'],
-    },
-    execute: ({ args, signal, grant }) => {
-      const path = requireString(args, 'path')
-      const entry = readState.entry(path)
-      if (entry === undefined) {
-        return Promise.resolve({
-          content: `尚未在本轮读取 ${path}：编辑前必须先用 file.read 读取该文件，并从返回内容中逐字符复制 oldText。`,
-          isError: true,
-          code: 'invalid_request',
-        })
-      }
-      const params: Record<string, unknown> = {
-        workspaceRoot,
-        path,
-        revision: entry.revision,
-        grant: grant ?? '',
-      }
-      const record = argsRecord(args)
-      if (Array.isArray(record.edits)) {
-        if (record.edits.length === 0) {
-          throw new Error('edits must not be empty')
-        }
-        params.edits = record.edits.map(parseEditOperation)
-      } else {
-        params.oldText = requireString(args, 'oldText')
-        params.newText = requireText(args, 'newText')
-        const expectedCount = optionalNumber(args, 'expectedCount')
-        if (expectedCount !== undefined) {
-          params.expectedCount = Math.max(1, Math.trunc(expectedCount))
-        }
-      }
-      return callSystem(system, 'file.edit', params, signal).then((result) => {
-        if (!result.isError) {
-          recordResultRevision(readState, path, result)
-        }
-        return result
-      })
     },
   }
 }

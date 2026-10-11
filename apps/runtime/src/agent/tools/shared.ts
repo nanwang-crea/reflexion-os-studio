@@ -61,6 +61,23 @@ export async function callSystem(
       (message.includes('file changed since last read') ||
         message.includes('file changed since upload began') ||
         message.includes('requires readToken'))
+    if (
+      method === 'file.edit' &&
+      error instanceof SystemRuntimeError &&
+      error.details
+    ) {
+      return {
+        content: `编辑失败：${message}。诊断：${JSON.stringify(error.details)}。请核对失败操作对应片段，只修正不匹配的定位或文本；全部操作仍基于同一原始快照，禁止原样重试。`,
+        isError: true,
+        code:
+          error.details.reason === 'overlap'
+            ? 'overlapping_edits'
+            : error.details.reason.startsWith('invalid_')
+              ? 'invalid_request'
+              : 'file_edit_match_conflict',
+        data: { ...error.details },
+      }
+    }
     return {
       content: revisionConflict
         ? `文件 revision 冲突：${message}。请重新 file.read 获取最新内容，基于新内容重新合并变更后再提交；禁止原样重试。`

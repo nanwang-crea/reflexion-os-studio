@@ -43,7 +43,7 @@
 所有操作先在原始快照上解析；任一操作不匹配、范围越界或操作互相重叠，则整批不写入。
 操作从文件尾向前应用，避免位置漂移。只允许 CRLF/LF 归一化和 `file.read` 行号前缀
 剥离这两类确定性容错，不使用模糊匹配。旧版 `oldText/newText/expectedCount` 参数继续
-兼容，并在 Runtime 中转换为单个 `replace` 操作。
+兼容，并在 Rust handler 中转换为单个 `replace` 操作。
 
 成功结果返回 revision、`changedFiles` 与 `structuredPatch`。结构化 patch 记录每个实际
 修改的操作类型、原文件行范围、修改前文本和修改后文本，供模型轨迹与 UI 使用。
@@ -57,8 +57,9 @@
 - 任何失败均返回可自纠错误，不产生部分编辑。
 
 稳定错误码包括 `file_not_found`、`file_not_utf8`、`file_too_large`、
-`file_revision_conflict`、`file_edit_mismatch`、`file_overlapping_edits` 与兜底
-`file_error`。Runtime 保留 Rust 返回的错误码，不再把所有文件失败压扁成同一种错误。
+`stale_revision`、`edit_mismatch`、`overlapping_edits` 与兜底 `file_error`。
+Runtime 将陈旧凭据和匹配失败分别归一化为 `file_revision_conflict` 与
+`file_edit_match_conflict`，其余保留 Rust 稳定码。
 
 ## 大文件流式写入
 
@@ -78,3 +79,24 @@
 checkpoint 位于目标同目录，因此 System Runtime 重启后仍能凭 `uploadId` 和
 `nextOffset` 续传。commit 前目标文件保持不变；目标在上传期间发生变化时 commit 拒绝。
 内部 staging/checkpoint 不会出现在 `file.list`、`file.glob` 或 `file.grep` 结果中。
+
+## 编辑定位与失败恢复
+
+同一函数或代码块的关联修改优先用一次 `replace_range` 完整块替换；独立位置
+保留原子 `edits[]`。全部操作均针对原始快照，不允许依赖前一项的替换结果。
+范围校验优先精确原文；仅当不匹配且每行均有对应绝对行号时，才去除读取展示的
+`L<行号>: ` 前缀后再次精确校验。新内容永远按原文写入，不自动去前缀或模糊匹配。文件自身含 BOM 时，复制的
+首行原文允许带 BOM，匹配时仅在文件开头确定性剥离，文件 BOM 保持原样。
+
+contracts 的 Zod schema 是编辑参数真源，工具 JSON Schema 从它导出。各操作
+有独立必填字段，拒绝未知字段、混用新旧参数、空批次与非正整数 expectedCount，
+不做截断或静默纠正。Rust 同时拒绝未知字段、混用参数及零计数。
+
+操作失败通过 JSON-RPC `error.data.details` 返回结构化诊断：0-based
+`operationIndex`、`kind`、`reason`、`noChangesWritten: true`，以及适用的
+行范围、匹配数量、最多 20 个精确候选行或冲突操作编号。Runtime 校验后保留于
+canonical ToolOutput 的 data，正文也向模型提供诊断。诊断不附带文件正文。
+陈旧 revision 必须重读；定位失败先核对对应片段并修正，再提交整批。
+
+实现共享于 macOS / Windows / Linux，无新增平台依赖；保持现有 BOM 与 CRLF
+处理及原子写入边界，LF/CRLF、Unicode 与分页绝对行号由回归测试覆盖。

@@ -16,6 +16,9 @@ import {
 import { Store } from '../dist/store/index.js'
 import { canonicalDigest } from '../dist/agent/permissions/index.js'
 import { dispatchCommand } from '../dist/handlers.js'
+import { createFileReadTool } from '../dist/agent/tools/files-query.js'
+import { createFileEditTool } from '../dist/agent/tools/files-edit.js'
+import { FileReadState } from '../dist/agent/tools/read-state.js'
 
 /**
  * 回归测试：先读后改凭据链路（真实二进制端到端）。
@@ -310,6 +313,153 @@ test(
         readFileSync(join(workspace, 'note.txt'), 'utf8'),
         'external edit\n',
       )
+    } finally {
+      await client.shutdown()
+      rmSync(workspace, { recursive: true, force: true })
+    }
+  },
+)
+
+test(
+  'atomic file.edit validates numbered ranges and transports bounded operation diagnostics',
+  { skip: BINARY === null },
+  async () => {
+    const workspace = mkdtempSync(join(tmpdir(), 'reflexion-edit-diagnostics-'))
+    const target = join(workspace, 'note.txt')
+    writeFileSync(target, 'head\n重复\n重复\nend\n')
+    const client = new SystemRuntimeClient(BINARY, [], () => {})
+    client.start()
+    try {
+      await waitReady(client)
+      const read = await client.request('file.read', {
+        workspaceRoot: workspace,
+        path: 'note.txt',
+        offset: 1,
+        limit: 2,
+      })
+      const params = {
+        workspaceRoot: workspace,
+        path: 'note.txt',
+        revision: read.revision,
+        grant: makeGrant(workspace, 'file.edit', 'note.txt'),
+      }
+      await assert.rejects(
+        client.request('file.edit', {
+          ...params,
+          edits: [
+            { kind: 'replace', oldText: 'head', newText: 'changed' },
+            { kind: 'replace', oldText: '重复', newText: 'new' },
+          ],
+        }),
+        (error) => {
+          assert.equal(error.code, 'edit_mismatch')
+          assert.deepEqual(error.details, {
+            operationIndex: 1,
+            kind: 'replace',
+            reason: 'match_count',
+            actualCount: 2,
+            expectedCount: 1,
+            candidateLines: [2, 3],
+            noChangesWritten: true,
+          })
+          return true
+        },
+      )
+      assert.equal(readFileSync(target, 'utf8'), 'head\n重复\n重复\nend\n')
+      for (const edits of [
+        [{ kind: 'replace', oldText: 'head', newText: 'changed', typo: true }],
+        [
+          {
+            kind: 'replace',
+            oldText: 'head',
+            newText: 'changed',
+            expectedCount: 0,
+          },
+        ],
+      ]) {
+        await assert.rejects(client.request('file.edit', { ...params, edits }))
+        assert.equal(readFileSync(target, 'utf8'), 'head\n重复\n重复\nend\n')
+      }
+      for (const mixed of [
+        { expectedCount: 2 },
+        { oldText: null },
+        { expectedCount: null },
+      ]) {
+        await assert.rejects(
+          client.request('file.edit', {
+            ...params,
+            edits: [{ kind: 'replace', oldText: 'head', newText: 'changed' }],
+            ...mixed,
+          }),
+          (error) => error.code === 'invalid_request',
+        )
+      }
+      const outcome = await client.request('file.edit', {
+        ...params,
+        edits: [
+          {
+            kind: 'replace_range',
+            startLine: 2,
+            endLine: 3,
+            expectedText: `L2: ${read.content.split('\n')[0]}\nL3: ${read.content.split('\n')[1]}`,
+            newText: '新块',
+          },
+        ],
+      })
+      assert.equal(readFileSync(target, 'utf8'), 'head\n新块\nend\n')
+      assert.equal(outcome.structuredPatch[0].before, '重复\n重复')
+      await assert.rejects(
+        client.request('file.edit', {
+          ...params,
+          edits: [{ kind: 'replace', oldText: '新块', newText: 'stale' }],
+        }),
+        /changed since last read/,
+      )
+    } finally {
+      await client.shutdown()
+      rmSync(workspace, { recursive: true, force: true })
+    }
+  },
+)
+
+test(
+  'actual numbered file.read output edits the BOM first line through Runtime tools',
+  { skip: BINARY === null },
+  async () => {
+    const workspace = mkdtempSync(join(tmpdir(), 'reflexion-bom-edit-'))
+    const target = join(workspace, 'note.txt')
+    writeFileSync(target, '\ufeff首行\r\n第二行\r\n')
+    const client = new SystemRuntimeClient(BINARY, [], () => {})
+    client.start()
+    try {
+      await waitReady(client)
+      const state = new FileReadState()
+      const signal = new AbortController().signal
+      const read = await createFileReadTool(client, workspace, state).execute({
+        args: { path: 'note.txt', limit: 1 },
+        signal,
+      })
+      assert.equal(read.isError, false)
+      const numbered = JSON.parse(read.content).content
+      assert.equal(numbered, 'L1: \ufeff首行')
+      const edit = await createFileEditTool(client, workspace, state).execute({
+        args: {
+          path: 'note.txt',
+          edits: [
+            {
+              kind: 'replace_range',
+              startLine: 1,
+              endLine: 1,
+              expectedText: numbered,
+              newText: '新首行',
+            },
+          ],
+        },
+        signal,
+        grant: makeGrant(workspace, 'file.edit', 'note.txt'),
+      })
+      assert.equal(edit.isError, false, edit.content)
+      assert.equal(readFileSync(target, 'utf8'), '\ufeff新首行\r\n第二行\r\n')
     } finally {
       await client.shutdown()
       rmSync(workspace, { recursive: true, force: true })

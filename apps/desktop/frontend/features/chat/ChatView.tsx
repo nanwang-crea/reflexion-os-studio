@@ -242,7 +242,10 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
   const addEditImages = (files: File[]): void => {
     try {
       const current = editImagesRef.current
-      if (editImageAssetIds.length + current.length + files.length > MAX_MESSAGE_IMAGES) {
+      if (
+        editImageAssetIds.length + current.length + files.length >
+        MAX_MESSAGE_IMAGES
+      ) {
         throw new Error('每条消息最多 4 张图片')
       }
       files.forEach(validateImageFile)
@@ -294,7 +297,8 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
       (editDraft.trim() === '' &&
         editImageAssetIds.length === 0 &&
         editImages.length === 0)
-    ) return
+    )
+      return
     try {
       setEditSaving(true)
       await props.onEditResend(

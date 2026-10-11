@@ -5,6 +5,8 @@ import { createInterface } from 'node:readline'
 import {
   PROTOCOL_VERSION,
   ReadyParamsSchema,
+  FileEditDiagnosticSchema,
+  type FileEditDiagnostic,
 } from '@reflexion-os-studio/contracts'
 
 export type SystemAvailability =
@@ -17,11 +19,14 @@ export type SystemAvailability =
  */
 export class SystemRuntimeError extends Error {
   readonly code?: string
+  readonly details?: FileEditDiagnostic
 
-  constructor(message: string, code?: string) {
+  constructor(message: string, code?: string, details?: unknown) {
     super(message)
     this.name = 'SystemRuntimeError'
     if (code !== undefined) this.code = code
+    const parsed = FileEditDiagnosticSchema.safeParse(details)
+    if (parsed.success) this.details = parsed.data
   }
 }
 
@@ -253,7 +258,7 @@ export class SystemRuntimeClient {
       method?: unknown
       params?: unknown
       result?: unknown
-      error?: { message?: string; data?: { code?: unknown } }
+      error?: { message?: string; data?: { code?: unknown; details?: unknown } }
     }
     try {
       message = JSON.parse(line)
@@ -313,6 +318,7 @@ export class SystemRuntimeClient {
           new SystemRuntimeError(
             message.error.message ?? 'system request error',
             dataCode,
+            message.error.data?.details,
           ),
         )
       } else {

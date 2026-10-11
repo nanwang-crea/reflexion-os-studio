@@ -19,3 +19,5 @@ export * from './providers/index.js'
 export * from './operations.js'
 
 export * from './session-history.js'
+
+export * from './file-edits.js'

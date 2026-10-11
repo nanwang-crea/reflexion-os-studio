@@ -105,10 +105,14 @@ export function UserMessage({
               value={editDraft}
               onChange={(event) => onDraftChange(event.target.value)}
               onPaste={(event) => {
-                const files = Array.from(event.clipboardData.files).filter((file) =>
-                  ['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(
-                    file.type,
-                  ),
+                const files = Array.from(event.clipboardData.files).filter(
+                  (file) =>
+                    [
+                      'image/png',
+                      'image/jpeg',
+                      'image/webp',
+                      'image/gif',
+                    ].includes(file.type),
                 )
                 if (files.length > 0) {
                   event.preventDefault()

@@ -144,3 +144,94 @@ test('file.write_stream injects revision and hashes each UTF-8 chunk', async () 
   )
   assert.deepEqual(state.entry('large.txt').revision, revision)
 })
+
+test('file.edit rejects malformed and mixed parameters without invoking system', async () => {
+  let calls = 0
+  const system = {
+    request: async () => {
+      calls++
+      return {}
+    },
+  }
+  const state = new FileReadState()
+  state.record('a.txt', { revision, complete: false })
+  const tool = createFileEditTool(system, '/ws', state)
+  const replace = { kind: 'replace', oldText: 'a', newText: '' }
+  for (const args of [
+    { path: 'a.txt', edits: [] },
+    { path: 'a.txt', edits: [{ kind: 'replace', oldText: 'a' }] },
+    { path: 'a.txt', edits: [{ ...replace, content: 'wrong-field' }] },
+    { path: 'a.txt', edits: [replace], oldText: 'a', newText: '' },
+    { path: 'a.txt', edits: [replace], expectedCount: 2 },
+    ...[0, -1, 1.5, '2', null, Number.MAX_SAFE_INTEGER + 1].flatMap(
+      (expectedCount) => [
+        { path: 'a.txt', edits: [{ ...replace, expectedCount }] },
+        { path: 'a.txt', oldText: 'a', newText: '', expectedCount },
+      ],
+    ),
+    { path: 'a.txt', edits: [{ kind: 'insert_after', anchor: 'a' }] },
+    {
+      path: 'a.txt',
+      edits: [
+        {
+          kind: 'replace_range',
+          startLine: 2,
+          endLine: 1,
+          expectedText: 'a',
+          newText: '',
+        },
+      ],
+    },
+    {
+      path: 'a.txt',
+      edits: [{ kind: 'replace_range', startLine: 1, endLine: 1, newText: '' }],
+    },
+    { edits: [replace] },
+  ]) {
+    const result = await tool.execute(context(args))
+    assert.equal(result.isError, true, JSON.stringify(args))
+    assert.equal(result.code, 'invalid_request')
+  }
+  assert.equal(calls, 0)
+})
+
+test('structured edit diagnostics survive canonical normalization and model text', async () => {
+  const { SystemRuntimeError } = await import('../dist/system.js')
+  const { normalizeToolOutput } =
+    await import('../dist/agent/run/toolResults.js')
+  const details = {
+    operationIndex: 1,
+    kind: 'replace',
+    reason: 'match_count',
+    actualCount: 2,
+    expectedCount: 1,
+    candidateLines: [3, 5],
+    noChangesWritten: true,
+  }
+  const result = await callSystem(
+    {
+      request: async () => {
+        throw new SystemRuntimeError(
+          'edits[1]: mismatch',
+          'edit_mismatch',
+          details,
+        )
+      },
+    },
+    'file.edit',
+    {},
+    new AbortController().signal,
+  )
+  assert.equal(result.code, 'file_edit_match_conflict')
+  assert.deepEqual(result.data, details)
+  assert.match(result.content, /operationIndex/)
+  assert.match(result.content, /禁止原样重试/)
+  const output = normalizeToolOutput(result, null, 'file.edit')
+  assert.deepEqual(output.data, details)
+  assert.deepEqual(output.changedFiles, [])
+  const malformed = new SystemRuntimeError('failure', 'file_error', {
+    operationIndex: '1',
+    noChangesWritten: true,
+  })
+  assert.equal(malformed.details, undefined)
+})

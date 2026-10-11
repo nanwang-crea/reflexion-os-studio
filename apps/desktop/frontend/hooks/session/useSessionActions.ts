@@ -1,4 +1,3 @@
-
 import { deleteAsset } from '../../api/assets'
 import { uploadMessageImages } from '../../features/chat/images/upload-message-images'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
@@ -287,10 +286,14 @@ export function useSessionActions(deps: SessionActionsDeps): {
           content,
           imageAssetIds: [...imageAssetIds, ...uploadedImageIds],
           providerId:
-            modelKey && separator > 0 ? modelKey.slice(0, separator) : undefined,
+            modelKey && separator > 0
+              ? modelKey.slice(0, separator)
+              : undefined,
           reasoningEffort: deps.requestedReasoningEffort,
           model:
-            modelKey && separator > 0 ? modelKey.slice(separator + 2) : undefined,
+            modelKey && separator > 0
+              ? modelKey.slice(separator + 2)
+              : undefined,
           permissionPreset: deps.permissionPreset,
         })
       } catch (error) {

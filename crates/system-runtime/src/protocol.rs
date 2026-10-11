@@ -45,11 +45,16 @@ pub fn ready_message() -> Value {
 pub struct OpError {
     pub code: &'static str,
     pub message: String,
+    pub details: Option<Value>,
 }
 
 impl OpError {
     pub fn new(code: &'static str, message: String) -> Self {
-        Self { code, message }
+        Self {
+            code,
+            message,
+            details: None,
+        }
     }
 }
 
