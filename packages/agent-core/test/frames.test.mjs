@@ -287,3 +287,28 @@ test('property: random valid frame sequences round-trip without dangling refs', 
     )
   }
 })
+
+test('ordinary tool history trimming preserves task context and latest user constraints', () => {
+  const task = {
+    kind: 'runtime_control',
+    control: 'task_context',
+    content: 'ORIGINAL_GOAL',
+  }
+  const user = { kind: 'user', content: 'CURRENT_CONSTRAINT' }
+  const frames = [
+    { kind: 'system', content: 'rules' },
+    task,
+    user,
+    ...Array.from({ length: 12 }, () => ({
+      kind: 'assistant_text',
+      content: 'x'.repeat(400),
+    })),
+  ]
+  const bounded = boundFramesForModel(frames, 500, 8)
+  assert.ok(
+    bounded.some(
+      (f) => f.content === task.content && f.control === 'task_context',
+    ),
+  )
+  assert.ok(bounded.some((f) => f.content === user.content))
+})

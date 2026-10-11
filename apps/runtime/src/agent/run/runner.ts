@@ -1,3 +1,4 @@
+import { withTaskContext } from '../context/task-context.js'
 import { resolveOutputBudget } from '../../provider/output-budget.js'
 import type { SystemRuntimeClient } from '../../system.js'
 import {
@@ -180,7 +181,11 @@ export class RunRunner {
         const outcome = await runAgentLoop({
           history,
           signal: controller.signal,
-          prepareMessages: (messages) => compactInRun(messages, input.provider),
+          prepareMessages: (messages) =>
+            compactInRun(
+              withTaskContext(this.store, run.sessionId, messages),
+              input.provider,
+            ),
           maxTurns,
           maxContinuationTurns: budgets.maxContinuationTurns,
           onRecovery: (recovery) => {

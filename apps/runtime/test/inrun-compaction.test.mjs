@@ -82,3 +82,52 @@ test('compactInRun stays untouched when within budget', () => {
   )
   assert.deepEqual(result, messages)
 })
+
+test('canonical task context restores plan goal and user corrections every turn', async () => {
+  const { withTaskContext } =
+    await import('../dist/agent/context/task-context.js')
+  const history = [
+    { id: 'old', role: 'user', content: 'unrelated' },
+    { id: 'request', role: 'user', content: 'original request' },
+    { id: 'assistant', role: 'assistant', content: 'create plan' },
+    {
+      id: 'correction',
+      role: 'user',
+      content: 'do not add a completion check',
+    },
+    { id: 'continue', role: 'user', content: 'continue' },
+  ]
+  const plan = {
+    id: 'p',
+    messageId: 'assistant',
+    goal: 'original goal',
+    steps: [{ title: 'implement', status: 'pending', note: null }],
+  }
+  const store = {
+    plans: { getActive: () => plan },
+    messages: { listBySession: () => history },
+  }
+  const messages = [
+    { role: 'system', content: 'rules' },
+    { role: 'assistant', content: 'recent', toolCalls: [] },
+  ]
+  const first = withTaskContext(store, 's', messages)
+  const bounded = compactInRun(first, provider({ contextBudget: 1000 }))
+  const task = JSON.parse(
+    bounded.find((m) => m.control === 'task_context').content.split('\n')[1],
+  )
+  assert.equal(task.goal, 'original goal')
+  assert.deepEqual(task.userInstructions, [
+    'original request',
+    'do not add a completion check',
+    'continue',
+  ])
+  plan.steps[0].status = 'completed'
+  const second = withTaskContext(store, 's', bounded)
+  assert.equal(second.filter((m) => m.control === 'task_context').length, 1)
+  assert.ok(
+    second
+      .find((m) => m.control === 'task_context')
+      .content.includes('completed'),
+  )
+})

@@ -68,9 +68,15 @@ export async function callSystem(
       isError: true,
       code: revisionConflict
         ? 'file_revision_conflict'
-        : error instanceof SystemRuntimeError && error.code
-          ? error.code
-          : 'tool_error',
+        : method === 'file.edit' &&
+            (message.includes('expectedText does not match') ||
+              message.includes('match appears') ||
+              message.includes('found 0') ||
+              message.includes('occurrences'))
+          ? 'file_edit_match_conflict'
+          : error instanceof SystemRuntimeError && error.code
+            ? error.code
+            : 'tool_error',
     }
   }
 }

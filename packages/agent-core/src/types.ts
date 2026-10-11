@@ -22,7 +22,7 @@ export type ModelMessage =
   | {
       role: 'user'
       /** 仅用于 Runtime 控制，不投影到 Provider 请求。 */
-      control?: 'continuation' | 'tool_recovery' | 'reflection'
+      control?: 'continuation' | 'tool_recovery' | 'reflection' | 'task_context'
       content: string
       images?: (ImagePart & { base64?: string })[]
     }

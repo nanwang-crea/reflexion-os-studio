@@ -1,3 +1,4 @@
+import { FailureTracker } from './failure-tracker.js'
 import { createHash } from 'node:crypto'
 import type { ToolCallRequest, ToolResult } from './types.js'
 
@@ -19,6 +20,7 @@ import type { ToolCallRequest, ToolResult } from './types.js'
  *   直到 freshness 因其它原因推进；模型仍重复一次则 no_progress。
  */
 export class LoopGuard {
+  private readonly failures = new FailureTracker()
   private epoch = 0
   /** 完整指纹 → 执行次数。 */
   private readonly seen = new Map<string, number>()
@@ -35,6 +37,7 @@ export class LoopGuard {
   /** fresh epoch：mutation 成功、Plan 变化、用户新消息后调用。 */
   bumpEpoch(): void {
     this.epoch += 1
+    this.failures.clear()
   }
 
   currentEpoch(): number {
@@ -60,6 +63,14 @@ export class LoopGuard {
     code?: string
     message?: string
   } {
+    if (this.failures.exhausted(request)) {
+      return {
+        verdict: 'block',
+        code: 'no_progress',
+        message:
+          '同一操作与资源已连续四次出现同类错误，调整参数仍未取得进展，已停止执行。',
+      }
+    }
     const base = baseFingerprint(request)
     // 已成功 mutation 的完全相同重放：freshness 未因其它原因推进 → 拦截。
     const boundEpoch = this.successfulMutations.get(base)
@@ -108,6 +119,7 @@ export class LoopGuard {
     result: ToolResult,
     mutation: boolean,
   ): { repeated: boolean } {
+    this.failures.record(request, result, mutation)
     const fp = this.fingerprint(request)
     const digest = this.resultDigest(result)
     const count = this.seen.get(fp) ?? 0

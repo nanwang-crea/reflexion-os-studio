@@ -250,6 +250,13 @@ export function boundFramesForModel(
   const keep = Math.min(keepRecentFrames, body.length)
   const continuation = continuationFrames(current)
   const recent = body.slice(body.length - keep)
+  const taskFrames = current.filter(
+    (frame) =>
+      frame.kind === 'runtime_control' && frame.control === 'task_context',
+  )
+  const latestUser = [...current]
+    .reverse()
+    .find((frame) => frame.kind === 'user')
   const bounded: ContextFrame[] = [
     ...(system ? [system] : []),
     { kind: 'user', content: '[更早的历史已因上下文超长被截断]' },
@@ -259,11 +266,20 @@ export function boundFramesForModel(
     ...(continuation.tail && !recent.includes(continuation.tail)
       ? [continuation.tail]
       : []),
+    ...taskFrames.filter((frame) => !recent.includes(frame)),
+    ...(latestUser &&
+    !recent.includes(latestUser) &&
+    latestUser !== continuation.task
+      ? [latestUser]
+      : []),
     ...recent,
   ]
   const protectedIndices = new Set(
     bounded.flatMap((frame, index) =>
-      frame === continuation.task || frame === continuation.control
+      frame === continuation.task ||
+      frame === continuation.control ||
+      frame === latestUser ||
+      taskFrames.includes(frame)
         ? [index]
         : [],
     ),

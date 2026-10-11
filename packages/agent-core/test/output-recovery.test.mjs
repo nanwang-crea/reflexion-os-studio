@@ -160,3 +160,32 @@ test('context limit does not become a text continuation', async () => {
   assert.equal(outcome.reason, 'context_limit')
   assert.equal(calls, 1)
 })
+
+test('failed tools receive action-oriented reflection and ordinary stop remains final', async () => {
+  let call = 0
+  let reflection
+  const outcome = await runAgentLoop({
+    history: [{ role: 'user', content: 'implement' }],
+    signal: new AbortController().signal,
+    callModel: async (messages) => {
+      call++
+      if (call === 1)
+        return {
+          content: '',
+          finishReason: 'tool_calls',
+          toolCalls: [
+            { id: 'a', name: 'edit', arguments: '{}' },
+            { id: 'b', name: 'edit', arguments: '{}' },
+          ],
+        }
+      reflection = messages.find((m) => m.control === 'reflection')?.content
+      return { content: 'done', finishReason: 'stop', toolCalls: [] }
+    },
+    executeToolBatch: async (requests) =>
+      requests.map(() => ({ content: 'mismatch', isError: true })),
+  })
+  assert.ok(reflection.includes('继续执行'))
+  assert.ok(reflection.includes('原因不明时先验证'))
+  assert.equal(outcome.status, 'completed')
+  assert.equal(call, 2)
+})

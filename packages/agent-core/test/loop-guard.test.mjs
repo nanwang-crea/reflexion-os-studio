@@ -91,3 +91,67 @@ test('no_progress block only after two identical executions, error results count
   assert.equal(third.verdict, 'block')
   assert.equal(third.code, 'no_progress')
 })
+
+test('changed anchors and unchanged reads cannot bypass resource failure limit', () => {
+  const guard = new LoopGuard()
+  const read = REQ('file.read', { path: './a.ts' })
+  const snapshot = OK(JSON.stringify({ revision: { sha256: 'same' } }))
+  guard.recordExecution(read, snapshot, false)
+  for (let i = 0; i < 4; i++) {
+    const edit = REQ('file.edit', { path: 'a.ts', oldText: `guess${i}` })
+    assert.equal(guard.admit(edit).verdict, 'allow')
+    guard.recordExecution(
+      edit,
+      ERR('mismatch', 'file_edit_match_conflict'),
+      true,
+    )
+    guard.recordExecution(read, snapshot, false)
+    guard.recordExecution(
+      REQ('manage_plan', { planId: 'p', action: 'update_step' }),
+      OK('updated'),
+      true,
+    )
+  }
+  assert.equal(
+    guard.admit(REQ('file.edit', { path: './a.ts', oldText: 'new' })).code,
+    'no_progress',
+  )
+  assert.equal(
+    guard.admit(REQ('file.edit', { path: 'b.ts', oldText: 'new' })).verdict,
+    'allow',
+  )
+  guard.recordExecution(
+    read,
+    OK(JSON.stringify({ revision: { sha256: 'changed' } })),
+    false,
+  )
+  assert.equal(
+    guard.admit(REQ('file.edit', { path: 'a.ts', oldText: 'new' })).verdict,
+    'allow',
+  )
+})
+
+test('successful write clears failed edits on that resource only', () => {
+  const guard = new LoopGuard()
+  for (const path of ['a.ts', 'b.ts']) {
+    for (let i = 0; i < 4; i++)
+      guard.recordExecution(
+        REQ('file.edit', { path, oldText: String(i) }),
+        ERR('bad'),
+        true,
+      )
+  }
+  guard.recordExecution(
+    REQ('file.write', { path: 'a.ts', content: 'fixed' }),
+    OK('done'),
+    true,
+  )
+  assert.equal(
+    guard.admit(REQ('file.edit', { path: 'a.ts', oldText: 'fresh' })).verdict,
+    'allow',
+  )
+  assert.equal(
+    guard.admit(REQ('file.edit', { path: 'b.ts', oldText: 'fresh' })).code,
+    'no_progress',
+  )
+})
