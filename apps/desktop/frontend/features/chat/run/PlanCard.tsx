@@ -5,6 +5,7 @@ import type {
   PlanStepStatus,
 } from '@reflexion-os-studio/runtime-client'
 import { ChevronIcon, ListIcon } from '../../../ui/icons'
+import './plan-card.css'
 
 const stepLabels: Record<PlanStepStatus, string> = {
   pending: '待处理',
@@ -29,13 +30,9 @@ function currentStep(steps: PlanStep[]): PlanStep | null {
   )
 }
 
-/**
- * 悬浮常驻的任务计划小卡片（Codex/ChatGPT 式）：只要当前会话有计划就显示在
- * 对话区右上角，不占聊天流宽度、不随滚动被顶走。折叠态只显示目标 + 当前步骤
- * 预览；展开态列出全部步骤，限高内部滚动。
- */
+/** Composer 上方的可折叠计划，展开后展示步骤及各自状态。 */
 export function PlanCard({ plan }: { plan: Plan }): React.JSX.Element {
-  const [open, setOpen] = useState(() => plan.status === 'active')
+  const [open, setOpen] = useState(false)
   // 进度口径：completed/skipped/cancelled 均已了结。
   const finished = plan.steps.filter(
     (step) =>
@@ -46,15 +43,25 @@ export function PlanCard({ plan }: { plan: Plan }): React.JSX.Element {
   const active = currentStep(plan.steps)
 
   return (
-    <section className={`plan-float plan-${plan.status}`} aria-label="任务计划">
+    <section
+      className={`plan-float plan-${plan.status} ${open ? 'plan-expanded' : 'plan-collapsed'}`}
+      aria-label="任务计划"
+    >
       <button
         type="button"
         className="plan-float-head"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        <ListIcon size={13} />
-        <strong className="plan-float-goal">{plan.goal}</strong>
+        <span className="plan-float-eyebrow">
+          <ListIcon size={14} />
+          执行计划
+        </span>
+        {!open && (
+          <span className="plan-float-preview">
+            {plan.status === 'active' && active ? active.title : plan.goal}
+          </span>
+        )}
         <span className="plan-float-meta">
           <span className="plan-float-dot" aria-hidden="true" />
           <span className="plan-float-status">{statusLabels[plan.status]}</span>
@@ -64,27 +71,22 @@ export function PlanCard({ plan }: { plan: Plan }): React.JSX.Element {
         </span>
         <ChevronIcon />
       </button>
-      {!open && active && (
-        <p className="plan-float-current">
-          <span className="plan-float-step-label">
-            {stepLabels[active.status]}
-          </span>
-          {active.title}
-        </p>
-      )}
       {open && (
         <div className="plan-float-body">
+          <p className="plan-float-goal">{plan.goal}</p>
           <ol className="plan-card-steps">
-            {plan.steps.map((step) => (
+            {plan.steps.map((step, index) => (
               <li
                 key={step.id}
                 className={`plan-step plan-step-${step.status}`}
               >
-                <span aria-hidden="true">
-                  {step.status === 'completed' ? '✓' : '○'}
+                <span className="plan-step-marker" aria-hidden="true">
+                  {step.status === 'completed' ? '✓' : index + 1}
                 </span>
-                <span>{step.title}</span>
-                <small>{stepLabels[step.status]}</small>
+                <span className="plan-step-title">{step.title}</span>
+                {step.status !== 'pending' && (
+                  <small>{stepLabels[step.status]}</small>
+                )}
               </li>
             ))}
           </ol>
