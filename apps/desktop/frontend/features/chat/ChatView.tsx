@@ -336,7 +336,6 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
     <div className="chat-view">
       <div className="chat-scroll" ref={scrollRef} onScroll={handleScroll}>
         <div className="transcript">
-          {currentPlan && <PlanCard key={currentPlan.id} plan={currentPlan} />}
           {sessionId && props.sessionData?.nextBefore && (
             <HistoryLoader
               key={sessionId}
@@ -407,6 +406,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
       )}
 
       <div className="composer-wrap">
+        {currentPlan && <PlanCard key={currentPlan.id} plan={currentPlan} />}
         {props.sessionData?.session?.executionMode === 'plan' && (
           <div className="plan-mode-banner" role="status">
             <span>计划模式 · 仅允许只读调研，批准计划后才能执行修改</span>

@@ -47,12 +47,13 @@ export type ApprovalOverride = z.infer<typeof ApprovalOverrideSchema>
 
 /**
  * 沙箱能力档位：与权限决策正交——审批只决定"是否要问"，
- * SandboxPolicy 决定"获批后实际能访问什么"。任何档位下 no-read 机密规则不变。
+ * SandboxPolicy 决定"获批后实际能访问什么"。unsandboxed 仅在用户逐次批准后解除 OS 隔离。
  */
 export const SandboxPolicySchema = z.enum([
   'read-only',
   'workspace-write',
   'escalated',
   'danger',
+  'unsandboxed',
 ])
 export type SandboxPolicy = z.infer<typeof SandboxPolicySchema>

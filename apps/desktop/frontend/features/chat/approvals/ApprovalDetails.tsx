@@ -57,6 +57,16 @@ export function ApprovalDetails({
           )}
         </div>
       )}
+      {display.context?.sandbox === 'unsandboxed' && (
+        <div className="approval-rule-note">
+          <p>
+            仅本次命令解除文件读写、敏感路径与网络的沙箱限制，以当前用户身份执行，不获得管理员权限。
+          </p>
+          {display.context.justification && (
+            <p>理由：{display.context.justification}</p>
+          )}
+        </div>
+      )}
       {display.writeRoots.length > 0 && (
         <div className="approval-write-roots" aria-label="本次额外可写范围">
           <p>本次额外可写范围（目录包含子目录）</p>

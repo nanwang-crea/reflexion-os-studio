@@ -1,4 +1,5 @@
 import type {
+  ContentPart,
   MessageEditResendParams,
   RunRetryParams,
 } from '@reflexion-os-studio/contracts'
@@ -117,15 +118,28 @@ export class RunResubmissionService {
     const session = requireSession(this.store, params.sessionId)
     requireIdleSession(this.store, params.sessionId)
     const content = params.content.trim()
-    if (content === '' && (params.imageAssetIds?.length ?? 0) === 0) {
-      throw new CommandError('invalid_request', '消息内容或图片不能为空')
-    }
     const messages = this.store.messages.listBySession(params.sessionId)
     const lastUserMessage = [...messages]
       .reverse()
       .find((message) => message.role === 'user')
     if (!lastUserMessage || lastUserMessage.id !== params.messageId) {
       throw new CommandError('invalid_request', '只能编辑最后一条用户消息')
+    }
+    // Omission preserves persisted attachments; [] explicitly removes them.
+    const parts: ContentPart[] =
+      params.imageAssetIds === undefined
+        ? [
+            ...(content ? [{ type: 'text' as const, text: content }] : []),
+            ...lastUserMessage.parts.filter((part) => part.type === 'image'),
+          ]
+        : userContentParts(
+            this.store,
+            params.sessionId,
+            content,
+            params.imageAssetIds,
+          )
+    if (parts.length === 0) {
+      throw new CommandError('invalid_request', '消息内容或图片不能为空')
     }
     const replacedRunIds: string[] = []
     let replacedRun = lastUserMessage.runId
@@ -175,12 +189,7 @@ export class RunResubmissionService {
           runId: newRun.id,
           role: 'user',
           content,
-          parts: userContentParts(
-            this.store,
-            params.sessionId,
-            content,
-            params.imageAssetIds,
-          ),
+          parts,
           status: 'completed',
         })
         const newAssistantMessage = createPendingAssistantMessage(

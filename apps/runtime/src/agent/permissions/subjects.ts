@@ -174,7 +174,7 @@ export function buildApprovalSubject(
           displayCommand: shell.displayCommand,
           prefixCandidate: shell.prefixCandidate,
           escalation: shell.escalation,
-          ...(shell.escalation
+          ...(shell.escalation && shell.sandbox !== 'unsandboxed'
             ? { escalationRoots: shell.escalationRoots }
             : {}),
           network: shell.network,

@@ -99,6 +99,8 @@ fn parse_grant(grant: &str) -> Result<ApprovalGrant, OpError> {
 /// 已通过复核的 grant 字段，不是请求侧可自由声明的参数）。
 #[derive(Debug, Clone)]
 pub struct GrantFacts {
+    pub grant_id: String,
+    pub expires_at: u64,
     pub sandbox: String,
     pub source: String,
     /// escalated 档的审批提权根（参与 digest 绑定；handler 再独立复核）。
@@ -128,8 +130,11 @@ pub fn require_grant(
         || !parsed.subject_digest.starts_with("sha256:")
         || !matches!(
             parsed.sandbox.as_str(),
-            "read-only" | "workspace-write" | "escalated" | "danger"
+            "read-only" | "workspace-write" | "escalated" | "danger" | "unsandboxed"
         )
+        // 无沙箱必须逐次用户授权，不能由预设/会话/Danger 生成。
+        || (parsed.sandbox == "unsandboxed"
+            && (operation != "shell.execute" || parsed.source != "once" || !parsed.sandbox_network))
         // danger 档只能来自 danger-lease（普通审批永远给不出系统范围访问）。
         || (parsed.sandbox == "danger" && parsed.source != "danger-lease")
         // 提权根只能挂在 escalated 档上（其余档位必须为空，防静默扩边界）。
@@ -167,6 +172,8 @@ pub fn require_grant(
         ));
     }
     Ok(GrantFacts {
+        grant_id: parsed.grant_id,
+        expires_at: parsed.expires_at,
         sandbox: parsed.sandbox,
         source: parsed.source,
         escalation_roots: parsed.escalation_roots,
@@ -264,6 +271,44 @@ mod tests {
             network,
             now_millis() + 60_000,
         )
+    }
+
+    #[test]
+    fn unsandboxed_requires_once_shell_and_network_approval() {
+        let parts = shell_parts("echo approved", ".");
+        let grant = grant_with(
+            "shell.execute",
+            &parts,
+            "unsandboxed",
+            true,
+            now_millis() + 60_000,
+        );
+        assert!(require_grant(&grant, "/w", "shell.execute", &parts).is_ok());
+        for source in ["preset", "session-rule", "danger-lease"] {
+            let invalid = grant.replace("\"source\":\"once\"", &format!("\"source\":\"{source}\""));
+            assert_eq!(
+                require_grant(&invalid, "/w", "shell.execute", &parts)
+                    .unwrap_err()
+                    .code,
+                "invalid_grant"
+            );
+        }
+        let no_network = grant_with(
+            "shell.execute",
+            &parts,
+            "unsandboxed",
+            false,
+            now_millis() + 60_000,
+        );
+        assert!(require_grant(&no_network, "/w", "shell.execute", &parts).is_err());
+        let file = grant_with(
+            "file.write",
+            &["a.txt".into()],
+            "unsandboxed",
+            true,
+            now_millis() + 60_000,
+        );
+        assert!(require_grant(&file, "/w", "file.write", &["a.txt".into()]).is_err());
     }
 
     #[test]

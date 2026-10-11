@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import type { ToolExecutorInput } from './tool-executor.js'
 import type {
   ApprovalRequestInput,
@@ -46,6 +47,7 @@ export function riskFor(
 
 export function buildApprovalContext(input: {
   workspaceRoot: string | null
+  relativeCwd?: string
   permissionPreset: PermissionPreset
   approvalReason: ApprovalContextView['approvalReason']
   sandbox: SandboxPolicy
@@ -61,7 +63,12 @@ export function buildApprovalContext(input: {
       ? null
       : (root.split(/[\\/]/).filter(Boolean).pop() ?? root ?? null)
   return {
-    displayCwd: basename === null ? null : `…/${basename}`,
+    displayCwd:
+      root !== null && input.sandbox === 'unsandboxed'
+        ? join(root, input.relativeCwd ?? '.')
+        : basename === null
+          ? null
+          : `…/${basename}`,
     workspaceScope: root === null ? 'none' : 'inside',
     permissionPreset: input.permissionPreset,
     approvalReason: input.approvalReason,

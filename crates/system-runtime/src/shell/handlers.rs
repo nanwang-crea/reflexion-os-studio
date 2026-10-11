@@ -44,6 +44,7 @@ pub fn handle_shell_execute(id: Value, params: Value) -> Result<(Value, bool), O
         require_network_approval(&params.grant)?;
     }
     // 沙箱档位来自已复核 grant 的 sandbox 字段（请求侧无法自行声明更宽档位）。
+    let unsandboxed = facts.sandbox == "unsandboxed";
     let access = sandbox::SandboxAccess::from_grant(&facts.sandbox);
     // Danger 租约语义包含网络（启用时已向用户声明"联网不再单独审批"）；
     // grant 仍显式携带 sandboxNetwork 审计字段。
@@ -80,7 +81,7 @@ pub fn handle_shell_execute(id: Value, params: Value) -> Result<(Value, bool), O
     }
     // 能力门禁：provider 无法可靠应用所选档位时 fail-closed，绝不无沙箱执行。
     let provider = sandbox::provider();
-    if !provider.supports_access(access) {
+    if !unsandboxed && !provider.supports_access(access) {
         return Err(OpError::new(
             "sandbox_policy_unavailable",
             format!(
@@ -91,9 +92,9 @@ pub fn handle_shell_execute(id: Value, params: Value) -> Result<(Value, bool), O
         ));
     }
     let sandbox_meta = json!({
-        "active": provider.id() != "none",
-        "provider": provider.id(),
-        "access": access.as_str(),
+        "active": !unsandboxed && provider.id() != "none",
+        "provider": if unsandboxed { "none" } else { provider.id() },
+        "access": if unsandboxed { "unsandboxed" } else { access.as_str() },
         "grantSource": facts.source,
     });
     let request = sandbox::SandboxRequest {
@@ -104,6 +105,9 @@ pub fn handle_shell_execute(id: Value, params: Value) -> Result<(Value, bool), O
         access,
         writable_roots,
     };
+    if unsandboxed {
+        shell::unsandboxed::consume(&facts)?;
+    }
     std::thread::spawn(move || {
         let provider = sandbox::provider();
         // 沙盒临时目录必须在 provider 渲染前落盘：macOS profile_path 规范化要求
@@ -111,36 +115,44 @@ pub fn handle_shell_execute(id: Value, params: Value) -> Result<(Value, bool), O
         // （缺失 dest 在 ro 父挂载下 mkdir 会 EROFS）。Windows exec_direct 的
         // launch.rs 自建同款目录，create_dir_all 幂等不受影响。
         let temp = sandbox::sandbox_temp_dir();
-        let outcome = match std::fs::create_dir_all(&temp) {
-            // 线程闭包非 Result 上下文，禁止 `?`——match 产出 Err 走统一上报。
-            Err(error) => Err(format!("sandbox temp dir create failed: {error}")),
-            Ok(()) => match provider.exec_direct(&request, &|pid| {
+        let outcome = if unsandboxed {
+            shell::execute(&request.command, &request.cwd, request.timeout_ms, &|pid| {
                 let _ = running_shells().lock().map(|mut shells| {
                     shells.insert(request_id.clone(), pid);
                 });
-            }) {
-                Some(result) => result,
-                None => match provider.wrap(&request) {
-                    // 包装路径：TMPDIR 指到沙盒临时目录（与 Windows 轮 TMP/TEMP 重定向
-                    // 同语义；该目录已在 request.writable_roots 白名单里）。bwrap argv 内的
-                    // --setenv 是沙箱子进程视角的第二重权威覆盖，两者并存互不冲突。
-                    Some(argv) => shell::execute_argv(
-                        &argv,
-                        &[("TMPDIR", temp.display().to_string())],
-                        &request.cwd,
-                        request.timeout_ms,
-                        &|pid| {
-                            let _ = running_shells().lock().map(|mut shells| {
-                                shells.insert(request_id.clone(), pid);
-                            });
-                        },
-                    ),
-                    None => Err(format!(
-                        "sandbox provider {} has no executable isolation path",
-                        provider.id()
-                    )),
+            })
+        } else {
+            match std::fs::create_dir_all(&temp) {
+                // 线程闭包非 Result 上下文，禁止 `?`——match 产出 Err 走统一上报。
+                Err(error) => Err(format!("sandbox temp dir create failed: {error}")),
+                Ok(()) => match provider.exec_direct(&request, &|pid| {
+                    let _ = running_shells().lock().map(|mut shells| {
+                        shells.insert(request_id.clone(), pid);
+                    });
+                }) {
+                    Some(result) => result,
+                    None => match provider.wrap(&request) {
+                        // 包装路径：TMPDIR 指到沙盒临时目录（与 Windows 轮 TMP/TEMP 重定向
+                        // 同语义；该目录已在 request.writable_roots 白名单里）。bwrap argv 内的
+                        // --setenv 是沙箱子进程视角的第二重权威覆盖，两者并存互不冲突。
+                        Some(argv) => shell::execute_argv(
+                            &argv,
+                            &[("TMPDIR", temp.display().to_string())],
+                            &request.cwd,
+                            request.timeout_ms,
+                            &|pid| {
+                                let _ = running_shells().lock().map(|mut shells| {
+                                    shells.insert(request_id.clone(), pid);
+                                });
+                            },
+                        ),
+                        None => Err(format!(
+                            "sandbox provider {} has no executable isolation path",
+                            provider.id()
+                        )),
+                    },
                 },
-            },
+            }
         };
         let _ = running_shells().lock().map(|mut shells| {
             shells.remove(&request_id);

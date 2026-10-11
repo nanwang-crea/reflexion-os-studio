@@ -1,6 +1,7 @@
 //! Shell Service：workspace 内执行命令，带超时、输出上限与进程树回收。
 //! 平台分支显式：POSIX 走 `sh -c` + 进程组；Windows 走 `cmd /C` + taskkill 树杀。
 pub(crate) mod handlers;
+pub(crate) mod unsandboxed;
 
 use std::io::Read;
 use std::process::{Command, Stdio};
@@ -24,8 +25,7 @@ pub struct ShellOutcome {
     pub truncated: bool,
 }
 
-#[cfg(all(test, unix))]
-fn execute(
+pub(crate) fn execute(
     command: &str,
     cwd: &std::path::Path,
     timeout_ms: u64,
@@ -115,7 +115,6 @@ fn run_command(
     })
 }
 
-#[cfg(all(test, unix))]
 fn build_command(command: &str) -> Command {
     #[cfg(unix)]
     {

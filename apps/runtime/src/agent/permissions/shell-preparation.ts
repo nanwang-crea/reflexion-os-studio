@@ -25,7 +25,7 @@ import {
   shellDigest,
   type ShellSubjectInput,
 } from './subjects.js'
-import { displayCommand } from './summaries.js'
+import { displayCommand, redactSecrets } from './summaries.js'
 
 export type ShellInterpreterTag = 'posix-sh' | 'windows-cmd'
 
@@ -84,10 +84,11 @@ export function prepareShellExecution(
       code: 'invalid_request',
     }
   }
+  const unsandboxed = record.sandbox_permissions === 'require_unsandboxed'
   const escalationRequested = record.sandbox_permissions === 'require_escalated'
   // Danger 生效时提权请求被更宽的 danger 档吸收（roots 不进 digest）。
-  const escalation = escalationRequested && !dangerActive
-  const networkRequested = record.requires_network === true
+  const escalation = unsandboxed || (escalationRequested && !dangerActive)
+  const networkRequested = unsandboxed || record.requires_network === true
   const rawCwd = record.cwd
   const cwd =
     rawCwd === undefined || rawCwd === ''
@@ -101,7 +102,7 @@ export function prepareShellExecution(
     }
   }
   let escalationRoots: string[] = []
-  if (escalation) {
+  if (escalation && !unsandboxed) {
     const targets = validateEscalationTargets(
       validated.data.additional_write_roots ?? [],
     )
@@ -118,11 +119,13 @@ export function prepareShellExecution(
   // Shell 默认档位严格跟随 preset（§6.2）；审批扩写必须走显式 choice。
   const presetShellSandbox: SandboxPolicy =
     preset === 'workspace-read' ? 'read-only' : 'workspace-write'
-  const sandbox: SandboxPolicy = dangerActive
-    ? 'danger'
-    : escalation
-      ? 'escalated'
-      : presetShellSandbox
+  const sandbox: SandboxPolicy = unsandboxed
+    ? 'unsandboxed'
+    : dangerActive
+      ? 'danger'
+      : escalation
+        ? 'escalated'
+        : presetShellSandbox
   const classification = classifyShellCommand(
     record.command,
     currentShellInterpreter(),
@@ -138,7 +141,9 @@ export function prepareShellExecution(
     sandbox,
     network: networkRequested,
     escalation,
-    displayCommand: displayCommand(record.command),
+    displayCommand: unsandboxed
+      ? redactSecrets(record.command)
+      : displayCommand(record.command),
     prefixCandidate: candidate,
     interpreter: currentShellInterpreter(),
     escalationRoots,
@@ -168,7 +173,12 @@ export async function preflightShellExecution(
   workspaceRoot: string | null,
   signal: AbortSignal,
 ): Promise<ShellExecutionPrepared> {
-  if (!prepared.ok || !prepared.escalation) return prepared
+  if (
+    !prepared.ok ||
+    !prepared.escalation ||
+    prepared.shellInput.sandbox === 'unsandboxed'
+  )
+    return prepared
   if (!system || !workspaceRoot)
     return {
       ok: false,

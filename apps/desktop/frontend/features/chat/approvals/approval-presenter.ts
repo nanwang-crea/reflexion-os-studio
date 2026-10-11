@@ -90,7 +90,15 @@ function chipsFor(
   else if (context.sandbox === 'workspace-write') chips.push('批准后工作区可写')
   else if (context.sandbox === 'escalated') chips.push('提权：工作区外路径')
   else if (context.sandbox === 'danger') chips.push('Danger 系统范围')
-  chips.push(context.network ? '将联网' : '不联网')
+  else if (context.sandbox === 'unsandboxed')
+    chips.push('本次解除沙箱（含敏感路径保护）')
+  chips.push(
+    context.sandbox === 'unsandboxed'
+      ? '网络不受沙箱限制'
+      : context.network
+        ? '将联网'
+        : '不联网',
+  )
   if (context.escalation) chips.push('将访问工作区外')
   if (context.sandboxProvider) chips.push(`沙箱 ${context.sandboxProvider}`)
   return chips
@@ -142,6 +150,7 @@ const SANDBOX_NAMES: Record<string, string> = {
   'workspace-write': '工作区可写',
   escalated: '提权',
   danger: 'Danger',
+  unsandboxed: '本次解除沙箱',
 }
 
 export function presentApproval(approval: PendingApproval): ApprovalDisplay {
@@ -189,7 +198,13 @@ export function presentApproval(approval: PendingApproval): ApprovalDisplay {
     if (approval.context.justification) {
       details.push({ label: '理由', value: approval.context.justification })
     }
-    if (
+    if (approval.context.sandbox === 'unsandboxed') {
+      details.push({
+        label: '解除沙箱',
+        value:
+          '仅本次命令以当前用户身份执行；文件读写、敏感路径与网络的 OS 沙箱限制均解除，不获得管理员权限。',
+      })
+    } else if (
       approval.subject?.kind === 'shell-command' &&
       approval.subject.escalation
     ) {

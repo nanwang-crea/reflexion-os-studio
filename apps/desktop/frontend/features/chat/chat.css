@@ -327,11 +327,12 @@
   background: var(--accent-hover);
 }
 
-/* ---------- Task plan（对话流内联卡片） ---------- */
+/* ---------- Active plan（Composer 上方固定状态条） ---------- */
 .plan-float {
   position: relative;
-  width: min(100%, 640px);
-  margin: 0 0 2px auto;
+  width: 100%;
+  max-width: var(--chat-col);
+  margin: 0 auto 8px;
   overflow: hidden;
   border: 1px solid var(--border-subtle);
   border-radius: 10px;

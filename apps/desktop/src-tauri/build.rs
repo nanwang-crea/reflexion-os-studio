@@ -9,7 +9,20 @@ struct RuntimeMethods {
 }
 
 fn main() {
-    tauri_build::build();
+    let out_dir = PathBuf::from(env::var_os("OUT_DIR").unwrap());
+    let app_manifest_dir = out_dir.join("app-manifest");
+    fs::create_dir_all(&app_manifest_dir).unwrap_or_else(|error| {
+        panic!(
+            "failed to create Tauri permission manifest directory {}: {error}",
+            app_manifest_dir.display()
+        )
+    });
+    tauri_build::try_build(tauri_build::Attributes::default()).unwrap_or_else(|error| {
+        panic!(
+            "Tauri build failed (OUT_DIR={}): {error:#}",
+            out_dir.display()
+        )
+    });
 
     let manifest_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
     let manifest_path =
@@ -25,7 +38,6 @@ fn main() {
         }))
         .unwrap_or_else(|error| panic!("invalid runtime methods manifest: {error}"));
 
-    let out_dir = PathBuf::from(env::var_os("OUT_DIR").unwrap());
     let generated = format!(
         "pub const RUNTIME_METHODS_VERSION: u32 = {};\n\
 pub const RUNTIME_METHODS: [&str; {}] = [{}];\n",

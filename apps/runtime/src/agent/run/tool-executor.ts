@@ -126,6 +126,7 @@ export async function executeToolCall(
   const shellTokens: string[] = prepared?.tokens ?? []
   const escalationRoots: string[] = prepared?.escalationRoots ?? []
   const shellSandbox: SandboxPolicy = shellInput?.sandbox ?? 'workspace-write'
+  const unsandboxed = shellSandbox === 'unsandboxed'
 
   // ---- subject 构造（非法资源路径审批前拒绝）。----
   let built: { subject: ApprovalSubject; digest: string }
@@ -153,6 +154,7 @@ export async function executeToolCall(
     toolName: request.name,
     subject: built.subject,
     escalation,
+    unsandboxed,
   }
   const decision = input.gate.decisionFor(permissionRequest)
 
@@ -228,7 +230,7 @@ export async function executeToolCall(
     workspaceRoot: input.workspaceRoot,
   }
   let sessionRuleHit = false
-  if (decision === 'ask' && !dangerActive) {
+  if (decision === 'ask' && !dangerActive && !unsandboxed) {
     if (shellInput && built.subject.kind === 'shell-command') {
       sessionRuleHit =
         input.approvals.matchShellPrefixRule(scope, {
@@ -252,7 +254,8 @@ export async function executeToolCall(
       )
     }
   }
-  let askNeeded = decision === 'ask' && !sessionRuleHit && !dangerActive
+  let askNeeded =
+    decision === 'ask' && !sessionRuleHit && (!dangerActive || unsandboxed)
 
   const row = ensureRow(askNeeded ? 'awaiting_approval' : 'running')
   if (precreatedId === undefined) {
@@ -267,6 +270,7 @@ export async function executeToolCall(
 
   const context = buildApprovalContext({
     workspaceRoot: input.workspaceRoot,
+    relativeCwd: shellInput?.cwd,
     permissionPreset: input.gate.preset,
     approvalReason: escalation
       ? 'escalation'
@@ -276,7 +280,9 @@ export async function executeToolCall(
           ? 'preset-policy'
           : 'dynamic-tool',
     sandbox,
-    sandboxProvider: prepared?.sandboxProvider ?? input.sandboxProvider,
+    sandboxProvider: unsandboxed
+      ? null
+      : (prepared?.sandboxProvider ?? input.sandboxProvider),
     network: networkRequested,
     escalation,
     justification:
@@ -341,8 +347,8 @@ export async function executeToolCall(
   // ---- 网络审批独立链路（W6 收敛）：once 批准只进当前精确 grant；会话复用
   // 只命中"同一命令前缀 + network=true"规则；无可靠前缀的复合命令给不出
   // 会话网络授权（批准 git fetch 不能放行无关 curl）。----
-  let sandboxNetwork = false
-  if (networkRequested) {
+  let sandboxNetwork = unsandboxed
+  if (networkRequested && !unsandboxed) {
     if (dangerActive) {
       // Danger lease 自动放行网络，grant 仍显式记录 sandboxNetwork=true。
       sandboxNetwork = true
@@ -440,7 +446,7 @@ export async function executeToolCall(
       source: grantSource,
       subjectDigest: effectiveDigest,
       sandbox: effectiveSandbox,
-      escalationRoots: escalation ? escalationRoots : undefined,
+      escalationRoots: escalation && !unsandboxed ? escalationRoots : undefined,
       sandboxNetwork,
     })
     store.toolCalls.markStatus(row.id, 'running', grant)

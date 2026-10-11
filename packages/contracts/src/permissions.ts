@@ -180,7 +180,7 @@ export const ShellExecuteParamsSchema = z
       .describe('需要联网时置 true，独立审批，默认 false')
       .optional(),
     sandbox_permissions: z
-      .enum(['use_default', 'require_escalated'])
+      .enum(['use_default', 'require_escalated', 'require_unsandboxed'])
       .optional(),
     justification: z
       .string()
@@ -200,11 +200,12 @@ export const ShellExecuteParamsSchema = z
   })
   .refine(
     (value) =>
-      value.sandbox_permissions !== 'require_escalated' ||
+      value.sandbox_permissions === undefined ||
+      value.sandbox_permissions === 'use_default' ||
       (value.justification !== undefined &&
         value.justification.trim().length > 0),
     {
-      message: 'require_escalated requires a non-empty justification',
+      message: 'sandbox escalation requires a non-empty justification',
       path: ['justification'],
     },
   )
@@ -224,6 +225,15 @@ export const ShellExecuteParamsSchema = z
     {
       message: 'additional_write_roots requires require_escalated',
       path: ['additional_write_roots'],
+    },
+  )
+  .refine(
+    (value) =>
+      value.sandbox_permissions !== 'require_unsandboxed' ||
+      value.prefix_rule === undefined,
+    {
+      message: 'unsandboxed execution cannot reuse prefix rules',
+      path: ['prefix_rule'],
     },
   )
 export type ShellExecuteParams = z.infer<typeof ShellExecuteParamsSchema>

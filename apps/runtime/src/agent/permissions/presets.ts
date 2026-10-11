@@ -131,6 +131,8 @@ export interface PermissionRequest {
   subject: ApprovalSubject
   /** shell 显式提权标志（无工作区会话唯一可审批入口）。 */
   escalation: boolean
+  /** 单次解除沙箱必须用户审批，Danger 不能旁路。 */
+  unsandboxed?: boolean
 }
 
 export interface PermissionGateOptions {
@@ -211,6 +213,8 @@ export class PermissionGate {
       }
       return 'denied'
     }
+    if (request.toolName === 'shell.execute' && request.unsandboxed)
+      return 'ask'
     if (this.dangerActive) return 'automatic'
     let decision = POLICY[this.opts.preset][request.toolName]
     // 工作区外访问必须显式提权审批（§6.1"工作区外=ask escalation"列）：

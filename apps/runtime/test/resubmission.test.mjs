@@ -142,3 +142,122 @@ test('image references survive retry and editing without copying image bytes', (
     parts[1],
   ])
 })
+
+for (const mode of [
+  'image-only-preserved',
+  'explicit-removal',
+  'empty-rejected',
+  'invalid-replacement',
+]) {
+  test(`edit resend image semantics: ${mode}`, (t) => {
+    const f = fixture(t)
+    const image = {
+      type: 'image',
+      assetId: 'stored-image',
+      mimeType: 'image/png',
+    }
+    f.store.messages.finalize(f.user.id, f.user.content, 'completed', '', [
+      { type: 'text', text: f.user.content },
+      image,
+    ])
+    const params = {
+      requestId: mode,
+      sessionId: f.session.id,
+      messageId: f.user.id,
+      content:
+        mode === 'explicit-removal' || mode === 'invalid-replacement'
+          ? 'edited question'
+          : '',
+      ...(mode === 'empty-rejected' || mode === 'explicit-removal'
+        ? { imageAssetIds: [] }
+        : mode === 'invalid-replacement'
+          ? { imageAssetIds: ['missing-image'] }
+          : {}),
+    }
+    if (mode === 'empty-rejected' || mode === 'invalid-replacement') {
+      assert.throws(
+        () => f.agent.startEditResend(params),
+        mode === 'empty-rejected' ? /不能为空/ : /图片不存在/,
+      )
+      assert.equal(f.launches.length, 0)
+      assert.equal(
+        f.store.messages
+          .listBySession(f.session.id, true)
+          .find((message) => message.id === f.user.id).status,
+        'completed',
+      )
+      assert.equal(f.store.runs.get(f.original.id).supersededByRunId, null)
+      assert.equal(f.store.runs.listBySession(f.session.id).length, 1)
+    } else {
+      f.agent.startEditResend(params)
+      const user = f.store.messages
+        .listBySession(f.session.id)
+        .find((message) => message.role === 'user')
+      assert.deepEqual(
+        user.parts,
+        mode === 'image-only-preserved'
+          ? [image]
+          : [{ type: 'text', text: 'edited question' }],
+      )
+      assert.deepEqual(
+        f.store.messages
+          .listBySession(f.session.id, true)
+          .find((message) => message.id === f.user.id)
+          .parts.at(-1),
+        image,
+        'superseded history keeps its images',
+      )
+    }
+  })
+}
+
+test('edit resend replaces images with validated session assets', (t) => {
+  const f = fixture(t)
+  const originalImage = {
+    type: 'image',
+    assetId: 'stored-image',
+    mimeType: 'image/png',
+  }
+  f.store.messages.finalize(f.user.id, f.user.content, 'completed', '', [
+    { type: 'text', text: f.user.content },
+    originalImage,
+  ])
+  f.store.assetStore.create({
+    assetId: 'replacement-image',
+    projectId: null,
+    sessionId: f.session.id,
+    uri: 'asset://replacement-image',
+    kind: 'image',
+    mimeType: 'image/png',
+    size: 1,
+    hash: 'test-image-hash',
+    fileName: 'replacement.png',
+    runId: null,
+    nodeRunId: null,
+    createdBy: 'user',
+    createdAt: new Date().toISOString(),
+    metadata: {},
+    preview: 'ready',
+  })
+  f.agent.startEditResend({
+    requestId: 'replace-image',
+    sessionId: f.session.id,
+    messageId: f.user.id,
+    content: 'new image',
+    imageAssetIds: ['replacement-image'],
+  })
+  const user = f.store.messages
+    .listBySession(f.session.id)
+    .find((message) => message.role === 'user')
+  assert.deepEqual(user.parts, [
+    { type: 'text', text: 'new image' },
+    { type: 'image', assetId: 'replacement-image', mimeType: 'image/png' },
+  ])
+  assert.deepEqual(
+    f.store.messages
+      .listBySession(f.session.id, true)
+      .find((message) => message.id === f.user.id)
+      .parts.at(-1),
+    originalImage,
+  )
+})

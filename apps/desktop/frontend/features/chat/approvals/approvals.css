@@ -12,7 +12,7 @@
   --elevated-text: #fb923c;
   position: relative;
   margin: 0 12px 8px;
-  padding: 12px 14px;
+  padding: 9px 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--bg-elevated);
@@ -35,7 +35,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 .approval-risk-icon {
   font-size: 14px;
@@ -67,7 +67,7 @@
 .approval-body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 5px;
 }
 .approval-subject {
   display: flex;
@@ -83,13 +83,13 @@
   font-family: var(--mono, ui-monospace, monospace);
   font-size: 12px;
   line-height: 1.5;
-  padding: 8px 10px;
+  padding: 5px 8px;
   border-radius: 8px;
   background: var(--bg-inset);
   border: 1px solid var(--border-subtle);
   white-space: pre-wrap;
   word-break: break-all;
-  max-height: 120px;
+  max-height: 72px;
   overflow: auto;
 }
 .approval-copy {
@@ -110,11 +110,11 @@
 .approval-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
 }
 .approval-chip {
   font-size: 11px;
-  padding: 2px 8px;
+  padding: 1px 6px;
   border-radius: 999px;
   border: 1px solid var(--border);
   color: var(--text-secondary);
@@ -177,11 +177,11 @@
   justify-content: flex-end;
   align-items: center;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 6px;
 }
 .approval-actions button {
   font-size: 12px;
-  padding: 6px 12px;
+  padding: 5px 10px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: transparent;
@@ -404,10 +404,25 @@
 }
 
 .approval-write-roots {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
   overflow-wrap: anywhere;
 }
+.approval-write-roots p {
+  margin: 0;
+}
 .approval-write-roots ul {
+  margin: 0;
   padding-left: 1.5em;
+  max-height: 72px;
+  overflow: auto;
+}
+.approval-write-roots code {
+  font-family: var(--mono, ui-monospace, monospace);
 }
 
 .danger-modal {

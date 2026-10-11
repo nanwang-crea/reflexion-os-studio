@@ -64,11 +64,12 @@ test('changing composer selection immediately changes retry and edit resend requ
     selectedModelKey: 'new-provider::new::model',
   })
   await updated.retryRun()
-  await updated.editResendMessage('message', 'edited question')
+  await updated.editResendMessage('message', 'edited question', [], [])
   const [before, retry, edit] = globalThis.__chatRequests
   assert.equal(before.params.model, 'old-model')
   assert.equal(retry.method, 'run.retry')
   assert.equal(edit.method, 'message.edit_resend')
+  assert.deepEqual(edit.params.imageAssetIds, [])
   for (const request of [retry, edit]) {
     assert.equal(request.params.providerId, 'new-provider')
     assert.equal(request.params.model, 'new::model')
@@ -139,4 +140,21 @@ test('late sends do not navigate away from the selected conversation', async () 
   } finally {
     delete globalThis.__chatRequestResult
   }
+})
+
+test('edit resend forwards retained image references and explicit removal', async () => {
+  globalThis.__chatRequests = []
+  const actions = useSessionActions(sendDeps())
+  await actions.editResendMessage(
+    'message',
+    'edited question',
+    ['retained-image'],
+    [],
+  )
+  await actions.editResendMessage('message', 'edited question', [], [])
+  assert.deepEqual(
+    globalThis.__chatRequests.map((r) => r.params.imageAssetIds),
+    [['retained-image'], []],
+  )
+  delete globalThis.__chatRequests
 })

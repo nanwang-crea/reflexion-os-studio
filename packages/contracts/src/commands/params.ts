@@ -60,7 +60,11 @@ export const MessageEditResendParamsSchema = z.object({
   sessionId: z.string().min(1),
   messageId: z.string().min(1),
   content: z.string(),
-  imageAssetIds: z.array(z.string().min(1)).max(MAX_MESSAGE_IMAGES).optional(),
+  imageAssetIds: z
+    .array(z.string().min(1))
+    .max(MAX_MESSAGE_IMAGES)
+    .describe('省略则保留原消息图片；显式数组替换图片集合，空数组移除全部图片')
+    .optional(),
   // 可选覆盖 Provider/模型；运行参数从模型配置与 Provider 默认解析。
   providerId: z.string().min(1).optional(),
   model: z.string().min(1).optional(),

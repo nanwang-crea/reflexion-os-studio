@@ -39,7 +39,14 @@ export function buildApprovalChoices(input: {
       id: 'allow-once',
       decision: 'approved',
       presentation: 'primary',
-      label: '允许一次',
+      label:
+        input.sandbox === 'unsandboxed' ? '解除沙箱并执行一次' : '允许一次',
+      ...(input.sandbox === 'unsandboxed'
+        ? {
+            description:
+              '本次命令将以当前用户身份执行，解除文件读写、敏感路径与网络的沙箱限制；不获得管理员权限',
+          }
+        : {}),
     },
     effect: { kind: 'once' },
   }
@@ -52,6 +59,7 @@ export function buildApprovalChoices(input: {
     },
     effect: { kind: 'deny' },
   }
+  if (input.sandbox === 'unsandboxed') return [once, deny]
   const choices: ChoiceSpec[] = [once]
 
   // §6.2：read-only 档的 Shell 审批若需要写能力，choice 必须显式携带
@@ -183,7 +191,11 @@ export function buildNetworkChoices(input: {
       effect: { kind: 'once' },
     },
   ]
-  if (input.prefixCandidate !== null && input.sandbox !== 'danger') {
+  if (
+    input.prefixCandidate !== null &&
+    input.sandbox !== 'danger' &&
+    input.sandbox !== 'unsandboxed'
+  ) {
     const shown = input.prefixCandidate.join(' ')
     choices.push({
       choice: {

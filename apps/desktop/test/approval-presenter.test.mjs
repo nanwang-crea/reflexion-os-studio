@@ -219,3 +219,53 @@ test('escalation scopes are visible without opening details', () => {
   assert.deepEqual(display.writeRoots, roots)
   assert.equal(display.context.justification, 'Write cache')
 })
+
+test('unsandboxed approval clearly discloses filesystem and network access', () => {
+  const display = presentApproval({
+    toolCallId: 'unsandboxed',
+    runId: 'r1',
+    operation: 'shell.execute',
+    summary: 'shell.execute: hdiutil create',
+    risk: 'elevated',
+    subject: {
+      ...SHELL_SUBJECT,
+      escalation: true,
+      prefixCandidate: null,
+      network: true,
+    },
+    context: {
+      ...CONTEXT,
+      sandbox: 'unsandboxed',
+      sandboxProvider: null,
+      escalation: true,
+      network: true,
+      justification: '打包',
+    },
+    choices: [
+      {
+        id: 'allow-once',
+        decision: 'approved',
+        presentation: 'primary',
+        label: '解除沙箱并执行一次',
+      },
+      {
+        id: 'deny',
+        decision: 'denied',
+        presentation: 'secondary',
+        label: '拒绝',
+      },
+    ],
+  })
+  assert.ok(display.chips.includes('本次解除沙箱（含敏感路径保护）'))
+  assert.ok(display.chips.includes('网络不受沙箱限制'))
+  assert.equal(display.ruleNote, null)
+  assert.equal(display.writeRoots.length, 0)
+  assert.match(
+    display.details.find((d) => d.label === '解除沙箱').value,
+    /敏感路径/,
+  )
+  assert.equal(
+    display.details.some((d) => d.label === '提权'),
+    false,
+  )
+})

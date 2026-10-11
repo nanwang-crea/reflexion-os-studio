@@ -92,7 +92,17 @@ Preset → Shell 默认 SandboxPolicy：`workspace-read→read-only`、`workspac
 
 ## 7. Shell 命令前缀与会话规则
 
-`shell.execute` 参数扩展：`sandbox_permissions: 'use_default'|'require_escalated'`、`justification?`、`prefix_rule?`。`require_escalated` 必须携带非空 justification（`ShellExecuteParamsSchema` refine）。
+`shell.execute` 参数扩展：`sandbox_permissions: 'use_default'|'require_escalated'|'require_unsandboxed'`、`justification?`、`prefix_rule?`。`require_escalated` 必须携带非空 justification（`ShellExecuteParamsSchema` refine）。
+
+### 7.0 单次解除沙箱（用户显式授权）
+
+`sandbox_permissions="require_unsandboxed"` 必须提供非空 `justification`，不得携带 `additional_write_roots` 或 `prefix_rule`。它独立于路径提权和 Danger：即使 workspace-full、Danger 或会话规则生效，也必须逐次向用户请求批准，仅提供“解除沙箱并执行一次”和“拒绝”。计划模式仍禁止执行 Shell。
+
+审批明确展示命令、工作目录、理由，以及文件读写、敏感路径和网络的 OS 沙箱限制均将解除；不获得 sudo/管理员身份。拒绝或取消不得执行，不自动静默重试，不生成会话规则。网络开放包含在本次审批内，不另弹网络卡。
+
+Rust 只接受 shell.execute 的 source=once、sandbox=unsandboxed、sandboxNetwork=true 且无额外根的有效 grant，重新验证命令/cwd/digest/时效并消费一次性 grant 防重放。macOS/Linux 使用系统 sh；Windows 使用 cmd；都沿用超时、输出限额、取消和进程树回收。此模式不依赖沙箱 provider 可用性，结果记录 active=false/provider=none/access=unsandboxed；它是明确授权的独立执行路径，不是沙箱故障降级。这里的 `unsandboxed` 仅表示不附加 ReflexionOS 的沙箱包装，不检测或解除父进程继承的外部沙箱、操作系统权限、macOS 隐私授权或 Windows 令牌限制，不能作为排除 EPERM 权限问题的证据。
+
+安全承诺例外：本模式无法强制保护凭据文件，用户批准即接受其 OS 隔离边界解除；Agent 仍不得主动读取或外传凭据，file.* 与其它沙箱模式的敏感拒读规则不变。
 
 ### 7.1 显式提权范围与执行预检
 
@@ -112,7 +122,9 @@ macOS Seatbelt 支持明确文件或目录（包括尚未创建的目标）；Li
 
 网络：once 批准只进当前精确调用 grant；session 复用要求命中同一 `shell-prefix` rule 且 `network=true`；无 prefix 的复合命令不得创建 session 网络授权；`workspace-full` 仍需首次网络审批；有效 Danger lease 自动放行网络但 grant 显式记录 `sandboxNetwork=true`；Rust 在 `allowNetwork=true` 时继续复核 `sandboxNetwork=true`。
 
-## 9. 永久硬拒绝（优先于 preset / session rule / escalation / Danger）
+## 9. 沙箱模式永久硬拒绝（优先于 preset / session rule / escalation / Danger）
+
+单次解除沙箱的 OS 边界例外见 §7.0；Agent 的机密访问禁令仍有效。
 
 AGENTS.md 第 12 节 no-read 清单；Provider secret 及 `secretRef` 原值、数据目录 `secrets.json`；工作区根删除；绝对路径 / `..` / 符号链接逃逸；未声明网络；无效/过期/资源不匹配/命令不匹配的 grant。`require_escalated` 只扩展本次命令允许访问的非敏感路径，不关闭敏感拒读与日志脱敏。
 
