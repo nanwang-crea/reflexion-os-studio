@@ -1,4 +1,13 @@
+import {
+  BrowserImportRequestSchema,
+  BrowserImportResultSchema,
+  BrowserCredentialsSchema,
+} from './browser-import.js'
 import { z } from 'zod'
+import {
+  BrowserActionSchema,
+  BrowserSnapshotSchema,
+} from './browser-surface.js'
 import { CommandSchemaRegistry } from './commands.js'
 import {
   MessageSchema,
@@ -83,6 +92,11 @@ export const jsonSchemas: Readonly<Record<string, unknown>> = Object.freeze(
     toJSONSchema('GitChangeEntry', GitChangeEntrySchema),
     toJSONSchema('AssetRef', AssetRefSchema),
     toJSONSchema('ResourceLink', ResourceLinkSchema),
+    toJSONSchema('BrowserImport.Request', BrowserImportRequestSchema),
+    toJSONSchema('BrowserImport.Result', BrowserImportResultSchema),
+    toJSONSchema('BrowserImport.Credentials', BrowserCredentialsSchema),
+    toJSONSchema('BrowserSurface.Action', BrowserActionSchema),
+    toJSONSchema('BrowserSurface.Snapshot', BrowserSnapshotSchema),
     toJSONSchema('Artifact', ArtifactSchema),
     toJSONSchema('QueueEntry', QueueEntrySchema),
     toJSONSchema('AgentSettings', AgentSettingsSchema),

@@ -1,7 +1,8 @@
 import { useCallback } from 'react'
 import type { RefObject } from 'react'
 import type { ResourceLink } from '@reflexion-os-studio/runtime-client'
-import { openExternalUrl } from '../api/system'
+import { setBrowserPanelOpen } from '../features/browser/panel-state'
+import { openBrowserUrl } from '../api/browser'
 import type { WorkspaceOpenRequest } from '../features/workspace/types'
 
 interface ResourceRouterOptions {
@@ -22,7 +23,7 @@ export function useResourceRouter(
   return useCallback(
     (link: ResourceLink): void => {
       if (link.kind === 'externalUrl') {
-        void openExternalUrl(link.uri).catch((error: unknown) =>
+        void openBrowserUrl(link.uri).catch((error: unknown) =>
           setNotice(
             `打开链接失败：${error instanceof Error ? error.message : String(error)}`,
           ),
@@ -50,6 +51,7 @@ export function useResourceRouter(
           assetId: link.assetId,
         })
       }
+      setBrowserPanelOpen(false)
       setWorkspaceOpen(true)
     },
     [activeProjectRef, setWorkspaceRequest, setWorkspaceOpen, setNotice],

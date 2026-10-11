@@ -27,7 +27,7 @@ Rust File/Shell Service、Workspace 边界、read-only/workspace Profile、Chat 
 
 - **已完成第一阶段（2026-08-31）**：异步 Workspace Indexer（纯 TS worker、progress/cancel/stale/failed 状态、忽略目录与符号链接、快照落库+版本号）、文件树（按需懒加载，经 Rust 侧 workspace 边界）、文件/文档查看器（行号、复制、跳转行、分段加载、Markdown/JSON 预览）、Git 变更面（`git.status`/`git.diff`：文件状态列表 + 单文件 diff 预览，只读查看与定位）、`workspace.*` 命令与白名单、工作区页面 UI。
 - **已完成第二阶段（2026-08-31）**：Asset Store（数据目录隔离、sha256 元数据、导入/列表/预览/删除/复制引用，`asset.*` 命令）、ResourceLink（消息内 `workspace://`/`asset://`/https 引用渲染与点击分发——查看器定位行列、资产预览、系统浏览器安全打开）、会话变更文件列表（2026-10-07 收敛：仅汇总成功工具变更，文件/资产引用保留在正文，移除独立 Artifact 卡）；导出/下载/系统应用打开留后续阶段（需权限）。
-- **待完成**：安全 URL 系统浏览器打开（已就位，剩余只读内嵌 Browser 评估）。Git 写操作已交付方案 A 子集（编辑器保存 + stage/unstage/commit/fetch/push/pull(--ff-only)/分支创建与切换，UI 直接动作免审批、内存脏 buffer 三键守卫），提交历史浏览（分页 log/commit 文件/diff/基于 commit 建分支与分离切换）与远程管理（remote 增删列表、远程分支检出为本地跟踪、发布=推送）已随增补批交付；剩余 discard/amend/stash/force-push/删远程分支/revert-reset 仍待后续,须经明确命令与权限策略（集成终端已作为 Phase 2 Terminal Surface 交付，见下）。
+- **待完成**：安全 URL 系统浏览器打开（已就位，Browser Surface 已进入隔离浏览 Spike：支持 HTTP / HTTPS，用户交互与网页脚本可用，Agent 暂不读写；实验默认关闭，右侧面板已接入，三平台发布验收待完成，见 `BROWSER-SPIKE-REPORT.md`）。Git 写操作已交付方案 A 子集（编辑器保存 + stage/unstage/commit/fetch/push/pull(--ff-only)/分支创建与切换，UI 直接动作免审批、内存脏 buffer 三键守卫），提交历史浏览（分页 log/commit 文件/diff/基于 commit 建分支与分离切换）与远程管理（remote 增删列表、远程分支检出为本地跟踪、发布=推送）已随增补批交付；剩余 discard/amend/stash/force-push/删远程分支/revert-reset 仍待后续,须经明确命令与权限策略（集成终端已作为 Phase 2 Terminal Surface 交付，见下）。
 
 ## Phase 2：Agent Platform（进行中）
 
@@ -73,3 +73,13 @@ Node SDK、Workflow Definition、DAG 校验、调度、checkpoint、React Flow �
 - 旧 `ReflexionOS` 仅作参考，新项目不依赖旧 Python 服务。
 
 计划模式支持临时 Markdown 方案、工作区审阅入口、审批快照与终态安全清理，属于现有 Chat 的交互与恢复能力，详见 [计划模式设计](PLAN-MODE.md)。
+
+Browser 基础扩展（2026-10-11）：右侧多标签保活、标题、关闭、独立导航历史
+与共享临时 Cookie 已实现。直接 Chrome/Edge 迁移、Keychain 密码存储/手动填充
+为 macOS 实验适配；正常发布构建、Windows/Linux、Safari/Firefox 未开放。
+不计作 Phase 2 Browser Tool 完成，Agent 仍无页面内容或操作权限。
+
+浏览器设置及能力交付按 [BROWSER-SETTINGS-PLAN.md](BROWSER-SETTINGS-PLAN.md) 执行：
+B1 设置与路由 → B2 三平台用户浏览及数据治理 → B3 下载/网站权限/自动填充 →
+B4 Agent 读取与操作 → B5 站点工具。前三批属于 Surface 产品能力；后两批属于 Phase 2 Browser Tool，
+均需独立验收，设置界面不得提前表现为可用。

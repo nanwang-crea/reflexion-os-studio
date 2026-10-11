@@ -2,6 +2,8 @@
 //! 进程监管见 supervisor.rs、路径解析见 sidecar_paths.rs、
 //! 关停与信号见 shutdown.rs；本文件只做装配与 Tauri 命令注册。
 
+mod browser;
+mod host;
 mod logging;
 mod orphan_cleanup;
 mod shutdown;
@@ -19,8 +21,11 @@ include!(concat!(env!("OUT_DIR"), "/runtime_methods.rs"));
 
 #[tauri::command]
 fn bootstrap_get_state(
+    webview: tauri::Webview,
+    app: tauri::AppHandle,
     state: State<'_, Arc<SupervisorState>>,
 ) -> Result<BootstrapSnapshot, String> {
+    host::caller::trusted(&webview, &app, &["main"])?;
     state
         .snapshot
         .lock()
@@ -28,55 +33,16 @@ fn bootstrap_get_state(
         .map_err(|_| "bootstrap state lock poisoned".to_string())
 }
 
-/// 外部 URL 安全打开：仅允许 https，经系统默认浏览器打开（三平台显式分支，
-/// 与 WebView 内导航隔离，永不内嵌）。
-#[tauri::command]
-fn open_external(url: String) -> Result<(), String> {
-    let parsed = url::Url::parse(url.trim()).map_err(|_| "invalid external URL".to_string())?;
-    if parsed.scheme() != "https" || parsed.host_str().is_none() {
-        return Err("only valid https external URLs allowed".to_string());
-    }
-    let trimmed = parsed.as_str();
-    let status =
-        open_with_system_browser(trimmed).map_err(|error| format!("failed to open: {error}"))?;
-    if !status.success() {
-        return Err(format!("system browser exited with status {status}"));
-    }
-    Ok(())
-}
-
-#[cfg(target_os = "macos")]
-fn open_with_system_browser(url: &str) -> std::io::Result<std::process::ExitStatus> {
-    std::process::Command::new("open").arg(url).status()
-}
-
-#[cfg(target_os = "windows")]
-fn open_with_system_browser(url: &str) -> std::io::Result<std::process::ExitStatus> {
-    std::process::Command::new("rundll32.exe")
-        .args(["url.dll,FileProtocolHandler", url])
-        .status()
-}
-
-#[cfg(target_os = "linux")]
-fn open_with_system_browser(url: &str) -> std::io::Result<std::process::ExitStatus> {
-    std::process::Command::new("xdg-open").arg(url).status()
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-fn open_with_system_browser(_url: &str) -> std::io::Result<std::process::ExitStatus> {
-    Err(std::io::Error::new(
-        std::io::ErrorKind::Unsupported,
-        "unsupported platform",
-    ))
-}
-
 /// 前端访问 Runtime 的唯一通道：白名单方法校验 + supervisor 转发。
 #[tauri::command]
 fn runtime_request(
+    webview: tauri::Webview,
+    app: tauri::AppHandle,
     state: State<'_, Arc<SupervisorState>>,
     method: String,
     params: serde_json::Value,
 ) -> Result<u64, String> {
+    host::caller::trusted(&webview, &app, &["main"])?;
     if !RUNTIME_METHODS.contains(&method.as_str()) {
         return Err(format!("method not allowed: {method}"));
     }
@@ -98,10 +64,17 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(state)
+        .manage(browser::BrowserState::default())
         .invoke_handler(tauri::generate_handler![
             bootstrap_get_state,
             runtime_request,
-            open_external
+            host::external::open_external,
+            browser::commands::browser_open,
+            browser::commands::browser_control,
+            browser::import::browser_import,
+            browser::import::browser_credentials,
+            browser::import::browser_fill,
+            browser::import::browser_clear_credentials
         ])
         .setup(move |app| {
             match app.path().app_log_dir() {
@@ -151,6 +124,13 @@ pub fn run() {
                             shutdown::kill_runtime_tree(state.inner());
                         }
                     }
+                }
+                tauri::RunEvent::WindowEvent {
+                    label,
+                    event: tauri::WindowEvent::CloseRequested { .. },
+                    ..
+                } if label == "main" => {
+                    browser::dispose();
                 }
                 _ => {}
             }

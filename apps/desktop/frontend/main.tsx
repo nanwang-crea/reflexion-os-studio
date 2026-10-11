@@ -1,7 +1,7 @@
 import { initializeOperations } from './api/operations'
 import './features/workspace/editor/monaco-worker'
 import { createRoot } from 'react-dom/client'
-import App from './App'
+import { lazy, Suspense } from 'react'
 import { initializeTheme } from './lib/theme'
 import './styles/style.css'
 import './styles/sidebar.css'
@@ -17,9 +17,14 @@ import './components/feedback/empty-state.css'
 import './styles/product-surfaces.css'
 import './styles/themes.css'
 
+const App = lazy(() => import('./App'))
 initializeTheme()
 initializeOperations()
 
 const rootElement = document.getElementById('root')
 if (!rootElement) throw new Error('#root not found')
-createRoot(rootElement).render(<App />)
+createRoot(rootElement).render(
+  <Suspense fallback={<p>正在打开…</p>}>
+    <App />
+  </Suspense>,
+)

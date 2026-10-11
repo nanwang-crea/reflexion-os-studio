@@ -69,6 +69,12 @@ test('normalizes explicit and filesystem resource links', () => {
   assert.equal(encoded.path, 'src/agent/with space#L197.ts')
   assert.equal(encoded.line, 2)
   assert.equal(readFileSync(join(workspace, encoded.path), 'utf8'), 'encoded\n')
+  for (const target of ['http://example.com', 'http://localhost:3000']) {
+    const result = normalizeContent(`[web](${target})`, session, store)
+    assert.equal(result.parts[0].type, 'resource_link')
+    assert.equal(result.parts[0].link.kind, 'externalUrl')
+    assert.equal(result.parts[0].link.uri, target)
+  }
   // Windows-style single backslashes normalize to forward slashes.
   const backslash = normalizeContent(
     '[bs](workspace:///src\\agent\\runner.ts#L1)',
@@ -108,7 +114,8 @@ test('rejects unsupported, escaping, and standalone-session links', () => {
     'C:/Users/foo',
     '\\\\server\\share',
     'file:///tmp/a',
-    'http://example.com',
+    'ftp://example.com',
+    'https://user:sample@example.com',
     'foo://bar',
   ]) {
     const result = normalizeContent(`[x](${target})`, session, store)

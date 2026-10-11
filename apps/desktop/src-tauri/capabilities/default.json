@@ -8,6 +8,15 @@
     "core:window:allow-close",
     "core:window:allow-destroy",
     "dialog:allow-open",
-    "clipboard-manager:allow-write-text"
+    "clipboard-manager:allow-write-text",
+    "allow-bootstrap-get-state",
+    "allow-runtime-request",
+    "allow-open-external",
+    "allow-browser-open",
+    "allow-browser-control",
+    "allow-browser-import",
+    "allow-browser-credentials",
+    "allow-browser-fill",
+    "allow-browser-clear-credentials"
   ]
 }

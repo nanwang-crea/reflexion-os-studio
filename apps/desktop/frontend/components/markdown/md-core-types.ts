@@ -12,11 +12,11 @@ export interface MarkdownCoreProps {
   caret?: boolean
   /** 去掉外层 .md 容器：预览按块拼装时由宿主统一提供容器。 */
   bare?: boolean
-  /** 资源引用（workspace:// asset:// https://）点击回调；宿主按类型分发。 */
+  /** 资源引用（workspace:// asset:// http(s)://）点击回调；宿主按类型分发。 */
   onResourceClick?: (link: ResourceLink) => void
 }
 
-/** 解析消息内资源引用协议；非资源协议（http 等）返回 null 保持普通链接。 */
+/** 解析消息内资源引用协议；非资源协议返回 null 保持普通链接。 */
 export function parseResourceLink(href: string): ResourceLink | null {
   try {
     return parseResourceUri(href)

@@ -1,3 +1,9 @@
+import { useEffect, useRef } from 'react'
+import { BrowserSurfacePanel } from './features/browser/BrowserSurfacePanel'
+import {
+  useBrowserPanelOpen,
+  setBrowserPanelOpen,
+} from './features/browser/panel-state'
 import type { ComponentProps, Dispatch, SetStateAction } from 'react'
 import type { ViewName } from './hooks/session/useSessionNavigation'
 import { TopBar } from './components/TopBar'
@@ -18,6 +24,8 @@ export interface AppMainProps {
   /** TopBar 全部 props（contextTitle / 面板开关除外，本组件内推导）。 */
   topBar: Omit<
     ComponentProps<typeof TopBar>,
+    | 'browserOpen'
+    | 'onToggleBrowser'
     | 'contextTitle'
     | 'showWorkspaceToggle'
     | 'workspaceOpen'
@@ -55,6 +63,12 @@ export interface AppMainProps {
  */
 export function AppMain(props: AppMainProps): React.JSX.Element {
   const { view, activeSessionId, notice, workspace, terminal } = props
+  const surfaceRef = useRef<HTMLDivElement>(null)
+  const browserOpen = useBrowserPanelOpen()
+  useEffect(() => {
+    setBrowserPanelOpen(false)
+  }, [workspace.panel.activeTabId])
+  const surfaceOpen = browserOpen || (view === 'chat' && workspace.open)
   const contextTitle =
     view === 'settings'
       ? '设置'
@@ -71,67 +85,149 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
                 : '新对话'
 
   return (
-    <div className="main-pane">
-      <TopBar
-        {...props.topBar}
-        contextTitle={contextTitle}
-        showWorkspaceToggle={view === 'chat'}
-        workspaceOpen={workspace.open}
-        onToggleWorkspace={() => workspace.setOpen((open) => !open)}
-        showTerminalToggle={view === 'chat' && !isTerminalEntryDisabled()}
-        terminalOpen={terminal.open}
-        onToggleTerminal={terminal.onToggle}
-      />
-      {notice && (
-        <div className="notice" role="alert" aria-live="assertive">
-          <span>{notice}</span>
-          <button
-            type="button"
-            className="ghost"
-            onClick={props.onDismissNotice}
-          >
-            关闭
-          </button>
-        </div>
-      )}
-      <div className="content-area">
-        <div className="content-main">
-          {view === 'settings' ? (
-            <SettingsView {...props.settings} />
-          ) : view === 'skills' ? (
-            <SkillsView onUseSkill={props.onUseSkill} />
-          ) : view === 'automations' ? (
-            <AutomationsView />
-          ) : view === 'instructions' ? (
-            <InstructionsView {...props.instructions} />
-          ) : activeSessionId !== null ? (
-            <ChatView {...props.chat} />
-          ) : (
-            <LandingView {...props.landing} />
-          )}
-          {/* 底部终端面板：右侧文件查看器的下方对应物。实例保活在
+    <div className="main-pane surface-split-layout">
+      <div className="main-chat-column">
+        <TopBar
+          {...props.topBar}
+          contextTitle={contextTitle}
+          browserOpen={browserOpen}
+          onToggleBrowser={() => setBrowserPanelOpen(!browserOpen)}
+          showWorkspaceToggle={view === 'chat'}
+          workspaceOpen={workspace.open && !browserOpen}
+          onToggleWorkspace={() => {
+            if (browserOpen) {
+              setBrowserPanelOpen(false)
+              workspace.setOpen(true)
+            } else workspace.setOpen((open) => !open)
+          }}
+          showTerminalToggle={view === 'chat' && !isTerminalEntryDisabled()}
+          terminalOpen={terminal.open}
+          onToggleTerminal={terminal.onToggle}
+        />
+        {notice && (
+          <div className="notice" role="alert" aria-live="assertive">
+            <span>{notice}</span>
+            <button
+              type="button"
+              className="ghost"
+              onClick={props.onDismissNotice}
+            >
+              关闭
+            </button>
+          </div>
+        )}
+        <div className="content-area">
+          <div className="content-main">
+            {view === 'settings' ? (
+              <SettingsView {...props.settings} />
+            ) : view === 'skills' ? (
+              <SkillsView onUseSkill={props.onUseSkill} />
+            ) : view === 'automations' ? (
+              <AutomationsView />
+            ) : view === 'instructions' ? (
+              <InstructionsView {...props.instructions} />
+            ) : activeSessionId !== null ? (
+              <ChatView {...props.chat} />
+            ) : (
+              <LandingView {...props.landing} />
+            )}
+            {/* 底部终端面板：右侧文件查看器的下方对应物。实例保活在
               terminalManager（模块级单例），页面切换/收起只是容器回
               离屏宿主，不是销毁。 */}
-          {view === 'chat' && terminal.open && (
-            <TerminalPanel
-              activeProjectId={terminal.activeProjectId}
-              confirm={terminal.confirm}
-            />
-          )}
+            {view === 'chat' && terminal.open && (
+              <TerminalPanel
+                activeProjectId={terminal.activeProjectId}
+                confirm={terminal.confirm}
+              />
+            )}
+          </div>
         </div>
-        <div
-          className="workspace-surface"
-          style={{
-            display: view === 'chat' && workspace.open ? 'contents' : 'none',
-          }}
-        >
-          <ResizeHandle
-            resizeSide="next"
-            onResize={(delta, width) =>
-              workspace.setWidth(Math.max(280, Math.min(900, width - delta)))
-            }
-          />
-          <FileViewerPanel {...workspace.panel} />
+      </div>
+      <div
+        ref={surfaceRef}
+        className="right-surface"
+        style={{
+          display: surfaceOpen ? 'flex' : 'none',
+          width: workspace.width,
+        }}
+      >
+        <ResizeHandle
+          resizeSide="next"
+          onResize={(delta, width) =>
+            workspace.setWidth(
+              Math.max(
+                360,
+                Math.min(
+                  1200,
+                  (surfaceRef.current?.getBoundingClientRect().width ?? width) -
+                    delta,
+                ),
+              ),
+            )
+          }
+        />
+        <div className="right-surface-content">
+          <nav
+            className="right-surface-tabs"
+            aria-label="右侧面板"
+            style={{ display: browserOpen ? 'none' : 'flex' }}
+          >
+            <button
+              type="button"
+              aria-pressed={!browserOpen}
+              onClick={() => {
+                setBrowserPanelOpen(false)
+                workspace.setOpen(true)
+              }}
+            >
+              工作区
+            </button>
+            <button
+              type="button"
+              aria-pressed={browserOpen}
+              onClick={() => setBrowserPanelOpen(true)}
+            >
+              浏览器
+            </button>
+            <button
+              type="button"
+              className="right-surface-collapse"
+              aria-label="收起右侧面板"
+              onClick={() => {
+                setBrowserPanelOpen(false)
+                workspace.setOpen(false)
+              }}
+            >
+              收起
+            </button>
+          </nav>
+          <div
+            className="workspace-surface"
+            style={{
+              display: view === 'chat' && !browserOpen ? 'contents' : 'none',
+            }}
+          >
+            <FileViewerPanel {...workspace.panel} width={workspace.width} />
+          </div>
+          <div
+            className="browser-panel-host"
+            style={{ display: browserOpen ? 'flex' : 'none' }}
+          >
+            <BrowserSurfacePanel
+              visible={browserOpen}
+              onWorkspace={() => {
+                setBrowserPanelOpen(false)
+                workspace.setOpen(true)
+              }}
+              onTerminal={() => {
+                if (!terminal.open) terminal.onToggle()
+              }}
+              onCollapse={() => {
+                setBrowserPanelOpen(false)
+                workspace.setOpen(false)
+              }}
+            />
+          </div>
         </div>
       </div>
     </div>

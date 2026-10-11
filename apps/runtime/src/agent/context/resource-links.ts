@@ -103,7 +103,8 @@ function normalizeUri(
   } catch {
     parsed = null as never
   }
-  if (parsed?.protocol === 'https:') return resourceLinkFromUri(raw)
+  if (parsed?.protocol === 'https:' || parsed?.protocol === 'http:')
+    return resourceLinkFromUri(raw)
   if (/^[a-z][a-z\d+.-]*:/i.test(raw))
     throw new Error('Unsupported resource URI')
 

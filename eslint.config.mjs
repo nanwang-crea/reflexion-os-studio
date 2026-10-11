@@ -13,6 +13,7 @@ export default ts.config(
       '**/src-tauri/gen/**',
       '**/src-tauri/package-resources/**',
       '.worktrees/**',
+      '**/.cache/**',
       '*.config.*',
     ],
   },

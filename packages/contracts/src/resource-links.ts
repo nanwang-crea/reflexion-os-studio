@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { normalizeBrowserUrl } from './browser-surface.js'
 
 export const ResourceLinkSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -67,7 +68,10 @@ export function parseResourceUri(uri: string): ResourceLink {
     if (!assetId || fragment) throw new Error('Invalid asset resource URI')
     return { kind: 'asset', uri, assetId }
   }
-  if (/^https:\/\//i.test(uri)) return { kind: 'externalUrl', uri }
+  if (/^https?:\/\//i.test(uri)) {
+    normalizeBrowserUrl(uri)
+    return { kind: 'externalUrl', uri }
+  }
   throw new Error('Unsupported resource URI')
 }
 

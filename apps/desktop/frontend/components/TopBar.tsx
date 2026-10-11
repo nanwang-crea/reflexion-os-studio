@@ -11,6 +11,8 @@ export const STATUS_LABELS: Record<string, string> = {
 }
 
 interface TopBarProps {
+  browserOpen: boolean
+  onToggleBrowser: () => void
   sidebarOpen: boolean
   onToggleSidebar: () => void
   contextTitle: string
@@ -42,6 +44,16 @@ export function TopBar(props: TopBarProps): React.JSX.Element {
       </button>
       <span className="topbar-title">{props.contextTitle}</span>
       <span className="spacer" />
+      <button
+        type="button"
+        className="topbar-toggle"
+        title={props.browserOpen ? '收起浏览器面板' : '展开浏览器面板'}
+        aria-label="网页浏览"
+        aria-pressed={props.browserOpen}
+        onClick={props.onToggleBrowser}
+      >
+        网页
+      </button>
       {props.showWorkspaceToggle && (
         <button
           type="button"

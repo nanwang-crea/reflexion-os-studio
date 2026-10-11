@@ -26,3 +26,23 @@ tauri-plugin-clipboard-manager = "2"
 [target.'cfg(unix)'.dependencies]
 # 进程组树杀（kill -pgid）：POSIX 上兜底收割 TS Runtime 及其子进程。
 libc = "0.2"
+
+[features]
+# Experimental user Surface. Release builds still fail closed even with this feature.
+browser-spike = ["dep:objc2", "dep:objc2-foundation", "dep:objc2-app-kit", "dep:objc2-web-kit", "dep:block2", "dep:security-framework", "dep:rusqlite", "dep:aes", "dep:cbc", "dep:pbkdf2", "dep:sha1", "dep:sha2", "dep:zeroize"]
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = { version = "0.6.4", optional = true }
+objc2-foundation = { version = "0.3.2", optional = true, default-features = false, features = ["std", "NSObject", "NSString", "NSURL", "NSURLRequest", "NSArray", "NSError", "NSGeometry", "NSProcessInfo", "NSURLResponse", "NSHTTPCookie", "NSDictionary", "NSDate", "NSValue", "NSKeyValueObserving"] }
+objc2-app-kit = { version = "0.3.2", optional = true, default-features = false, features = ["std", "NSWindow", "NSView", "NSDragging", "NSPasteboard"] }
+objc2-web-kit = { version = "0.3.2", optional = true, default-features = false, features = ["std", "objc2-app-kit", "block2", "WKWebView", "WKWebViewConfiguration", "WKWebsiteDataStore", "WKPreferences", "WKNavigation", "WKNavigationAction", "WKNavigationDelegate", "WKNavigationResponse", "WKUIDelegate", "WKOpenPanelParameters", "WKFrameInfo", "WKSecurityOrigin", "WKWindowFeatures", "WKHTTPCookieStore"] }
+block2 = { version = "0.6.2", optional = true }
+
+security-framework = { version = "3", optional = true }
+rusqlite = { version = "0.37", optional = true, features = ["bundled", "backup"] }
+aes = { version = "0.8", optional = true }
+cbc = { version = "0.1", optional = true, features = ["alloc"] }
+pbkdf2 = { version = "0.12", optional = true }
+sha1 = { version = "0.10", optional = true }
+sha2 = { version = "0.10", optional = true }
+zeroize = { version = "1", optional = true, features = ["derive"] }

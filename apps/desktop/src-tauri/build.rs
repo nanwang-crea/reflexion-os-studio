@@ -17,7 +17,20 @@ fn main() {
             app_manifest_dir.display()
         )
     });
-    tauri_build::try_build(tauri_build::Attributes::default()).unwrap_or_else(|error| {
+    tauri_build::try_build(tauri_build::Attributes::default().app_manifest(
+        tauri_build::AppManifest::new().commands(&[
+            "bootstrap_get_state",
+            "runtime_request",
+            "open_external",
+            "browser_open",
+            "browser_control",
+            "browser_import",
+            "browser_credentials",
+            "browser_fill",
+            "browser_clear_credentials",
+        ]),
+    ))
+    .unwrap_or_else(|error| {
         panic!(
             "Tauri build failed (OUT_DIR={}): {error:#}",
             out_dir.display()

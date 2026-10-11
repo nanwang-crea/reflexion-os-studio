@@ -137,3 +137,17 @@ Agent、Memory、Skill、Context 和 Delegation/Policy 是一等领域，分别�
 工作区 UI 的覆盖保存绑定具体读取快照：Runtime 为每次读取发放不透明 readToken，按工作区根目录、相对路径与完整读取状态校验。保存使用该快照的 revision，成功后返回新 token；其他预览或分页读取不能更新编辑器的保存凭据。凭据簿有界，淘汰或 Runtime 重启后须重新加载。Rust 仍执行磁盘 revision 校验，无 token 只可走新文件创建路径。
 
 单次解除 Shell 沙箱：用户显式批准 `require_unsandboxed` 后，Rust 以当前用户身份直接执行命令；精确绑定、过期及一次性消费校验仍生效。该模式解除文件、敏感路径与网络的 OS 隔离，不受 preset、Danger 或会话规则自动授权。三平台执行方式及安全承诺例外见 `docs/PERMISSION-MODEL.md` §7.0。
+
+## 14. Browser Surface Spike（2026-10-11）
+
+用户 Surface 与未来 Agent Browser Tool 分离。首版支持 HTTP / HTTPS 任意域名及内网，网站自身脚本正常运行，Agent 当前不读取和操作网页；后续 Browser Tool 经 Runtime / PermissionGate 独立授权。
+
+可信工具栏经 contracts / runtime-client 的 Host facade 调用结构化 Surface 命令。Host 在主窗口右侧挂载没有 Tauri IPC、应用脚本、自定义协议和持久化数据的原生网页视图；不把网页当作应用 Renderer，不修改 Chat 的可用性与系统工具边界。macOS 原型采用非持久化 WKWebView；Windows / Linux 在原生隔离未验证前 fail-closed，走系统浏览器回退。
+
+实验仅在显式启用 `browser-spike` feature 的 macOS debug 构建开放，发布默认关闭。右侧面板布局已接入，原生视图使用测量后的 viewport 坐标，弹层出现时隐藏；完整安全边界与发布阻塞项见 [Browser Surface](docs/BROWSER-SURFACE.md) 与 [Spike 报告](docs/BROWSER-SPIKE-REPORT.md)。
+
+Browser 基础扩展：用户 Surface 多标签各自维护原生视图/历史，共享独立临时
+存储，后台导航事件只更新所属标签。系统浏览器直接迁移为原生 OS 集成例外：
+用户二次确认后处理来源只读快照和平台解密，凭据不经过 Runtime/Agent/IPC。
+macOS 实验构建支持 Chrome/Edge v10 和 Keychain 存储、显式同来源 HTTPS
+密码填充；Windows/Linux 及正常发布构建暂不开放，详见 BROWSER-SURFACE.md。

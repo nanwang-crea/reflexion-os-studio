@@ -140,3 +140,5 @@ export type {
   HistoryCursor,
   SessionHistory,
 } from '@reflexion-os-studio/contracts'
+
+export * from './browser-surface.js'
