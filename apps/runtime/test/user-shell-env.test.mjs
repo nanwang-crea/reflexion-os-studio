@@ -4,6 +4,7 @@ import {
   parseEnvDump,
   mergeUserEnv,
   probeUserShellEnv,
+  resolveProbeShell,
 } from '../dist/user-shell-env.js'
 
 test('parseEnvDump 解析 NUL 分隔并过滤 rc 噪声段', () => {
@@ -72,3 +73,32 @@ test('probeUserShellEnv 超时不悬挂', async () => {
   const probe = await probeUserShellEnv({ shell: sleeper, timeoutMs: 1 })
   assert.equal(probe.status, 'timeout')
 })
+
+test(
+  'resolveProbeShell validates environment then falls back to account API and sh',
+  { skip: process.platform === 'win32' },
+  () => {
+    assert.equal(
+      resolveProbeShell('/bin/sh', () => {
+        throw new Error('should not query account')
+      }),
+      '/bin/sh',
+    )
+    for (const invalid of ['', 'relative/bash', '/nonexistent/shell', '/tmp']) {
+      assert.equal(
+        resolveProbeShell(invalid, () => '/bin/sh'),
+        '/bin/sh',
+      )
+    }
+    assert.equal(
+      resolveProbeShell('', () => null),
+      '/bin/sh',
+    )
+    assert.equal(
+      resolveProbeShell('', () => {
+        throw new Error('account unavailable')
+      }),
+      '/bin/sh',
+    )
+  },
+)

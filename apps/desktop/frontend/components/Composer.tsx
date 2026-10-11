@@ -302,36 +302,6 @@ export function Composer(props: ComposerProps): React.JSX.Element {
         }}
       />
       <div className="composer-bar">
-        {props.permissionValue !== undefined && props.onPermissionChange && (
-          <label
-            className="composer-select permission"
-            title={
-              props.permissionValue !== undefined
-                ? PERMISSION_PRESET_HINTS[props.permissionValue]
-                : ''
-            }
-          >
-            <ShieldIcon />
-            <Select
-              aria-label="权限档位"
-              value={props.permissionValue}
-              onValueChange={(value) =>
-                props.onPermissionChange?.(value as PermissionPreset)
-              }
-            >
-              <option value="workspace-read">
-                {PERMISSION_PRESET_LABELS['workspace-read']}
-              </option>
-              <option value="workspace-write">
-                {PERMISSION_PRESET_LABELS['workspace-write']}
-              </option>
-              <option value="workspace-full">
-                {PERMISSION_PRESET_LABELS['workspace-full']}
-              </option>
-            </Select>
-            <ChevronIcon />
-          </label>
-        )}
         <div className="composer-plus-menu" ref={plusMenuRef}>
           <button
             type="button"
@@ -386,6 +356,36 @@ export function Composer(props: ComposerProps): React.JSX.Element {
             </div>
           )}
         </div>
+        {props.permissionValue !== undefined && props.onPermissionChange && (
+          <label
+            className="composer-select permission"
+            title={
+              props.permissionValue !== undefined
+                ? PERMISSION_PRESET_HINTS[props.permissionValue]
+                : ''
+            }
+          >
+            <ShieldIcon />
+            <Select
+              aria-label="权限档位"
+              value={props.permissionValue}
+              onValueChange={(value) =>
+                props.onPermissionChange?.(value as PermissionPreset)
+              }
+            >
+              <option value="workspace-read">
+                {PERMISSION_PRESET_LABELS['workspace-read']}
+              </option>
+              <option value="workspace-write">
+                {PERMISSION_PRESET_LABELS['workspace-write']}
+              </option>
+              <option value="workspace-full">
+                {PERMISSION_PRESET_LABELS['workspace-full']}
+              </option>
+            </Select>
+            <ChevronIcon />
+          </label>
+        )}
         {agentTemplateId !== '' && (
           <button
             type="button"

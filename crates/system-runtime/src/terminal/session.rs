@@ -24,12 +24,14 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use base64::Engine as _;
-use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
+use portable_pty::{native_pty_system, ChildKiller, MasterPty, PtySize};
 use serde_json::json;
 
 use crate::protocol::emit;
 use crate::terminal::output_queue::{chunk_frames, Frame, OutputQueue};
-use crate::terminal::shell_command::default_shell_argv;
+use crate::terminal::shell_command::{
+    access_hint, default_shell_argv, shell_command, validate_cwd,
+};
 
 /// SIGHUP 后等待 shell 自行收敛的时限；超时即 SIGKILL 升级（W2-3）。
 #[cfg(unix)]
@@ -112,6 +114,7 @@ pub fn spawn(
     rows: u16,
     cols: u16,
 ) -> Result<Arc<TerminalSession>, String> {
+    validate_cwd(cwd)?;
     let pty_system = native_pty_system();
     let size = PtySize {
         rows,
@@ -123,16 +126,11 @@ pub fn spawn(
         .openpty(size)
         .map_err(|error| format!("openpty failed: {error}"))?;
     let argv = default_shell_argv();
-    let mut command = CommandBuilder::new(&argv[0]);
-    for arg in &argv[1..] {
-        command.arg(arg);
-    }
-    command.cwd(cwd);
-    command.env("TERM", "xterm-256color");
+    let command = shell_command(&argv, cwd);
     let child = pair
         .slave
         .spawn_command(command)
-        .map_err(|error| format!("spawn failed: {error}"))?;
+        .map_err(|error| format!("terminal spawn failed: {error}{}", access_hint()))?;
     // 父进程侧从属 fd 必须关闭，否则读线程永远等不到 EOF。
     drop(pair.slave);
     let reader = pair

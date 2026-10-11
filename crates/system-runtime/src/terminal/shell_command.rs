@@ -1,24 +1,57 @@
 //! 默认 shell 选择（AGENTS §8：显式平台分支）。
 //! 返回 argv（路径 + 独立参数数组），禁止拼接命令字符串。
 
-#[cfg(unix)]
-use std::path::PathBuf;
+use portable_pty::CommandBuilder;
 
-/// 纯函数版回退逻辑：显式注入 env 值（Option），避免测试改动进程环境
-/// （cargo 默认多线程，set_var 是进程级共享状态，会与并发测试竞态）。
-/// 有效用户 shell 优先；不存在/为空/非普通文件回退 /bin/sh。
 #[cfg(unix)]
-fn shell_from_env(shell_env: Option<String>) -> Vec<String> {
-    let user_shell = shell_env
-        .filter(|value| !value.trim().is_empty() && PathBuf::from(value).is_file())
-        .unwrap_or_else(|| "/bin/sh".to_string());
-    vec![user_shell]
+use super::unix_shell::{account_shell, select_shell, shell_argv};
+
+/// macOS 对齐 Terminal 登录模式；Linux 对齐图形终端的交互模式。
+#[cfg(unix)]
+fn unix_shell_argv(shell: String) -> Vec<String> {
+    shell_argv(shell, cfg!(target_os = "macos"))
 }
 
-/// 读取 SHELL 环境变量的薄包装。
 #[cfg(unix)]
 pub fn default_shell_argv() -> Vec<String> {
-    shell_from_env(std::env::var("SHELL").ok())
+    unix_shell_argv(select_shell(std::env::var("SHELL").ok(), account_shell))
+}
+
+/// PTY 使用独立环境标识；继承用户 PATH，不清空或重写工具链变量。
+pub fn shell_command(argv: &[String], cwd: &str) -> CommandBuilder {
+    let mut command = CommandBuilder::new(&argv[0]);
+    command.args(&argv[1..]);
+    command.cwd(cwd);
+    command.env("TERM", "xterm-256color");
+    command.env("TERM_PROGRAM", "ReflexionOS Studio");
+    command.env("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"));
+    command.env("COLORTERM", "truecolor");
+    command
+}
+
+/// 只检查存在性和目录类型，不以写权限限制用户终端。
+/// portable-pty 在 Unix 对非法 cwd 会回退 HOME，必须提前拒绝，避免跑错目录。
+pub fn validate_cwd(cwd: &str) -> Result<(), String> {
+    if !std::path::Path::new(cwd).is_absolute() {
+        return Err("terminal cwd must be an absolute directory path".to_string());
+    }
+    let metadata = std::fs::metadata(cwd)
+        .map_err(|error| format!("terminal cwd inaccessible: {error}{}", access_hint()))?;
+    if !metadata.is_dir() {
+        return Err("terminal cwd is not a directory".to_string());
+    }
+    Ok(())
+}
+
+pub fn access_hint() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        "; 若访问被拒绝，请检查目录权限及系统设置 → 隐私与安全性 → 文件与文件夹中本应用的授权；此错误本身不能确定是 TCC"
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        "; 若访问被拒绝，请检查目录访问权限"
+    }
 }
 
 /// 查找文件即可，不运行 shell（避免窗口闪烁与用户 profile 阻塞协议线程）。
@@ -79,36 +112,11 @@ mod path_tests {
 
 #[cfg(all(test, unix))]
 mod tests {
-    use super::{default_shell_argv, shell_from_env};
-
     #[test]
-    fn unix_shell_is_executable_absolute_path() {
-        let argv = default_shell_argv();
-        assert_eq!(argv.len(), 1);
-        // SHELL 未设置/非法时也必须落在绝对路径（/bin/sh 兜底）。
+    fn unix_default_shell_is_executable_absolute_path() {
+        let argv = super::default_shell_argv();
         assert!(std::path::Path::new(&argv[0]).is_absolute());
-    }
-
-    #[test]
-    fn unix_falls_back_to_bin_sh_when_shell_invalid() {
-        // 纯函数注入 env 值，不改动进程环境（cargo 测试多线程，set_var 会有进程级竞态）。
-        let fallback = vec!["/bin/sh".to_string()];
-        assert_eq!(shell_from_env(None), fallback);
-        assert_eq!(shell_from_env(Some(String::new())), fallback);
-        assert_eq!(shell_from_env(Some("   ".to_string())), fallback);
-        // 指向目录（非普通文件）与不存在路径同样回退。
-        assert_eq!(shell_from_env(Some("/tmp".to_string())), fallback);
-        assert_eq!(
-            shell_from_env(Some("/nonexistent/shell-for-test-42".to_string())),
-            fallback
-        );
-    }
-
-    #[test]
-    fn unix_prefers_valid_user_shell() {
-        // current_exe 必然是存在普通文件，作为确定性的「有效 shell」输入。
-        let shell = std::env::current_exe().unwrap().display().to_string();
-        assert_eq!(shell_from_env(Some(shell.clone())), vec![shell]);
+        assert!(std::path::Path::new(&argv[0]).is_file());
     }
 }
 
@@ -121,3 +129,7 @@ mod tests {
         assert_eq!(default_shell_argv().len(), 1);
     }
 }
+
+#[cfg(test)]
+#[path = "shell_command_tests.rs"]
+mod launch_tests;

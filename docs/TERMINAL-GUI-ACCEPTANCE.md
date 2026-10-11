@@ -25,3 +25,25 @@
 | OS / 版本     | （待填，如 macOS 26.6.2 + 打包版 0.1.0）     |
 | 加载形态      | （dev / 安装包，待填）                       |
 | 结论          | （待填：x/10 PASS；FAIL 项附截图或现象描述） |
+
+## Shell 环境一致性（2026-10-11）
+
+- macOS：zsh、bash、fish、ksh 使用独立 argv 参数 `-l -i`；Linux 使用 `-i`，与常见图形终端的非登录交互模式一致，避免跳过 `.bashrc`。sh/dash 只传 `-i`，避免把不支持的登录参数传给 Linux dash；未知 shell 不猜测参数。
+- Windows：保留优先 pwsh、其次 Windows PowerShell 的交互启动，加载其默认 profile；不添加 Unix 登录参数。
+- Unix 有效且可执行的 SHELL 优先，否则通过系统账户 API 获取默认 Shell，再回退 sh；不直接读取账户文件。Runtime 环境快照同样采用账户 API 回退，macOS 探测使用登录交互模式，Linux 使用交互模式。保留 Runtime 的用户环境快照与继承链；PTY 设置自己的 TERM、TERM_PROGRAM、TERM_PROGRAM_VERSION、COLORTERM。启动终端时不清空 PATH 或工具链变量。
+- 创建前检查 cwd 是绝对路径、存在且为目录。portable-pty 对非法 cwd 可能回退 HOME，现改为明确报错。只读目录仍可打开终端，不执行写入探测，不据此承诺 Cargo 能在目录内构建。
+- 自动测试以隔离的 HOME/ZDOTDIR 和测试 profile 对比对应平台的外部 zsh/bash 与真实 PTY（macOS `-l -i`，Linux `-i`，并在 macOS 上额外模拟 Linux 参数），验证登录/交互配置、cargo/pnpm 查找路径和 cwd；不读取用户 profile 或打印完整环境。
+
+真机复验：从 Finder 打开打包应用，在同一项目目录新建终端，与外部终端比较以下有限诊断（不执行 `env`、不打印凭据）：
+
+```sh
+printf 'shell=%s\nterm=%s\nprogram=%s\npwd=%s\n' "$SHELL" "$TERM" "$TERM_PROGRAM" "$PWD"
+command -v cargo
+command -v pnpm
+```
+
+随后执行原本失败的构建命令。Shell/PATH 一致不等于操作系统权限一致；若仍出现 EPERM，记录具体失败的操作和路径，核对文件权限、ACL、系统隐私授权及可执行文件限制，不直接认定缓存或 TCC 是根因。
+
+当前应用未启用 macOS App Sandbox。security-scoped bookmark 是沙箱资源访问机制，缺少 bookmark 不能独立证明 TCC 拒绝；Tauri `dialog:allow-open` 是前端命令权限，也不等价于操作系统目录权限。参考 [Apple security-scoped bookmark 文档](https://developer.apple.com/documentation/professional-video-applications/enabling-security-scoped-bookmark-and-url-access) 与 [文件与文件夹隐私权限](https://support.apple.com/en-lamr/guide/mac-help/mchld5a35146/27/mac/27)。
+
+本次自动 PTY 对比在 macOS 通过；Finder/TCC 场景、Windows 与 Linux 真机验收仍需执行。

@@ -78,6 +78,12 @@ jobs:
           cargo test --manifest-path crates/Cargo.toml path_lookup_finds_windows_exe
           pnpm --filter @reflexion-os-studio/runtime exec node --disable-warning=ExperimentalWarning --import ./test/set-test-data-dir.mjs --test test/handlers.test.mjs test/workspace-indexer.test.mjs
 
+      - name: Verify terminal shell startup regressions
+        run: |
+          cargo test --manifest-path crates/Cargo.toml terminal::shell_command
+          cargo test --manifest-path crates/Cargo.toml terminal::unix_shell
+          pnpm --filter @reflexion-os-studio/runtime exec node --disable-warning=ExperimentalWarning --import ./test/set-test-data-dir.mjs --test test/user-shell-env.test.mjs
+
       - name: Verify MCP process launch regressions
         run: pnpm --filter @reflexion-os-studio/runtime exec node --disable-warning=ExperimentalWarning --import ./test/set-test-data-dir.mjs --test test/mcp.test.mjs test/mcp-launch.test.mjs
 

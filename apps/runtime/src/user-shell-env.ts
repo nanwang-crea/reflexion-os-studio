@@ -1,12 +1,13 @@
+import { userInfo } from 'node:os'
 import { spawn } from 'node:child_process'
-import { accessSync, constants, existsSync } from 'node:fs'
+import { accessSync, constants, statSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
 
 /**
  * P1 环境继承（替代原 S1"每命令 -lc"方案，对齐 VS Code/Claude Code 快照做法）：
  * GUI（Finder/图标）启动链的 PATH 只有系统目录，shell 工具与 MCP spawn 找不到
  * nvm/homebrew/conda 等用户工具。这里在 Runtime 启动时跑一次
- * `$SHELL -ilc 'env -0'` 取用户真实环境快照，合并进 process.env，
+ * macOS `$SHELL -ilc 'env -0'`、Linux `$SHELL -ic 'env -0'` 取用户真实环境快照，合并进 process.env，
  * 之后 spawn 的一切子进程（Rust sidecar、MCP server、shell 命令）自然继承。
  * 失败/超时只记 degraded 日志，不阻塞启动（与沙箱降级同一纪律）。
  */
@@ -100,16 +101,29 @@ export function mergeUserEnv(
   return { added, pathPrepended }
 }
 
-export function resolveProbeShell(): string | null {
+export function resolveProbeShell(
+  shellEnv = process.env.SHELL,
+  accountShell: () => string | null = () => userInfo().shell,
+): string | null {
   if (process.platform === 'win32') return null
-  const shell = process.env.SHELL
-  if (!shell || !isAbsolute(shell) || !existsSync(shell)) return null
-  try {
-    accessSync(shell, constants.X_OK)
-  } catch {
-    return null
+  const executable = (shell: string | null | undefined): shell is string => {
+    if (!shell || !isAbsolute(shell)) return false
+    try {
+      if (!statSync(shell).isFile()) return false
+      accessSync(shell, constants.X_OK)
+      return true
+    } catch {
+      return false
+    }
   }
-  return shell
+  if (executable(shellEnv)) return shellEnv
+  try {
+    const shell = accountShell()
+    if (executable(shell)) return shell
+  } catch {
+    // 系统账户查询不可用时与 Rust 侧一样回退 sh。
+  }
+  return executable('/bin/sh') ? '/bin/sh' : null
 }
 
 export function probeUserShellEnv(
@@ -122,7 +136,10 @@ export function probeUserShellEnv(
   return new Promise((resolve) => {
     let child: ReturnType<typeof spawn>
     try {
-      child = spawn(shell, ['-i', '-l', '-c', DUMP_COMMAND], {
+      const flags =
+        process.platform === 'darwin' ? ['-i', '-l', '-c'] : ['-i', '-c']
+      child = spawn(shell, [...flags, DUMP_COMMAND], {
+        env: { ...process.env, SHELL: shell },
         stdio: ['ignore', 'pipe', 'ignore'],
       })
     } catch {
@@ -168,14 +185,17 @@ export async function applyUserShellEnv(
 ): Promise<UserShellEnvStatus> {
   try {
     if (process.platform === 'win32') return 'skipped-platform'
-    const probe = await probeUserShellEnv()
+    const shell = resolveProbeShell()
+    const probe = await probeUserShellEnv({ shell })
     if (probe.status !== 'ok') {
       log(
         `[runtime] user shell env not applied (${probe.status}); ` +
-          'inherited env stays launchd-minimal',
+          'inherited environment retained',
       )
       return probe.status
     }
+    // 解析出的有效 shell 取代缺失/无效 SHELL，让 Rust 和 MCP 继承同一选择。
+    if (shell) process.env.SHELL = shell
     const { added, pathPrepended } = mergeUserEnv(process.env, probe.env)
     log(
       `[runtime] user shell env applied (+${pathPrepended} PATH entries, ` +
