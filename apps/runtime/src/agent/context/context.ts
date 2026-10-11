@@ -10,7 +10,10 @@ import {
   messagesToFrames,
 } from '@reflexion-os-studio/agent-core'
 import type { Store } from '../../store/index.js'
-import type { ProviderHeader } from '@reflexion-os-studio/contracts'
+import type {
+  ProviderHeader,
+  ReasoningEffort,
+} from '@reflexion-os-studio/contracts'
 import { buildInstructionBlock } from '../instructions/render.js'
 import {
   framesToValidatedMessages,
@@ -81,6 +84,7 @@ export interface ProviderRuntimeConfig {
   headers?: ProviderHeader[]
   /** 缺省由服务端决定。 */
   temperature?: number
+  reasoningEffort?: ReasoningEffort
   maxTokens?: number
   /** 模型上下文窗口（token 数）；未知时用预算上限。 */
   contextWindow?: number

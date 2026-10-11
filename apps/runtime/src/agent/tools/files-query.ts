@@ -73,12 +73,15 @@ export function createFileReadTool(
   return {
     name: 'file.read',
     description:
-      '读取工作区内 UTF-8 文本文件，每行带绝对行号前缀（L<行号>: 内容），行号可直接用于资源链接 #L<行号> 引用；构造 file.edit 的 oldText 时必须去掉行号前缀。大文件用 offset（0 起始行号）+ limit 分段读；contentTruncated=true 时用同一 path 以 offset=nextOffset 继续读取（nextOffset 即最后一个已读行的行号）。path 为工作区相对路径，不允许绝对路径或 ..。编辑或覆盖文件前必须先用本工具读取目标文件。',
+      '读取工作区内 UTF-8 文本文件，每行带 1 起始绝对行号前缀（L<行号>: 内容），行号可直接用于资源链接 #L<行号> 或 file.edit.replace_range 的 startLine/endLine，不要减 1。例如替换 L93 到 L94，应传 startLine=93、endLine=94。file.edit 会安全去除匹配文本的行号前缀。大文件用 offset（0 起始的跳过行数，不是编辑行号）+ limit 分段读；contentTruncated=true 时用同一 path 以 offset=nextOffset 继续读取（nextOffset 即最后一个已读行的行号）。path 为工作区相对路径，不允许绝对路径或 ..。编辑或覆盖文件前必须先用本工具读取目标文件。',
     parameters: {
       type: 'object',
       properties: {
         path: { type: 'string', description: '工作区相对路径，如 src/app.ts' },
-        offset: { type: 'number', description: '起始行号（0 起），缺省从头读' },
+        offset: {
+          type: 'number',
+          description: '跳过的行数（0 起），缺省 0；读取 L93 从 offset=92 开始',
+        },
         limit: { type: 'number', description: '本次最多读取的行数，缺省 2000' },
       },
       required: ['path'],

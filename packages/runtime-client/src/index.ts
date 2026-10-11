@@ -16,6 +16,8 @@ export type {
   Message,
   Project,
   ProviderProfile,
+  ProviderModel,
+  ReasoningEffort,
   ProviderHeader,
   Run,
   RuntimeEvent,

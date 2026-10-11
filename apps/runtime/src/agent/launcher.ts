@@ -157,6 +157,9 @@ export class RunLauncher {
       apiFormat: profile.apiFormat,
       headers: profile.headers,
       ...sampling,
+      ...(profile.reasoningEffort != null
+        ? { reasoningEffort: profile.reasoningEffort }
+        : {}),
       ...(profile.contextWindow !== null
         ? { contextWindow: profile.contextWindow }
         : {}),

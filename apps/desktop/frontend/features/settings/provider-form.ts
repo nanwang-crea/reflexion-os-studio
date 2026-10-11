@@ -2,6 +2,7 @@ import type {
   ApiFormat,
   ProviderHeader,
   ProviderProfile,
+  ReasoningEffort,
 } from '@reflexion-os-studio/runtime-client'
 import {
   checkAbsoluteUrl,
@@ -37,6 +38,7 @@ export interface Draft {
   contextWindow: string
   /** 上下文预算上限（token 数）；空串表示默认 64k。 */
   contextBudget: string
+  reasoningEffort: ReasoningEffort | ''
 }
 
 export const EMPTY_DRAFT: Draft = {
@@ -53,6 +55,7 @@ export const EMPTY_DRAFT: Draft = {
   maxTokens: '',
   contextWindow: '',
   contextBudget: '',
+  reasoningEffort: '',
 }
 
 export function draftFromProfile(profile: ProviderProfile): Draft {
@@ -72,6 +75,7 @@ export function draftFromProfile(profile: ProviderProfile): Draft {
       profile.contextWindow == null ? '' : String(profile.contextWindow),
     contextBudget:
       profile.contextBudget == null ? '' : String(profile.contextBudget),
+    reasoningEffort: profile.reasoningEffort ?? '',
   }
 }
 
@@ -157,6 +161,7 @@ export function preflightProviderSave(
     maxTokens: parseNumber(draft.maxTokens, true),
     contextWindow: parseNumber(draft.contextWindow, true),
     contextBudget: parseNumber(draft.contextBudget, true),
+    reasoningEffort: draft.reasoningEffort || null,
   }
   if (draft.id && !hasNewSecret && !secretRef) {
     return {

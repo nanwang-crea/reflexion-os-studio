@@ -1,3 +1,4 @@
+import type { ReasoningSelection } from '../../components/composer/ModelSelector'
 import type {
   ResourceLink,
   SkillManifest,
@@ -37,6 +38,7 @@ export interface ChatViewProps {
   dangerLease: DangerAccessLease | null
   onDisableDanger: () => void
   modelOptions: ComposerModelOption[]
+  reasoningSelection?: ReasoningSelection
   selectedModelKey: string | null
   onModelChange: (key: string) => void
   skills: SkillManifest[]

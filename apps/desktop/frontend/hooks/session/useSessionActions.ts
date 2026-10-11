@@ -2,7 +2,11 @@ import { uploadMessageImages } from '../../features/chat/images/upload-message-i
 import { deleteAsset } from '../../api/assets'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import { open } from '@tauri-apps/plugin-dialog'
-import type { Project, Session } from '@reflexion-os-studio/runtime-client'
+import type {
+  Project,
+  Session,
+  ReasoningEffort,
+} from '@reflexion-os-studio/runtime-client'
 import type { ConfirmDialogState } from '../../components/ConfirmDialog'
 import * as chatApi from '../../api/chat'
 import {
@@ -19,6 +23,7 @@ interface SessionActionsDeps {
   activeSessionId: string | null
   activeProjectId: string | null
   selectedModelKey: string | null
+  requestedReasoningEffort?: ReasoningEffort | null
   sessionData: SessionData | null
   /** 三档权限预设快照（随 message.send 传给 Runtime）。 */
   permissionPreset: 'workspace-read' | 'workspace-write' | 'workspace-full'
@@ -201,6 +206,7 @@ export function useSessionActions(deps: SessionActionsDeps): {
           content,
           providerId,
           model,
+          reasoningEffort: deps.requestedReasoningEffort,
           permissionPreset,
           agentTemplateId,
           imageAssetIds,
@@ -269,6 +275,7 @@ export function useSessionActions(deps: SessionActionsDeps): {
         content,
         providerId:
           modelKey && separator > 0 ? modelKey.slice(0, separator) : undefined,
+        reasoningEffort: deps.requestedReasoningEffort,
         model:
           modelKey && separator > 0 ? modelKey.slice(separator + 2) : undefined,
         permissionPreset: deps.permissionPreset,
@@ -304,6 +311,7 @@ export function useSessionActions(deps: SessionActionsDeps): {
         runId: lastFinishedBadly.id,
         providerId:
           modelKey && separator > 0 ? modelKey.slice(0, separator) : undefined,
+        reasoningEffort: deps.requestedReasoningEffort,
         model:
           modelKey && separator > 0 ? modelKey.slice(separator + 2) : undefined,
       })

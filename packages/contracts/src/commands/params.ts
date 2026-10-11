@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { MAX_MESSAGE_IMAGES } from '../images.js'
-import { PermissionPresetSchema } from '../entities.js'
+import { PermissionPresetSchema, ReasoningEffortSchema } from '../entities.js'
 export const RequestIdSchema = z.string().min(1)
 export type RequestId = z.infer<typeof RequestIdSchema>
 
@@ -37,9 +37,9 @@ export const MessageSendParamsSchema = z.object({
   // 不传则使用启用的 Provider 及其第一个模型。
   providerId: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
-  // 本次回复的模型采样参数；缺省用 Provider 配置的默认值。
-  temperature: z.number().min(0).max(2).optional(),
-  maxTokens: z.number().int().positive().optional(),
+  // 当前 UI 请求意图；只参与内存执行，不落 Run/Message。null 表示自动。
+  reasoningEffort: ReasoningEffortSchema.nullable().optional(),
+
   // 本次发送的权限预设快照；缺省 workspace-read（保守回落，不静默扩大写权限）。
   permissionPreset: PermissionPresetSchema.optional(),
   // @deprecated 兼容一个协议版本：legacy `permissionMode`/`trusted` 双轨。
@@ -60,11 +60,10 @@ export const MessageEditResendParamsSchema = z.object({
   sessionId: z.string().min(1),
   messageId: z.string().min(1),
   content: z.string().min(1),
-  // 可选覆盖 Provider/模型/参数（与 message.send 同义）。
+  // 可选覆盖 Provider/模型；运行参数从模型配置与 Provider 默认解析。
   providerId: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
-  temperature: z.number().min(0).max(2).optional(),
-  maxTokens: z.number().int().positive().optional(),
+  reasoningEffort: ReasoningEffortSchema.nullable().optional(),
   permissionPreset: PermissionPresetSchema.optional(),
   skillId: z.string().min(1).optional(),
   agentTemplateId: z.string().min(1).optional(),
@@ -108,5 +107,6 @@ export const RunRetryParamsSchema = z.object({
   runId: z.string().min(1),
   providerId: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
+  reasoningEffort: ReasoningEffortSchema.nullable().optional(),
 })
 export type RunRetryParams = z.infer<typeof RunRetryParamsSchema>

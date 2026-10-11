@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { Store } from '../dist/store/index.js'
+import { LATEST_SCHEMA_VERSION } from '../dist/store/schema.js'
 
 function freshStore() {
   return new Store(mkdtempSync(join(tmpdir(), 'reflexion-store-')))
@@ -1177,12 +1178,12 @@ test('v23 migration drops legacy memories/FTS/memory_jobs tables', () => {
     .map((row) => row.name)
   assert.deepEqual(names, [])
   const version = after.prepare('PRAGMA user_version').get()
-  assert.equal(Number(version.user_version), 39)
+  assert.equal(Number(version.user_version), LATEST_SCHEMA_VERSION)
   after.close()
   store.close()
 })
 
-test('fresh store schema has dynamic agent governance and version 39', () => {
+test('fresh store schema has dynamic agent governance and current version', () => {
   const dir = mkdtempSync(join(tmpdir(), 'reflexion-v23-fresh-'))
   const store = new Store(dir)
   store.close()
@@ -1195,7 +1196,7 @@ test('fresh store schema has dynamic agent governance and version 39', () => {
     .map((row) => row.name)
   assert.deepEqual(names, [])
   const version = db.prepare('PRAGMA user_version').get()
-  assert.equal(Number(version.user_version), 39)
+  assert.equal(Number(version.user_version), LATEST_SCHEMA_VERSION)
   const plugins = db
     .prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'plugins'",

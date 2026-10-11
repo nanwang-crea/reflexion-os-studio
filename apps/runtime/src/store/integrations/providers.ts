@@ -6,8 +6,11 @@ import {
   type ProviderCapability,
   type ProviderHeader,
   type ProviderProfile,
+  type ReasoningEffort,
   ProviderHeadersSchema,
+  ReasoningEffortSchema,
 } from '@reflexion-os-studio/contracts'
+import { readProviderNumber } from './provider-values.js'
 import { nowIso, type Row } from '../shared.js'
 
 /** 模型供应商领域：多供应商 × 多模型配置。 */
@@ -52,6 +55,7 @@ export class ProviderStore {
     maxTokens?: number | null
     contextWindow?: number | null
     contextBudget?: number | null
+    reasoningEffort?: ReasoningEffort | null
   }): ProviderProfile {
     const id = input.id ?? randomUUID()
     // capabilities 省略时：编辑保留原值，新建缺省 ['chat']。
@@ -85,11 +89,15 @@ export class ProviderStore {
       input.contextBudget === undefined
         ? (existing?.contextBudget ?? null)
         : input.contextBudget
+    const reasoningEffort =
+      input.reasoningEffort === undefined
+        ? (existing?.reasoningEffort ?? null)
+        : input.reasoningEffort
     const updatedAt = nowIso()
     this.db
       .prepare(
-        `INSERT INTO provider_profiles (id, name, base_url, models, capabilities, secret_ref, enabled, api_format, headers_json, temperature, max_tokens, context_window, context_budget, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO provider_profiles (id, name, base_url, models, capabilities, secret_ref, enabled, api_format, headers_json, temperature, max_tokens, context_window, context_budget, reasoning_effort, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            base_url = excluded.base_url,
@@ -103,6 +111,7 @@ export class ProviderStore {
            max_tokens = excluded.max_tokens,
            context_window = excluded.context_window,
            context_budget = excluded.context_budget,
+           reasoning_effort = excluded.reasoning_effort,
            updated_at = excluded.updated_at`,
       )
       .run(
@@ -119,6 +128,7 @@ export class ProviderStore {
         maxTokens,
         contextWindow,
         contextBudget,
+        reasoningEffort,
         updatedAt,
       )
     const row = this.db
@@ -158,12 +168,11 @@ export class ProviderStore {
       enabled: Number(row.enabled) === 1,
       apiFormat: this.parseApiFormat(row.api_format),
       headers: this.parseHeaders(row.headers_json),
-      temperature: row.temperature == null ? null : Number(row.temperature),
-      maxTokens: row.max_tokens == null ? null : Number(row.max_tokens),
-      contextWindow:
-        row.context_window == null ? null : Number(row.context_window),
-      contextBudget:
-        row.context_budget == null ? null : Number(row.context_budget),
+      temperature: readProviderNumber('temperature', row.temperature),
+      maxTokens: readProviderNumber('maxTokens', row.max_tokens),
+      contextWindow: readProviderNumber('contextWindow', row.context_window),
+      contextBudget: readProviderNumber('contextBudget', row.context_budget),
+      reasoningEffort: this.parseReasoningEffort(row.reasoning_effort),
       updatedAt: String(row.updated_at),
     }
   }
@@ -186,6 +195,11 @@ export class ProviderStore {
     const raw = String(value ?? '')
     if (valid.includes(raw as ApiFormat)) return raw as ApiFormat
     return 'openai-chat'
+  }
+
+  private parseReasoningEffort(value: unknown): ReasoningEffort | null {
+    const result = ReasoningEffortSchema.safeParse(value)
+    return result.success ? result.data : null
   }
 
   private parseHeaders(value: unknown): ProviderHeader[] {

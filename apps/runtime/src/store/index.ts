@@ -20,6 +20,7 @@ import { MutationReceiptStore } from './agents/mutationReceipts.js'
 import { McpServerStore } from './integrations/mcpServers.js'
 import { PluginStore } from './integrations/plugins.js'
 import { ProviderStore } from './integrations/providers.js'
+import { ProviderModelStore } from './integrations/providerModels.js'
 import { AssetStore } from './workspace/assets.js'
 import { WorkspaceIndexStore } from './workspace/workspaceIndex.js'
 import { runMigrations } from './migrations.js'
@@ -41,6 +42,7 @@ export class Store {
   readonly interactions: UserInteractionStore
   readonly turnExecutions: TurnExecutionStore
   readonly providers: ProviderStore
+  readonly providerModels: ProviderModelStore
   readonly workspaceIndex: WorkspaceIndexStore
   readonly assetStore: AssetStore
   readonly agentSettings: AgentSettingsStore
@@ -74,6 +76,7 @@ export class Store {
     this.interactions = new UserInteractionStore(this.db)
     this.turnExecutions = new TurnExecutionStore(this.db)
     this.providers = new ProviderStore(this.db)
+    this.providerModels = new ProviderModelStore(this.db)
     this.workspaceIndex = new WorkspaceIndexStore(this.db)
     this.assetStore = new AssetStore(this.db)
     this.agentSettings = new AgentSettingsStore(this.db)

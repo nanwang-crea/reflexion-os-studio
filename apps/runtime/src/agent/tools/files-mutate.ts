@@ -164,7 +164,7 @@ export function createFileEditTool(
   return {
     name: 'file.edit',
     description:
-      '原子编辑工作区内单个文本文件。优先传 edits 数组，可组合 replace、insert_before、insert_after、replace_range；全部操作基于同一原始快照校验，任一失败或重叠则完全不写入。replace_range 必须同时提供 expectedText，不能只凭行号修改。旧版 oldText/newText 参数仍兼容。匹配文本可直接复制 file.read 返回内容，运行时会安全去除 L<行号>: 前缀。需要用户审批。',
+      '原子编辑工作区内单个文本文件。优先传 edits 数组，可组合 replace、insert_before、insert_after、replace_range；全部操作基于同一原始快照校验，任一失败或重叠则完全不写入。replace_range 的 startLine/endLine 均为 1 起始且包含首尾，直接使用 file.read 的 L 行号，不要减 1；必须同时提供 expectedText，不能只凭行号修改。旧版 oldText/newText 参数仍兼容。匹配文本可直接复制 file.read 返回内容，运行时会安全去除 L<行号>: 前缀。需要用户审批。',
     parameters: {
       type: 'object',
       properties: {
@@ -201,9 +201,23 @@ export function createFileEditTool(
               anchor: { type: 'string' },
               content: { type: 'string' },
               expectedCount: { type: 'number' },
-              startLine: { type: 'number' },
-              endLine: { type: 'number' },
-              expectedText: { type: 'string' },
+              startLine: {
+                type: 'integer',
+                minimum: 1,
+                description:
+                  'replace_range 起始行（1 起，包含）；直接使用 file.read 的 L 行号，不要减 1',
+              },
+              endLine: {
+                type: 'integer',
+                minimum: 1,
+                description:
+                  'replace_range 结束行（1 起，包含），必须 >= startLine；L93–L94 对应 startLine=93、endLine=94',
+              },
+              expectedText: {
+                type: 'string',
+                description:
+                  'replace_range 范围内的完整原文，行间保留换行，不含结束行后的换行；可复制 file.read 的 L 行号前缀，校验不匹配则完全不写入',
+              },
             },
             required: ['kind'],
           },

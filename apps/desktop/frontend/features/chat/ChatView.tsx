@@ -369,6 +369,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
           onPermissionChange={props.onPermissionChange}
           advanced={props.advanced}
           modelOptions={props.modelOptions}
+          reasoningSelection={props.reasoningSelection}
           selectedModelKey={props.selectedModelKey}
           onModelChange={props.onModelChange}
           skills={props.skills}

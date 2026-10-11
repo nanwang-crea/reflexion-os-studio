@@ -106,7 +106,7 @@ export async function resumeInteraction(
     profile,
     apiKey,
     model,
-    sampling: resolveSampling(profile, {}),
+    sampling: resolveSampling(profile),
     permissionPreset: DEFAULT_PRESET,
     defaultChildTemplateId: run.agentTemplateId ?? undefined,
     skill:

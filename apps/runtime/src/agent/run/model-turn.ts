@@ -103,6 +103,9 @@ export async function executeModelTurn(
         signal,
       ),
       tools: registry.specs(),
+      ...(provider.reasoningEffort !== undefined
+        ? { reasoningEffort: provider.reasoningEffort }
+        : {}),
       ...(provider.temperature !== undefined
         ? { temperature: provider.temperature }
         : {}),

@@ -2,6 +2,8 @@ import type {
   ApiFormat,
   ProviderHeader,
   ProviderProfile,
+  ProviderModel,
+  ReasoningEffort,
 } from '@reflexion-os-studio/runtime-client'
 import { request, requestList } from './client'
 
@@ -28,6 +30,7 @@ export interface ConfigureProviderPayload {
   contextWindow?: number | null
   /** 上下文预算上限（token 数）；缺省 64k。 */
   contextBudget?: number | null
+  reasoningEffort?: ReasoningEffort | null
   enabled?: boolean
 }
 
@@ -57,4 +60,25 @@ export function testProvider(input: {
   headers?: ProviderHeader[]
 }): Promise<ProviderTestResult> {
   return request<ProviderTestResult>('provider.test', input)
+}
+
+export function listProviderModels(providerId: string): Promise<{
+  models: ProviderModel[]
+}> {
+  return requestList('provider.model.list', { providerId })
+}
+
+export function configureProviderModel(
+  payload: Omit<ProviderModel, 'updatedAt'>,
+): Promise<{ model: ProviderModel }> {
+  return request('provider.model.configure', payload)
+}
+
+export function deleteProviderModel(
+  providerId: string,
+  model: string,
+): Promise<{
+  removed: boolean
+}> {
+  return request('provider.model.delete', { providerId, model })
 }

@@ -125,7 +125,12 @@ export class ChatAgent {
       this.skills,
       session.projectId,
     )
-    resolveProvider(this.store, params.providerId, params.model)
+    resolveProvider(
+      this.store,
+      params.providerId,
+      params.model,
+      params.reasoningEffort,
+    )
     if (this.store.runs.activeForSession(params.sessionId) === null) {
       const started = this.startSend(params)
       return { queued: false, ...started, queueId: null, position: null }
@@ -135,8 +140,7 @@ export class ChatAgent {
       imageAssetIds: params.imageAssetIds,
       providerId: params.providerId,
       model: params.model,
-      temperature: params.temperature,
-      maxTokens: params.maxTokens,
+      reasoningEffort: params.reasoningEffort,
       // 入队即固化解析后的档位快照（legacy 字段不再入队）。
       permissionPreset: resolveInputPreset(params),
       agentTemplateId: params.agentTemplateId,
@@ -254,8 +258,9 @@ export class ChatAgent {
       this.store,
       params.providerId,
       params.model,
+      params.reasoningEffort,
     )
-    const sampling = resolveSampling(profile, params)
+    const sampling = resolveSampling(profile)
     requireIdleSession(this.store, params.sessionId)
 
     const parts = userContentParts(

@@ -91,6 +91,7 @@ function tableColumns(db: DatabaseSync, table: string): TableColumn[] {
  * v34 → v35：TurnExecution 增加版本化 Runtime 状态（首批持久化文件读取凭据）。
  * v35 → v36：plugins 增加 global/project 作用域和可选 project_id。
  * v36 → v37：provider_profiles 增加附加请求头 JSON。
+ * v39 → v40：Provider 默认思考强度与模型独立配置表。
  * 各步骤带形状检测：SCHEMA 刚建好的新库不会空跑重建。
  */
 export function runMigrations(db: DatabaseSync, dir: string): void {
@@ -377,6 +378,33 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
     ) {
       db.exec(
         "ALTER TABLE provider_profiles ADD COLUMN headers_json TEXT NOT NULL DEFAULT '[]'",
+      )
+    }
+    if (version < 40) {
+      const providerColumns = tableColumns(db, 'provider_profiles').map(
+        (column) => column.name,
+      )
+      if (!providerColumns.includes('reasoning_effort')) {
+        db.exec(
+          'ALTER TABLE provider_profiles ADD COLUMN reasoning_effort TEXT',
+        )
+      }
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS provider_models (
+          provider_id TEXT NOT NULL REFERENCES provider_profiles(id) ON DELETE CASCADE,
+          model TEXT NOT NULL,
+          temperature REAL,
+          max_tokens INTEGER,
+          context_window INTEGER,
+          context_budget INTEGER,
+          reasoning_effort TEXT,
+          reasoning_effort_supported INTEGER NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (provider_id, model)
+        )
+      `)
+      db.exec(
+        'CREATE INDEX IF NOT EXISTS idx_provider_models_provider ON provider_models(provider_id, updated_at DESC)',
       )
     }
     if (version < 39) migrateImageAssets(db)

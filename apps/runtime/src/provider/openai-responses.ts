@@ -146,6 +146,9 @@ export async function streamOpenAIResponses(
               model: options.model,
               input,
               stream: true,
+              ...(options.reasoningEffort !== undefined
+                ? { reasoning: { effort: options.reasoningEffort } }
+                : {}),
               ...(instructions !== undefined ? { instructions } : {}),
               ...(options.maxTokens !== undefined
                 ? { max_output_tokens: options.maxTokens }

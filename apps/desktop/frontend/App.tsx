@@ -104,8 +104,13 @@ export default function App() {
     dangerDialogOpen,
     setDangerDialogOpen,
   } = useAdvancedPermissions(activeSessionId, setNotice)
-  const { modelOptions, selectedModelKey, setSelectedModelKey } =
-    useModelSelection(profiles, sessionData, activeSessionId)
+  const {
+    modelOptions,
+    selectedModelKey,
+    setSelectedModelKey,
+    reasoningSelection,
+    requestedReasoningEffort,
+  } = useModelSelection(profiles, sessionData, activeSessionId)
 
   const {
     refreshSessionData,
@@ -262,6 +267,7 @@ export default function App() {
     activeSessionId,
     activeProjectId,
     selectedModelKey,
+    requestedReasoningEffort,
     sessionData,
     permissionPreset,
     activeSessionRef,
@@ -379,6 +385,7 @@ export default function App() {
       dangerDialogOpen={dangerDialogOpen}
       setDangerDialogOpen={setDangerDialogOpen}
       modelOptions={modelOptions}
+      reasoningSelection={reasoningSelection}
       selectedModelKey={selectedModelKey}
       setSelectedModelKey={setSelectedModelKey}
       composerPrefill={composerPrefill}

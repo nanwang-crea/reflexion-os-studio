@@ -1,7 +1,9 @@
+import { providerModelCommandHandlers } from './model-handlers.js'
 import type {
   ApiFormat,
   ProviderCapability,
   ProviderHeader,
+  ReasoningEffort,
 } from '@reflexion-os-studio/contracts'
 import { CommandError } from '../agent/errors.js'
 import { streamChat } from '../provider.js'
@@ -10,6 +12,7 @@ import { requireString, type CommandHandler } from '../command-utils.js'
 
 /** Provider Profile 命令：配置（含密钥落盘）、删除、列表。 */
 export const providerCommandHandlers: Record<string, CommandHandler> = {
+  ...providerModelCommandHandlers,
   'provider.list': (_p, { store }) => ({
     profiles: store.providers.list(),
   }),
@@ -62,6 +65,7 @@ export const providerCommandHandlers: Record<string, CommandHandler> = {
       maxTokens: p.maxTokens as number | null | undefined,
       contextWindow: p.contextWindow as number | null | undefined,
       contextBudget: p.contextBudget as number | null | undefined,
+      reasoningEffort: p.reasoningEffort as ReasoningEffort | null | undefined,
     })
     // 换 Key 后清理被替换的旧密钥，secrets.json 不留孤儿条目。
     if (existing && existing.secretRef !== profile.secretRef) {

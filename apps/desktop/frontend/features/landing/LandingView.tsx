@@ -1,3 +1,4 @@
+import type { ReasoningSelection } from '../../components/composer/ModelSelector'
 import { Select } from '../../components/forms/Select'
 import type {
   Project,
@@ -21,6 +22,7 @@ interface LandingViewProps {
   permissionValue: PermissionPreset
   onPermissionChange: (value: PermissionPreset) => void
   modelOptions: ComposerModelOption[]
+  reasoningSelection?: ReasoningSelection
   selectedModelKey: string | null
   onModelChange: (key: string) => void
   /** 可用技能清单：落地页斜杠补全与聊天页共用。 */
@@ -121,6 +123,7 @@ export function LandingView(props: LandingViewProps): React.JSX.Element {
             permissionValue={props.permissionValue}
             onPermissionChange={props.onPermissionChange}
             modelOptions={props.modelOptions}
+            reasoningSelection={props.reasoningSelection}
             selectedModelKey={props.selectedModelKey}
             onModelChange={props.onModelChange}
             skills={props.skills}

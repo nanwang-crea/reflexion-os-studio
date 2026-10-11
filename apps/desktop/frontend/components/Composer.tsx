@@ -18,12 +18,12 @@ import {
 import { ChevronIcon, SendIcon, ShieldIcon, StopIcon } from '../ui/icons'
 import { ComposerRunConfig } from './ComposerRunConfig'
 
-export interface ComposerModelOption {
-  /** `${providerId}::${model}` */
-  key: string
-  label: string
-  group: string
-}
+import {
+  ModelSelector,
+  type ComposerModelOption,
+  type ReasoningSelection,
+} from './composer/ModelSelector'
+export type { ComposerModelOption } from './composer/ModelSelector'
 
 /** 高级权限入口的会话态（ask-everything 覆盖项 + Danger 租约）。 */
 export interface ComposerAdvancedState {
@@ -49,6 +49,7 @@ interface ComposerProps {
   /** 高级入口（所有操作均询问 / Danger）；缺省不渲染。 */
   advanced?: ComposerAdvancedState
   modelOptions?: ComposerModelOption[]
+  reasoningSelection?: ReasoningSelection
   selectedModelKey?: string | null
   onModelChange?: (key: string) => void
   /** 可用技能清单：输入 / 时弹出斜杠补全；缺省不启用。 */
@@ -159,16 +160,6 @@ export function Composer(props: ComposerProps): React.JSX.Element {
       setSendError(error instanceof Error ? error.message : '发送失败，请重试')
     } finally {
       setSending(false)
-    }
-  }
-
-  const groups: { group: string; options: ComposerModelOption[] }[] = []
-  for (const option of props.modelOptions ?? []) {
-    const last = groups[groups.length - 1]
-    if (last && last.group === option.group) {
-      last.options.push(option)
-    } else {
-      groups.push({ group: option.group, options: [option] })
     }
   }
 
@@ -346,24 +337,12 @@ export function Composer(props: ComposerProps): React.JSX.Element {
         </button>
         <span className="bar-spacer" />
         {showModelSelect && (
-          <label className="composer-select model" title="对话使用的模型">
-            <Select
-              aria-label="对话模型"
-              value={props.selectedModelKey ?? ''}
-              onValueChange={(value) => props.onModelChange?.(value)}
-            >
-              {groups.map((group) => (
-                <optgroup key={group.group} label={group.group}>
-                  {group.options.map((option) => (
-                    <option key={option.key} value={option.key}>
-                      {option.label}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </Select>
-            <ChevronIcon />
-          </label>
+          <ModelSelector
+            options={props.modelOptions ?? []}
+            selectedKey={props.selectedModelKey ?? null}
+            onModelChange={(key) => props.onModelChange?.(key)}
+            reasoning={props.reasoningSelection}
+          />
         )}
         {props.modelOptions !== undefined &&
           props.modelOptions.length === 0 && (

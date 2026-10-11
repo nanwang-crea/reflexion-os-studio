@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ReasoningEffortSchema } from './reasoning.js'
 import { IsoDateTimeSchema } from '../shared.js'
 
 /**
@@ -65,6 +66,9 @@ export const ProviderHeadersSchema = z
     })
   })
 
+export { ReasoningEffortSchema } from './reasoning.js'
+export type { ReasoningEffort } from './reasoning.js'
+
 export const ProviderProfileSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -86,6 +90,10 @@ export const ProviderProfileSchema = z.object({
   contextWindow: z.number().int().positive().nullable(),
   // 上下文预算上限（token 数）；null 表示用默认(64k)。
   contextBudget: z.number().int().positive().nullable(),
+  // Provider 默认思考强度；null 表示由模型/供应商自动决定。
+  reasoningEffort: ReasoningEffortSchema.nullable(),
   updatedAt: IsoDateTimeSchema,
 })
 export type ProviderProfile = z.infer<typeof ProviderProfileSchema>
+export { ProviderModelSchema } from './provider-models.js'
+export type { ProviderModel } from './provider-models.js'

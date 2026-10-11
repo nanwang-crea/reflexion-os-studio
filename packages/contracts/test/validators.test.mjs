@@ -294,6 +294,7 @@ test('ProviderProfileSchema requires capability list', () => {
     maxTokens: null,
     contextWindow: null,
     contextBudget: null,
+    reasoningEffort: null,
     updatedAt: NOW,
   }
   assert.equal(ProviderProfileSchema.safeParse(profile).success, true)

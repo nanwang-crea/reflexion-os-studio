@@ -50,6 +50,7 @@ export class RunResubmissionService {
         params.providerId === original.providerId
           ? (original.model ?? undefined)
           : undefined),
+      params.reasoningEffort,
     )
     requireIdleSession(this.store, original.sessionId)
 
@@ -85,7 +86,7 @@ export class RunResubmissionService {
       profile,
       apiKey,
       model,
-      sampling: resolveSampling(profile, {}),
+      sampling: resolveSampling(profile),
       // 重试不继承高权限档：回落默认预设（workspace-read）重跑；
       // 会话级 ask-everything 覆盖项仍生效（只会更严，不构成提权）。
       permissionPreset: DEFAULT_PRESET,
@@ -145,8 +146,9 @@ export class RunResubmissionService {
       this.store,
       params.providerId,
       params.model,
+      params.reasoningEffort,
     )
-    const sampling = resolveSampling(profile, params)
+    const sampling = resolveSampling(profile)
     const { newRun, newUserMessage, newAssistantMessage } =
       this.store.transaction(() => {
         const newRun = this.store.runs.create({

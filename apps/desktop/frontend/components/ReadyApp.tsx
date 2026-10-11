@@ -79,6 +79,7 @@ export function ReadyApp(props: ReadyAppProps): React.JSX.Element {
             void props.disableDanger()
           },
           modelOptions: props.modelOptions,
+          reasoningSelection: props.reasoningSelection,
           selectedModelKey: props.selectedModelKey,
           onModelChange: props.setSelectedModelKey,
           skills: props.skills,
@@ -128,6 +129,7 @@ export function ReadyApp(props: ReadyAppProps): React.JSX.Element {
           permissionValue: props.permissionPreset,
           onPermissionChange: props.changePermissionPreset,
           modelOptions: props.modelOptions,
+          reasoningSelection: props.reasoningSelection,
           selectedModelKey: props.selectedModelKey,
           onModelChange: props.setSelectedModelKey,
           skills: props.skills,

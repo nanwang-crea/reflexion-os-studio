@@ -1,9 +1,11 @@
 import { z } from 'zod'
 import {
   ProviderCapabilitySchema,
+  ProviderModelSchema,
   ProviderProfileSchema,
   ApiFormatSchema,
   ProviderHeadersSchema,
+  ReasoningEffortSchema,
 } from '../entities.js'
 import { RequestIdSchema } from './params.js'
 
@@ -30,16 +32,46 @@ export const providerCommands = {
       apiFormat: ApiFormatSchema.optional(),
       // 附加请求头；禁止覆盖 Runtime 管理的鉴权与 Content-Type。
       headers: ProviderHeadersSchema.optional(),
-      // 对话默认采样参数；省略=保留原值，null=清空回未配置。
+      // Provider 默认采样参数；省略=保留原值，null=清空回未配置。
       temperature: z.number().min(0).max(2).nullable().optional(),
       maxTokens: z.number().int().positive().nullable().optional(),
       // 模型上下文窗口（token 数）；省略=保留原值，null=清空。
       contextWindow: z.number().int().positive().nullable().optional(),
       // 上下文预算上限（token 数）；省略=保留原值，null=清空(默认 64k)。
       contextBudget: z.number().int().positive().nullable().optional(),
+      reasoningEffort: ReasoningEffortSchema.nullable().optional(),
       enabled: z.boolean().optional(),
     }),
     result: z.object({ profile: ProviderProfileSchema }),
+  },
+  'provider.model.list': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      providerId: z.string().min(1),
+    }),
+    result: z.object({ models: z.array(ProviderModelSchema) }),
+  },
+  'provider.model.configure': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      providerId: z.string().min(1),
+      model: z.string().min(1),
+      temperature: z.number().min(0).max(2).nullable().optional(),
+      maxTokens: z.number().int().positive().nullable().optional(),
+      contextWindow: z.number().int().positive().nullable().optional(),
+      contextBudget: z.number().int().positive().nullable().optional(),
+      reasoningEffort: ReasoningEffortSchema.nullable().optional(),
+      reasoningEffortSupported: z.boolean().optional(),
+    }),
+    result: z.object({ model: ProviderModelSchema }),
+  },
+  'provider.model.delete': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      providerId: z.string().min(1),
+      model: z.string().min(1),
+    }),
+    result: z.object({ removed: z.boolean() }),
   },
   'provider.delete': {
     params: z.object({

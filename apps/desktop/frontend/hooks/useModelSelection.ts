@@ -1,6 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import type { ProviderProfile } from '@reflexion-os-studio/runtime-client'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type {
+  ProviderProfile,
+  ProviderModel,
+  ReasoningEffort,
+} from '@reflexion-os-studio/runtime-client'
 import type { ComposerModelOption } from '../components/Composer'
+import { listProviderModels } from '../api/providers'
+import type { ReasoningSelection } from '../components/composer/ModelSelector'
+import {
+  modelOptionsFor,
+  selectedEffort,
+  type ReasoningChoice,
+} from './session/model-selection'
 import type { SessionData } from '../api/sessions'
 
 /**
@@ -15,24 +26,69 @@ export function useModelSelection(
   activeSessionId: string | null,
 ): {
   modelOptions: ComposerModelOption[]
+  reasoningSelection: ReasoningSelection
+  requestedReasoningEffort?: ReasoningEffort | null
   selectedModelKey: string | null
   setSelectedModelKey: (key: string) => void
 } {
-  const modelOptions = useMemo(
-    () =>
+  const [configs, setConfigs] = useState<ProviderModel[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [choice, setChoice] = useState<ReasoningChoice | null>(null)
+  useEffect(() => {
+    let active = true
+    setLoading(true)
+    setError(null)
+    void Promise.all(
       profiles
         .filter((profile) => profile.enabled)
-        .flatMap((profile) =>
-          profile.models.map((model) => ({
-            key: `${profile.id}::${model}`,
-            label: model,
-            group: profile.name,
-          })),
-        ),
-    [profiles],
+        .map((profile) => listProviderModels(profile.id)),
+    )
+      .then((results) => {
+        if (active) setConfigs(results.flatMap((result) => result.models))
+      })
+      .catch((caught) => {
+        if (active) {
+          setConfigs([])
+          setError(caught instanceof Error ? caught.message : String(caught))
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [profiles])
+  const modelOptions = useMemo(
+    () => modelOptionsFor(profiles, configs),
+    [profiles, configs],
   )
-
-  const [selectedModelKey, setSelectedModelKey] = useState<string | null>(null)
+  const [selectedModelKey, setModelKey] = useState<string | null>(null)
+  const setSelectedModelKey = useCallback((key: string | null) => {
+    setModelKey(key)
+    setChoice(null)
+  }, [])
+  const selected = modelOptions.find(
+    (option) => option.key === selectedModelKey,
+  )
+  const defaultValue = selected?.defaultReasoningEffort ?? null
+  const value = selectedEffort(selected, choice)
+  const onReasoningChange = useCallback(
+    (value: ReasoningEffort | null) => {
+      setChoice({ key: selectedModelKey, defaultValue, value })
+    },
+    [selectedModelKey, defaultValue],
+  )
+  const supported =
+    selected?.reasoningEffortSupported === true && !loading && error === null
+  const reasoningSelection = {
+    value: supported ? value : null,
+    supported,
+    loading,
+    error,
+    onChange: onReasoningChange,
+  }
   const syncedSessionRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -46,7 +102,7 @@ export function useModelSelection(
     ) {
       setSelectedModelKey(modelOptions[0].key)
     }
-  }, [modelOptions, selectedModelKey])
+  }, [modelOptions, selectedModelKey, setSelectedModelKey])
 
   // 会话数据落地后做一次性同步；等待供应商列表加载完成（选项非空）才开始，
   // 避免在选项就绪前标记已同步、之后不再生效。会话中途手动换模型不受影响
@@ -71,7 +127,19 @@ export function useModelSelection(
     ) {
       setSelectedModelKey(key)
     }
-  }, [sessionData, activeSessionId, modelOptions, selectedModelKey])
+  }, [
+    sessionData,
+    activeSessionId,
+    modelOptions,
+    selectedModelKey,
+    setSelectedModelKey,
+  ])
 
-  return { modelOptions, selectedModelKey, setSelectedModelKey }
+  return {
+    modelOptions,
+    selectedModelKey,
+    setSelectedModelKey,
+    reasoningSelection,
+    requestedReasoningEffort: supported ? value : undefined,
+  }
 }

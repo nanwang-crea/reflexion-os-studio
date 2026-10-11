@@ -59,6 +59,7 @@ export interface ReadyAppProps {
   dangerDialogOpen: boolean
   setDangerDialogOpen: (open: boolean) => void
   modelOptions: MainProps['chat']['modelOptions']
+  reasoningSelection: MainProps['chat']['reasoningSelection']
   selectedModelKey: MainProps['chat']['selectedModelKey']
   setSelectedModelKey: MainProps['chat']['onModelChange']
   composerPrefill: { skillId: string; nonce: number } | null

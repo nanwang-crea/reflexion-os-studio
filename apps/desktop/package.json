@@ -10,7 +10,7 @@
     "prepare:package": "bash ../../scripts/prepare-package.sh",
     "dev:frontend": "vite",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "node --disable-warning=ExperimentalWarning --test-concurrency=1 --test test/keyboard.test.mjs test/workspace-state.test.mjs test/danger-dialog.test.mjs test/markdown-read.test.mjs test/file-format.test.mjs test/resubmission.test.mjs test/approval-presenter.test.mjs test/permission-storage.test.mjs test/run-resources.test.mjs test/theme.test.mjs test/git-actions.test.mjs test/operations.test.mjs test/history-pages.test.mjs test/tool-groups.test.mjs"
+    "test": "node --disable-warning=ExperimentalWarning --test-concurrency=1 --test test/keyboard.test.mjs test/model-selection.test.mjs test/workspace-state.test.mjs test/danger-dialog.test.mjs test/markdown-read.test.mjs test/file-format.test.mjs test/resubmission.test.mjs test/approval-presenter.test.mjs test/permission-storage.test.mjs test/run-resources.test.mjs test/theme.test.mjs test/git-actions.test.mjs test/operations.test.mjs test/history-pages.test.mjs test/tool-groups.test.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

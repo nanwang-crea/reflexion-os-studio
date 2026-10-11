@@ -1,5 +1,6 @@
 import type {
   ProviderHeader,
+  ReasoningEffort,
   ToolSpec,
   Usage,
 } from '@reflexion-os-studio/contracts'
@@ -28,6 +29,7 @@ export interface StreamChatOptions {
   maxTokens?: number
   /** 采样温度；缺省由服务端决定。 */
   temperature?: number
+  reasoningEffort?: ReasoningEffort
   /** 请求建立阶段失败自动重试次数；连接测试等场景传 0 快速失败。 */
   maxRetries?: number
   /** 每次请求即将重试时调用；attempt 从 1 开始。 */

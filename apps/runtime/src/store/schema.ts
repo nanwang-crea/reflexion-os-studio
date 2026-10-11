@@ -157,8 +157,23 @@ CREATE TABLE IF NOT EXISTS provider_profiles (
   max_tokens INTEGER,
   context_window INTEGER,
   context_budget INTEGER,
+  reasoning_effort TEXT,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS provider_models (
+  provider_id TEXT NOT NULL REFERENCES provider_profiles(id) ON DELETE CASCADE,
+  model TEXT NOT NULL,
+  temperature REAL,
+  max_tokens INTEGER,
+  context_window INTEGER,
+  context_budget INTEGER,
+  reasoning_effort TEXT,
+  reasoning_effort_supported INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (provider_id, model)
+);
+CREATE INDEX IF NOT EXISTS idx_provider_models_provider
+  ON provider_models(provider_id, updated_at DESC);
 -- MCP server 配置与最后运行状态(工具清单在运行时内存)。
 CREATE TABLE IF NOT EXISTS mcp_servers (
   id TEXT PRIMARY KEY,
@@ -296,4 +311,4 @@ CREATE INDEX IF NOT EXISTS idx_run_events_run ON run_events(run_id, created_at);
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 39
+export const LATEST_SCHEMA_VERSION = 40

@@ -52,6 +52,9 @@ export function chatRequestBody(
       toProviderMessage(message, canonicalToProvider),
     ),
     stream: true,
+    ...(options.reasoningEffort !== undefined
+      ? { reasoning_effort: options.reasoningEffort }
+      : {}),
     stream_options: { include_usage: true },
     ...(options.maxTokens !== undefined
       ? { max_tokens: options.maxTokens }

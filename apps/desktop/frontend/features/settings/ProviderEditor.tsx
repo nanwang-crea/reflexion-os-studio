@@ -13,10 +13,11 @@ import {
   EMPTY_DRAFT,
   preflightProviderSave,
   preflightProviderToggle,
-  samplingHint,
   type Draft,
 } from './provider-form'
 import { ProviderHeadersEditor } from './ProviderHeadersEditor'
+import { ProviderParametersFields } from './providers/ProviderParametersFields'
+import { ProviderModelsPanel } from './providers/ProviderModelsPanel'
 import { ProviderConnectionTest } from './ProviderConnectionTest'
 
 interface ProviderEditorProps {
@@ -75,6 +76,8 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
         JSON.stringify(draft.headers) !== JSON.stringify(profile.headers) ||
         draft.secret.trim() !== '' ||
         draft.enabled !== profile.enabled ||
+        draft.apiFormat !== profile.apiFormat ||
+        draft.reasoningEffort !== (profile.reasoningEffort ?? '') ||
         draft.temperature !==
           (profile.temperature == null ? '' : String(profile.temperature)) ||
         draft.maxTokens !==
@@ -299,82 +302,20 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
         添加模型
       </button>
 
-      <div className="sampling-grid">
-        <label className="field">
-          温度（0–2，留空默认）
-          <input
-            type="number"
-            min={0}
-            max={2}
-            step={0.1}
-            value={draft.temperature}
-            placeholder="服务端默认"
-            onChange={(event) =>
-              updateDraft({ temperature: event.target.value })
-            }
-          />
-          <span className="field-hint">
-            {samplingHint('temperature', '超过上限会被保存拦截')}
-          </span>
-        </label>
-        <label className="field">
-          最大输出 tokens（
-          {draft.apiFormat === 'anthropic'
-            ? '留空固定默认 4096'
-            : '留空使用服务端默认'}
-          ）
-          <input
-            type="number"
-            min={1}
-            step={1}
-            value={draft.maxTokens}
-            placeholder={
-              draft.apiFormat === 'anthropic' ? '4096' : '服务端默认'
-            }
-            onChange={(event) => updateDraft({ maxTokens: event.target.value })}
-          />
-          <span className="field-hint">
-            {samplingHint('maxTokens', '输入 0 或非法值会被保存拦截')}
-            {draft.apiFormat === 'anthropic' &&
-              '；留空时应用固定传入 4096，可填写其他值覆盖默认值，实际支持上限以模型为准'}
-          </span>
-        </label>
-        <label className="field sampling-wide">
-          模型上下文窗口 tokens（留空用保守默认预算）
-          <input
-            type="number"
-            min={1}
-            step={1}
-            value={draft.contextWindow}
-            placeholder="例如 128000"
-            onChange={(event) =>
-              updateDraft({ contextWindow: event.target.value })
-            }
-          />
-          <span className="field-hint">
-            {samplingHint('contextWindow', '按模型标称窗口填写')}
-          </span>
-        </label>
-        <label className="field sampling-wide">
-          上下文预算上限 tokens（留空默认 64000）
-          <input
-            type="number"
-            min={1}
-            step={1}
-            value={draft.contextBudget}
-            placeholder="例如 64000"
-            onChange={(event) =>
-              updateDraft({ contextBudget: event.target.value })
-            }
-          />
-          <span className="field-hint">
-            {samplingHint(
-              'contextBudget',
-              '实际使用取本值与上下文窗口的较小者',
-            )}
-          </span>
-        </label>
-      </div>
+      <p className="field-hint">Provider 默认参数：对未单独配置的模型生效。</p>
+      <ProviderParametersFields
+        draft={draft}
+        apiFormat={draft.apiFormat}
+        onChange={updateDraft}
+        reasoningDisabled={draft.apiFormat === 'anthropic'}
+      />
+      {profile && (
+        <ProviderModelsPanel
+          key={profile.id}
+          profile={profile}
+          onSaved={props.onSaved}
+        />
+      )}
 
       <ProviderConnectionTest
         key={profile?.id ?? 'new'}

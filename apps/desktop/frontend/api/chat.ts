@@ -1,3 +1,4 @@
+import type { ReasoningEffort } from '@reflexion-os-studio/runtime-client'
 import { request } from './client'
 
 /** 发送结果：会话空闲时立即开始(queued=false)；忙碌时自动入队(queued=true)。 */
@@ -16,6 +17,7 @@ export function sendMessage(input: {
   imageAssetIds?: string[]
   providerId?: string
   model?: string
+  reasoningEffort?: ReasoningEffort | null
   /** 本次发送的权限预设快照；缺省 workspace-read（Runtime 侧默认）。 */
   permissionPreset?: 'workspace-read' | 'workspace-write' | 'workspace-full'
   agentTemplateId?: string
@@ -52,6 +54,7 @@ export function retryRun(input: {
   runId: string
   providerId?: string
   model?: string
+  reasoningEffort?: ReasoningEffort | null
 }): Promise<{
   messageId: string
   runId: string
@@ -69,8 +72,7 @@ export function editResendMessage(input: {
   content: string
   providerId?: string
   model?: string
-  temperature?: number
-  maxTokens?: number
+  reasoningEffort?: ReasoningEffort | null
   permissionPreset?: 'workspace-read' | 'workspace-write' | 'workspace-full'
   skillId?: string
 }): Promise<SendMessageResult> {
