@@ -819,6 +819,113 @@
 .composer-bar .bar-spacer {
   flex: 1;
 }
+.composer-plus-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.composer-plus-trigger {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.composer-plus-trigger:hover:not(:disabled),
+.composer-plus-trigger[aria-expanded='true'] {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.composer-plus-trigger:disabled {
+  opacity: 0.45;
+}
+
+.composer-plus-panel {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 40;
+  width: 238px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+}
+
+.composer-plus-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+
+.composer-plus-item.actionable {
+  cursor: pointer;
+}
+
+.composer-plus-item.actionable:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.composer-plus-item:disabled {
+  opacity: 0.45;
+}
+
+.composer-plus-symbol {
+  display: inline-grid;
+  width: 18px;
+  place-items: center;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 15px;
+}
+
+.composer-plus-divider {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--border);
+}
+
+.composer-plus-panel .composer-run-config {
+  display: block;
+}
+
+.composer-plus-panel .composer-run-config-trigger {
+  display: flex;
+  width: 100%;
+  min-height: 36px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: left;
+}
+
+.composer-plus-panel .composer-run-config-trigger:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
 
 .composer-select {
   display: inline-flex;

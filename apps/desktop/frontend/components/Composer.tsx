@@ -15,7 +15,13 @@ import {
   PERMISSION_PRESET_HINTS,
   PERMISSION_PRESET_LABELS,
 } from '../hooks/permissions/usePermissionPreset'
-import { ChevronIcon, SendIcon, ShieldIcon, StopIcon } from '../ui/icons'
+import {
+  ChevronIcon,
+  PlusIcon,
+  SendIcon,
+  ShieldIcon,
+  StopIcon,
+} from '../ui/icons'
 import { ComposerRunConfig } from './ComposerRunConfig'
 
 import {
@@ -80,6 +86,8 @@ export function Composer(props: ComposerProps): React.JSX.Element {
   const [slashIndex, setSlashIndex] = useState(0)
   const [slashDismissed, setSlashDismissed] = useState(false)
   const [agentTemplateId, setAgentTemplateId] = useState('')
+  const [plusOpen, setPlusOpen] = useState(false)
+  const plusMenuRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const busy = props.busy ?? false
@@ -104,6 +112,26 @@ export function Composer(props: ComposerProps): React.JSX.Element {
       setAgentTemplateId('')
     }
   }, [agentTemplateId, enabledAgentTemplates])
+
+  useEffect(() => {
+    if (!plusOpen) return
+    const onPointerDown = (event: MouseEvent): void => {
+      if (!plusMenuRef.current?.contains(event.target as Node)) {
+        setPlusOpen(false)
+      }
+    }
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        setPlusOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [plusOpen])
 
   const slashMatches = useMemo(() => {
     if (props.skills === undefined) return []
@@ -304,14 +332,60 @@ export function Composer(props: ComposerProps): React.JSX.Element {
             <ChevronIcon />
           </label>
         )}
-        {(props.advanced || enabledAgentTemplates.length > 0) && (
-          <ComposerRunConfig
-            advanced={props.advanced}
-            agentTemplates={enabledAgentTemplates}
-            agentTemplateId={agentTemplateId}
-            onAgentTemplateChange={setAgentTemplateId}
-          />
-        )}
+        <div className="composer-plus-menu" ref={plusMenuRef}>
+          <button
+            type="button"
+            className="composer-plus-trigger"
+            aria-label="添加功能"
+            aria-haspopup="menu"
+            aria-expanded={plusOpen}
+            disabled={props.disabled || sending}
+            title="添加附件、上下文或技能"
+            onClick={() => setPlusOpen((value) => !value)}
+          >
+            <PlusIcon size={17} />
+          </button>
+          {plusOpen && (
+            <div className="composer-plus-panel" role="menu">
+              <button
+                type="button"
+                className="composer-plus-item actionable"
+                role="menuitem"
+                disabled={props.disabled || sending}
+                onClick={() => {
+                  setPlusOpen(false)
+                  fileInputRef.current?.click()
+                }}
+              >
+                <span className="composer-plus-symbol">⌕</span>
+                <span>添加图片</span>
+              </button>
+              <div className="composer-plus-item" role="menuitem">
+                <span className="composer-plus-symbol">@</span>
+                <span>使用 @ 添加上下文</span>
+              </div>
+              <div className="composer-plus-item" role="menuitem">
+                <span className="composer-plus-symbol">/</span>
+                <span>使用 / 选择能力</span>
+              </div>
+              <div className="composer-plus-item" role="menuitem">
+                <span className="composer-plus-symbol">$</span>
+                <span>使用 $ 选择技能</span>
+              </div>
+              {(props.advanced || enabledAgentTemplates.length > 0) && (
+                <>
+                  <div className="composer-plus-divider" />
+                  <ComposerRunConfig
+                    advanced={props.advanced}
+                    agentTemplates={enabledAgentTemplates}
+                    agentTemplateId={agentTemplateId}
+                    onAgentTemplateChange={setAgentTemplateId}
+                  />
+                </>
+              )}
+            </div>
+          )}
+        </div>
         {agentTemplateId !== '' && (
           <button
             type="button"
@@ -326,15 +400,6 @@ export function Composer(props: ComposerProps): React.JSX.Element {
             <span aria-hidden>×</span>
           </button>
         )}
-        <button
-          type="button"
-          className="ghost composer-attach"
-          disabled={props.disabled || sending}
-          title="添加图片（最多 4 张，每张 4MB）；请使用支持视觉的模型"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          添加图片
-        </button>
         <span className="bar-spacer" />
         {showModelSelect && (
           <ModelSelector
