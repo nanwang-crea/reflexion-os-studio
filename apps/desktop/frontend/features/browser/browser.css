@@ -414,23 +414,3 @@
 .browser-surface-panel {
   position: relative;
 }
-
-.main-conversation-content {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-}
-.content-main.browser-with-chat {
-  flex-direction: row;
-}
-.browser-with-chat .main-conversation-content {
-  order: 2;
-  flex: 0 0 36%;
-  min-width: 300px;
-  border-left: 1px solid var(--border);
-}
-.browser-with-chat .browser-panel-host {
-  order: 1;
-}

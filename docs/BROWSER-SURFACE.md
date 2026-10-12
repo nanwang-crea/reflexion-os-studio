@@ -13,7 +13,7 @@ Browser Surface 是用户操作的隔离网页浏览区域，不是 Chat Core �
 
 ## Spike 与发布边界
 
-用户浏览器默认位于主窗口中间主内容区，聊天位于其右侧并保持可用；打开时暂时收起文件工作区，收起浏览器后恢复原内容，网页标签保持存活，关闭销毁临时会话。工具栏是可信应用 UI，网页是不注入 IPC、初始化脚本或自定义协议的原生 WebView，不能把远程网页当作应用 Renderer。
+用户浏览器位于主窗口右侧面板，与工作区切换；聊天始终保持在中间且输入框可用。右侧面板可调整宽度、收起保活，关闭销毁临时会话。工具栏是可信应用 UI，网页是不注入 IPC、初始化脚本或自定义协议的原生 WebView，不能把远程网页当作应用 Renderer。
 Host 负责窗口和原生适配；contracts 定义 Surface 契约，runtime-client 提供 typed facade，前端 api 层调用。Surface 命令不加入 Runtime 的命令或 Agent 工具表。
 
 Spike 仅在显式启用 Cargo `browser-spike` feature 的 debug 构建可用，普通开发/发布构建均使用系统浏览器。macOS 用独立非持久化 WKWebView；Windows 的 WebView2、Linux 的 WebKitGTK 在原生权限与上传边界验收前返回 unavailable，保持 HTTP / HTTPS 系统打开回退。不能把静态检查写成三平台完成。
@@ -96,3 +96,9 @@ Windows 使用 WebView2，Linux 使用 WebKitGTK。引擎复用不代表后三�
 HTTP 页面通过 `NSAllowsArbitraryLoadsInWebContent` 放开 WebView 的 ATS 限制，主 Renderer 仍受既有 CSP 限制，TLS 证书验证未增加绕过处理。新窗口返回使用 WebKit 提供配置创建的隔离网页视图，保留原始请求（含 POST、referrer 与 opener）；初始 `about:blank` 允许内部导航，应用 origin / file / 自定义协议仍拒绝。状态查询仅返回导航状态，不再根据 `isLoading=false` 把失败状态改成 ready。长加载或失败提供重试、系统浏览器入口，协议切换仅由用户点击触发。Windows/Linux 继续系统浏览器回退。
 
 HTTP 配置依据 [Apple ATS 文档](https://developer.apple.com/documentation/bundleresources/information-property-list/nsapptransportsecurity/nsallowsarbitraryloadsinwebcontent)。自动验证覆盖双坐标方向、视口边界、协议策略、类型检查和打包；本轮界面实测受 Mac 锁定阻碍，不能将自动检查视为截图问题已通过视觉验收。
+
+### 2026-10-12：按用户澄清恢复面板位置
+
+聊天保持在中间，浏览器继续使用右侧面板。此更新取代上文将浏览器移动至主内容区及将聊天放在右侧的布局说明，保留导航、HTTP、新窗口请求与原生坐标修复。“网页居中”仅指右侧视口中的网页内容。
+
+macOS 新文档提交时执行一次横向定位：仅当网页宽于视口、用户尚未横向滚动且没有锚点时，将横向可滚动范围居中，保留纵向位置；后退、前进和刷新保留已有位置。定位等待 DOMContentLoaded（已就绪时直接执行），没有常驻轮询，也不修改网页 CSS、注入 IPC 或回传网页内容。响应式网页保持站点原有布局。Windows/Linux 仍使用系统浏览器。

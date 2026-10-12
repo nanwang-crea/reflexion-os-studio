@@ -111,6 +111,7 @@ pub(super) fn attach_view(
                     _navigation: navigation,
                     _ui: ui,
                     ready: false,
+                    initial_position_pending: true,
                 },
             );
         });
@@ -165,6 +166,11 @@ pub fn control(app: &AppHandle, action: &Action) -> Result<(), String> {
         match action {
             Action::Navigate { url } => {
                 let url = policy::guest_url(url, crate::browser::policy::dev_url(app))?;
+                REGISTRY.with(|registry| {
+                    if let Some(guest) = registry.borrow_mut().guests.get_mut(&id) {
+                        guest.initial_position_pending = true;
+                    }
+                });
                 state::update_tab(app, id, |state| {
                     state.url = Some(url.to_string());
                     state.status = "loading".into();

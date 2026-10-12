@@ -10,6 +10,7 @@ pub(super) struct Guest {
     pub _navigation: Retained<navigation::NavigationDelegate>,
     pub _ui: Retained<ui_delegate::UiDelegate>,
     pub ready: bool,
+    pub initial_position_pending: bool,
 }
 #[derive(Default)]
 pub(super) struct Registry {

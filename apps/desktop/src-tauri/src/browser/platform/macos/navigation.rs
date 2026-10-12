@@ -6,7 +6,7 @@ use objc2::{
 use objc2_foundation::{MainThreadMarker, NSError, NSHTTPURLResponse, NSObjectProtocol, NSString};
 use objc2_web_kit::{
     WKNavigation, WKNavigationAction, WKNavigationActionPolicy, WKNavigationDelegate,
-    WKNavigationResponse, WKNavigationResponsePolicy, WKWebView,
+    WKNavigationResponse, WKNavigationResponsePolicy, WKNavigationType, WKWebView,
 };
 use tauri::AppHandle;
 
@@ -66,6 +66,15 @@ define_class!(
                     .is_some_and(|frame| frame.isMainFrame())
             };
             if allowed && main_frame && !downloading && !blank {
+                let kind = unsafe { action.navigationType() };
+                super::registry::REGISTRY.with(|registry| {
+                    if let Some(guest) = registry.borrow_mut().guests.get_mut(&self.ivars().id) {
+                        // Redirects are Other; preserve the initiating history/reload decision.
+                        if kind != WKNavigationType::Other {
+                            guest.initial_position_pending = kind != WKNavigationType::BackForward && kind != WKNavigationType::Reload && kind != WKNavigationType::FormResubmitted;
+                        }
+                    }
+                });
                 state::update_tab(app, self.ivars().id, |state| {
                     state.url = url.clone();
                     state.status = "loading".into();
@@ -133,7 +142,8 @@ define_class!(
             publish(&self.ivars().app, self.ivars().id, view, "loading", None);
         }
         #[unsafe(method(webView:didCommitNavigation:))]
-        fn committed(&self, _view: &WKWebView, _navigation: Option<&WKNavigation>) {
+        fn committed(&self, view: &WKWebView, _navigation: Option<&WKNavigation>) {
+            super::browsing::center_initial_content(self.ivars().id, view);
             super::reveal(self.ivars().id);
         }
         #[unsafe(method(webView:didFinishNavigation:))]
