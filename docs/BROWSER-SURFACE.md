@@ -74,4 +74,4 @@ Windows 使用 WebView2，Linux 使用 WebKitGTK。引擎复用不代表后三�
 ## 设置与后续能力规划
 
 常规偏好、数据/历史、密码与自动填充、下载、网站权限和 Agent 权限统一规划见
-[浏览器设置与能力规划](BROWSER-SETTINGS-PLAN.md)。B1–B5 均为待实施批次，不代表已开放功能。
+[浏览器设置与能力规划](BROWSER-SETTINGS-PLAN.md)。B1 设置与路由已实现，真机验收状态见该规划；B2–B5 仍为待实施批次。

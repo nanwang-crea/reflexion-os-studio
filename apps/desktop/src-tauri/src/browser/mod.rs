@@ -1,3 +1,4 @@
+pub mod capabilities;
 pub mod commands;
 pub mod import;
 mod platform;

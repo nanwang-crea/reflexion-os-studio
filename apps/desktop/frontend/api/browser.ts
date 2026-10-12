@@ -1,7 +1,12 @@
 import { setBrowserPanelOpen } from '../features/browser/panel-state'
 import { invoke, type InvokeArgs } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { createBrowserSurfaceClient } from '@reflexion-os-studio/runtime-client'
+import {
+  createBrowserSurfaceClient,
+  createBrowserSessionClient,
+  createBrowserSettingsClient,
+} from '@reflexion-os-studio/runtime-client'
+import { request } from './client'
 
 export const browserSurface = createBrowserSurfaceClient({
   invoke: <T>(command: string, args?: unknown) =>
@@ -10,9 +15,12 @@ export const browserSurface = createBrowserSurfaceClient({
     listen<T>(event, handler),
 })
 
-/** Normal builds and platforms without verified native adapters fall back. */
+export const browserSession = createBrowserSessionClient(
+  createBrowserSettingsClient({ request }),
+  browserSurface,
+)
+
+/** Ordinary links honor preferences; unavailable adapters fall back to the system. */
 export async function openBrowserUrl(url: string): Promise<void> {
-  const state = await browserSurface.open(url)
-  if (state.available) setBrowserPanelOpen(true)
-  if (!state.available) await browserSurface.openExternal(url)
+  if (await browserSession.openLink(url)) setBrowserPanelOpen(true)
 }

@@ -25,6 +25,7 @@ import {
   testProviderConnection,
 } from './provider/handlers.js'
 import { agentCommandHandlers } from './agent/handlers.js'
+import { browserSettingsCommandHandlers } from './browser-settings/handlers.js'
 
 /**
  * Chat 核心命令：项目/会话/消息发送/队列/Run/审批/Skills 清单。
@@ -363,6 +364,7 @@ export const commandHandlers: Record<string, CommandHandler> = {
   ...terminalCommandHandlers,
   ...providerCommandHandlers,
   ...agentCommandHandlers,
+  ...browserSettingsCommandHandlers,
 }
 
 export { testProviderConnection }

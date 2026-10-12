@@ -54,6 +54,8 @@ export type {
   ResourceLink,
   QueueEntry,
   AgentSettings,
+  BrowserSettings,
+  BrowserCapabilities,
   McpServer,
   McpTool,
   Plan,
@@ -142,3 +144,5 @@ export type {
 } from '@reflexion-os-studio/contracts'
 
 export * from './browser-surface.js'
+export * from './browser-settings.js'
+export * from './browser-session.js'

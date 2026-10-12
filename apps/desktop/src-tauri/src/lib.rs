@@ -70,6 +70,7 @@ pub fn run() {
             runtime_request,
             host::external::open_external,
             browser::commands::browser_open,
+            browser::commands::browser_capabilities,
             browser::commands::browser_control,
             browser::import::browser_import,
             browser::import::browser_credentials,

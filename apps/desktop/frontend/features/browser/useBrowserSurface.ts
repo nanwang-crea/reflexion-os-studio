@@ -3,9 +3,11 @@ import type {
   BrowserAction,
   BrowserSnapshot,
 } from '@reflexion-os-studio/runtime-client'
-import { browserSurface } from '../../api/browser'
+import { browserSurface, browserSession } from '../../api/browser'
+import { useBrowserSettings } from '../../api/browser-settings'
 
 export function useBrowserSurface(visible = true) {
+  const settings = useBrowserSettings()
   const [state, setState] = useState<BrowserSnapshot | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [slowLoad, setSlowLoad] = useState(false)
@@ -40,12 +42,12 @@ export function useBrowserSurface(visible = true) {
     }
   }, [accept])
   useEffect(() => {
-    if (!visible) return
+    if (!visible || settings.mode === 'system') return
     let disposed = false
-    void browserSurface
-      .control({ kind: 'attach' })
+    void browserSession
+      .attach(() => !disposed)
       .then((next) => {
-        if (!disposed) accept(next)
+        if (!disposed && next) accept(next)
       })
       .catch((caught: unknown) => {
         if (!disposed) setError(String(caught))
@@ -53,7 +55,7 @@ export function useBrowserSurface(visible = true) {
     return () => {
       disposed = true
     }
-  }, [visible, accept])
+  }, [visible, accept, settings.mode])
   // A bounded one-shot per navigation, never a polling/idle heartbeat.
   useEffect(() => {
     setSlowLoad(false)
@@ -65,7 +67,7 @@ export function useBrowserSurface(visible = true) {
     async (action: BrowserAction) => {
       setError(null)
       try {
-        accept(await browserSurface.control(action))
+        accept(await browserSession.control(action))
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : String(caught))
       }
@@ -76,13 +78,13 @@ export function useBrowserSurface(visible = true) {
     async (url: string) => {
       setError(null)
       try {
-        if (state?.available === false) await browserSurface.openExternal(url)
-        else accept(await browserSurface.control({ kind: 'navigate', url }))
+        const next = await browserSession.navigate(url)
+        if (next) accept(next)
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : String(caught))
       }
     },
-    [accept, state?.available],
+    [accept],
   )
   const external = useCallback(async (url: string) => {
     setError(null)

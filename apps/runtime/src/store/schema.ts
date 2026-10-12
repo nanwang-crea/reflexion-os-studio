@@ -213,6 +213,12 @@ CREATE TABLE IF NOT EXISTS agent_settings (
   settings_json TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+-- B1 低敏浏览器偏好(单行 JSON,id 恒为 1)，不保存凭据或网站数据。
+CREATE TABLE IF NOT EXISTS browser_settings (
+  id INTEGER PRIMARY KEY,
+  settings_json TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 -- Phase 1B：每项目一份 Workspace 索引快照；项目删除级联清掉。
 CREATE TABLE IF NOT EXISTS workspace_index (
   project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
@@ -311,4 +317,4 @@ CREATE INDEX IF NOT EXISTS idx_run_events_run ON run_events(run_id, created_at);
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 40
+export const LATEST_SCHEMA_VERSION = 41

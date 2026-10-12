@@ -167,6 +167,9 @@
   max-width: 720px;
   width: 100%;
 }
+.settings-error {
+  color: var(--danger, #f08b8b);
+}
 
 .provider-manager {
   flex: 1;

@@ -23,6 +23,7 @@ fn main() {
             "runtime_request",
             "open_external",
             "browser_open",
+            "browser_capabilities",
             "browser_control",
             "browser_import",
             "browser_credentials",

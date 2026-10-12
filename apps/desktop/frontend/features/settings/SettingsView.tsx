@@ -7,8 +7,9 @@ import { McpPanel } from './McpPanel'
 import { ProviderEditor } from './ProviderEditor'
 import { ProviderList } from './ProviderList'
 import { AppearancePanel } from './appearance/AppearancePanel'
+import { BrowserSettingsPanel } from './BrowserSettingsPanel'
 
-type SettingsSection = 'models' | 'runtime' | 'mcp' | 'appearance'
+type SettingsSection = 'models' | 'runtime' | 'mcp' | 'appearance' | 'browser'
 
 const SECTIONS: {
   id: SettingsSection
@@ -16,6 +17,7 @@ const SECTIONS: {
   icon: React.ReactNode
 }[] = [
   { id: 'appearance', label: '外观', icon: <GearIcon size={15} /> },
+  { id: 'browser', label: '浏览器', icon: <BoxIcon size={15} /> },
   {
     id: 'models',
     label: '模型供应商',
@@ -101,6 +103,7 @@ export function SettingsView(props: SettingsViewProps): React.JSX.Element {
 
         <div className="settings-content">
           {section === 'appearance' && <AppearancePanel />}
+          {section === 'browser' && <BrowserSettingsPanel />}
           {section === 'models' && (
             <>
               <div className="settings-panel-head settings-page-heading">

@@ -4,6 +4,8 @@ import {
   BrowserCredentialsSchema,
 } from './browser-import.js'
 import { z } from 'zod'
+import { BrowserSettingsSchema } from './browser-settings.js'
+import { BrowserCapabilitiesSchema } from './browser-capabilities.js'
 import {
   BrowserActionSchema,
   BrowserSnapshotSchema,
@@ -97,6 +99,8 @@ export const jsonSchemas: Readonly<Record<string, unknown>> = Object.freeze(
     toJSONSchema('BrowserImport.Credentials', BrowserCredentialsSchema),
     toJSONSchema('BrowserSurface.Action', BrowserActionSchema),
     toJSONSchema('BrowserSurface.Snapshot', BrowserSnapshotSchema),
+    toJSONSchema('BrowserSettings', BrowserSettingsSchema),
+    toJSONSchema('BrowserCapabilities', BrowserCapabilitiesSchema),
     toJSONSchema('Artifact', ArtifactSchema),
     toJSONSchema('QueueEntry', QueueEntrySchema),
     toJSONSchema('AgentSettings', AgentSettingsSchema),

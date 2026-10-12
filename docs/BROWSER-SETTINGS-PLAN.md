@@ -1,6 +1,6 @@
 # 浏览器设置与能力规划
 
-状态：规划，2026-10-11。截图作为交互与信息架构参考，不表示截图中的功能已交付。
+状态：B1 实现与代码验证完成，交互及跨平台真机验收待补；B2–B5 仍为规划，2026-10-12。截图作为交互与信息架构参考，不表示截图中的功能已交付。
 本规划承接 [Browser Surface](BROWSER-SURFACE.md)；用户要求后续提供网页读取与操作。
 
 ## 产品结构
@@ -36,7 +36,7 @@
 | Agent    | 站点工具 / WebMCP                          | 默认关闭；外部页面声明不构成授权，每个工具经过注册、权限和输入校验           | B5   |
 
 B0 是现有 macOS Spike：右侧多标签、HTTP/HTTPS、临时数据与 Chrome/Edge 实验迁移。
-其余批次均未交付，不能仅因出现设置项或按钮计为完成。
+B1 已实现设置、平台能力、持久化与路由；尚未完成三平台交互验收。B2–B5 未交付，不能仅因出现设置项或按钮计为完成。
 
 ## 实施顺序与验收门槛
 
@@ -90,3 +90,48 @@ B0 是现有 macOS Spike：右侧多标签、HTTP/HTTPS、临时数据与 Chrome
 - 截图、打印、下载在三平台上的可验证拦截方式与最低引擎版本。
 - 联系信息保存是否进入首个正式发布；在密码、数据清理与权限稳定之后再开放。
 - Agent 使用已登录网页时的敏感数据过滤和授权范围；上线前必须给出可测试方案。
+
+## B1 审查修复（2026-10-12）
+
+- 补齐可信 main 窗口的 browser_capabilities Tauri ACL，保持远程网页不可调用。
+- 普通和本地 URL 独立路由，新增用户默认系统浏览器；已有显式选择通过草稿格式迁移保留。
+- URL 先规范化再用 hostname 判断 localhost、127/8、IPv6 回环，内网不归为回环。
+- 完整网址设置接入面板，编辑时始终展示完整地址，HTTP 警示不隐藏。
+- 禁用内嵌先销毁临时会话，关闭面板，阻止面板重新 attach 与导航控制。
+- 保存期间禁用控件并串行处理，加载失败不允许覆盖原设置，保存失败保持已保存值。
+- 修复 runtime-client 设置 facade 缺失 requestId，并在发送前校验设置。
+- 删除未接入的主页设置；主页/搜索属于 B2，不以无效输入框计为交付。
+- 导入对话框打开时隐藏原生网页视图，避免遮挡可信 UI。
+
+验证：相关契约、客户端、Store 测试 48 项通过；Rust 测试原生环境 233 项通过；
+格式、lint、双 TS typecheck、packages 构建、普通及 browser-spike Host check、
+命令白名单与 macOS app/DMG 打包通过。Windows/Linux 真机与 macOS Spike 交互尚未完成。
+开发模式验证使用独立临时数据目录，避免已有应用占用数据库。
+
+空闲采样：隔离开发实例运行至 system-ready 后，top 四次采样中 Host、Node Runtime、
+Rust System Runtime 均为 0.0% CPU；ps RSS 分别约 111/75/6 MiB。
+未取得改动前同条件基线，也未可靠绑定 WebView renderer，因此不能据此宣称完整性能验收通过。
+
+## 提交前复审（2026-10-12）
+
+设置读取、保存、链接路由、面板 attach 和导航统一经 runtime-client 的 Browser Session
+门面串行处理。旧读取无法覆盖较新的保存结果；关闭前开始的导航先收敛，关闭后的导航
+重新读取设置，不再创建内嵌会话。组件卸载后待执行的 attach 只返回状态。
+输入不合法时不会先销毁会话，销毁失败不写入关闭设置，失败操作不会堵住后续队列。
+该门面只服务可信用户界面，不注册 Agent Browser Tool。
+
+原生开发服务器拒绝规则补齐 localhost 尾点、127/8 与 IPv4 映射 IPv6 别名，
+防止用替代回环地址访问应用 Renderer；内部资源域名尾点也拒绝。
+
+新增并发与取消回归测试已纳入默认测试入口；补充 v40 数据库升级与项目数据保留测试。
+定向验证：contracts 71、runtime-client 23、desktop 65、浏览器 Store 2、
+Rust System Runtime 233、Host 17 项全部通过，browser-spike 编译通过。
+完整三平台真机与 Spike 交互仍待验收，B2–B5 不属于本次 B1 提交。
+
+全量验证：pnpm test 完整通过（含契约、Agent Core、Runtime Client、Runtime、前端、
+Rust 测试，sidecar/Chat/Workspace/Skills/迁移冒烟和 Terminal 故障矩阵 26/26）。
+Runtime 488 项中 484 通过、4 项 Windows MCP 专用用例因 macOS 平台跳过，失败为 0。
+格式、lint、双 TS typecheck、Rust 格式检查和 Host 测试通过。
+复审后的隔离 dev 实例空闲采样：Host 与系统 sidecar 四次均为 0.0%，Node 三次为
+0.0%、一次为 0.8%；没有持续高负载。未取得同条件改动前基线及可靠 renderer 绑定，
+因此完整性能与原生 UI 交互验收仍待补。

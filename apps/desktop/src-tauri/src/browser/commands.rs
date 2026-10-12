@@ -4,6 +4,14 @@ use super::{
     window,
 };
 use tauri::{AppHandle, Webview};
+#[tauri::command]
+pub fn browser_capabilities(
+    webview: Webview,
+    app: AppHandle,
+) -> Result<super::capabilities::Capabilities, String> {
+    crate::host::caller::trusted(&webview, &app, &["main"])?;
+    Ok(super::capabilities::report())
+}
 
 #[tauri::command]
 pub async fn browser_open(

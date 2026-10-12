@@ -407,6 +407,15 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
         'CREATE INDEX IF NOT EXISTS idx_provider_models_provider ON provider_models(provider_id, updated_at DESC)',
       )
     }
+    if (version < 41) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS browser_settings (
+          id INTEGER PRIMARY KEY,
+          settings_json TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      `)
+    }
     if (version < 39) migrateImageAssets(db)
     db.exec('COMMIT')
     // 迁移全部执行完毕才推进版本号；否则下次启动会重复进入迁移分支。

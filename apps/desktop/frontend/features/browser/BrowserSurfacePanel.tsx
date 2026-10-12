@@ -6,6 +6,7 @@ import { BrowserIcon } from './BrowserIcon'
 import { BrowserTabs } from './BrowserTabs'
 import { BrowserImportDialog } from './BrowserImportDialog'
 import { BrowserMenu } from './BrowserMenu'
+import { useBrowserSettings } from '../../api/browser-settings'
 
 /** Trusted browser chrome; native webpage content remains a separate view. */
 export function BrowserSurfacePanel({
@@ -19,19 +20,25 @@ export function BrowserSurfacePanel({
   onTerminal: () => void
   onCollapse: () => void
 }): React.JSX.Element {
+  const settings = useBrowserSettings()
+  const [addressFocused, setAddressFocused] = useState(false)
   const { state, error, control, navigate, external } =
     useBrowserSurface(visible)
   const [menuOpen, setMenuOpen] = useState(false)
   const [bannerVisible, setBannerVisible] = useState(true)
+  const [importOpen, setImportOpen] = useState(false)
   const viewport = useRef<HTMLDivElement>(null)
   useBrowserViewport(
     viewport,
-    visible && Boolean(state?.url) && !menuOpen,
+    visible &&
+      settings.mode !== 'system' &&
+      Boolean(state?.url) &&
+      !menuOpen &&
+      !importOpen,
     state?.available === true,
     state?.revision ?? -1,
   )
   const [address, setAddress] = useState('')
-  const [importOpen, setImportOpen] = useState(false)
   useEffect(() => {
     setAddress(state?.url ?? '')
   }, [state?.url, state?.activeTabId])
@@ -116,7 +123,13 @@ export function BrowserSurfacePanel({
           )}
           <input
             aria-label="网址"
-            value={address}
+            value={
+              !addressFocused && !settings.showFullUrl && state?.url
+                ? new URL(state.url).origin
+                : address
+            }
+            onFocus={() => setAddressFocused(true)}
+            onBlur={() => setAddressFocused(false)}
             onChange={(event) => setAddress(event.target.value)}
             placeholder="输入网址"
             autoComplete="off"

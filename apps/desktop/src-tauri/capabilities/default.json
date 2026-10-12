@@ -13,6 +13,7 @@
     "allow-runtime-request",
     "allow-open-external",
     "allow-browser-open",
+    "allow-browser-capabilities",
     "allow-browser-control",
     "allow-browser-import",
     "allow-browser-credentials",

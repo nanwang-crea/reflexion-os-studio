@@ -5,6 +5,7 @@ import {
   type BrowserImportRequest,
   BrowserActionSchema,
   BrowserSnapshotSchema,
+  BrowserCapabilitiesSchema,
   normalizeBrowserUrl,
   type BrowserAction,
   type BrowserSnapshot,
@@ -14,6 +15,11 @@ import type { RuntimeTransportOptions } from './transport.js'
 /** Native Host facade, separate from RuntimeTransport and Agent tools. */
 export function createBrowserSurfaceClient(options: RuntimeTransportOptions) {
   return {
+    async capabilities() {
+      return BrowserCapabilitiesSchema.parse(
+        await options.invoke('browser_capabilities'),
+      )
+    },
     async open(url?: string): Promise<BrowserSnapshot> {
       return BrowserSnapshotSchema.parse(
         await options.invoke('browser_open', {

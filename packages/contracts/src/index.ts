@@ -25,3 +25,5 @@ export * from './file-edits.js'
 export * from './browser-surface.js'
 
 export * from './browser-import.js'
+export * from './browser-settings.js'
+export * from './browser-capabilities.js'

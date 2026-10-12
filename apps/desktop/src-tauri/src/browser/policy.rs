@@ -25,7 +25,7 @@ pub fn web_url(input: &str) -> Result<Url, String> {
 pub fn guest_url(input: &str, dev_url: Option<&Url>) -> Result<Url, String> {
     let url = web_url(input)?;
     if matches!(
-        url.host_str(),
+        url.host_str().map(|host| host.trim_end_matches('.')),
         Some("tauri.localhost" | "asset.localhost" | "ipc.localhost")
     ) || dev_url.is_some_and(|dev| {
         dev.origin() == url.origin()
@@ -46,7 +46,16 @@ pub fn dev_url(app: &tauri::AppHandle) -> Option<&Url> {
     }
 }
 fn loopback(url: &Url) -> bool {
-    matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"))
+    match url.host() {
+        Some(url::Host::Domain(host)) => {
+            host.trim_end_matches('.').eq_ignore_ascii_case("localhost")
+        }
+        Some(url::Host::Ipv4(host)) => host.is_loopback(),
+        Some(url::Host::Ipv6(host)) => {
+            host.is_loopback() || host.to_ipv4().is_some_and(|host| host.is_loopback())
+        }
+        None => false,
+    }
 }
 
 /// Never log paths, query tokens, fragments, userinfo or native error details.
@@ -109,5 +118,13 @@ mod tests {
         assert!(guest_url("http://localhost:3000", Some(&dev)).is_ok());
         assert!(guest_url("http://127.0.0.1:5173", Some(&dev)).is_err());
         assert!(guest_url("http://[::1]:5173", Some(&dev)).is_err());
+        for alias in [
+            "http://localhost.:5173",
+            "http://127.2.3.4:5173",
+            "http://[::ffff:127.0.0.1]:5173",
+        ] {
+            assert!(guest_url(alias, Some(&dev)).is_err(), "{alias}");
+        }
+        assert!(guest_url("http://ipc.localhost.", None).is_err());
     }
 }
