@@ -94,6 +94,9 @@ jobs:
         run: pnpm build:desktop
         env:
           CI: true
+      - name: Verify native browser adapters and release gates
+        run: |
+          cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --lib browser::
       - name: Verify packaged workspace services
         run: node scripts/smoke-workspace.mjs --packaged
 

@@ -134,7 +134,11 @@ pub fn update(app: &AppHandle, f: impl FnOnce(&mut Snapshot)) -> Snapshot {
 }
 
 /// Ignore callbacks from disposed tabs; background events never replace the active projection.
-#[cfg(all(feature = "browser-spike", target_os = "macos"))]
+#[cfg(any(
+    all(feature = "browser-spike", target_os = "macos"),
+    target_os = "windows",
+    target_os = "linux"
+))]
 pub fn update_tab(app: &AppHandle, id: u32, f: impl FnOnce(&mut Tab)) {
     let state = app.state::<BrowserState>();
     let next = {

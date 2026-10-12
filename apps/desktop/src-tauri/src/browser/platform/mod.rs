@@ -1,5 +1,11 @@
+#[cfg(target_os = "linux")]
+mod linux;
 #[cfg(all(feature = "browser-spike", target_os = "macos"))]
 mod macos;
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+mod portable;
+#[cfg(target_os = "windows")]
+mod windows;
 
 pub fn available() -> bool {
     #[cfg(all(feature = "browser-spike", target_os = "macos"))]
@@ -15,7 +21,14 @@ pub fn available() -> bool {
 #[cfg(all(feature = "browser-spike", target_os = "macos"))]
 pub use macos::{attach, close_tab, control, dispose, fill, install_cookies, manage_password};
 
-#[cfg(not(all(feature = "browser-spike", target_os = "macos")))]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+pub use portable::{attach, close_tab, control, dispose};
+
+#[cfg(not(any(
+    all(feature = "browser-spike", target_os = "macos"),
+    target_os = "windows",
+    target_os = "linux"
+)))]
 mod unsupported {
     use crate::browser::state::Action;
     use tauri::AppHandle;
@@ -31,7 +44,11 @@ mod unsupported {
     pub fn close_tab(_: u32) {}
     pub fn dispose() {}
 }
-#[cfg(not(all(feature = "browser-spike", target_os = "macos")))]
+#[cfg(not(any(
+    all(feature = "browser-spike", target_os = "macos"),
+    target_os = "windows",
+    target_os = "linux"
+)))]
 pub use unsupported::{attach, close_tab, control, dispose};
 
 pub fn persistent_available() -> bool {
@@ -55,7 +72,15 @@ pub fn clear_data(
     {
         macos::clear_data(app, website_data, cache, done);
     }
-    #[cfg(not(all(feature = "browser-spike", target_os = "macos")))]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    {
+        portable::clear_data(app, website_data, cache, done);
+    }
+    #[cfg(not(any(
+        all(feature = "browser-spike", target_os = "macos"),
+        target_os = "windows",
+        target_os = "linux"
+    )))]
     {
         let _ = (app, website_data, cache);
         let _ = done.send(Err("原生数据清理尚未适配本平台".into()));
@@ -67,7 +92,15 @@ pub fn downloads() -> Vec<crate::browser::downloads::Record> {
     {
         macos::downloads::list()
     }
-    #[cfg(not(all(feature = "browser-spike", target_os = "macos")))]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    {
+        portable::downloads::list()
+    }
+    #[cfg(not(any(
+        all(feature = "browser-spike", target_os = "macos"),
+        target_os = "windows",
+        target_os = "linux"
+    )))]
     {
         vec![]
     }
@@ -77,7 +110,15 @@ pub fn download_action(id: u64, kind: &str) -> Result<(), String> {
     {
         macos::downloads::action(id, kind)
     }
-    #[cfg(not(all(feature = "browser-spike", target_os = "macos")))]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    {
+        portable::downloads::action(id, kind)
+    }
+    #[cfg(not(any(
+        all(feature = "browser-spike", target_os = "macos"),
+        target_os = "windows",
+        target_os = "linux"
+    )))]
     {
         let _ = (id, kind);
         Err("下载适配不可用".into())
@@ -89,7 +130,15 @@ pub fn clearing() -> bool {
     {
         macos::clearing()
     }
-    #[cfg(not(all(feature = "browser-spike", target_os = "macos")))]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    {
+        portable::clearing()
+    }
+    #[cfg(not(any(
+        all(feature = "browser-spike", target_os = "macos"),
+        target_os = "windows",
+        target_os = "linux"
+    )))]
     {
         false
     }

@@ -66,7 +66,19 @@ mod tests {
                     >= 12
         );
         #[cfg(not(target_os = "macos"))]
-        assert!(!report.embedded_available);
+        {
+            assert!(!report.embedded_available);
+            assert_eq!(report.features["persistentSession"], false);
+            assert_eq!(report.features["passwordManagement"], false);
+            assert_eq!(report.features["sitePermissions"], serde_json::json!([]));
+            let snapshot = crate::browser::state::BrowserState::default()
+                .snapshot
+                .into_inner()
+                .unwrap();
+            assert_eq!(snapshot.status, "unavailable");
+            assert!(snapshot.tabs.is_empty());
+            assert!(report.system_available);
+        }
         assert_eq!(report.features["downloads"], report.embedded_available);
     }
 }

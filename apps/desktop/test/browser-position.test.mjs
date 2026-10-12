@@ -5,7 +5,7 @@ import { runInNewContext } from 'node:vm'
 
 const source = readFileSync(
   new URL(
-    '../src-tauri/src/browser/platform/macos/initial-position.js',
+    '../src-tauri/src/browser/platform/initial-position.js',
     import.meta.url,
   ),
   'utf8',

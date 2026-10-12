@@ -21,7 +21,7 @@ pub(super) fn center_initial_content(id: u32, view: &WKWebView) {
         // A one-shot scroll only: no CSS changes, IPC or webpage content returned to the app.
         unsafe {
             view.evaluateJavaScript_completionHandler(
-                &NSString::from_str(include_str!("initial-position.js")),
+                &NSString::from_str(include_str!("../initial-position.js")),
                 None,
             );
         }
