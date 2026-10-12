@@ -1,0 +1,37 @@
+.topbar-more {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+}
+.topbar-more[data-state='open'] {
+  background: var(--bg-active);
+  color: var(--text);
+}
+.topbar-tools-menu {
+  z-index: 1200;
+  width: 232px;
+  max-width: calc(100vw - 16px);
+  padding: 6px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  box-shadow: 0 8px 24px #0002;
+  font-size: 13px;
+}
+.topbar-tools-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  outline: none;
+  cursor: default;
+}
+.topbar-tools-item > span:first-of-type {
+  flex: 1;
+}
+.topbar-tools-item[data-highlighted] {
+  background: var(--bg-hover);
+}

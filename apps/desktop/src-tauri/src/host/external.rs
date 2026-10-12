@@ -19,7 +19,9 @@ pub async fn open_external(webview: Webview, app: AppHandle, url: String) -> Res
 
 #[cfg(target_os = "macos")]
 fn open_with_system_browser(url: &str) -> std::io::Result<std::process::ExitStatus> {
-    std::process::Command::new("open").arg(url).status()
+    std::process::Command::new("/usr/bin/open")
+        .arg(url)
+        .status()
 }
 #[cfg(target_os = "windows")]
 fn open_with_system_browser(url: &str) -> std::io::Result<std::process::ExitStatus> {

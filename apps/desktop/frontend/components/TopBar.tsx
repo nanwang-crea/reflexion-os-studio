@@ -1,9 +1,5 @@
-import {
-  DoubleChevronIcon,
-  FolderIcon,
-  GlobeIcon,
-  TerminalIcon,
-} from '../ui/icons'
+import { DoubleChevronIcon } from '../ui/icons'
+import { TopBarTools } from './TopBarTools'
 
 /** Runtime 状态文案：顶栏角标与启动页共用。 */
 export const STATUS_LABELS: Record<string, string> = {
@@ -15,7 +11,7 @@ export const STATUS_LABELS: Record<string, string> = {
   stopping: '正在关闭…',
 }
 
-interface TopBarProps {
+export interface TopBarProps {
   browserOpen: boolean
   onToggleBrowser: () => void
   sidebarOpen: boolean
@@ -49,41 +45,7 @@ export function TopBar(props: TopBarProps): React.JSX.Element {
       </button>
       <span className="topbar-title">{props.contextTitle}</span>
       <span className="spacer" />
-      <button
-        type="button"
-        className={`topbar-toggle topbar-browser${props.browserOpen ? ' active' : ''}`}
-        title={props.browserOpen ? '收起浏览器面板' : '展开浏览器面板'}
-        aria-label="网页浏览"
-        aria-pressed={props.browserOpen}
-        onClick={props.onToggleBrowser}
-      >
-        <GlobeIcon />
-        <span>网页</span>
-      </button>
-      {props.showWorkspaceToggle && (
-        <button
-          type="button"
-          className={`topbar-toggle${props.workspaceOpen ? ' active' : ''}`}
-          title={props.workspaceOpen ? '收起工作区面板' : '展开工作区面板'}
-          aria-label="工作区面板"
-          aria-pressed={props.workspaceOpen}
-          onClick={props.onToggleWorkspace}
-        >
-          <FolderIcon />
-        </button>
-      )}
-      {props.showTerminalToggle && (
-        <button
-          type="button"
-          className={`topbar-toggle${props.terminalOpen ? ' active' : ''}`}
-          title={props.terminalOpen ? '收起终端面板' : '终端'}
-          aria-label="终端"
-          aria-pressed={props.terminalOpen}
-          onClick={props.onToggleTerminal}
-        >
-          <TerminalIcon />
-        </button>
-      )}
+      <TopBarTools {...props} />
       {props.runtimeState !== 'system-ready' && (
         <span className={`badge badge-${props.runtimeState}`}>
           {props.statusLabel}

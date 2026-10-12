@@ -29,7 +29,8 @@ export function BrowserSurfacePanel({
 }): React.JSX.Element {
   const settings = useBrowserSettings()
   const [addressFocused, setAddressFocused] = useState(false)
-  const { state, error, control, navigate, external } =
+  const addressFocus = useRef(false)
+  const { state, error, control, navigate, external, externalNotice } =
     useBrowserSurface(visible)
   const [findOpen, setFindOpen] = useState(false)
   const [find, setFind] = useState('')
@@ -52,11 +53,14 @@ export function BrowserSurfacePanel({
   const [address, setAddress] = useState('')
   const addressTab = useRef<number | null>(null)
   useEffect(() => {
-    if (!addressFocused || addressTab.current !== (state?.activeTabId ?? null))
+    if (
+      !addressFocus.current ||
+      addressTab.current !== (state?.activeTabId ?? null)
+    )
       setAddress(state?.url ?? '')
     addressTab.current = state?.activeTabId ?? null
-  }, [state?.url, state?.activeTabId, addressFocused])
-  const target = state?.url ?? address
+  }, [state?.url, state?.activeTabId])
+  const target = address.trim() || state?.url || ''
   const busy = state?.status === 'loading'
   return (
     <section className="browser-surface-panel" aria-label="浏览器面板">
@@ -145,12 +149,21 @@ export function BrowserSurfacePanel({
           <input
             aria-label="网址"
             value={
-              !addressFocused && !settings.showFullUrl && state?.url
+              !addressFocused &&
+              !settings.showFullUrl &&
+              address === state?.url &&
+              state?.url
                 ? new URL(state.url).origin
                 : address
             }
-            onFocus={() => setAddressFocused(true)}
-            onBlur={() => setAddressFocused(false)}
+            onFocus={() => {
+              addressFocus.current = true
+              setAddressFocused(true)
+            }}
+            onBlur={() => {
+              addressFocus.current = false
+              setAddressFocused(false)
+            }}
             onChange={(event) => setAddress(event.target.value)}
             placeholder="输入网址或搜索"
             autoComplete="off"
@@ -212,6 +225,15 @@ export function BrowserSurfacePanel({
             关闭查找
           </button>
         </form>
+      )}
+      {externalNotice && (
+        <div
+          className="browser-external-status"
+          role="status"
+          aria-live="polite"
+        >
+          {externalNotice}
+        </div>
       )}
       <BrowserLoadNotice
         state={state}

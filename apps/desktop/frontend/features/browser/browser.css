@@ -463,15 +463,6 @@
   background: var(--bg-active);
   color: var(--text);
 }
-.topbar-browser {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-width: 68px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-}
 
 @container (max-width: 420px) {
   .browser-toolbar {
@@ -484,4 +475,13 @@
   .browser-start-tools {
     grid-template-columns: 1fr;
   }
+}
+
+.browser-external-status {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12px;
 }

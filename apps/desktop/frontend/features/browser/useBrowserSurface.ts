@@ -125,12 +125,18 @@ export function useBrowserSurface(visible = true) {
     },
     [accept],
   )
+  const [externalNotice, setExternalNotice] = useState<string | null>(null)
   const external = useCallback(async (url: string) => {
     setError(null)
+    setExternalNotice('正在调用系统浏览器…')
     try {
       await browserSurface.openExternal(url)
+      setExternalNotice('已交给系统默认浏览器打开')
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught))
+      setExternalNotice(null)
+      setError(
+        `系统浏览器打开失败：${caught instanceof Error ? caught.message : String(caught)}`,
+      )
     }
   }, [])
   return {
@@ -143,5 +149,6 @@ export function useBrowserSurface(visible = true) {
     control,
     navigate,
     external,
+    externalNotice,
   }
 }
