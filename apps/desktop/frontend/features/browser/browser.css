@@ -62,10 +62,10 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 38px;
+  height: 56px;
   flex-shrink: 0;
   padding: 5px 8px;
-  background: var(--bg-elevated);
+  background: var(--bg-sidebar);
   border-bottom: 1px solid var(--border-subtle);
 }
 .browser-current-tab {
@@ -425,14 +425,12 @@
   white-space: nowrap;
 }
 .browser-import-banner {
-  position: absolute;
+  position: relative;
   z-index: 1;
-  left: 0;
-  right: 0;
-  bottom: 0;
 }
 .browser-surface-panel {
   position: relative;
+  container-type: inline-size;
 }
 
 .browser-load-progress {
@@ -449,4 +447,41 @@
   background: var(--accent);
   transform-origin: left;
   transition: opacity 150ms linear;
+}
+
+.main-chat-column[hidden] {
+  display: none;
+}
+.browser-expanded > .right-surface {
+  flex: 1;
+  max-width: 100%;
+}
+.browser-expanded > .right-surface > .resize-handle {
+  display: none;
+}
+.browser-expand-button[aria-pressed='true'] {
+  background: var(--bg-active);
+  color: var(--text);
+}
+.topbar-browser {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 68px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+@container (max-width: 420px) {
+  .browser-toolbar {
+    flex-wrap: wrap;
+  }
+  .browser-toolbar .browser-address {
+    order: 1;
+    flex-basis: 100%;
+  }
+  .browser-start-tools {
+    grid-template-columns: 1fr;
+  }
 }

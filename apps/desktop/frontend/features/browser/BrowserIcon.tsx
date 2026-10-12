@@ -12,8 +12,12 @@ export function BrowserIcon({
     | 'folder'
     | 'terminal'
     | 'more'
+    | 'expand'
+    | 'restore'
 }): React.JSX.Element {
   const paths = {
+    expand: 'M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5',
+    restore: 'M3 8h5V3M21 8h-5V3M8 21v-5H3M16 21v-5h5',
     more: 'M5 12h.01M12 12h.01M19 12h.01',
     back: 'M14 5 7 12l7 7M7 12h13',
     forward: 'm10 5 7 7-7 7M4 12h13',

@@ -3,7 +3,7 @@ import { useBrowserSurface } from './useBrowserSurface'
 import './browser.css'
 import { useBrowserViewport } from './useBrowserViewport'
 import { BrowserIcon } from './BrowserIcon'
-import { BrowserTabs } from './BrowserTabs'
+import { BrowserPanelHeader } from './BrowserPanelHeader'
 import { BrowserImportDialog } from './BrowserImportDialog'
 import { BrowserSettingsDialog } from './BrowserSettingsDialog'
 import { browserHomeUrl } from '@reflexion-os-studio/contracts'
@@ -14,11 +14,15 @@ import { useBrowserSettings } from '../../api/browser-settings'
 /** Trusted browser chrome; native webpage content remains a separate view. */
 export function BrowserSurfacePanel({
   visible,
+  expanded,
+  onToggleExpanded,
   onWorkspace,
   onTerminal,
   onCollapse,
 }: {
   visible: boolean
+  expanded: boolean
+  onToggleExpanded: () => void
   onWorkspace: () => void
   onTerminal: () => void
   onCollapse: () => void
@@ -56,28 +60,14 @@ export function BrowserSurfacePanel({
   const busy = state?.status === 'loading'
   return (
     <section className="browser-surface-panel" aria-label="浏览器面板">
-      <div className="browser-tabstrip">
-        <BrowserTabs state={state} control={control} />
-        <div className="browser-tabstrip-spacer" />
-        <button
-          type="button"
-          className="browser-icon-button"
-          title="切换工作区"
-          aria-label="切换工作区"
-          onClick={onWorkspace}
-        >
-          <BrowserIcon name="folder" />
-        </button>
-        <button
-          type="button"
-          className="browser-icon-button"
-          title="收起浏览器面板"
-          aria-label="收起浏览器面板"
-          onClick={onCollapse}
-        >
-          <BrowserIcon name="panel" />
-        </button>
-      </div>
+      <BrowserPanelHeader
+        state={state}
+        control={control}
+        expanded={expanded}
+        onToggleExpanded={onToggleExpanded}
+        onWorkspace={onWorkspace}
+        onCollapse={onCollapse}
+      />
       {settingsOpen && (
         <BrowserSettingsDialog onClose={() => setSettingsOpen(false)} />
       )}
@@ -229,27 +219,28 @@ export function BrowserSurfacePanel({
         navigate={navigate}
         external={external}
       />
-      {bannerVisible && state?.available && !state.url && (
-        <div className="browser-import-banner">
-          <BrowserIcon name="globe" />
-          <div>
-            <strong>从系统浏览器导入数据</strong>
-            <span>导入 Chrome / Edge 的密码和 Cookie</span>
-          </div>
-          <button type="button" onClick={() => setImportOpen(true)}>
-            导入
-          </button>
-          <button
-            type="button"
-            className="browser-icon-button"
-            aria-label="关闭导入提示"
-            onClick={() => setBannerVisible(false)}
-          >
-            <BrowserIcon name="close" />
-          </button>
-        </div>
-      )}
       <div className="browser-viewport" ref={viewport}>
+        {bannerVisible && state?.available && !state.url && (
+          <div className="browser-import-banner">
+            <BrowserIcon name="globe" />
+            <div>
+              <strong>从系统浏览器导入数据</strong>
+              <span>导入 Chrome / Edge 的密码和 Cookie</span>
+            </div>
+            <button type="button" onClick={() => setImportOpen(true)}>
+              导入
+            </button>
+            <button
+              type="button"
+              className="browser-icon-button"
+              aria-label="关闭导入提示"
+              onClick={() => setBannerVisible(false)}
+            >
+              <BrowserIcon name="close" />
+            </button>
+          </div>
+        )}
+
         {!state?.url ? (
           <div className="browser-start-page">
             <p className="browser-mode">

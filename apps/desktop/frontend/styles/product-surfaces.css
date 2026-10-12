@@ -222,3 +222,8 @@ textarea::placeholder {
 .project-files-empty > .empty-state {
   padding: 0;
 }
+
+.inline-banner button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}

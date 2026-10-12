@@ -1,4 +1,9 @@
-import { DoubleChevronIcon, FolderIcon, TerminalIcon } from '../ui/icons'
+import {
+  DoubleChevronIcon,
+  FolderIcon,
+  GlobeIcon,
+  TerminalIcon,
+} from '../ui/icons'
 
 /** Runtime 状态文案：顶栏角标与启动页共用。 */
 export const STATUS_LABELS: Record<string, string> = {
@@ -46,13 +51,14 @@ export function TopBar(props: TopBarProps): React.JSX.Element {
       <span className="spacer" />
       <button
         type="button"
-        className="topbar-toggle"
+        className={`topbar-toggle topbar-browser${props.browserOpen ? ' active' : ''}`}
         title={props.browserOpen ? '收起浏览器面板' : '展开浏览器面板'}
         aria-label="网页浏览"
         aria-pressed={props.browserOpen}
         onClick={props.onToggleBrowser}
       >
-        网页
+        <GlobeIcon />
+        <span>网页</span>
       </button>
       {props.showWorkspaceToggle && (
         <button

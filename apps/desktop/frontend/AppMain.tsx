@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BrowserSurfacePanel } from './features/browser/BrowserSurfacePanel'
 import {
-  useBrowserPanelOpen,
+  useBrowserPanelState,
+  setBrowserPanelExpanded,
   setBrowserPanelOpen,
 } from './features/browser/panel-state'
 import type { ComponentProps, Dispatch, SetStateAction } from 'react'
@@ -64,10 +65,15 @@ export interface AppMainProps {
 export function AppMain(props: AppMainProps): React.JSX.Element {
   const { view, activeSessionId, notice, workspace, terminal } = props
   const surfaceRef = useRef<HTMLDivElement>(null)
-  const browserOpen = useBrowserPanelOpen()
+  const [browserWidth, setBrowserWidth] = useState<number | null>(null)
+  const { open: browserOpen, expanded: browserExpanded } =
+    useBrowserPanelState()
   useEffect(() => {
     setBrowserPanelOpen(false)
   }, [workspace.panel.activeTabId, view])
+  useEffect(() => {
+    setBrowserPanelExpanded(false)
+  }, [activeSessionId])
   const surfaceOpen = browserOpen || (view === 'chat' && workspace.open)
   const contextTitle =
     view === 'settings'
@@ -85,8 +91,14 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
                 : '新对话'
 
   return (
-    <div className="main-pane surface-split-layout">
-      <div className="main-chat-column">
+    <div
+      className={`main-pane surface-split-layout${browserExpanded ? ' browser-expanded' : ''}`}
+    >
+      <div
+        className="main-chat-column"
+        hidden={browserExpanded}
+        inert={browserExpanded}
+      >
         <TopBar
           {...props.topBar}
           contextTitle={contextTitle}
@@ -148,23 +160,27 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
         className="right-surface"
         style={{
           display: surfaceOpen ? 'flex' : 'none',
-          width: workspace.width,
+          width: browserExpanded
+            ? '100%'
+            : browserOpen
+              ? (browserWidth ?? '50%')
+              : workspace.width,
         }}
       >
         <ResizeHandle
           resizeSide="next"
-          onResize={(delta, width) =>
-            workspace.setWidth(
-              Math.max(
-                360,
-                Math.min(
-                  1200,
-                  (surfaceRef.current?.getBoundingClientRect().width ?? width) -
-                    delta,
-                ),
+          onResize={(delta, width) => {
+            const nextWidth = Math.max(
+              360,
+              Math.min(
+                1200,
+                (surfaceRef.current?.getBoundingClientRect().width ?? width) -
+                  delta,
               ),
             )
-          }
+            if (browserOpen) setBrowserWidth(nextWidth)
+            else workspace.setWidth(nextWidth)
+          }}
         />
         <div className="right-surface-content">
           <nav
@@ -215,11 +231,14 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
           >
             <BrowserSurfacePanel
               visible={browserOpen}
+              expanded={browserExpanded}
+              onToggleExpanded={() => setBrowserPanelExpanded(!browserExpanded)}
               onWorkspace={() => {
                 setBrowserPanelOpen(false)
                 workspace.setOpen(true)
               }}
               onTerminal={() => {
+                setBrowserPanelExpanded(false)
                 if (!terminal.open) terminal.onToggle()
               }}
               onCollapse={() => {

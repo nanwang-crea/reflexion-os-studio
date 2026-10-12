@@ -360,3 +360,20 @@ export function SearchIcon({ size = 15 }: IconProps): React.JSX.Element {
     </svg>
   )
 }
+
+export function GlobeIcon({ size = 16 }: IconProps): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18" />
+    </svg>
+  )
+}
