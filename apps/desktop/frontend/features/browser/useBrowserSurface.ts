@@ -11,6 +11,7 @@ export function useBrowserSurface(visible = true) {
   const settings = useBrowserSettings()
   const [state, setState] = useState<BrowserSnapshot | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [externalNotice, setExternalNotice] = useState<string | null>(null)
   const [slowLoad, setSlowLoad] = useState(false)
   const revision = useRef(-1)
   const recorded = useRef(new Map<number, string>())
@@ -104,6 +105,7 @@ export function useBrowserSurface(visible = true) {
   }, [state?.status, state?.url])
   const control = useCallback(
     async (action: BrowserAction) => {
+      setExternalNotice(null)
       setError(null)
       try {
         accept(await browserSession.control(action))
@@ -115,6 +117,7 @@ export function useBrowserSurface(visible = true) {
   )
   const navigate = useCallback(
     async (url: string) => {
+      setExternalNotice(null)
       setError(null)
       try {
         const next = await browserSession.navigate(url)
@@ -125,7 +128,6 @@ export function useBrowserSurface(visible = true) {
     },
     [accept],
   )
-  const [externalNotice, setExternalNotice] = useState<string | null>(null)
   const external = useCallback(async (url: string) => {
     setError(null)
     setExternalNotice('正在调用系统浏览器…')

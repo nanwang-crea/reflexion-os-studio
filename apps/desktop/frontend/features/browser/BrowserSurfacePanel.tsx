@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useBrowserSurface } from './useBrowserSurface'
+import { useLoadingProgress } from './useLoadingProgress'
 import './browser.css'
 import { useBrowserViewport } from './useBrowserViewport'
 import { BrowserIcon } from './BrowserIcon'
@@ -61,7 +62,8 @@ export function BrowserSurfacePanel({
     addressTab.current = state?.activeTabId ?? null
   }, [state?.url, state?.activeTabId])
   const target = address.trim() || state?.url || ''
-  const busy = state?.status === 'loading'
+  const progress = useLoadingProgress(state)
+  const busy = progress.running
   return (
     <section className="browser-surface-panel" aria-label="浏览器面板">
       <BrowserPanelHeader
@@ -226,16 +228,9 @@ export function BrowserSurfacePanel({
           </button>
         </form>
       )}
-      {externalNotice && (
-        <div
-          className="browser-external-status"
-          role="status"
-          aria-live="polite"
-        >
-          {externalNotice}
-        </div>
-      )}
       <BrowserLoadNotice
+        progress={progress}
+        info={externalNotice}
         state={state}
         error={error}
         navigate={navigate}

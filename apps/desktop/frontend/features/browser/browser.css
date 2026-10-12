@@ -446,7 +446,14 @@
   height: 100%;
   background: var(--accent);
   transform-origin: left;
-  transition: opacity 150ms linear;
+  transition:
+    transform 240ms ease-out,
+    opacity 150ms linear;
+}
+@media (prefers-reduced-motion: reduce) {
+  .browser-load-progress > span {
+    transition: none;
+  }
 }
 
 .main-chat-column[hidden] {
@@ -475,13 +482,4 @@
   .browser-start-tools {
     grid-template-columns: 1fr;
   }
-}
-
-.browser-external-status {
-  flex-shrink: 0;
-  padding: 6px 14px;
-  color: var(--text-muted);
-  background: var(--bg-elevated);
-  border-bottom: 1px solid var(--border-subtle);
-  font-size: 12px;
 }

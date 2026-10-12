@@ -16,6 +16,7 @@ await build({
       import { createElement } from 'react'
       import { renderToStaticMarkup } from 'react-dom/server'
       import { BrowserLoadNotice } from './frontend/features/browser/BrowserLoadNotice'
+      export { updateLoadingProgress } from './frontend/features/browser/useLoadingProgress'
       import { BrowserTabs } from './frontend/features/browser/BrowserTabs'
       export const notice = (state) => renderToStaticMarkup(createElement(BrowserLoadNotice, { state, error: null, navigate: async () => {}, external: async () => {} }))
       export const tabs = (state) => renderToStaticMarkup(createElement(BrowserTabs, { state, control: async () => {} }))
@@ -28,7 +29,9 @@ await build({
   jsx: 'automatic',
   outfile,
 })
-const { notice, tabs } = (await import(pathToFileURL(outfile).href)).default
+const { notice, tabs, updateLoadingProgress } = (
+  await import(pathToFileURL(outfile).href)
+).default
 const tab = {
   id: 1,
   title: 'Stable title',
@@ -59,4 +62,29 @@ test('failed HTTPS loads offer retry without an automatic HTTP downgrade', () =>
   assert.match(failed, /重试/)
   assert.match(failed, /系统浏览器打开/)
   assert.doesNotMatch(failed, /尝试 HTTP|尝试 HTTPS/)
+})
+
+test('redirect gaps preserve progress and another tab starts independently', () => {
+  const idle = { tabId: 1, value: 0, visible: false, running: false }
+  const loading = updateLoadingProgress(idle, 1, 'loading', 0.6)
+  const gap = updateLoadingProgress(loading, 1, 'ready', 0)
+  assert.equal(gap, loading)
+  const redirected = updateLoadingProgress(gap, 1, 'loading', 0.1)
+  assert.equal(redirected.value, 0.6)
+  assert.equal(redirected.visible, true)
+  const other = updateLoadingProgress(redirected, 2, 'loading', 0.1)
+  assert.equal(other.value, 0.1)
+  assert.equal(other.tabId, 2)
+})
+
+test('a new navigation restarts after fade; failures and stops clear the bar', () => {
+  const faded = { tabId: 1, value: 1, visible: false, running: false }
+  const next = updateLoadingProgress(faded, 1, 'loading', 0)
+  assert.equal(next.value, 0.03)
+  for (const status of ['failed', 'idle', undefined]) {
+    const stopped = updateLoadingProgress(next, 1, status, 0)
+    assert.equal(stopped.visible, false)
+    assert.equal(stopped.running, false)
+  }
+  assert.equal(updateLoadingProgress(faded, 1, 'loading', 1).value, 0.95)
 })
