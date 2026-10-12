@@ -46,9 +46,12 @@ export function BrowserSurfacePanel({
     state?.activeTabId ?? null,
   )
   const [address, setAddress] = useState('')
+  const addressTab = useRef<number | null>(null)
   useEffect(() => {
-    setAddress(state?.url ?? '')
-  }, [state?.url, state?.activeTabId])
+    if (!addressFocused || addressTab.current !== (state?.activeTabId ?? null))
+      setAddress(state?.url ?? '')
+    addressTab.current = state?.activeTabId ?? null
+  }, [state?.url, state?.activeTabId, addressFocused])
   const target = state?.url ?? address
   const busy = state?.status === 'loading'
   return (
@@ -136,14 +139,19 @@ export function BrowserSurfacePanel({
           className="browser-address"
           onSubmit={(event) => {
             event.preventDefault()
-            if (address.trim()) void navigate(address)
+            if (address.trim()) {
+              const input = event.currentTarget.querySelector('input')
+              void navigate(address).then(() => input?.blur())
+            }
           }}
         >
-          {state?.url?.startsWith('http:') && (
-            <span className="browser-http" title="HTTP 连接未加密">
-              不安全
-            </span>
-          )}
+          {!busy &&
+            state?.status === 'ready' &&
+            state.url?.startsWith('http:') && (
+              <span className="browser-http" title="HTTP 连接未加密">
+                不安全
+              </span>
+            )}
           <input
             aria-label="网址"
             value={
@@ -274,9 +282,7 @@ export function BrowserSurfacePanel({
           <p className="browser-empty">
             {state.status === 'failed'
               ? '网页未能加载，请重试或使用系统浏览器。'
-              : busy
-                ? '正在加载网页…'
-                : ''}
+              : ''}
           </p>
         )}
       </div>

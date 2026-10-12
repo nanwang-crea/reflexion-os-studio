@@ -76,6 +76,7 @@ pub fn control(app: &AppHandle, action: Action) -> Result<Snapshot, String> {
                 state.tabs.clear();
                 state.active_tab_id = None;
                 state.url = None;
+                state.progress = 0.0;
                 state.status = if state.available {
                     "idle"
                 } else {

@@ -52,10 +52,12 @@ pub fn close_tab(id: u32) {
     let guest = REGISTRY.with(|registry| registry.borrow_mut().guests.remove(&id));
     if let Some(guest) = guest {
         unsafe {
-            guest.view.removeObserver_forKeyPath(
-                &guest._navigation,
-                &objc2_foundation::NSString::from_str("title"),
-            );
+            for key in ["title", "estimatedProgress"] {
+                guest.view.removeObserver_forKeyPath(
+                    &guest._navigation,
+                    &objc2_foundation::NSString::from_str(key),
+                );
+            }
             guest.view.setNavigationDelegate(None);
             guest.view.setUIDelegate(None);
             guest.view.stopLoading();

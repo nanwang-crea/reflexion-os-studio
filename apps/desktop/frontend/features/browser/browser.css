@@ -394,6 +394,7 @@
 }
 
 .browser-status-slot {
+  position: relative;
   height: 34px;
   flex-shrink: 0;
   overflow: hidden;
@@ -413,4 +414,20 @@
 }
 .browser-surface-panel {
   position: relative;
+}
+
+.browser-load-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  pointer-events: none;
+}
+.browser-load-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left;
+  transition: opacity 150ms linear;
 }

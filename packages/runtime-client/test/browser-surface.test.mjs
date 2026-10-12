@@ -7,6 +7,7 @@ const snapshot = {
   activeTabId: null,
   available: true,
   status: 'idle',
+  progress: 0,
   url: null,
   canGoBack: false,
   canGoForward: false,

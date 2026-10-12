@@ -4,8 +4,28 @@ import {
   normalizeBrowserUrl,
   parseResourceUri,
   BrowserActionSchema,
+  BrowserTabSchema,
   lookupCommandSchema,
 } from '../dist/index.js'
+
+test('browser progress is bounded and old snapshots default to zero', () => {
+  const tab = {
+    id: 1,
+    title: 'Page',
+    status: 'loading',
+    url: 'https://example.com/',
+    canGoBack: false,
+    canGoForward: false,
+    notice: null,
+  }
+  assert.equal(BrowserTabSchema.parse(tab).progress, 0)
+  assert.equal(BrowserTabSchema.parse({ ...tab, progress: 0.6 }).progress, 0.6)
+  for (const progress of [-0.1, 1.1, NaN])
+    assert.equal(
+      BrowserTabSchema.safeParse({ ...tab, progress }).success,
+      false,
+    )
+})
 
 test('web addresses support HTTP, HTTPS, ports, IPv6 and internal hosts', () => {
   for (const [input, expected] of [

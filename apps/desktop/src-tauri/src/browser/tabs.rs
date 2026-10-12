@@ -13,6 +13,7 @@ impl Snapshot {
             id,
             title: "新标签页".into(),
             status: "idle".into(),
+            progress: 0.0,
             url,
             can_go_back: false,
             can_go_forward: false,
@@ -55,6 +56,7 @@ impl Snapshot {
             .iter()
             .find(|tab| Some(tab.id) == self.active_tab_id);
         self.url = active.and_then(|tab| tab.url.clone());
+        self.progress = active.map_or(0.0, |tab| tab.progress);
         self.status = active.map(|tab| tab.status.clone()).unwrap_or_else(|| {
             if self.available {
                 "idle"

@@ -47,9 +47,19 @@ export function useBrowserSurface(visible = true) {
   useEffect(() => {
     let disposed = false
     let unlisten: (() => void) | undefined
+    let frame = 0
+    let buffered: BrowserSnapshot | null = null
     void browserSurface
       .subscribe((next) => {
-        if (!disposed) accept(next)
+        if (disposed) return
+        if (!buffered || next.revision >= buffered.revision) buffered = next
+        if (!frame)
+          frame = requestAnimationFrame(() => {
+            frame = 0
+            const current = buffered
+            buffered = null
+            if (!disposed && current) accept(current)
+          })
       })
       .then(async (cleanup) => {
         if (disposed) {
@@ -65,6 +75,8 @@ export function useBrowserSurface(visible = true) {
       })
     return () => {
       disposed = true
+      cancelAnimationFrame(frame)
+      buffered = null
       unlisten?.()
     }
   }, [accept])

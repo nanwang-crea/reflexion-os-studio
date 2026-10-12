@@ -1,3 +1,4 @@
+use super::load_state::{failed, publish};
 use crate::browser::{policy, state};
 use block2::Block;
 use objc2::{
@@ -8,11 +9,13 @@ use objc2_web_kit::{
     WKNavigation, WKNavigationAction, WKNavigationActionPolicy, WKNavigationDelegate,
     WKNavigationResponse, WKNavigationResponsePolicy, WKNavigationType, WKWebView,
 };
+use std::cell::Cell;
 use tauri::AppHandle;
 
 pub struct NavigationIvars {
     app: AppHandle,
     id: u32,
+    active_navigation: Cell<usize>,
 }
 define_class!(
     #[unsafe(super(NSObject))]
@@ -21,10 +24,21 @@ define_class!(
     pub struct NavigationDelegate;
     impl NavigationDelegate {
         #[unsafe(method(observeValueForKeyPath:ofObject:change:context:))]
-        fn title_changed(&self, _key: Option<&NSString>, object: Option<&objc2::runtime::AnyObject>, _change: Option<&objc2_foundation::NSDictionary>, _context: *mut std::ffi::c_void) {
+        fn properties_changed(&self, key: Option<&NSString>, object: Option<&objc2::runtime::AnyObject>, _change: Option<&objc2_foundation::NSDictionary>, _context: *mut std::ffi::c_void) {
             let Some(view) = object.and_then(|object| object.downcast_ref::<WKWebView>()) else { return; };
-            if let Some(title) = unsafe { view.title() }.filter(|title| !title.is_empty()) {
-                state::update_tab(&self.ivars().app, self.ivars().id, |tab| { tab.title = title.to_string(); });
+            match key.map(|key| key.to_string()).as_deref() {
+                Some("title") => {
+                    if let Some(title) = unsafe { view.title() }.filter(|title| !title.is_empty()) {
+                        state::update_tab(&self.ivars().app, self.ivars().id, |tab| { tab.title = title.to_string(); });
+                    }
+                }
+                Some("estimatedProgress") => {
+                    let progress = unsafe { view.estimatedProgress() };
+                    state::update_tab(&self.ivars().app, self.ivars().id, |tab| {
+                        if tab.status == "loading" { tab.progress = tab.progress.max((progress.clamp(0.0, 1.0) * 100.0).round() / 100.0); }
+                    });
+                }
+                _ => {}
             }
         }
     }
@@ -77,6 +91,7 @@ define_class!(
                 });
                 state::update_tab(app, self.ivars().id, |state| {
                     state.url = url.clone();
+                    if state.status != "loading" { state.progress = 0.0; }
                     state.status = "loading".into();
                     state.notice = None;
                 });
@@ -123,13 +138,9 @@ define_class!(
                     })
             };
             let allowed = unsafe { response.canShowMIMEType() } && !attachment;
-            if !allowed {
-                state::update_tab(&self.ivars().app, self.ivars().id, |state| {
-                    super::hide(self.ivars().id);
-                    state.status = "failed".into();
-                    state.notice = Some("正在准备下载".into());
-                });
-                policy::audit("download", None, "blocked");
+            if !allowed && unsafe { response.isForMainFrame() } {
+                publish(&self.ivars().app, self.ivars().id, _view, "failed", Some("正在准备下载".into()), false);
+                policy::audit("download", None, "requested");
             }
             handler.call((if allowed {
                 WKNavigationResponsePolicy::Allow
@@ -138,32 +149,41 @@ define_class!(
             },));
         }
         #[unsafe(method(webView:didStartProvisionalNavigation:))]
-        fn started(&self, view: &WKWebView, _navigation: Option<&WKNavigation>) {
-            publish(&self.ivars().app, self.ivars().id, view, "loading", None);
+        fn started(&self, view: &WKWebView, navigation: Option<&WKNavigation>) {
+            self.track(navigation);
+            publish(&self.ivars().app, self.ivars().id, view, "loading", None, false);
+        }
+        #[unsafe(method(webView:didReceiveServerRedirectForProvisionalNavigation:))]
+        fn redirected(&self, view: &WKWebView, navigation: Option<&WKNavigation>) {
+            if self.current(navigation) { publish(&self.ivars().app, self.ivars().id, view, "loading", None, true); }
         }
         #[unsafe(method(webView:didCommitNavigation:))]
-        fn committed(&self, view: &WKWebView, _navigation: Option<&WKNavigation>) {
-            super::browsing::center_initial_content(self.ivars().id, view);
+        fn committed(&self, view: &WKWebView, navigation: Option<&WKNavigation>) {
+            if !self.current(navigation) { return; }
+            publish(&self.ivars().app, self.ivars().id, view, "loading", None, true);
             super::reveal(self.ivars().id);
         }
         #[unsafe(method(webView:didFinishNavigation:))]
-        fn finished(&self, view: &WKWebView, _navigation: Option<&WKNavigation>) {
+        fn finished(&self, view: &WKWebView, navigation: Option<&WKNavigation>) {
+            if !self.current(navigation) { return; }
+            // Position once after initial styles/layout settle, never on intermediate redirects.
+            super::browsing::center_initial_content(self.ivars().id, view);
             super::reveal(self.ivars().id);
-            publish(&self.ivars().app, self.ivars().id, view, "ready", None);
+            publish(&self.ivars().app, self.ivars().id, view, "ready", None, true);
             policy::audit("load", None, "finished");
         }
         #[unsafe(method(webView:didFailProvisionalNavigation:withError:))]
         fn failed_provisional(
             &self,
             view: &WKWebView,
-            _navigation: Option<&WKNavigation>,
+            navigation: Option<&WKNavigation>,
             error: &NSError,
         ) {
-            failed(&self.ivars().app, self.ivars().id, view, error);
+            if self.current(navigation) { failed(&self.ivars().app, self.ivars().id, view, error); }
         }
         #[unsafe(method(webView:didFailNavigation:withError:))]
-        fn failed(&self, view: &WKWebView, _navigation: Option<&WKNavigation>, error: &NSError) {
-            failed(&self.ivars().app, self.ivars().id, view, error);
+        fn failed(&self, view: &WKWebView, navigation: Option<&WKNavigation>, error: &NSError) {
+            if self.current(navigation) { failed(&self.ivars().app, self.ivars().id, view, error); }
         }
         #[unsafe(method(webViewWebContentProcessDidTerminate:))]
         fn terminated(&self, view: &WKWebView) {
@@ -174,6 +194,7 @@ define_class!(
                 view,
                 "failed",
                 Some("网页进程已退出，可刷新或使用系统浏览器".into()),
+                false,
             );
             policy::audit("process", None, "terminated");
         }
@@ -181,57 +202,24 @@ define_class!(
 );
 
 impl NavigationDelegate {
+    pub(super) fn track(&self, navigation: Option<&WKNavigation>) {
+        if let Some(navigation) = navigation {
+            self.ivars()
+                .active_navigation
+                .set(navigation as *const WKNavigation as usize);
+        }
+    }
+    fn current(&self, navigation: Option<&WKNavigation>) -> bool {
+        navigation.is_none_or(|navigation| {
+            self.ivars().active_navigation.get() == navigation as *const WKNavigation as usize
+        })
+    }
     pub fn new(marker: MainThreadMarker, app: AppHandle, id: u32) -> Retained<Self> {
-        let object = marker
-            .alloc::<Self>()
-            .set_ivars(NavigationIvars { app, id });
+        let object = marker.alloc::<Self>().set_ivars(NavigationIvars {
+            app,
+            id,
+            active_navigation: Cell::new(0),
+        });
         unsafe { msg_send![super(object), init] }
     }
-}
-
-pub fn publish(app: &AppHandle, id: u32, view: &WKWebView, status: &str, notice: Option<String>) {
-    unsafe {
-        let current = view
-            .URL()
-            .and_then(|url| url.absoluteString())
-            .map(|url| url.to_string())
-            .filter(|url| url != "about:blank");
-        state::update_tab(app, id, |state| {
-            // Provisional failure may leave the previous URL: keep the requested target.
-            if status == "ready" {
-                if let Some(url) = current {
-                    state.url = Some(url);
-                }
-            }
-            if status == "ready" {
-                if let Some(title) = view.title().filter(|title| !title.is_empty()) {
-                    state.title = title.to_string();
-                }
-            }
-            state.status = status.into();
-            state.notice = notice;
-            state.can_go_back = view.canGoBack();
-            state.can_go_forward = view.canGoForward();
-        });
-    }
-}
-fn failed(app: &AppHandle, id: u32, view: &WKWebView, error: &NSError) {
-    // NSURLErrorCancelled is expected for stop/superseded/blocked navigation.
-    if error.code() == -999
-        || state::snapshot(app)
-            .tabs
-            .iter()
-            .any(|tab| tab.id == id && tab.status == "failed")
-    {
-        return;
-    }
-    super::hide(id);
-    publish(
-        app,
-        id,
-        view,
-        "failed",
-        Some("网页加载失败（网络、证书或站点兼容性），可重试或使用系统浏览器".into()),
-    );
-    policy::audit("load", None, "failed");
 }

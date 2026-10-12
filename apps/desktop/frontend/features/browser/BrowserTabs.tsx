@@ -63,7 +63,7 @@ export function BrowserTabs({
               }}
             >
               <BrowserIcon name="globe" />
-              <span>{tab.status === 'loading' ? '加载中…' : tab.title}</span>
+              <span>{tab.title}</span>
             </button>
             <button
               type="button"

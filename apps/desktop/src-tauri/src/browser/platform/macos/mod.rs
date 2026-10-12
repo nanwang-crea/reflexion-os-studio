@@ -8,6 +8,7 @@ use objc2::Message;
 pub use passwords::manage as manage_password;
 mod credentials;
 pub(super) mod downloads;
+mod load_state;
 mod navigation;
 mod registry;
 mod storage;
@@ -93,12 +94,14 @@ pub(super) fn attach_view(
         let navigation = navigation::NavigationDelegate::new(marker, app.clone(), id);
         let ui = ui_delegate::UiDelegate::new(marker, app.clone(), id);
         view.setNavigationDelegate(Some(ProtocolObject::from_ref(&*navigation)));
-        view.addObserver_forKeyPath_options_context(
-            &navigation,
-            &NSString::from_str("title"),
-            objc2_foundation::NSKeyValueObservingOptions::New,
-            std::ptr::null_mut(),
-        );
+        for key in ["title", "estimatedProgress"] {
+            view.addObserver_forKeyPath_options_context(
+                &navigation,
+                &NSString::from_str(key),
+                objc2_foundation::NSKeyValueObservingOptions::New,
+                std::ptr::null_mut(),
+            );
+        }
         view.setUIDelegate(Some(ProtocolObject::from_ref(&*ui)));
         view.unregisterDraggedTypes();
         view.setHidden(true);
@@ -174,11 +177,17 @@ pub fn control(app: &AppHandle, action: &Action) -> Result<(), String> {
                 state::update_tab(app, id, |state| {
                     state.url = Some(url.to_string());
                     state.status = "loading".into();
+                    state.progress = 0.0;
                     state.notice = None;
                 });
                 let native_url = NSURL::URLWithString(&NSString::from_str(url.as_str()))
                     .ok_or("invalid native URL")?;
-                view.loadRequest(&NSURLRequest::requestWithURL(&native_url));
+                let navigation = view.loadRequest(&NSURLRequest::requestWithURL(&native_url));
+                REGISTRY.with(|registry| {
+                    if let Some(guest) = registry.borrow().guests.get(&id) {
+                        guest._navigation.track(navigation.as_deref());
+                    }
+                });
                 policy::audit("navigate", Some(url.as_str()), "requested");
             }
             Action::Back => {
@@ -193,7 +202,7 @@ pub fn control(app: &AppHandle, action: &Action) -> Result<(), String> {
             Action::Stop => {
                 view.stopLoading();
                 reveal(id);
-                navigation::publish(app, id, &view, "ready", Some("已停止加载".into()));
+                load_state::publish(app, id, &view, "ready", Some("已停止加载".into()), true);
             }
             Action::Fillcontact { contact } => contact::fill(app, &view, contact)?,
             Action::Find { text, backwards } => browsing::find(&view, text, *backwards)?,

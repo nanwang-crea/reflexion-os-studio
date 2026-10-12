@@ -17,28 +17,22 @@ export function BrowserLoadNotice({
   const url = state?.url
   return (
     <div className="browser-status-slot">
-      {(notice || busy) && (
+      <div className="browser-load-progress" aria-hidden="true">
+        <span
+          style={{
+            transform: `scaleX(${busy ? Math.max(0.03, state?.progress ?? 0) : 1})`,
+            opacity: busy ? 1 : 0,
+          }}
+        />
+      </div>
+      {notice && (
         <div className="browser-notice" role="status" aria-live="polite">
-          <span title={notice ?? undefined}>{notice ?? '正在加载…'}</span>
+          <span title={notice ?? undefined}>{notice}</span>
           {url && (failed || error) && (
             <>
               <button type="button" onClick={() => void navigate(url)}>
                 重试
               </button>
-              {failed && /^https?:/.test(url) && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    void navigate(
-                      url.startsWith('https:')
-                        ? url.replace(/^https:/, 'http:')
-                        : url.replace(/^http:/, 'https:'),
-                    )
-                  }
-                >
-                  尝试 {url.startsWith('https:') ? 'HTTP' : 'HTTPS'}
-                </button>
-              )}
               <button type="button" onClick={() => void external(url)}>
                 系统浏览器打开
               </button>
