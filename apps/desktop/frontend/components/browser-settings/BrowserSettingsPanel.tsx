@@ -75,6 +75,7 @@ export function BrowserSettingsPanel(): React.JSX.Element {
         </p>
       )}
       <fieldset className="browser-settings-card" disabled={!loaded || saving}>
+        <legend>链接打开方式</legend>
         <label>
           <span>默认打开方式</span>
           <Select
@@ -144,6 +145,8 @@ export function BrowserSettingsPanel(): React.JSX.Element {
         <label className="browser-settings-checkbox">
           <input
             type="checkbox"
+            className="ui-switch"
+            role="switch"
             checked={settings.showFullUrl}
             onChange={(event) =>
               void save({ ...settings, showFullUrl: event.target.checked })

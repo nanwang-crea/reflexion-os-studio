@@ -134,6 +134,8 @@ export function AgentRuntimePanel(): React.JSX.Element {
             </span>
             <input
               type="checkbox"
+              className="ui-switch"
+              role="switch"
               checked={enableChildRuns}
               onChange={(event) => setEnableChildRuns(event.target.checked)}
             />

@@ -1,0 +1,178 @@
+.settings-error {
+  color: var(--danger, #f08b8b);
+}
+
+.settings-view .field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.settings-view .field .ui-select {
+  appearance: none;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.settings-view .field .ui-select:focus-visible {
+  outline: 1px solid var(--border);
+}
+
+.field-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 14px;
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  min-height: 52px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg);
+}
+
+.form-actions .saved {
+  color: var(--ok);
+  font-size: 12px;
+}
+
+.form-actions .error {
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.field-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 400;
+}
+
+.settings-view
+  input:not([type='checkbox']):not([type='radio']):not([type='search']),
+.settings-view textarea,
+.settings-view .field .ui-select {
+  min-height: 36px;
+  border-color: var(--border);
+  border-radius: 8px;
+  background: var(--bg-inset);
+}
+
+.settings-view
+  input:not([type='checkbox']):not([type='radio']):not([type='search']):hover,
+.settings-view textarea:hover,
+.settings-view .field .ui-select:hover {
+  border-color: var(--text-muted);
+}
+
+.settings-view
+  input:not([type='checkbox']):not([type='radio']):not(
+    [type='search']
+  ):focus-visible,
+.settings-view textarea:focus-visible,
+.settings-view .field .ui-select:focus-visible {
+  outline: none;
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 1px var(--focus-ring);
+}
+
+.form-actions .primary {
+  background: var(--text);
+  color: var(--bg-sidebar);
+  font-weight: 600;
+}
+
+.form-actions .primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.settings-list-toolbar h4,
+.mcp-add-heading h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-list-toolbar p,
+.mcp-add-heading p {
+  margin: 5px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.danger-text {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--danger);
+  font-weight: 500;
+}
+
+.danger-text:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+.settings-list-toolbar {
+  display: flex;
+  min-height: 48px;
+  padding-bottom: 14px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.settings-toolbar-actions,
+.mcp-add-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.settings-primary {
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px solid var(--text);
+  border-radius: 7px;
+  background: var(--text);
+  color: var(--bg-sidebar);
+  font-weight: 600;
+}
+
+.settings-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.settings-feedback {
+  margin-top: 16px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}

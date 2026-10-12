@@ -149,7 +149,7 @@ export function McpPanel(props: McpPanelProps): React.JSX.Element {
     <div className="mcp-panel">
       <div className="settings-list-toolbar">
         <div>
-          <h4>MCP 服务器</h4>
+          <h4>已连接的工具服务</h4>
           <p>{servers.length} 个已配置服务器</p>
         </div>
         <div className="settings-toolbar-actions">
@@ -257,7 +257,7 @@ export function McpPanel(props: McpPanelProps): React.JSX.Element {
           <li className="mcp-empty">
             <EmptyState
               title="还没有 MCP 服务器"
-              description="在下方添加服务器以连接外部工具。添加后可查看连接状态和工具列表。"
+              description="点击“添加服务器”连接外部工具，配置后可查看连接状态和工具列表。"
             />
           </li>
         )}

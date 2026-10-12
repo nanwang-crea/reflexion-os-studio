@@ -69,3 +69,24 @@
   text-align: center;
   padding: 3px;
 }
+
+/* Native checkbox semantics with a consistent switch appearance. */
+input[type='checkbox'].ui-switch {
+  width: 34px;
+  height: 20px;
+  border: 0;
+  border-radius: 999px;
+  background-color: var(--bg-active);
+  background-image: radial-gradient(circle, #fff 7px, transparent 7.5px);
+  background-size: 16px 16px;
+  background-repeat: no-repeat;
+  background-position: 2px center;
+  transition:
+    background-color 160ms ease,
+    background-position 160ms ease;
+}
+input[type='checkbox'].ui-switch:checked {
+  background-color: var(--focus-ring);
+  background-image: radial-gradient(circle, #fff 7px, transparent 7.5px);
+  background-position: calc(100% - 2px) center;
+}

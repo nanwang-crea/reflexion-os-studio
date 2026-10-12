@@ -1,7 +1,7 @@
 /* Shared product presentation: navigation, page hierarchy and interaction.
    Feature-specific layouts remain owned by their feature stylesheets. */
 :root {
-  --page-width: 1040px;
+  --page-width: 1120px;
   --page-padding: clamp(20px, 4vw, 48px);
   --focus-ring: #85abff;
 }
@@ -50,10 +50,9 @@ a:focus-visible {
 
 .session-row.active,
 .project-row.active,
-.nav-item.active,
-.settings-nav-item.active {
-  background: var(--accent-soft);
-  box-shadow: inset 3px 0 0 var(--focus-ring);
+.nav-item.active {
+  background: var(--bg-active);
+  box-shadow: none;
 }
 
 .session-row:focus-within .row-action,
@@ -70,7 +69,7 @@ a:focus-visible {
 .instructions-view {
   width: 100%;
   max-width: var(--page-width);
-  padding: 32px var(--page-padding) 48px;
+  padding: clamp(32px, 5vh, 64px) var(--page-padding) 56px;
   min-height: 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
@@ -79,23 +78,20 @@ a:focus-visible {
 .skills-view .panel-head,
 .automations-view .panel-head,
 .instructions-view header {
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 12px;
 }
 
 .skills-view h1,
 .automations-view h1,
-.instructions-view header h2,
-.settings-head h2 {
-  font-size: var(--font-title);
+.instructions-view header h2 {
+  font-size: 28px;
   font-weight: 600;
   letter-spacing: -0.025em;
   line-height: 1.35;
 }
 
 .panel-sub,
-.instructions-view header p,
-.settings-head p {
+.instructions-view header p {
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.7;
@@ -115,27 +111,10 @@ a:focus-visible {
   padding: 24px;
 }
 
-.settings-head {
-  padding: var(--space-4) var(--space-6);
-  height: auto;
-  min-height: 76px;
-}
-
-.settings-content {
-  padding: 28px var(--page-padding) 48px;
-}
-
-.runtime-group {
-  padding: 20px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  background: var(--bg-inset);
-}
-
 .composer {
   border-radius: 18px;
   border-color: var(--border-subtle);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-sm);
 }
 
 .composer:focus-within {
@@ -161,11 +140,6 @@ a:focus-visible {
 }
 
 @media (max-width: 760px) {
-  .settings-head {
-    padding: 16px;
-  }
-
-  .settings-content,
   .skills-view,
   .automations-view,
   .instructions-view {
@@ -227,13 +201,6 @@ textarea::placeholder {
 .settings-toolbar-actions,
 .mcp-add-actions {
   flex-wrap: wrap;
-}
-.settings-panel h3 {
-  font-size: 18px;
-  line-height: 1.4;
-}
-.settings-head p {
-  max-width: 65ch;
 }
 .workspace-panel-empty > .empty-state {
   padding: 0;

@@ -66,6 +66,8 @@ export function BrowserContacts({
         <input
           type="checkbox"
           disabled={!supported}
+          className="ui-switch"
+          role="switch"
           checked={settings.contactAutofill}
           onChange={(event) =>
             void save({ ...settings, contactAutofill: event.target.checked })

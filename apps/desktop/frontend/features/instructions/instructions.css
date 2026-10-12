@@ -16,7 +16,7 @@
   display: flex;
   gap: 8px;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 24px;
 }
 .instructions-toolbar .ui-select {
   margin-left: 4px;
@@ -52,7 +52,7 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 16px;
-  margin-bottom: 16px;
+  margin-bottom: 24px;
 }
 .instruction-pane h3 {
   margin: 0 0 6px;
@@ -67,7 +67,9 @@
 }
 .instruction-pane textarea {
   width: 100%;
-  margin-top: 10px;
+  margin-top: 16px;
+  padding: 16px;
+  line-height: 1.7;
   font-family: ui-monospace, monospace;
   font-size: 13px;
   resize: vertical;

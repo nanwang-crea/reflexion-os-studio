@@ -46,14 +46,8 @@
 .edit-resend-actions .primary {
   color: var(--on-accent);
 }
-:root[data-theme='light'] input[type='checkbox']:checked {
+:root[data-theme='light'] input[type='checkbox']:not(.ui-switch):checked {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m3 8 3 3 7-7' fill='none' stroke='%23fff' stroke-width='2'/%3E%3C/svg%3E");
-}
-:root[data-theme='light'] .settings-view {
-  --settings-surface: rgba(0, 0, 0, 0.025);
-  --settings-surface-strong: rgba(0, 0, 0, 0.045);
-  --settings-border: var(--border-subtle);
-  --settings-accent: #3b52ad;
 }
 :root[data-theme='light'] .settings-primary:hover:not(:disabled),
 :root[data-theme='light'] .form-actions .primary:hover:not(:disabled) {
@@ -62,14 +56,16 @@
 }
 :root[data-theme='light']
   .settings-view
-  input:not([type='checkbox']):not([type='radio']):hover,
+  input:not([type='checkbox']):not([type='radio']):not([type='search']):hover,
 :root[data-theme='light'] .settings-view textarea:hover,
 :root[data-theme='light'] .settings-view .field .ui-select:hover {
   border-color: var(--text-muted);
 }
 :root[data-theme='light']
   .settings-view
-  input:not([type='checkbox']):not([type='radio']):focus-visible,
+  input:not([type='checkbox']):not([type='radio']):not(
+    [type='search']
+  ):focus-visible,
 :root[data-theme='light'] .settings-view textarea:focus-visible,
 :root[data-theme='light'] .settings-view .field .ui-select:focus-visible {
   border-color: var(--focus-ring);

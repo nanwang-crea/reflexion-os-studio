@@ -1,0 +1,119 @@
+.agent-runtime {
+  padding: 0;
+  background: transparent;
+}
+
+.settings-section-heading {
+  margin-bottom: 20px;
+}
+
+.settings-eyebrow {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--settings-accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.settings-section-heading h3 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+
+.settings-section-heading .hint {
+  max-width: 620px;
+  line-height: 1.6;
+}
+
+.agent-runtime-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(240px, 1fr));
+  gap: 14px 20px;
+}
+
+.agent-runtime .field-hint {
+  display: block;
+}
+
+.agent-runtime-body {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.agent-definition-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agent-definition-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+}
+
+.agent-definition-row > span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.agent-definition-row small {
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.agent-template-editor {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.agent-template-editor textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.runtime-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  background: var(--bg);
+}
+
+.runtime-group-title {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.agent-definition-row:last-child {
+  border-bottom: 0;
+}
+@container (max-width: 640px) {
+  .agent-runtime-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .agent-definition-row {
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+}

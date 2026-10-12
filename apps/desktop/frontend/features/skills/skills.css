@@ -11,7 +11,7 @@
   padding: 24px 16px 32px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 28px;
 }
 
 .skills-view .panel-head,
@@ -45,9 +45,9 @@
   flex-direction: column;
   gap: 12px;
   padding: 16px;
-  border: 1px dashed var(--border);
-  border-radius: 12px;
-  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  background: var(--bg-inset);
 }
 
 .plugin-installer.dragging {
@@ -99,6 +99,25 @@
 
 .plugin-installer-head {
   justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.plugin-installer-head > div:first-child {
+  flex: 1 1 260px;
+}
+
+.plugin-local-actions {
+  flex-wrap: wrap;
+}
+
+.plugin-local-actions button,
+.plugin-git-form button {
+  white-space: nowrap;
+}
+
+.plugin-git-form {
+  flex-wrap: wrap;
 }
 
 .plugin-installer h2,
@@ -117,7 +136,7 @@
 }
 
 .plugin-git-form input {
-  flex: 1;
+  flex: 1 1 240px;
   min-width: 0;
   padding: 8px 10px;
   border: 1px solid var(--border);
@@ -234,18 +253,18 @@
 
 .skill-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+  gap: 20px;
 }
 
 .skill-card {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: var(--bg-elevated);
+  background: var(--bg);
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  padding: 16px;
+  border-radius: 14px;
+  padding: 22px;
   transition: border-color 120ms ease;
 }
 
@@ -316,7 +335,7 @@
   margin: 0;
   color: var(--text-secondary);
   font-size: 13px;
-  line-height: 1.55;
+  line-height: 1.7;
 }
 
 .skill-card-hint {

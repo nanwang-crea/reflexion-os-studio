@@ -99,6 +99,8 @@ export function BrowserDownloads({
       <label>
         <input
           type="checkbox"
+          className="ui-switch"
+          role="switch"
           checked={settings.askDownloadLocation}
           onChange={(event) =>
             void save({

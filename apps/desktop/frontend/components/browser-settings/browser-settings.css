@@ -1,41 +1,75 @@
 .browser-settings-card,
 .browser-capability-card {
   display: grid;
-  gap: 14px;
-  padding: 16px;
-  border: 1px solid var(--settings-border);
-  border-radius: 12px;
-  background: var(--settings-surface);
+  gap: 16px;
+  min-width: 0;
+  margin: 0 0 28px;
+  padding: 20px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  background: var(--bg);
 }
-
+.browser-settings-card legend {
+  padding: 0 8px;
+  margin-left: -8px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
 .browser-settings-card label {
   display: grid;
-  gap: 6px;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.browser-settings-card label:has(> .ui-select) {
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 46%);
+  align-items: center;
+  min-height: 48px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.browser-settings-card label:has(> input[type='checkbox']) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+}
+.browser-settings-card .hint {
+  margin: 0;
+  line-height: 1.65;
+}
+.browser-settings-card > button {
+  justify-self: start;
+}
+.browser-settings-card > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.browser-settings-card label:has(> .ui-switch),
+.browser-settings-checkbox {
+  flex-direction: row-reverse;
+  justify-content: space-between;
+}
+.browser-settings-checkbox > span {
+  flex: 1;
+}
+.browser-capability-card {
+  background: var(--bg-inset);
+  gap: 8px;
   color: var(--text-muted);
   font-size: 13px;
 }
-
-.browser-settings-checkbox {
-  display: flex !important;
-  align-items: center;
-  gap: 8px !important;
-}
-
-.browser-settings-checkbox input {
-  width: 16px;
-  height: 16px;
-}
-
-.browser-capability-card {
-  margin-top: 14px;
-  color: var(--text-muted);
-}
-
 .browser-capability-card strong {
   color: var(--text);
 }
-
-.browser-settings-card {
-  margin: 0;
-  min-width: 0;
+@container (max-width: 460px) {
+  .browser-settings-card label:has(> .ui-select) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .browser-settings-card,
+  .browser-capability-card {
+    padding: 16px;
+  }
 }

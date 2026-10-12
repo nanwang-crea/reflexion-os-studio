@@ -103,6 +103,8 @@ export function BrowserPreferences({
         <input
           type="checkbox"
           disabled={disabled || settings.storageMode !== 'persistent'}
+          className="ui-switch"
+          role="switch"
           checked={settings.saveHistory}
           onChange={(event) =>
             void save({ ...settings, saveHistory: event.target.checked })
