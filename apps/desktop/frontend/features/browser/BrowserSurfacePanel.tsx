@@ -8,6 +8,7 @@ import { BrowserImportDialog } from './BrowserImportDialog'
 import { BrowserSettingsDialog } from './BrowserSettingsDialog'
 import { browserHomeUrl } from '@reflexion-os-studio/contracts'
 import { BrowserMenu } from './BrowserMenu'
+import { BrowserLoadNotice } from './BrowserLoadNotice'
 import { useBrowserSettings } from '../../api/browser-settings'
 
 /** Trusted browser chrome; native webpage content remains a separate view. */
@@ -50,7 +51,6 @@ export function BrowserSurfacePanel({
   }, [state?.url, state?.activeTabId])
   const target = state?.url ?? address
   const busy = state?.status === 'loading'
-  const notice = error ?? state?.notice
   return (
     <section className="browser-surface-panel" aria-label="浏览器面板">
       <div className="browser-tabstrip">
@@ -215,23 +215,12 @@ export function BrowserSurfacePanel({
           </button>
         </form>
       )}
-      <div className="browser-status-slot">
-        {(notice || busy) && (
-          <div className="browser-notice" role="status" aria-live="polite">
-            {notice ?? '正在加载…'}
-            {state?.status === 'failed' && state.url?.startsWith('https:') && (
-              <button
-                type="button"
-                onClick={() =>
-                  void navigate(state.url!.replace(/^https:/, 'http:'))
-                }
-              >
-                尝试 HTTP
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+      <BrowserLoadNotice
+        state={state}
+        error={error}
+        navigate={navigate}
+        external={external}
+      />
       {bannerVisible && state?.available && !state.url && (
         <div className="browser-import-banner">
           <BrowserIcon name="globe" />

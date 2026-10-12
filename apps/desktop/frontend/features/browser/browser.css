@@ -180,6 +180,12 @@
   color: var(--text-secondary);
   border-bottom: 1px solid var(--border-subtle);
 }
+.browser-notice > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .browser-notice button {
   flex-shrink: 0;
   padding: 3px 6px;
@@ -407,4 +413,24 @@
 }
 .browser-surface-panel {
   position: relative;
+}
+
+.main-conversation-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.content-main.browser-with-chat {
+  flex-direction: row;
+}
+.browser-with-chat .main-conversation-content {
+  order: 2;
+  flex: 0 0 36%;
+  min-width: 300px;
+  border-left: 1px solid var(--border);
+}
+.browser-with-chat .browser-panel-host {
+  order: 1;
 }

@@ -122,8 +122,10 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
           </div>
         )}
         <div className="content-area">
-          <div className="content-main">
-            <div style={{ display: browserOpen ? 'none' : 'contents' }}>
+          <div
+            className={`content-main${browserOpen ? ' browser-with-chat' : ''}`}
+          >
+            <div className="main-conversation-content">
               {view === 'settings' ? (
                 <SettingsView {...props.settings} />
               ) : view === 'skills' ? (

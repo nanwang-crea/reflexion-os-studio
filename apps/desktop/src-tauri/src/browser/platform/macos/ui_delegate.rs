@@ -111,28 +111,11 @@ define_class!(
         unsafe fn new_window(
             &self,
             _view: &WKWebView,
-            _config: &WKWebViewConfiguration,
+            config: &WKWebViewConfiguration,
             action: &WKNavigationAction,
             _features: &WKWindowFeatures,
         ) -> Option<Retained<WKWebView>> {
-            let request = action.request();
-            let url = request
-                .URL()
-                .and_then(|url| url.absoluteString())
-                .map(|url| url.to_string());
-            let app = &self.ivars().app;
-            let allowed = url.as_deref().is_some_and(|raw| {
-                policy::guest_url(raw, crate::browser::policy::dev_url(app)).is_ok()
-            });
-            if allowed {
-                let _ = crate::browser::window::control(app, state::Action::Newtab { url });
-            }
-            policy::audit(
-                "new-window",
-                None,
-                if allowed { "new-tab" } else { "blocked" },
-            );
-            None
+            super::popup::create(&self.ivars().app, self.ivars().id, config, action)
         }
         #[unsafe(method(webView:runJavaScriptAlertPanelWithMessage:initiatedByFrame:completionHandler:))]
         fn alert(

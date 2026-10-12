@@ -51,7 +51,8 @@ define_class!(
                     .map(|url| url.to_string())
             };
             let downloading = unsafe { action.shouldPerformDownload() };
-            let allowed = url.as_deref().is_some_and(|url| {
+            let blank = url.as_deref() == Some("about:blank");
+            let allowed = blank || url.as_deref().is_some_and(|url| {
                     policy::guest_url(url, crate::browser::policy::dev_url(app)).is_ok()
                 });
             policy::audit(
@@ -64,7 +65,7 @@ define_class!(
                     .targetFrame()
                     .is_some_and(|frame| frame.isMainFrame())
             };
-            if allowed && main_frame && !downloading {
+            if allowed && main_frame && !downloading && !blank {
                 state::update_tab(app, self.ivars().id, |state| {
                     state.url = url.clone();
                     state.status = "loading".into();
@@ -183,7 +184,8 @@ pub fn publish(app: &AppHandle, id: u32, view: &WKWebView, status: &str, notice:
         let current = view
             .URL()
             .and_then(|url| url.absoluteString())
-            .map(|url| url.to_string());
+            .map(|url| url.to_string())
+            .filter(|url| url != "about:blank");
         state::update_tab(app, id, |state| {
             // Provisional failure may leave the previous URL: keep the requested target.
             if status == "ready" {

@@ -2,6 +2,9 @@ use objc2_foundation::NSObjectNSKeyValueObserverRegistration;
 mod browsing;
 mod contact;
 mod passwords;
+mod popup;
+mod viewport;
+use objc2::Message;
 pub use passwords::manage as manage_password;
 mod credentials;
 pub(super) mod downloads;
@@ -35,6 +38,14 @@ pub fn supported_version() -> bool {
 }
 
 pub fn attach(app: &AppHandle) -> Result<(), String> {
+    attach_view(app, None, true).map(|_| ())
+}
+
+pub(super) fn attach_view(
+    app: &AppHandle,
+    configuration: Option<&WKWebViewConfiguration>,
+    navigate: bool,
+) -> Result<objc2::rc::Retained<WKWebView>, String> {
     if REGISTRY.with(|r| r.borrow().clearing) {
         return Err("浏览数据正在清理".into());
     }
@@ -43,8 +54,14 @@ pub fn attach(app: &AppHandle) -> Result<(), String> {
         .ok_or("no active browser tab")?;
     REGISTRY.with(|registry| registry.borrow_mut().active = Some(id));
     registry::refresh();
-    if REGISTRY.with(|registry| registry.borrow().guests.contains_key(&id)) {
-        return Ok(());
+    if let Some(view) = REGISTRY.with(|registry| {
+        registry
+            .borrow()
+            .guests
+            .get(&id)
+            .map(|guest| guest.view.clone())
+    }) {
+        return Ok(view);
     }
     let marker = MainThreadMarker::new().ok_or("browser requires main thread")?;
     let window = app
@@ -54,12 +71,14 @@ pub fn attach(app: &AppHandle) -> Result<(), String> {
         .ns_window()
         .map_err(|_| "native window unavailable")?;
     // SAFETY: Tauri owns this NSWindow; access only on its main thread, no ownership transfer.
-    unsafe {
+    let view = unsafe {
         let native = &*(pointer as *const NSWindow);
         let parent = native
             .contentView()
             .ok_or("native content view unavailable")?;
-        let config = WKWebViewConfiguration::new(marker);
+        let config = configuration
+            .map(|config| config.retain())
+            .unwrap_or_else(|| WKWebViewConfiguration::new(marker));
         let store = storage::store(app, marker)?;
         config.setWebsiteDataStore(&store);
         config
@@ -88,61 +107,23 @@ pub fn attach(app: &AppHandle) -> Result<(), String> {
             registry.borrow_mut().guests.insert(
                 id,
                 Guest {
-                    view,
+                    view: view.clone(),
                     _navigation: navigation,
                     _ui: ui,
                     ready: false,
                 },
             );
         });
-    }
-    if let Some(url) = state::snapshot(app).url {
-        control(app, &Action::Navigate { url })?;
-    }
-    policy::audit("attach", None, "nonpersistent-no-ipc");
-    Ok(())
-}
-
-/// CSS pixels are logical points; clamp native content to the current client area.
-fn layout(
-    app: &AppHandle,
-    x: f64,
-    y: f64,
-    width: f64,
-    height: f64,
-    visible: bool,
-) -> Result<(), String> {
-    if [x, y, width, height]
-        .iter()
-        .any(|n| !n.is_finite() || *n < 0.0 || *n > 100000.0)
-    {
-        return Err("invalid browser bounds".into());
-    }
-    let window = app
-        .get_webview_window("main")
-        .ok_or("main window unavailable")?;
-    let pointer = window
-        .ns_window()
-        .map_err(|_| "native window unavailable")?;
-    // Full-size content views include the titlebar; CSS viewport starts below it.
-    let bounds = unsafe { (&*(pointer as *const NSWindow)).contentLayoutRect() };
-    let client_width = bounds.size.width;
-    let client_height = bounds.size.height;
-    let width = width.min((client_width - x).max(0.0));
-    let height = height.min((client_height - y).max(0.0));
-    REGISTRY.with(|registry| {
-        let mut registry = registry.borrow_mut();
-        registry.visible = visible && width > 0.0 && height > 0.0;
-        registry.frame = Some(NSRect::new(
-            NSPoint::new(
-                bounds.origin.x + x,
-                bounds.origin.y + (client_height - y - height).max(0.0),
-            ),
-            NSSize::new(width, height),
-        ));
-    });
+        view
+    };
     registry::refresh();
-    Ok(())
+    if navigate {
+        if let Some(url) = state::snapshot(app).url {
+            control(app, &Action::Navigate { url })?;
+        }
+    }
+    policy::audit("attach", None, "isolated-no-ipc");
+    Ok(view)
 }
 
 pub(super) fn reveal(id: u32) {
@@ -161,7 +142,7 @@ pub fn control(app: &AppHandle, action: &Action) -> Result<(), String> {
         visible,
     } = action
     {
-        return layout(app, *x, *y, *width, *height, *visible);
+        return viewport::layout(app, *x, *y, *width, *height, *visible);
     }
     // Do not borrow the thread-local Guest while invoking WebKit: native callbacks may reenter.
     let id = state::snapshot(app).active_tab_id;
@@ -212,13 +193,8 @@ pub fn control(app: &AppHandle, action: &Action) -> Result<(), String> {
             Action::Find { text, backwards } => browsing::find(&view, text, *backwards)?,
             Action::Zoom { factor } => view.setPageZoom(*factor),
             Action::Print => browsing::print(&view, app)?,
-            Action::Status => navigation::publish(
-                app,
-                id,
-                &view,
-                if view.isLoading() { "loading" } else { "ready" },
-                None,
-            ),
+            // Navigation delegates own load/error state; status must not erase a failure.
+            Action::Status => {}
             _ => {}
         }
     }
