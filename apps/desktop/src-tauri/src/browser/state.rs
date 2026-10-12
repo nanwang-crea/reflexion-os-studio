@@ -100,7 +100,7 @@ impl Default for BrowserState {
                 notice: if available {
                     None
                 } else {
-                    Some("内嵌浏览实验未启用或本平台尚未通过隔离验证".into())
+                    Some(super::platform::unavailable_notice().into())
                 },
             }),
         }

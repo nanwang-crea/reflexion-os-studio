@@ -28,7 +28,8 @@ tauri-plugin-clipboard-manager = "2"
 libc = "0.2"
 
 [features]
-# Experimental user Surface. Release builds still fail closed even with this feature.
+# macOS native browser is enabled in normal builds; other platforms remain unsupported.
+default = ["browser-spike"]
 browser-spike = ["dep:objc2", "dep:objc2-foundation", "dep:objc2-app-kit", "dep:objc2-web-kit", "dep:block2", "dep:security-framework", "dep:rusqlite", "dep:aes", "dep:cbc", "dep:pbkdf2", "dep:sha1", "dep:sha2", "dep:zeroize"]
 
 [target.'cfg(target_os = "macos")'.dependencies]

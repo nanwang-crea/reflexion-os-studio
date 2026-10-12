@@ -159,3 +159,12 @@ UUID 的 WKWebsiteDataStore 支持单个持久配置，不使用应用 Renderer 
 查找、缩放、打印、下载及网站权限由原生适配实现；密码增删改/揭示经系统
 LocalAuthentication 和原生窗口，凭据不经 IPC。联系信息只在用户明确选取并确认
 精确 HTTPS 来源后填充主页面，不自动提交。发布与跨平台验收仍见浏览器规划。
+
+### macOS 默认启用更新（2026-10-12）
+
+按用户决定，macOS 12+ 的原生内嵌浏览器在默认开发与发布构建中启用；
+不再受 debug-only 限制。Cargo 默认启用现有 browser-spike feature，显式
+`--no-default-features` 仍可关闭。Windows/Linux 保持不可用并回退系统浏览器。
+持久配置仍需 macOS 14+，媒体权限仍检查 bundle 的用途说明，其余权限约束不变。
+此更新取代上文历史记录中的 macOS 发布关闭规则，不代表待补真机验收已完成。
+默认链接路由仍尊重已有设置，用户可在浏览器设置中选择内嵌打开。

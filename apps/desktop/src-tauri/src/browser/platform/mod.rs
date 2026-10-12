@@ -2,11 +2,11 @@
 mod macos;
 
 pub fn available() -> bool {
-    #[cfg(all(feature = "browser-spike", debug_assertions, target_os = "macos"))]
+    #[cfg(all(feature = "browser-spike", target_os = "macos"))]
     {
         macos::supported_version()
     }
-    #[cfg(not(all(feature = "browser-spike", debug_assertions, target_os = "macos")))]
+    #[cfg(not(all(feature = "browser-spike", target_os = "macos")))]
     {
         false
     }
@@ -35,11 +35,11 @@ mod unsupported {
 pub use unsupported::{attach, close_tab, control, dispose};
 
 pub fn persistent_available() -> bool {
-    #[cfg(all(feature = "browser-spike", debug_assertions, target_os = "macos"))]
+    #[cfg(all(feature = "browser-spike", target_os = "macos"))]
     {
         macos::persistent_available()
     }
-    #[cfg(not(all(feature = "browser-spike", debug_assertions, target_os = "macos")))]
+    #[cfg(not(all(feature = "browser-spike", target_os = "macos")))]
     {
         false
     }
@@ -63,21 +63,21 @@ pub fn clear_data(
 }
 
 pub fn downloads() -> Vec<crate::browser::downloads::Record> {
-    #[cfg(all(feature = "browser-spike", debug_assertions, target_os = "macos"))]
+    #[cfg(all(feature = "browser-spike", target_os = "macos"))]
     {
         macos::downloads::list()
     }
-    #[cfg(not(all(feature = "browser-spike", debug_assertions, target_os = "macos")))]
+    #[cfg(not(all(feature = "browser-spike", target_os = "macos")))]
     {
         vec![]
     }
 }
 pub fn download_action(id: u64, kind: &str) -> Result<(), String> {
-    #[cfg(all(feature = "browser-spike", debug_assertions, target_os = "macos"))]
+    #[cfg(all(feature = "browser-spike", target_os = "macos"))]
     {
         macos::downloads::action(id, kind)
     }
-    #[cfg(not(all(feature = "browser-spike", debug_assertions, target_os = "macos")))]
+    #[cfg(not(all(feature = "browser-spike", target_os = "macos")))]
     {
         let _ = (id, kind);
         Err("下载适配不可用".into())
@@ -95,12 +95,27 @@ pub fn clearing() -> bool {
     }
 }
 pub fn media_available() -> bool {
-    #[cfg(all(feature = "browser-spike", debug_assertions, target_os = "macos"))]
+    #[cfg(all(feature = "browser-spike", target_os = "macos"))]
     {
         available() && macos::media_available()
     }
-    #[cfg(not(all(feature = "browser-spike", debug_assertions, target_os = "macos")))]
+    #[cfg(not(all(feature = "browser-spike", target_os = "macos")))]
     {
         false
+    }
+}
+
+pub fn unavailable_notice() -> &'static str {
+    #[cfg(all(feature = "browser-spike", target_os = "macos"))]
+    {
+        "内嵌浏览器需要 macOS 12 或更新系统"
+    }
+    #[cfg(all(not(feature = "browser-spike"), target_os = "macos"))]
+    {
+        "当前构建已禁用 macOS 内嵌浏览器"
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        "Windows / Linux 内嵌浏览器暂未启用，将使用系统浏览器"
     }
 }

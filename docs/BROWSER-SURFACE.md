@@ -75,3 +75,12 @@ Windows 使用 WebView2，Linux 使用 WebKitGTK。引擎复用不代表后三�
 
 常规偏好、数据/历史、密码与自动填充、下载、网站权限和 Agent 权限统一规划见
 [浏览器设置与能力规划](BROWSER-SETTINGS-PLAN.md)。B1 设置与路由已实现，真机验收状态见该规划；B2–B3 已有 macOS 实验实现，完整验收与缺口见该规划；B4–B5 仍为待实施批次。
+
+### macOS 默认启用更新（2026-10-12）
+
+按用户决定，macOS 12+ 的原生内嵌浏览器在默认开发与发布构建中启用；
+不再受 debug-only 限制。Cargo 默认启用现有 browser-spike feature，显式
+`--no-default-features` 仍可关闭。Windows/Linux 保持不可用并回退系统浏览器。
+持久配置仍需 macOS 14+，媒体权限仍检查 bundle 的用途说明，其余权限约束不变。
+此更新取代上文历史记录中的 macOS 发布关闭规则，不代表待补真机验收已完成。
+默认链接路由仍尊重已有设置，用户可在浏览器设置中选择内嵌打开。

@@ -30,7 +30,7 @@ pub fn report() -> Capabilities {
     let notice = if embedded_available {
         None
     } else {
-        Some("内嵌浏览器适配器尚未在当前构建与平台完成隔离验证，将回退到系统浏览器".into())
+        Some(super::platform::unavailable_notice().into())
     };
     Capabilities {
         platform: platform.into(),
@@ -44,5 +44,29 @@ pub fn report() -> Capabilities {
             "downloads": embedded_available, "passwordManagement": embedded_available, "contactFill": embedded_available,
             "sitePermissions": if super::platform::media_available() { vec!["camera", "microphone"] } else { vec![] }
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn capability_report_matches_platform_in_all_build_profiles() {
+        let report = super::report();
+        assert_eq!(
+            report.embedded_available,
+            super::super::platform::available()
+        );
+        #[cfg(all(feature = "browser-spike", target_os = "macos"))]
+        assert_eq!(
+            report.embedded_available,
+            super::super::platform::persistent_available()
+                || objc2_foundation::NSProcessInfo::processInfo()
+                    .operatingSystemVersion()
+                    .majorVersion
+                    >= 12
+        );
+        #[cfg(not(target_os = "macos"))]
+        assert!(!report.embedded_available);
+        assert_eq!(report.features["downloads"], report.embedded_available);
     }
 }
