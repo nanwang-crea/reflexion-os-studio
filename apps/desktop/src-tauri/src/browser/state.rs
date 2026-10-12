@@ -33,6 +33,21 @@ pub struct Snapshot {
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
 pub enum Action {
+    Configure {
+        #[serde(flatten)]
+        preferences: super::preferences::Preferences,
+    },
+    Find {
+        text: String,
+        backwards: bool,
+    },
+    Zoom {
+        factor: f64,
+    },
+    Print,
+    Fillcontact {
+        contact: super::preferences::Contact,
+    },
     Newtab {
         url: Option<String>,
     },
@@ -65,11 +80,13 @@ pub enum Action {
 
 pub struct BrowserState {
     pub snapshot: Mutex<Snapshot>,
+    pub preferences: Mutex<super::preferences::Preferences>,
 }
 impl Default for BrowserState {
     fn default() -> Self {
         let available = super::platform::available();
         Self {
+            preferences: Mutex::new(super::preferences::Preferences::default()),
             snapshot: Mutex::new(Snapshot {
                 tabs: Vec::new(),
                 active_tab_id: None,
@@ -134,4 +151,12 @@ pub fn update_tab(app: &AppHandle, id: u32, f: impl FnOnce(&mut Tab)) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.emit("browser:state", &next);
     }
+}
+
+pub fn preferences(app: &AppHandle) -> super::preferences::Preferences {
+    app.state::<BrowserState>()
+        .preferences
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
 }

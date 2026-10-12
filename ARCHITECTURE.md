@@ -151,3 +151,11 @@ Browser 基础扩展：用户 Surface 多标签各自维护原生视图/历史�
 用户二次确认后处理来源只读快照和平台解密，凭据不经过 Runtime/Agent/IPC。
 macOS 实验构建支持 Chrome/Edge v10 和 Keychain 存储、显式同来源 HTTPS
 密码填充；Windows/Linux 及正常发布构建暂不开放，详见 BROWSER-SURFACE.md。
+
+B2–B3 实验扩展：Runtime 的 `browser_history` / `browser_contacts` 仅保存显式允许的
+本地元数据（v42），不注册 Agent 工具。默认临时 store；macOS 14+ 通过固定独立
+UUID 的 WKWebsiteDataStore 支持单个持久配置，不使用应用 Renderer 的 store。
+原生分项清理关闭网页后等待引擎完成，未选择的数据保留，期间拒绝重建页面。
+查找、缩放、打印、下载及网站权限由原生适配实现；密码增删改/揭示经系统
+LocalAuthentication 和原生窗口，凭据不经 IPC。联系信息只在用户明确选取并确认
+精确 HTTPS 来源后填充主页面，不自动提交。发布与跨平台验收仍见浏览器规划。

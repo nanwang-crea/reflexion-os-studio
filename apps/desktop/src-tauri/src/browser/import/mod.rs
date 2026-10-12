@@ -68,11 +68,14 @@ pub async fn browser_import(
         let contents = match (request.cookies, request.passwords) {
             (true, true) => "Cookie 和密码", (true, false) => "Cookie", _ => "密码",
         };
+        let expected_tab = crate::browser::state::snapshot(&app).active_tab_id;
+        let expected_storage = crate::browser::state::preferences(&app).storage_mode;
         let parent = app.get_webview_window("main").ok_or("主窗口已关闭")?;
-        if !app.dialog().message(format!("从 {} 的 {} 配置迁移{}？\n请先关闭来源浏览器。Cookie 进入本应用临时浏览会话，密码保存在本应用的系统钥匙串条目。Agent 不可访问这些数据。", request.source, request.profile, contents))
+        if !app.dialog().message(format!("从 {} 的 {} 配置迁移{}？\n请先关闭来源浏览器。Cookie 进入本应用当前独立浏览会话（保存方式跟随临时/持久设置），密码保存在本应用的系统钥匙串条目。Agent 不可访问这些数据。", request.source, request.profile, contents))
             .parent(&parent).title("确认浏览器迁移").buttons(MessageDialogButtons::OkCancel).blocking_show() {
             return Ok(Report { cancelled: true, notice: "已取消，未读取浏览器数据".into(), ..Report::default() });
         }
+        if expected_tab != crate::browser::state::snapshot(&app).active_tab_id || expected_storage != crate::browser::state::preferences(&app).storage_mode { return Err("导入目标会话已变化，请重新确认".into()); }
         #[cfg(all(feature = "browser-spike", target_os = "macos"))]
         { chromium::import(&app, request) }
         #[cfg(not(all(feature = "browser-spike", target_os = "macos")))]
@@ -172,5 +175,31 @@ mod tests {
         }
         .validate()
         .is_ok());
+    }
+}
+
+#[tauri::command]
+pub async fn browser_password_manage(
+    webview: Webview,
+    app: AppHandle,
+    kind: String,
+    id: Option<usize>,
+    origin: Option<String>,
+) -> Result<bool, String> {
+    crate::host::caller::trusted(&webview, &app, &["main"])?;
+    supported()?;
+    if !matches!(kind.as_str(), "add" | "edit" | "reveal" | "delete")
+        || origin.as_ref().is_some_and(|s| s.len() > 8192)
+    {
+        return Err("密码管理请求无效".into());
+    }
+    #[cfg(all(feature = "browser-spike", target_os = "macos"))]
+    {
+        super::platform::manage_password(app, kind, id, origin).await
+    }
+    #[cfg(not(all(feature = "browser-spike", target_os = "macos")))]
+    {
+        let _ = (app, kind, id, origin);
+        Err("本平台尚无密码管理适配".into())
     }
 }

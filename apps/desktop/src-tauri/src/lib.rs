@@ -71,10 +71,14 @@ pub fn run() {
             host::external::open_external,
             browser::commands::browser_open,
             browser::commands::browser_capabilities,
+            browser::commands::browser_clear_data,
+            browser::downloads::browser_downloads,
+            browser::downloads::browser_download_action,
             browser::commands::browser_control,
             browser::import::browser_import,
             browser::import::browser_credentials,
             browser::import::browser_fill,
+            browser::import::browser_password_manage,
             browser::import::browser_clear_credentials
         ])
         .setup(move |app| {

@@ -1,7 +1,30 @@
 import { z } from 'zod'
+import { BrowserSiteRuleSchema, BrowserContactSchema } from './browser/data.js'
 
 /** User Surface only; deliberately absent from Runtime/Agent command tables. */
 export const BrowserActionSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('configure'),
+    storageMode: z.enum(['temporary', 'persistent']),
+    askDownloadLocation: z.boolean(),
+    downloadDirectory: z.string().min(1).max(4096).nullable(),
+    siteRules: z.array(BrowserSiteRuleSchema).max(500),
+    contactAutofill: z.boolean(),
+  }),
+  z.strictObject({
+    kind: z.literal('find'),
+    text: z.string().max(1000),
+    backwards: z.boolean(),
+  }),
+  z.strictObject({
+    kind: z.literal('zoom'),
+    factor: z.number().min(0.25).max(5),
+  }),
+  z.strictObject({ kind: z.literal('print') }),
+  z.strictObject({
+    kind: z.literal('fillcontact'),
+    contact: BrowserContactSchema,
+  }),
   z.strictObject({
     kind: z.literal('navigate'),
     url: z.string().min(1).max(8192),
@@ -58,29 +81,4 @@ export const BrowserSnapshotSchema = z.strictObject({
 })
 export type BrowserSnapshot = z.infer<typeof BrowserSnapshotSchema>
 
-/** Address-bar normalization. The Host independently enforces the boundary. */
-export function normalizeBrowserUrl(input: string): string {
-  if (/[\u0000-\u001f\u007f]/.test(input)) throw new Error('请输入有效的网址')
-  const trimmed = input.trim()
-  if (
-    !trimmed ||
-    trimmed.length > 8192 ||
-    /[\u0000-\u0020\u007f]/.test(trimmed)
-  )
-    throw new Error('请输入有效的网址')
-  const explicitScheme = /^[a-z][a-z\d+.-]*:/i.test(trimmed)
-  // A hostname:port is an address, not an application protocol.
-  const hostPort =
-    /^(?:localhost|[a-z\d.-]+|\[[a-f\d:]+\]):\d+(?:[/?#]|$)/i.test(trimmed)
-  const url = new URL(
-    explicitScheme && !hostPort ? trimmed : `https://${trimmed}`,
-  )
-  if (
-    !['http:', 'https:'].includes(url.protocol) ||
-    !url.hostname ||
-    url.username ||
-    url.password
-  )
-    throw new Error('只支持不含账号密码的 HTTP / HTTPS 网址')
-  return url.href
-}
+export { normalizeBrowserUrl } from './browser/url.js'

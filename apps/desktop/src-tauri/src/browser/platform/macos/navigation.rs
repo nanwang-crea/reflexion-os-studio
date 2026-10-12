@@ -30,6 +30,11 @@ define_class!(
     }
     unsafe impl NSObjectProtocol for NavigationDelegate {}
     unsafe impl WKNavigationDelegate for NavigationDelegate {
+        #[unsafe(method(webView:navigationAction:didBecomeDownload:))]
+        fn action_download(&self, _view: &WKWebView, _action: &WKNavigationAction, download: &objc2_web_kit::WKDownload) { super::downloads::start(&self.ivars().app, download); }
+        #[unsafe(method(webView:navigationResponse:didBecomeDownload:))]
+        fn response_download(&self, _view: &WKWebView, _response: &WKNavigationResponse, download: &objc2_web_kit::WKDownload) { super::downloads::start(&self.ivars().app, download); }
+
         #[unsafe(method(webView:decidePolicyForNavigationAction:decisionHandler:))]
         fn decide(
             &self,
@@ -46,8 +51,7 @@ define_class!(
                     .map(|url| url.to_string())
             };
             let downloading = unsafe { action.shouldPerformDownload() };
-            let allowed = !downloading
-                && url.as_deref().is_some_and(|url| {
+            let allowed = url.as_deref().is_some_and(|url| {
                     policy::guest_url(url, crate::browser::policy::dev_url(app)).is_ok()
                 });
             policy::audit(
@@ -60,7 +64,7 @@ define_class!(
                     .targetFrame()
                     .is_some_and(|frame| frame.isMainFrame())
             };
-            if allowed && main_frame {
+            if allowed && main_frame && !downloading {
                 super::hide(self.ivars().id);
                 state::update_tab(app, self.ivars().id, |state| {
                     state.url = url.clone();
@@ -81,7 +85,7 @@ define_class!(
                 });
             }
             handler.call((if allowed {
-                WKNavigationActionPolicy::Allow
+                if downloading { WKNavigationActionPolicy::Download } else { WKNavigationActionPolicy::Allow }
             } else {
                 WKNavigationActionPolicy::Cancel
             },));
@@ -114,14 +118,14 @@ define_class!(
                 state::update_tab(&self.ivars().app, self.ivars().id, |state| {
                     super::hide(self.ivars().id);
                     state.status = "failed".into();
-                    state.notice = Some("实验浏览器不支持下载此内容，请使用系统浏览器".into());
+                    state.notice = Some("正在准备下载".into());
                 });
                 policy::audit("download", None, "blocked");
             }
             handler.call((if allowed {
                 WKNavigationResponsePolicy::Allow
             } else {
-                WKNavigationResponsePolicy::Cancel
+                WKNavigationResponsePolicy::Download
             },));
         }
         #[unsafe(method(webView:didStartProvisionalNavigation:))]

@@ -38,6 +38,9 @@
     ],
     "resources": {
       "package-resources/": "pkg"
+    },
+    "macOS": {
+      "infoPlist": "Info.plist"
     }
   }
 }

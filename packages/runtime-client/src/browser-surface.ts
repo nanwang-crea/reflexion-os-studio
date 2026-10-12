@@ -1,5 +1,6 @@
 import {
   BrowserImportRequestSchema,
+  BrowserDownloadSchema,
   BrowserImportResultSchema,
   BrowserCredentialsSchema,
   type BrowserImportRequest,
@@ -44,6 +45,23 @@ export function createBrowserSurfaceClient(options: RuntimeTransportOptions) {
         }),
       )
     },
+    subscribeDownloads(handler: () => void): Promise<() => void> {
+      return options.listen('browser:downloads', handler)
+    },
+    async downloads() {
+      const result = await options.invoke('browser_downloads')
+      return BrowserDownloadSchema.array().max(200).parse(result)
+    },
+    async downloadAction(id: number, kind: 'cancel' | 'remove' | 'reveal') {
+      if (!Number.isSafeInteger(id) || id <= 0) throw new Error('下载编号无效')
+      return BrowserDownloadSchema.array()
+        .max(200)
+        .parse(await options.invoke('browser_download_action', { id, kind }))
+    },
+    async clearData(websiteData: boolean, cache: boolean): Promise<void> {
+      if (!websiteData && !cache) throw new Error('请选择清理项目')
+      await options.invoke('browser_clear_data', { websiteData, cache })
+    },
     async credentials() {
       return BrowserCredentialsSchema.parse(
         await options.invoke('browser_credentials'),
@@ -52,6 +70,26 @@ export function createBrowserSurfaceClient(options: RuntimeTransportOptions) {
     async fillCredential(id: number) {
       if (!Number.isInteger(id) || id < 0) throw new Error('无效的凭据编号')
       await options.invoke('browser_fill', { id })
+    },
+    async managePassword(
+      kind: 'add' | 'edit' | 'reveal' | 'delete',
+      id?: number,
+      origin?: string,
+    ) {
+      if (!['add', 'edit', 'reveal', 'delete'].includes(kind))
+        throw new Error('无效的密码操作')
+      if (
+        kind !== 'add' &&
+        (!Number.isSafeInteger(id) || (id ?? -1) < 0 || !origin)
+      )
+        throw new Error('缺少密码条目')
+      const result = await options.invoke('browser_password_manage', {
+        kind,
+        id: id ?? null,
+        origin: origin ?? null,
+      })
+      if (typeof result !== 'boolean') throw new Error('无效的密码管理结果')
+      return result
     },
     async clearCredentials() {
       const cleared = await options.invoke('browser_clear_credentials')

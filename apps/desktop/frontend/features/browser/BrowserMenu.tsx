@@ -9,6 +9,10 @@ export function BrowserMenu({
   onImport,
   onNewTab,
   onClear,
+  onFind,
+  onPrint,
+  onZoom,
+  onSettings,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -16,6 +20,10 @@ export function BrowserMenu({
   onImport: () => void
   onNewTab: () => void
   onClear: () => void
+  onFind: () => void
+  onPrint: () => void
+  onZoom: (factor: number) => void
+  onSettings: () => void
 }) {
   return (
     <DropdownMenu.Root open={open} onOpenChange={onOpenChange}>
@@ -43,20 +51,30 @@ export function BrowserMenu({
           >
             新标签页
           </DropdownMenu.Item>
+          {[0.75, 1, 1.25, 1.5, 2].map((factor) => (
+            <DropdownMenu.Item
+              key={factor}
+              className="browser-menu-item"
+              disabled={!available}
+              onSelect={() => onZoom(factor)}
+            >
+              缩放 {factor * 100}%
+            </DropdownMenu.Item>
+          ))}
           <DropdownMenu.Separator className="browser-menu-separator" />
           <DropdownMenu.Item
             className="browser-menu-item"
-            disabled
-            title="尚未开放"
+            disabled={!available}
+            onSelect={onFind}
           >
-            在页面中查找（尚未开放）
+            在页面中查找
           </DropdownMenu.Item>
           <DropdownMenu.Item
             className="browser-menu-item"
-            disabled
-            title="尚未开放"
+            disabled={!available}
+            onSelect={onPrint}
           >
-            打印（尚未开放）
+            打印
           </DropdownMenu.Item>
           <DropdownMenu.Separator className="browser-menu-separator" />
           <DropdownMenu.Item
@@ -73,22 +91,28 @@ export function BrowserMenu({
           >
             密码管理与手动填充…
           </DropdownMenu.Item>
-          <DropdownMenu.Item className="browser-menu-item" disabled>
-            下载（尚未开放）
+          <DropdownMenu.Item
+            className="browser-menu-item"
+            onSelect={onSettings}
+          >
+            下载与浏览器设置…
           </DropdownMenu.Item>
-          <DropdownMenu.Item className="browser-menu-item" disabled>
-            历史记录（尚未开放）
+          <DropdownMenu.Item
+            className="browser-menu-item"
+            onSelect={onSettings}
+          >
+            历史记录与浏览数据…
           </DropdownMenu.Item>
           <DropdownMenu.Item
             className="browser-menu-item"
             disabled={!available}
             onSelect={onClear}
           >
-            清除临时浏览数据
+            关闭浏览会话
           </DropdownMenu.Item>
           <DropdownMenu.Separator className="browser-menu-separator" />
           <div className="browser-menu-note">
-            浏览数据仅保留在当前临时会话中。已导入密码需在密码管理中单独删除。
+            浏览数据按会话设置保留。历史与网站数据在设置中管理。已导入密码需单独删除。
           </div>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>

@@ -380,3 +380,9 @@
   font-size: 11px;
   line-height: 1.5;
 }
+
+.browser-settings-dialog {
+  width: min(760px, 90vw);
+  max-height: 85vh;
+  overflow: auto;
+}

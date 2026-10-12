@@ -78,7 +78,7 @@ export function BrowserImportDialog({ onClose }: { onClose: () => void }) {
             onChange={(event) => setCookies(event.target.checked)}
             disabled={busy}
           />{' '}
-          Cookie（仅本次浏览会话）
+          Cookie（保存方式跟随当前会话设置）
         </label>
         <label>
           <input
@@ -130,6 +130,19 @@ export function BrowserImportDialog({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <hr />
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() =>
+            void run(async () => {
+              const changed = await browserSurface.managePassword('add')
+              setEntries(await browserSurface.credentials())
+              return changed ? '密码已保存' : '已取消'
+            })
+          }
+        >
+          添加网站密码（系统认证）…
+        </button>
         <div className="dialog-actions">
           <button
             type="button"
@@ -163,19 +176,41 @@ export function BrowserImportDialog({ onClose }: { onClose: () => void }) {
         {entries.length > 0 && (
           <div className="browser-password-list">
             {entries.map((entry) => (
-              <button
-                type="button"
-                key={entry.id}
-                disabled={busy}
-                onClick={() =>
-                  void run(async () => {
-                    await browserSurface.fillCredential(entry.id)
-                    return '已填入当前页面，请自行确认并提交'
-                  })
-                }
-              >
-                {entry.origin} · {entry.label} · 填入当前页面
-              </button>
+              <div key={entry.id}>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    void run(async () => {
+                      await browserSurface.fillCredential(entry.id)
+                      return '已填入当前页面，请自行确认并提交'
+                    })
+                  }
+                >
+                  {entry.origin} · {entry.label} · 填入当前页面
+                </button>
+                {(['reveal', 'edit', 'delete'] as const).map((kind) => (
+                  <button
+                    type="button"
+                    key={kind}
+                    disabled={busy}
+                    onClick={() =>
+                      void run(async () => {
+                        const changed = await browserSurface.managePassword(
+                          kind,
+                          entry.id,
+                          entry.origin,
+                        )
+                        setEntries(await browserSurface.credentials())
+                        return changed ? '操作已完成' : '已取消'
+                      })
+                    }
+                  >
+                    {{ reveal: '查看', edit: '编辑', delete: '删除' }[kind]}
+                    （系统认证）…
+                  </button>
+                ))}
+              </div>
             ))}
           </div>
         )}

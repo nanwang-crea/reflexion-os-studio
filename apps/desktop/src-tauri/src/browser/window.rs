@@ -2,10 +2,34 @@ use super::{
     platform,
     state::{self, Action, Snapshot},
 };
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 pub fn control(app: &AppHandle, action: Action) -> Result<Snapshot, String> {
+    if platform::clearing()
+        && !matches!(
+            action,
+            Action::Status | Action::Layout { .. } | Action::Close
+        )
+    {
+        return Err("浏览数据正在清理，请稍后重试".into());
+    }
     match action {
+        Action::Configure { preferences } => {
+            preferences.validate()?;
+            if preferences.storage_mode == "persistent" && !platform::persistent_available() {
+                return Err("本平台或系统版本不支持独立持久浏览配置".into());
+            }
+            let old = state::preferences(app);
+            if old.storage_mode != preferences.storage_mode
+                || old.site_rules != preferences.site_rules
+            {
+                control(app, Action::Close)?;
+            }
+            *app.state::<state::BrowserState>()
+                .preferences
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = preferences;
+        }
         Action::Newtab { url } => {
             let mut result = Ok(0);
             state::update(app, |state| {

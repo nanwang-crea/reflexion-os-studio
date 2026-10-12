@@ -14,10 +14,14 @@
     "allow-open-external",
     "allow-browser-open",
     "allow-browser-capabilities",
+    "allow-browser-clear-data",
+    "allow-browser-downloads",
+    "allow-browser-download-action",
     "allow-browser-control",
     "allow-browser-import",
     "allow-browser-credentials",
     "allow-browser-fill",
-    "allow-browser-clear-credentials"
+    "allow-browser-clear-credentials",
+    "allow-browser-password-manage"
   ]
 }

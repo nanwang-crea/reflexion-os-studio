@@ -8,6 +8,7 @@ pub struct Capabilities {
     pub system_available: bool,
     pub status: String,
     pub notice: Option<String>,
+    pub features: serde_json::Value,
 }
 
 pub fn report() -> Capabilities {
@@ -37,5 +38,11 @@ pub fn report() -> Capabilities {
         system_available: true,
         status: status.into(),
         notice,
+        features: serde_json::json!({
+            "find": embedded_available, "zoom": embedded_available, "print": embedded_available,
+            "persistentSession": super::platform::persistent_available(), "dataClearing": embedded_available,
+            "downloads": embedded_available, "passwordManagement": embedded_available, "contactFill": embedded_available,
+            "sitePermissions": if super::platform::media_available() { vec!["camera", "microphone"] } else { vec![] }
+        }),
     }
 }

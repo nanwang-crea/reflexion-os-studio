@@ -1,3 +1,4 @@
+import { BROWSER_DATA_SCHEMA } from './migrations/browser-data.js'
 // 存储结构定义：schema DDL 与当前版本号（版本迁移逻辑见 migrations.ts）。
 
 export const SCHEMA = `
@@ -214,6 +215,7 @@ CREATE TABLE IF NOT EXISTS agent_settings (
   updated_at TEXT NOT NULL
 );
 -- B1 低敏浏览器偏好(单行 JSON,id 恒为 1)，不保存凭据或网站数据。
+${BROWSER_DATA_SCHEMA}
 CREATE TABLE IF NOT EXISTS browser_settings (
   id INTEGER PRIMARY KEY,
   settings_json TEXT NOT NULL,
@@ -317,4 +319,4 @@ CREATE INDEX IF NOT EXISTS idx_run_events_run ON run_events(run_id, created_at);
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 41
+export const LATEST_SCHEMA_VERSION = 42

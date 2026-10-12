@@ -1,3 +1,4 @@
+import { migrateBrowserData } from './migrations/browser-data.js'
 import { migrateEarlySchema } from './migrations/early-schema.js'
 import { migrateImageAssets } from './migrations/image-assets.js'
 // 版本化迁移：user_version 推进、旧库重建。
@@ -407,6 +408,7 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
         'CREATE INDEX IF NOT EXISTS idx_provider_models_provider ON provider_models(provider_id, updated_at DESC)',
       )
     }
+    if (version < 42) migrateBrowserData(db)
     if (version < 41) {
       db.exec(`
         CREATE TABLE IF NOT EXISTS browser_settings (

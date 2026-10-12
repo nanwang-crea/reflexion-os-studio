@@ -7,5 +7,27 @@ export const BrowserCapabilitiesSchema = z.strictObject({
   systemAvailable: z.boolean(),
   status: z.enum(['available', 'degraded', 'unavailable']),
   notice: z.string().nullable(),
+  features: z
+    .strictObject({
+      find: z.boolean(),
+      zoom: z.boolean(),
+      print: z.boolean(),
+      persistentSession: z.boolean(),
+      dataClearing: z.boolean(),
+      downloads: z.boolean(),
+      passwordManagement: z.boolean(),
+      contactFill: z.boolean(),
+      sitePermissions: z.array(
+        z.enum([
+          'camera',
+          'microphone',
+          'geolocation',
+          'notifications',
+          'clipboard',
+          'upload',
+        ]),
+      ),
+    })
+    .optional(),
 })
 export type BrowserCapabilities = z.infer<typeof BrowserCapabilitiesSchema>

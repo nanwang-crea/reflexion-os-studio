@@ -5,6 +5,8 @@ import { useBrowserViewport } from './useBrowserViewport'
 import { BrowserIcon } from './BrowserIcon'
 import { BrowserTabs } from './BrowserTabs'
 import { BrowserImportDialog } from './BrowserImportDialog'
+import { BrowserSettingsDialog } from './BrowserSettingsDialog'
+import { browserHomeUrl } from '@reflexion-os-studio/contracts'
 import { BrowserMenu } from './BrowserMenu'
 import { useBrowserSettings } from '../../api/browser-settings'
 
@@ -24,8 +26,11 @@ export function BrowserSurfacePanel({
   const [addressFocused, setAddressFocused] = useState(false)
   const { state, error, control, navigate, external } =
     useBrowserSurface(visible)
+  const [findOpen, setFindOpen] = useState(false)
+  const [find, setFind] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const [bannerVisible, setBannerVisible] = useState(true)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const viewport = useRef<HTMLDivElement>(null)
   useBrowserViewport(
@@ -34,7 +39,8 @@ export function BrowserSurfacePanel({
       settings.mode !== 'system' &&
       Boolean(state?.url) &&
       !menuOpen &&
-      !importOpen,
+      !importOpen &&
+      !settingsOpen,
     state?.available === true,
     state?.revision ?? -1,
   )
@@ -44,7 +50,7 @@ export function BrowserSurfacePanel({
   }, [state?.url, state?.activeTabId])
   const target = state?.url ?? address
   const busy = state?.status === 'loading'
-  const notice = error ?? (state?.status === 'failed' ? state.notice : null)
+  const notice = error ?? state?.notice
   return (
     <section className="browser-surface-panel" aria-label="浏览器面板">
       <div className="browser-tabstrip">
@@ -69,6 +75,9 @@ export function BrowserSurfacePanel({
           <BrowserIcon name="panel" />
         </button>
       </div>
+      {settingsOpen && (
+        <BrowserSettingsDialog onClose={() => setSettingsOpen(false)} />
+      )}
       {importOpen && (
         <BrowserImportDialog onClose={() => setImportOpen(false)} />
       )}
@@ -108,6 +117,20 @@ export function BrowserSurfacePanel({
           >
             <BrowserIcon name={busy ? 'close' : 'reload'} />
           </button>
+          <button
+            type="button"
+            className="browser-icon-button"
+            title="主页"
+            aria-label="主页"
+            disabled={!state?.available}
+            onClick={() => {
+              const url = browserHomeUrl(settings)
+              if (url) void navigate(url)
+              else void control({ kind: 'newtab' })
+            }}
+          >
+            ⌂
+          </button>
         </nav>
         <form
           className="browser-address"
@@ -131,7 +154,7 @@ export function BrowserSurfacePanel({
             onFocus={() => setAddressFocused(true)}
             onBlur={() => setAddressFocused(false)}
             onChange={(event) => setAddress(event.target.value)}
-            placeholder="输入网址"
+            placeholder="输入网址或搜索"
             autoComplete="off"
             spellCheck={false}
           />
@@ -150,6 +173,10 @@ export function BrowserSurfacePanel({
           open={menuOpen}
           onOpenChange={setMenuOpen}
           available={state?.available === true}
+          onSettings={() => setSettingsOpen(true)}
+          onFind={() => setFindOpen(true)}
+          onPrint={() => void control({ kind: 'print' })}
+          onZoom={(factor) => void control({ kind: 'zoom', factor })}
           onImport={() => setImportOpen(true)}
           onNewTab={() => void control({ kind: 'newtab' })}
           onClear={() =>
@@ -159,6 +186,35 @@ export function BrowserSurfacePanel({
           }
         />
       </header>
+      {findOpen && (
+        <form
+          className="browser-toolbar"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void control({ kind: 'find', text: find, backwards: false })
+          }}
+        >
+          <input
+            autoFocus
+            aria-label="页面中查找"
+            value={find}
+            maxLength={1000}
+            onChange={(event) => setFind(event.target.value)}
+          />
+          <button type="submit">下一个</button>
+          <button
+            type="button"
+            onClick={() =>
+              void control({ kind: 'find', text: find, backwards: true })
+            }
+          >
+            上一个
+          </button>
+          <button type="button" onClick={() => setFindOpen(false)}>
+            关闭查找
+          </button>
+        </form>
+      )}
       {(notice || busy) && (
         <div className="browser-notice" role="status" aria-live="polite">
           {notice ?? '正在加载…'}
@@ -198,7 +254,11 @@ export function BrowserSurfacePanel({
         {!state?.url ? (
           <div className="browser-start-page">
             <p className="browser-mode">
-              {state?.available ? '临时浏览会话' : '系统浏览器模式'}
+              {state?.available
+                ? settings.storageMode === 'persistent'
+                  ? '持久浏览会话'
+                  : '临时浏览会话'
+                : '系统浏览器模式'}
             </p>
             <h2>工具</h2>
             <div className="browser-start-tools">
@@ -215,7 +275,7 @@ export function BrowserSurfacePanel({
             </div>
             <p className="browser-start-hint">
               {state?.available
-                ? '输入 HTTP / HTTPS 网址开始浏览。关闭整个浏览会话后清除临时数据。'
+                ? '输入网址或搜索。浏览数据按设置中的会话类型保留。'
                 : '输入网址后按 Enter，使用系统浏览器打开。'}
             </p>
           </div>

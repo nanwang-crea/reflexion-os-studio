@@ -12,6 +12,8 @@ import { PlanDocumentStore } from './chat/planDocuments.js'
 import { PlanStore } from './chat/plans.js'
 import { RunEventStore } from './chat/runEvents.js'
 import { AgentSettingsStore } from './agents/agentSettings.js'
+import { BrowserHistoryStore } from './integrations/browserHistory.js'
+import { BrowserContactsStore } from './integrations/browserContacts.js'
 import { BrowserSettingsStore } from './integrations/browserSettings.js'
 import { AgentStore } from './agents/agents.js'
 import { BUILTIN_AGENTS } from './agents/builtins.js'
@@ -47,6 +49,8 @@ export class Store {
   readonly workspaceIndex: WorkspaceIndexStore
   readonly assetStore: AssetStore
   readonly agentSettings: AgentSettingsStore
+  readonly browserHistory: BrowserHistoryStore
+  readonly browserContacts: BrowserContactsStore
   readonly browserSettings: BrowserSettingsStore
   readonly mcpServers: McpServerStore
   readonly planDocuments: PlanDocumentStore
@@ -82,6 +86,8 @@ export class Store {
     this.workspaceIndex = new WorkspaceIndexStore(this.db)
     this.assetStore = new AssetStore(this.db)
     this.agentSettings = new AgentSettingsStore(this.db)
+    this.browserHistory = new BrowserHistoryStore(this.db)
+    this.browserContacts = new BrowserContactsStore(this.db)
     this.browserSettings = new BrowserSettingsStore(this.db)
     this.mcpServers = new McpServerStore(this.db)
     this.plans = new PlanStore(this.db)

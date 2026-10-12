@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import './browser-settings.css'
 import { DEFAULT_BROWSER_SETTINGS } from '@reflexion-os-studio/contracts'
+import { BrowserPreferences } from './BrowserPreferences'
+import { BrowserContacts } from './BrowserContacts'
+import { BrowserSitePermissions } from './BrowserSitePermissions'
+import { BrowserDownloads } from './BrowserDownloads'
+import { BrowserDataPanel } from './BrowserDataPanel'
 import { Select } from '../../components/forms/Select'
 import type {
   BrowserCapabilities,
@@ -109,7 +114,7 @@ export function BrowserSettingsPanel(): React.JSX.Element {
               value="embedded"
               disabled={!capabilities?.embeddedAvailable}
             >
-              内嵌（临时会话）
+              内嵌浏览器
             </option>
             <option value="system">始终使用系统浏览器</option>
           </Select>
@@ -148,6 +153,30 @@ export function BrowserSettingsPanel(): React.JSX.Element {
         </label>
         {saving && <p className="hint">正在保存…</p>}
       </fieldset>
+      <BrowserPreferences
+        settings={settings}
+        capabilities={capabilities}
+        disabled={!loaded || saving}
+        save={save}
+      />
+      <BrowserDataPanel
+        supported={capabilities?.features?.dataClearing === true}
+      />
+      <BrowserContacts
+        settings={settings}
+        supported={capabilities?.features?.contactFill === true}
+        save={save}
+      />
+      <BrowserSitePermissions
+        settings={settings}
+        supported={capabilities?.features?.sitePermissions ?? []}
+        save={save}
+      />
+      <BrowserDownloads
+        settings={settings}
+        supported={capabilities?.features?.downloads === true}
+        save={save}
+      />
       {capabilities && (
         <div className="browser-capability-card">
           <strong>当前平台能力</strong>

@@ -42,14 +42,70 @@ define_class!(
         #[unsafe(method(webView:requestMediaCapturePermissionForOrigin:initiatedByFrame:type:decisionHandler:))]
         fn media(
             &self,
-            _view: &WKWebView,
-            _origin: &WKSecurityOrigin,
-            _frame: &WKFrameInfo,
-            _kind: WKMediaCaptureType,
+            view: &WKWebView,
+            origin: &WKSecurityOrigin,
+            frame: &WKFrameInfo,
+            kind: WKMediaCaptureType,
             handler: &Block<dyn Fn(WKPermissionDecision)>,
         ) {
-            handler.call((WKPermissionDecision::Deny,));
-            policy::audit("media", None, "blocked");
+            let current = unsafe { view.URL().and_then(|u| u.absoluteString()) }
+                .and_then(|s| url::Url::parse(&s.to_string()).ok())
+                .filter(|u| u.scheme() == "https");
+            let source = unsafe {
+                format!(
+                    "{}://{}{}",
+                    origin.protocol(),
+                    origin.host(),
+                    if origin.port() == 0 || origin.port() == 443 {
+                        String::new()
+                    } else {
+                        format!(":{}", origin.port())
+                    }
+                )
+            };
+            let prefs = state::preferences(&self.ivars().app);
+            let camera = kind == WKMediaCaptureType::Camera
+                || kind == WKMediaCaptureType::CameraAndMicrophone;
+            let microphone = kind == WKMediaCaptureType::Microphone
+                || kind == WKMediaCaptureType::CameraAndMicrophone;
+            let allowed = super::media_available()
+                && unsafe { frame.isMainFrame() }
+                && current
+                    .as_ref()
+                    .is_some_and(|u| u.origin().ascii_serialization() == source)
+                && (!camera || prefs.asks(&source, "camera"))
+                && (!microphone || prefs.asks(&source, "microphone"))
+                && super::contact::confirm(
+                    "网站媒体权限",
+                    &format!(
+                        "{} 请求{}{}。仅允许此次请求？",
+                        source,
+                        if camera { "摄像头" } else { "" },
+                        if microphone { "麦克风" } else { "" }
+                    ),
+                );
+            let unchanged = unsafe { view.URL().and_then(|u| u.absoluteString()) }
+                .and_then(|s| url::Url::parse(&s.to_string()).ok())
+                .is_some_and(|u| u.origin().ascii_serialization() == source);
+            let prefs = state::preferences(&self.ivars().app);
+            let unchanged = unchanged
+                && state::snapshot(&self.ivars().app).active_tab_id == Some(self.ivars().id)
+                && (!camera || prefs.asks(&source, "camera"))
+                && (!microphone || prefs.asks(&source, "microphone"));
+            handler.call((if allowed && unchanged {
+                WKPermissionDecision::Grant
+            } else {
+                WKPermissionDecision::Deny
+            },));
+            policy::audit(
+                "media",
+                None,
+                if allowed && unchanged {
+                    "allowed-once"
+                } else {
+                    "blocked"
+                },
+            );
         }
         #[unsafe(method_id(webView:createWebViewWithConfiguration:forNavigationAction:windowFeatures:))]
         unsafe fn new_window(

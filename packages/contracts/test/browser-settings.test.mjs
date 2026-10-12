@@ -55,3 +55,38 @@ test('settings reject unrelated URL and credential fields', () => {
     false,
   )
 })
+
+test('address search and fixed homepages cannot smuggle executable schemes', async () => {
+  const { browserAddressUrl, browserHomeUrl, BrowserSiteRuleSchema } =
+    await import('../dist/index.js')
+  assert.equal(
+    new URL(
+      browserAddressUrl('cats & dogs', DEFAULT_BROWSER_SETTINGS),
+    ).searchParams.get('q'),
+    'cats & dogs',
+  )
+  assert.equal(
+    browserAddressUrl('example.com', DEFAULT_BROWSER_SETTINGS),
+    'https://example.com/',
+  )
+  assert.throws(() =>
+    browserAddressUrl('javascript:alert(1)', DEFAULT_BROWSER_SETTINGS),
+  )
+  assert.equal(browserHomeUrl(DEFAULT_BROWSER_SETTINGS), undefined)
+  assert.equal(
+    BrowserSiteRuleSchema.safeParse({
+      origin: 'https://example.com/path',
+      permission: 'camera',
+      policy: 'ask',
+    }).success,
+    false,
+  )
+  assert.equal(
+    BrowserSiteRuleSchema.safeParse({
+      origin: 'https://example.com',
+      permission: 'camera',
+      policy: 'allow',
+    }).success,
+    false,
+  )
+})

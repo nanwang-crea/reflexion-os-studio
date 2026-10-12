@@ -161,3 +161,53 @@ test('unavailable adapter and local links use system; malformed links never reac
     ['external', 'https://example.com/'],
   ])
 })
+
+test('native profile configuration completes before navigation and rolls back on failed save', async () => {
+  const { client, native, settings } = setup()
+  const actions = []
+  native.capabilities = async () => ({
+    embeddedAvailable: true,
+    features: { persistentSession: true },
+  })
+  native.control = async (action) => {
+    actions.push(action)
+    return { available: true }
+  }
+  await client.navigate('example.com')
+  assert.deepEqual(
+    actions.map((a) => a.kind),
+    ['configure', 'navigate'],
+  )
+  settings.update = async () => {
+    throw new Error('synthetic storage failure')
+  }
+  await assert.rejects(
+    client.updateSettings({
+      ...client.getSnapshot(),
+      storageMode: 'persistent',
+    }),
+    /storage failure/,
+  )
+  assert.deepEqual(
+    actions.slice(-2).map((a) => a.storageMode),
+    ['persistent', 'temporary'],
+  )
+  assert.equal(client.getSnapshot().storageMode, 'temporary')
+})
+
+test('unsupported persistent profiles never create a native session', async () => {
+  const { client, native, settings, calls } = setup()
+  native.capabilities = async () => ({
+    embeddedAvailable: true,
+    features: { persistentSession: false },
+  })
+  settings.get = async () => ({
+    ...DEFAULT_BROWSER_SETTINGS,
+    storageMode: 'persistent',
+  })
+  await assert.rejects(
+    client.attach(() => true),
+    /不支持/,
+  )
+  assert.equal(calls.length, 0)
+})

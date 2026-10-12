@@ -18,6 +18,7 @@ pub(super) struct Registry {
     pub active: Option<u32>,
     pub frame: Option<NSRect>,
     pub visible: bool,
+    pub clearing: bool,
 }
 thread_local! { pub(super) static REGISTRY: RefCell<Registry> = RefCell::new(Registry::default()); }
 
@@ -62,10 +63,24 @@ pub fn close_tab(id: u32) {
     }
 }
 pub fn dispose() {
+    super::downloads::cancel_all();
     let ids =
         REGISTRY.with(|registry| registry.borrow().guests.keys().copied().collect::<Vec<_>>());
     for id in ids {
         close_tab(id);
     }
-    REGISTRY.with(|registry| *registry.borrow_mut() = Registry::default());
+    REGISTRY.with(|registry| {
+        let mut registry = registry.borrow_mut();
+        let store = if registry.clearing {
+            registry.store.clone()
+        } else {
+            None
+        };
+        let clearing = registry.clearing;
+        *registry = Registry {
+            store,
+            clearing,
+            ..Registry::default()
+        };
+    });
 }

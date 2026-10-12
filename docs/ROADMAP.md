@@ -38,6 +38,8 @@ Rust File/Shell Service、Workspace 边界、read-only/workspace Profile、Chat 
 - **已完成（2026-09，权限模型 V2 / Codex 风格）**：`permissionMode + trusted` 双轨合并为三档 `PermissionPreset`（谨慎模式 / 工作区读写 / 工作区完全允许）+ 会话级 `ask-everything` 覆盖项 + 两段确认的 Danger 租约（capability fail-closed）；文件审批绑定"操作 + 工作区相对路径"精确资源、Shell 按 token 前缀会话规则（复合命令只允许一次）、工作区外走显式提权（escalated 档 + 提权根 digest 绑定）、网络授权收敛到 shell rule 维度；grant 升级 ApprovalGrantV2（source/subjectDigest/sandbox），Rust 按实际请求重算 digest 复核并落实 read-only/workspace-write/escalated 三档沙箱（macOS 真机验证，Linux 渲染完成待真机、Windows 提权沿用受限令牌待真机）；审批 UI 重构为单焦点队列 + choice 驱动（Runtime 下发 choices，前端只回传 choiceId）。协议 1.1→1.2（握手 fail-closed，legacy message.send 字段兼容一个版本）。设计见 `docs/PERMISSION-MODEL.md`。**Windows/Linux 运行时边界待对应真机验收；Danger 在 Linux（待真机）与 Windows（无可验证凭据守卫）保持 fail-closed，不得宣称三平台完成。**
 - **待完成**：Provider/Tool Plugins（动态代码隔离模型确定后开放）、Browser Tool、检索式记忆（mem0 候选）、更完整的资产检索；权限规则持久化（当前刻意 session-only）与 Windows Danger credential guard spike。
 
+Browser B2–B3 已接入 macOS debug 实验实现，发布仍关闭；持久 store 需 macOS 14+，三平台真机验收及下载覆盖策略待补，详见 [浏览器规划](BROWSER-SETTINGS-PLAN.md)。
+
 ## Phase 3：Multi-Agent Orchestration（进行中）
 
 - **动态受控委派子集已完成**：Primary 通过 `task` 动态创建独立 Agent 实例；支持模板收窄、最大 4 层递归、整棵树共享的数量/并发/时间/token 预算、独立上下文与 Session、取消/恢复、结构化结果（摘要、资源链接、Changed Files、usage）及观测 UI。父 Run 可委派可写子 Agent，但权限、工具集和审批边界只能收窄；契约见 `docs/MULTI-AGENT.md`。

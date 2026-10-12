@@ -7,7 +7,7 @@ import { McpPanel } from './McpPanel'
 import { ProviderEditor } from './ProviderEditor'
 import { ProviderList } from './ProviderList'
 import { AppearancePanel } from './appearance/AppearancePanel'
-import { BrowserSettingsPanel } from './BrowserSettingsPanel'
+import { BrowserSettingsPanel } from '../../components/browser-settings/BrowserSettingsPanel'
 
 type SettingsSection = 'models' | 'runtime' | 'mcp' | 'appearance' | 'browser'
 

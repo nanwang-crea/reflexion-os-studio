@@ -4,6 +4,7 @@ import type {
   BrowserSnapshot,
 } from '@reflexion-os-studio/runtime-client'
 import { browserSurface, browserSession } from '../../api/browser'
+import { recordBrowserVisit } from '../../api/browser-data'
 import { useBrowserSettings } from '../../api/browser-settings'
 
 export function useBrowserSurface(visible = true) {
@@ -12,6 +13,32 @@ export function useBrowserSurface(visible = true) {
   const [error, setError] = useState<string | null>(null)
   const [slowLoad, setSlowLoad] = useState(false)
   const revision = useRef(-1)
+  const recorded = useRef(new Map<number, string>())
+  useEffect(() => {
+    if (
+      settings.storageMode !== 'persistent' ||
+      !settings.saveHistory ||
+      settings.mode !== 'embedded'
+    ) {
+      recorded.current.clear()
+      return
+    }
+    for (const tab of state?.tabs ?? []) {
+      if (
+        tab.status !== 'ready' ||
+        !tab.url ||
+        recorded.current.get(tab.id) === tab.url
+      )
+        continue
+      recorded.current.set(tab.id, tab.url)
+      void recordBrowserVisit(tab.url, tab.title).catch(() => {
+        recorded.current.delete(tab.id)
+      })
+    }
+    const ids = new Set(state?.tabs.map((tab) => tab.id))
+    for (const id of recorded.current.keys())
+      if (!ids.has(id)) recorded.current.delete(id)
+  }, [state?.tabs, settings.storageMode, settings.saveHistory, settings.mode])
   const accept = useCallback((next: BrowserSnapshot) => {
     if (next.revision < revision.current) return
     revision.current = next.revision

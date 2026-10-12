@@ -1,7 +1,13 @@
 use objc2_foundation::NSObjectNSKeyValueObserverRegistration;
+mod browsing;
+mod contact;
+mod passwords;
+pub use passwords::manage as manage_password;
 mod credentials;
+pub(super) mod downloads;
 mod navigation;
 mod registry;
+mod storage;
 pub use credentials::{fill, install_cookies};
 pub use registry::{close_tab, dispose};
 use registry::{Guest, REGISTRY};
@@ -16,7 +22,7 @@ use objc2_app_kit::NSWindow;
 use objc2_foundation::{
     MainThreadMarker, NSPoint, NSProcessInfo, NSRect, NSSize, NSString, NSURLRequest, NSURL,
 };
-use objc2_web_kit::{WKWebView, WKWebViewConfiguration, WKWebsiteDataStore};
+use objc2_web_kit::{WKWebView, WKWebViewConfiguration};
 
 use tauri::{AppHandle, Manager};
 
@@ -29,6 +35,9 @@ pub fn supported_version() -> bool {
 }
 
 pub fn attach(app: &AppHandle) -> Result<(), String> {
+    if REGISTRY.with(|r| r.borrow().clearing) {
+        return Err("浏览数据正在清理".into());
+    }
     let id = state::snapshot(app)
         .active_tab_id
         .ok_or("no active browser tab")?;
@@ -51,16 +60,7 @@ pub fn attach(app: &AppHandle) -> Result<(), String> {
             .contentView()
             .ok_or("native content view unavailable")?;
         let config = WKWebViewConfiguration::new(marker);
-        let store = REGISTRY.with(|registry| {
-            let mut registry = registry.borrow_mut();
-            registry
-                .store
-                .get_or_insert_with(|| WKWebsiteDataStore::nonPersistentDataStore(marker))
-                .clone()
-        });
-        if store.isPersistent() {
-            return Err("non-persistent browser storage unavailable".into());
-        }
+        let store = storage::store(app, marker)?;
         config.setWebsiteDataStore(&store);
         config
             .preferences()
@@ -208,6 +208,10 @@ pub fn control(app: &AppHandle, action: &Action) -> Result<(), String> {
                 reveal(id);
                 navigation::publish(app, id, &view, "ready", Some("已停止加载".into()));
             }
+            Action::Fillcontact { contact } => contact::fill(app, &view, contact)?,
+            Action::Find { text, backwards } => browsing::find(&view, text, *backwards)?,
+            Action::Zoom { factor } => view.setPageZoom(*factor),
+            Action::Print => browsing::print(&view, app)?,
             Action::Status => navigation::publish(
                 app,
                 id,
@@ -219,4 +223,34 @@ pub fn control(app: &AppHandle, action: &Action) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+pub fn persistent_available() -> bool {
+    NSProcessInfo::processInfo()
+        .operatingSystemVersion()
+        .majorVersion
+        >= 14
+}
+pub fn clear_data(
+    app: &AppHandle,
+    website_data: bool,
+    cache: bool,
+    done: std::sync::mpsc::Sender<Result<(), String>>,
+) {
+    storage::clear(app, website_data, cache, done)
+}
+
+pub fn clearing() -> bool {
+    REGISTRY.with(|r| r.borrow().clearing)
+}
+pub fn media_available() -> bool {
+    let bundle = objc2_foundation::NSBundle::mainBundle();
+    ["NSCameraUsageDescription", "NSMicrophoneUsageDescription"]
+        .iter()
+        .all(|key| {
+            bundle
+                .objectForInfoDictionaryKey(&NSString::from_str(key))
+                .and_then(|v| v.downcast::<NSString>().ok())
+                .is_some_and(|v| !v.is_empty())
+        })
 }

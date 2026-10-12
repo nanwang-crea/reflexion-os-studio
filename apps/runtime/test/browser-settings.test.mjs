@@ -4,6 +4,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import { DEFAULT_BROWSER_SETTINGS } from '@reflexion-os-studio/contracts'
 import { Store } from '../dist/store/index.js'
 
 test('browser settings survive reopening and migrate draft preferences', () => {
@@ -34,6 +35,7 @@ test('browser settings survive reopening and migrate draft preferences', () => {
   db.close()
   const migrated = new Store(dir)
   assert.deepEqual(migrated.browserSettings.get(), {
+    ...DEFAULT_BROWSER_SETTINGS,
     mode: 'embedded',
     defaultRoute: 'embedded',
     localRoute: 'system',
@@ -58,6 +60,58 @@ test('v40 database upgrades to browser settings while retaining project data', (
   assert.equal(upgraded.browserSettings.get().defaultRoute, 'system')
   upgraded.close()
   const inspect = new DatabaseSync(join(dir, 'reflexion.db'))
-  assert.equal(inspect.prepare('PRAGMA user_version').get().user_version, 41)
+  assert.equal(inspect.prepare('PRAGMA user_version').get().user_version, 42)
   inspect.close()
+})
+
+test('history is opt-in, searchable literally, paginated and cleared per exact origin', async () => {
+  const { browserDataCommandHandlers: handlers } =
+    await import('../dist/browser/data/handlers.js')
+  const store = new Store(
+    mkdtempSync(join(tmpdir(), 'reflexion-browser-data-')),
+  )
+  try {
+    const record = (url, title) =>
+      handlers['browser_history.record']({ url, title }, { store })
+    assert.equal(record('https://one.test/', 'private').recorded, false)
+    store.browserSettings.upsert({
+      ...store.browserSettings.get(),
+      saveHistory: true,
+    })
+    assert.equal(record('https://one.test/', 'still temporary').recorded, false)
+    store.browserSettings.upsert({
+      ...store.browserSettings.get(),
+      storageMode: 'persistent',
+    })
+    assert.equal(record('https://one.test/', 'literal % query').recorded, true)
+    record('https://two.test/', 'second')
+    assert.equal(store.browserHistory.list('%', 100).length, 1)
+    const page = store.browserHistory.list('', 1)
+    assert.equal(page[0].origin, 'https://two.test')
+    assert.equal(
+      store.browserHistory.list('', 1, Number(page[0].id))[0].origin,
+      'https://one.test',
+    )
+    assert.equal(store.browserHistory.clear('https://one.test'), 1)
+    assert.equal(store.browserHistory.list('', 100).length, 1)
+    store.browserSettings.upsert({
+      ...store.browserSettings.get(),
+      mode: 'system',
+    })
+    assert.equal(record('https://one.test/', 'system').recorded, false)
+    const contact = {
+      id: 'fixture',
+      label: 'Example',
+      name: 'Tester',
+      email: 'test@example.test',
+      phone: '',
+      address: '',
+    }
+    store.browserContacts.save(contact)
+    assert.deepEqual(store.browserContacts.list(), [contact])
+    assert.equal(store.browserContacts.delete(contact.id), true)
+    assert.equal(store.browserContacts.list().length, 0)
+  } finally {
+    store.close()
+  }
 })

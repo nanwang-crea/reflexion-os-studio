@@ -24,11 +24,15 @@ fn main() {
             "open_external",
             "browser_open",
             "browser_capabilities",
+            "browser_clear_data",
+            "browser_downloads",
+            "browser_download_action",
             "browser_control",
             "browser_import",
             "browser_credentials",
             "browser_fill",
             "browser_clear_credentials",
+            "browser_password_manage",
         ]),
     ))
     .unwrap_or_else(|error| {

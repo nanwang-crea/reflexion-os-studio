@@ -54,6 +54,20 @@ pub async fn browser_control(
     {
         return Err("browser Surface unavailable".into());
     }
+    match &action {
+        Action::Configure { preferences } => preferences.validate()?,
+        Action::Fillcontact { contact } => contact.validate()?,
+        Action::Find { text, backwards } => {
+            let _ = backwards;
+            if text.len() > 4000 {
+                return Err("查找文字过长".into());
+            }
+        }
+        Action::Zoom { factor } if !factor.is_finite() || !(0.25..=5.0).contains(factor) => {
+            return Err("无效的页面缩放".into())
+        }
+        _ => {}
+    }
     if let Action::Layout {
         x,
         y,
@@ -82,10 +96,10 @@ pub async fn browser_control(
     .await
 }
 
-async fn on_main(
+pub(super) async fn on_main<T: Send + 'static>(
     app: AppHandle,
-    operation: impl FnOnce(&AppHandle) -> Result<Snapshot, String> + Send + 'static,
-) -> Result<Snapshot, String> {
+    operation: impl FnOnce(&AppHandle) -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
     let (tx, rx) = std::sync::mpsc::sync_channel(1);
     let handle = app.clone();
     app.run_on_main_thread(move || {
@@ -98,4 +112,27 @@ async fn on_main(
     })
     .await
     .map_err(|_| "browser task failed")?
+}
+
+#[tauri::command]
+pub async fn browser_clear_data(
+    webview: Webview,
+    app: AppHandle,
+    website_data: bool,
+    cache: bool,
+) -> Result<(), String> {
+    crate::host::caller::trusted(&webview, &app, &["main"])?;
+    if !platform::available() || (!website_data && !cache) {
+        return Err("当前平台不支持清理，或未选择清理项目".into());
+    }
+    let (tx, rx) = std::sync::mpsc::channel();
+    let handle = app.clone();
+    app.run_on_main_thread(move || platform::clear_data(&handle, website_data, cache, tx))
+        .map_err(|_| "清理请求未发送")?;
+    tauri::async_runtime::spawn_blocking(move || {
+        rx.recv_timeout(std::time::Duration::from_secs(30))
+            .map_err(|_| "数据清理超时；不要立即重试，请重新检查")?
+    })
+    .await
+    .map_err(|_| "清理任务已取消")?
 }

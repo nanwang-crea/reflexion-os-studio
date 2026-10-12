@@ -33,9 +33,9 @@ browser-spike = ["dep:objc2", "dep:objc2-foundation", "dep:objc2-app-kit", "dep:
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = { version = "0.6.4", optional = true }
-objc2-foundation = { version = "0.3.2", optional = true, default-features = false, features = ["std", "NSObject", "NSString", "NSURL", "NSURLRequest", "NSArray", "NSError", "NSGeometry", "NSProcessInfo", "NSURLResponse", "NSHTTPCookie", "NSDictionary", "NSDate", "NSValue", "NSKeyValueObserving"] }
-objc2-app-kit = { version = "0.3.2", optional = true, default-features = false, features = ["std", "NSWindow", "NSView", "NSDragging", "NSPasteboard"] }
-objc2-web-kit = { version = "0.3.2", optional = true, default-features = false, features = ["std", "objc2-app-kit", "block2", "WKWebView", "WKWebViewConfiguration", "WKWebsiteDataStore", "WKPreferences", "WKNavigation", "WKNavigationAction", "WKNavigationDelegate", "WKNavigationResponse", "WKUIDelegate", "WKOpenPanelParameters", "WKFrameInfo", "WKSecurityOrigin", "WKWindowFeatures", "WKHTTPCookieStore"] }
+objc2-foundation = { version = "0.3.2", optional = true, default-features = false, features = ["std", "NSObject", "NSString", "NSURL", "NSURLRequest", "NSArray", "NSError", "NSGeometry", "NSProcessInfo", "NSURLResponse", "NSHTTPCookie", "NSDictionary", "NSDate", "NSValue", "NSKeyValueObserving", "NSUUID", "NSBundle", "NSSet", "NSProgress", "NSData"] }
+objc2-app-kit = { version = "0.3.2", optional = true, default-features = false, features = ["std", "NSWindow", "NSView", "NSDragging", "NSPasteboard", "NSPrintOperation", "NSPrintInfo", "NSSavePanel", "NSAlert", "NSTextField", "NSSecureTextField", "NSControl", "NSButton", "NSStackView"] }
+objc2-web-kit = { version = "0.3.2", optional = true, default-features = false, features = ["std", "objc2-app-kit", "block2", "WKWebView", "WKWebViewConfiguration", "WKWebsiteDataStore", "WKPreferences", "WKNavigation", "WKNavigationAction", "WKNavigationDelegate", "WKNavigationResponse", "WKUIDelegate", "WKOpenPanelParameters", "WKFrameInfo", "WKSecurityOrigin", "WKWindowFeatures", "WKHTTPCookieStore", "WKFindConfiguration", "WKFindResult", "WKDownload", "WKDownloadDelegate", "WKWebsiteDataRecord"] }
 block2 = { version = "0.6.2", optional = true }
 
 security-framework = { version = "3", optional = true }

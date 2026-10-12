@@ -13,7 +13,7 @@ pub fn available() -> bool {
 }
 
 #[cfg(all(feature = "browser-spike", target_os = "macos"))]
-pub use macos::{attach, close_tab, control, dispose, fill, install_cookies};
+pub use macos::{attach, close_tab, control, dispose, fill, install_cookies, manage_password};
 
 #[cfg(not(all(feature = "browser-spike", target_os = "macos")))]
 mod unsupported {
@@ -33,3 +33,74 @@ mod unsupported {
 }
 #[cfg(not(all(feature = "browser-spike", target_os = "macos")))]
 pub use unsupported::{attach, close_tab, control, dispose};
+
+pub fn persistent_available() -> bool {
+    #[cfg(all(feature = "browser-spike", debug_assertions, target_os = "macos"))]
+    {
+        macos::persistent_available()
+    }
+    #[cfg(not(all(feature = "browser-spike", debug_assertions, target_os = "macos")))]
+    {
+        false
+    }
+}
+
+pub fn clear_data(
+    app: &tauri::AppHandle,
+    website_data: bool,
+    cache: bool,
+    done: std::sync::mpsc::Sender<Result<(), String>>,
+) {
+    #[cfg(all(feature = "browser-spike", target_os = "macos"))]
+    {
+        macos::clear_data(app, website_data, cache, done);
+    }
+    #[cfg(not(all(feature = "browser-spike", target_os = "macos")))]
+    {
+        let _ = (app, website_data, cache);
+        let _ = done.send(Err("原生数据清理尚未适配本平台".into()));
+    }
+}
+
+pub fn downloads() -> Vec<crate::browser::downloads::Record> {
+    #[cfg(all(feature = "browser-spike", debug_assertions, target_os = "macos"))]
+    {
+        macos::downloads::list()
+    }
+    #[cfg(not(all(feature = "browser-spike", debug_assertions, target_os = "macos")))]
+    {
+        vec![]
+    }
+}
+pub fn download_action(id: u64, kind: &str) -> Result<(), String> {
+    #[cfg(all(feature = "browser-spike", debug_assertions, target_os = "macos"))]
+    {
+        macos::downloads::action(id, kind)
+    }
+    #[cfg(not(all(feature = "browser-spike", debug_assertions, target_os = "macos")))]
+    {
+        let _ = (id, kind);
+        Err("下载适配不可用".into())
+    }
+}
+
+pub fn clearing() -> bool {
+    #[cfg(all(feature = "browser-spike", target_os = "macos"))]
+    {
+        macos::clearing()
+    }
+    #[cfg(not(all(feature = "browser-spike", target_os = "macos")))]
+    {
+        false
+    }
+}
+pub fn media_available() -> bool {
+    #[cfg(all(feature = "browser-spike", debug_assertions, target_os = "macos"))]
+    {
+        available() && macos::media_available()
+    }
+    #[cfg(not(all(feature = "browser-spike", debug_assertions, target_os = "macos")))]
+    {
+        false
+    }
+}

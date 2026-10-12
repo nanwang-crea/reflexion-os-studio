@@ -25,6 +25,7 @@ import {
   testProviderConnection,
 } from './provider/handlers.js'
 import { agentCommandHandlers } from './agent/handlers.js'
+import { browserDataCommandHandlers } from './browser/data/handlers.js'
 import { browserSettingsCommandHandlers } from './browser-settings/handlers.js'
 
 /**
@@ -365,6 +366,7 @@ export const commandHandlers: Record<string, CommandHandler> = {
   ...providerCommandHandlers,
   ...agentCommandHandlers,
   ...browserSettingsCommandHandlers,
+  ...browserDataCommandHandlers,
 }
 
 export { testProviderConnection }
