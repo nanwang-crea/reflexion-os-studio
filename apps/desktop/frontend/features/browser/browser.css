@@ -386,3 +386,25 @@
   max-height: 85vh;
   overflow: auto;
 }
+
+.browser-status-slot {
+  height: 34px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.browser-status-slot .browser-notice {
+  height: 34px;
+  box-sizing: border-box;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.browser-import-banner {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+.browser-surface-panel {
+  position: relative;
+}

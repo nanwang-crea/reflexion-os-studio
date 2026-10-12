@@ -42,7 +42,7 @@ export function BrowserSurfacePanel({
       !importOpen &&
       !settingsOpen,
     state?.available === true,
-    state?.revision ?? -1,
+    state?.activeTabId ?? null,
   )
   const [address, setAddress] = useState('')
   useEffect(() => {
@@ -215,22 +215,24 @@ export function BrowserSurfacePanel({
           </button>
         </form>
       )}
-      {(notice || busy) && (
-        <div className="browser-notice" role="status" aria-live="polite">
-          {notice ?? '正在加载…'}
-          {state?.status === 'failed' && state.url?.startsWith('https:') && (
-            <button
-              type="button"
-              onClick={() =>
-                void navigate(state.url!.replace(/^https:/, 'http:'))
-              }
-            >
-              尝试 HTTP
-            </button>
-          )}
-        </div>
-      )}
-      {bannerVisible && state?.available && (
+      <div className="browser-status-slot">
+        {(notice || busy) && (
+          <div className="browser-notice" role="status" aria-live="polite">
+            {notice ?? '正在加载…'}
+            {state?.status === 'failed' && state.url?.startsWith('https:') && (
+              <button
+                type="button"
+                onClick={() =>
+                  void navigate(state.url!.replace(/^https:/, 'http:'))
+                }
+              >
+                尝试 HTTP
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      {bannerVisible && state?.available && !state.url && (
         <div className="browser-import-banner">
           <BrowserIcon name="globe" />
           <div>

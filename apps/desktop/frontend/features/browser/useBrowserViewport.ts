@@ -6,14 +6,14 @@ export function useBrowserViewport(
   ref: RefObject<HTMLDivElement | null>,
   visible: boolean,
   available: boolean,
-  revision: number,
+  activeTabId: number | null,
 ): void {
-  const latest = useRef({ visible, available, revision })
-  latest.current = { visible, available, revision }
+  const latest = useRef({ visible, available, activeTabId })
+  latest.current = { visible, available, activeTabId }
   const requestLayout = useRef<() => void>(() => {})
   useEffect(() => {
     requestLayout.current()
-  }, [visible, available, revision])
+  }, [visible, available, activeTabId])
   useEffect(() => {
     const element = ref.current
     if (!element) return
@@ -46,7 +46,8 @@ export function useBrowserViewport(
           rect.width > 0 &&
           rect.height > 0,
       }
-      const signature = JSON.stringify([action, latest.current.revision])
+      // A recreated native session needs its frame even when geometry is unchanged.
+      const signature = JSON.stringify([action, latest.current.activeTabId])
       if (signature === previous) return
       pending = true
       try {

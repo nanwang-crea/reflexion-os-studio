@@ -67,8 +67,8 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
   const browserOpen = useBrowserPanelOpen()
   useEffect(() => {
     setBrowserPanelOpen(false)
-  }, [workspace.panel.activeTabId])
-  const surfaceOpen = browserOpen || (view === 'chat' && workspace.open)
+  }, [workspace.panel.activeTabId, view])
+  const surfaceOpen = !browserOpen && view === 'chat' && workspace.open
   const contextTitle =
     view === 'settings'
       ? '设置'
@@ -101,8 +101,13 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
             } else workspace.setOpen((open) => !open)
           }}
           showTerminalToggle={view === 'chat' && !isTerminalEntryDisabled()}
-          terminalOpen={terminal.open}
-          onToggleTerminal={terminal.onToggle}
+          terminalOpen={terminal.open && !browserOpen}
+          onToggleTerminal={() => {
+            if (browserOpen) {
+              setBrowserPanelOpen(false)
+              if (!terminal.open) terminal.onToggle()
+            } else terminal.onToggle()
+          }}
         />
         {notice && (
           <div className="notice" role="alert" aria-live="assertive">
@@ -118,28 +123,50 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
         )}
         <div className="content-area">
           <div className="content-main">
-            {view === 'settings' ? (
-              <SettingsView {...props.settings} />
-            ) : view === 'skills' ? (
-              <SkillsView onUseSkill={props.onUseSkill} />
-            ) : view === 'automations' ? (
-              <AutomationsView />
-            ) : view === 'instructions' ? (
-              <InstructionsView {...props.instructions} />
-            ) : activeSessionId !== null ? (
-              <ChatView {...props.chat} />
-            ) : (
-              <LandingView {...props.landing} />
-            )}
-            {/* 底部终端面板：右侧文件查看器的下方对应物。实例保活在
+            <div style={{ display: browserOpen ? 'none' : 'contents' }}>
+              {view === 'settings' ? (
+                <SettingsView {...props.settings} />
+              ) : view === 'skills' ? (
+                <SkillsView onUseSkill={props.onUseSkill} />
+              ) : view === 'automations' ? (
+                <AutomationsView />
+              ) : view === 'instructions' ? (
+                <InstructionsView {...props.instructions} />
+              ) : activeSessionId !== null ? (
+                <ChatView {...props.chat} />
+              ) : (
+                <LandingView {...props.landing} />
+              )}
+              {/* 底部终端面板：右侧文件查看器的下方对应物。实例保活在
               terminalManager（模块级单例），页面切换/收起只是容器回
               离屏宿主，不是销毁。 */}
-            {view === 'chat' && terminal.open && (
-              <TerminalPanel
-                activeProjectId={terminal.activeProjectId}
-                confirm={terminal.confirm}
+              {view === 'chat' && terminal.open && (
+                <TerminalPanel
+                  activeProjectId={terminal.activeProjectId}
+                  confirm={terminal.confirm}
+                />
+              )}
+            </div>
+            <div
+              className="browser-panel-host"
+              style={{ display: browserOpen ? 'flex' : 'none' }}
+            >
+              <BrowserSurfacePanel
+                visible={browserOpen}
+                onWorkspace={() => {
+                  setBrowserPanelOpen(false)
+                  workspace.setOpen(true)
+                }}
+                onTerminal={() => {
+                  setBrowserPanelOpen(false)
+                  if (!terminal.open) terminal.onToggle()
+                }}
+                onCollapse={() => {
+                  setBrowserPanelOpen(false)
+                  workspace.setOpen(false)
+                }}
               />
-            )}
+            </div>
           </div>
         </div>
       </div>
@@ -208,25 +235,6 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
             }}
           >
             <FileViewerPanel {...workspace.panel} width={workspace.width} />
-          </div>
-          <div
-            className="browser-panel-host"
-            style={{ display: browserOpen ? 'flex' : 'none' }}
-          >
-            <BrowserSurfacePanel
-              visible={browserOpen}
-              onWorkspace={() => {
-                setBrowserPanelOpen(false)
-                workspace.setOpen(true)
-              }}
-              onTerminal={() => {
-                if (!terminal.open) terminal.onToggle()
-              }}
-              onCollapse={() => {
-                setBrowserPanelOpen(false)
-                workspace.setOpen(false)
-              }}
-            />
           </div>
         </div>
       </div>

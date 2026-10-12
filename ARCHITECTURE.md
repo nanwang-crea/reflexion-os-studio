@@ -142,9 +142,9 @@ Agent、Memory、Skill、Context 和 Delegation/Policy 是一等领域，分别�
 
 用户 Surface 与未来 Agent Browser Tool 分离。首版支持 HTTP / HTTPS 任意域名及内网，网站自身脚本正常运行，Agent 当前不读取和操作网页；后续 Browser Tool 经 Runtime / PermissionGate 独立授权。
 
-可信工具栏经 contracts / runtime-client 的 Host facade 调用结构化 Surface 命令。Host 在主窗口右侧挂载没有 Tauri IPC、应用脚本、自定义协议和持久化数据的原生网页视图；不把网页当作应用 Renderer，不修改 Chat 的可用性与系统工具边界。macOS 原型采用非持久化 WKWebView；Windows / Linux 在原生隔离未验证前 fail-closed，走系统浏览器回退。
+可信工具栏经 contracts / runtime-client 的 Host facade 调用结构化 Surface 命令。Host 在主窗口中间主内容区挂载没有 Tauri IPC、应用脚本、自定义协议和持久化数据的原生网页视图；不把网页当作应用 Renderer，不修改 Chat 的可用性与系统工具边界。macOS 原型采用非持久化 WKWebView；Windows / Linux 在原生隔离未验证前 fail-closed，走系统浏览器回退。
 
-实验仅在显式启用 `browser-spike` feature 的 macOS debug 构建开放，发布默认关闭。右侧面板布局已接入，原生视图使用测量后的 viewport 坐标，弹层出现时隐藏；完整安全边界与发布阻塞项见 [Browser Surface](docs/BROWSER-SURFACE.md) 与 [Spike 报告](docs/BROWSER-SPIKE-REPORT.md)。
+实验仅在显式启用 `browser-spike` feature 的 macOS debug 构建开放，发布默认关闭。主内容区布局已接入，原生视图使用测量后的 viewport 坐标，弹层出现时隐藏；完整安全边界与发布阻塞项见 [Browser Surface](docs/BROWSER-SURFACE.md) 与 [Spike 报告](docs/BROWSER-SPIKE-REPORT.md)。
 
 Browser 基础扩展：用户 Surface 多标签各自维护原生视图/历史，共享独立临时
 存储，后台导航事件只更新所属标签。系统浏览器直接迁移为原生 OS 集成例外：

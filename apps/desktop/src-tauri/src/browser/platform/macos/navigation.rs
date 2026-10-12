@@ -65,7 +65,6 @@ define_class!(
                     .is_some_and(|frame| frame.isMainFrame())
             };
             if allowed && main_frame && !downloading {
-                super::hide(self.ivars().id);
                 state::update_tab(app, self.ivars().id, |state| {
                     state.url = url.clone();
                     state.status = "loading".into();
@@ -130,8 +129,11 @@ define_class!(
         }
         #[unsafe(method(webView:didStartProvisionalNavigation:))]
         fn started(&self, view: &WKWebView, _navigation: Option<&WKNavigation>) {
-            super::hide(self.ivars().id);
             publish(&self.ivars().app, self.ivars().id, view, "loading", None);
+        }
+        #[unsafe(method(webView:didCommitNavigation:))]
+        fn committed(&self, _view: &WKWebView, _navigation: Option<&WKNavigation>) {
+            super::reveal(self.ivars().id);
         }
         #[unsafe(method(webView:didFinishNavigation:))]
         fn finished(&self, view: &WKWebView, _navigation: Option<&WKNavigation>) {
