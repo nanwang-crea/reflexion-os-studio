@@ -12,7 +12,10 @@ use windows::{
 };
 use wry::{WebView, WebViewExtWindows};
 
-pub(super) fn install(app: &AppHandle, id: u32, view: &WebView) -> Result<(), String> {
+pub(super) fn install(app: &AppHandle, id: u32, view: &WebView) -> Result<Rc<Cell<bool>>, String> {
+    let stopped = Rc::new(Cell::new(false));
+    let starting_stopped = stopped.clone();
+    let finished_stopped = stopped.clone();
     let webview = view.webview();
     let active = Rc::new(Cell::new(0u64));
     let current = active.clone();
@@ -25,7 +28,19 @@ pub(super) fn install(app: &AppHandle, id: u32, view: &WebView) -> Result<(), St
         unsafe {
             let mut token = 0;
             webview.add_ProcessFailed(
-                &ProcessFailedEventHandler::create(Box::new(move |_, _| {
+                &ProcessFailedEventHandler::create(Box::new(move |_, args| {
+                    let Some(args) = args else {
+                        return Ok(());
+                    };
+                    let mut kind = COREWEBVIEW2_PROCESS_FAILED_KIND::default();
+                    args.ProcessFailedKind(&mut kind)?;
+                    if !matches!(
+                        kind,
+                        COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED
+                            | COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED
+                    ) {
+                        return Ok(());
+                    }
                     state::update_tab(&failed_app, id, |tab| {
                         tab.status = "failed".into();
                         tab.progress = 0.0;
@@ -40,7 +55,13 @@ pub(super) fn install(app: &AppHandle, id: u32, view: &WebView) -> Result<(), St
                     if let Some(args) = args {
                         let mut navigation = 0;
                         args.NavigationId(&mut navigation)?;
+                        if current.get() != navigation {
+                            starting_stopped.set(false);
+                        }
                         current.set(navigation);
+                        if super::navigation::text(|pointer| args.Uri(pointer))? == "about:blank" {
+                            return Ok(());
+                        }
                         state::update_tab(&start_app, id, |tab| {
                             if tab.status != "loading" {
                                 tab.progress = 0.0;
@@ -64,8 +85,22 @@ pub(super) fn install(app: &AppHandle, id: u32, view: &WebView) -> Result<(), St
                         let mut success = BOOL::default();
                         args.IsSuccess(&mut success)?;
                         let url = source(&view)?;
+                        let mut error = COREWEBVIEW2_WEB_ERROR_STATUS::default();
+                        args.WebErrorStatus(&mut error)?;
+                        let cancelled = finished_stopped.get()
+                            && error == COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED;
                         state::update_tab(&finish_app, id, |tab| {
-                            if success.as_bool() {
+                            if cancelled {
+                                tab.progress = 0.0;
+                                tab.notice = None;
+                                tab.status = if crate::browser::policy::web_url(&url).is_ok() {
+                                    tab.url = Some(url.clone());
+                                    "ready"
+                                } else {
+                                    "idle"
+                                }
+                                .into();
+                            } else if success.as_bool() {
                                 super::super::portable::loading(tab, &url, true);
                             } else {
                                 tab.status = "failed".into();
@@ -109,7 +144,8 @@ pub(super) fn install(app: &AppHandle, id: u32, view: &WebView) -> Result<(), St
         }
         Ok(())
     };
-    install().map_err(|_| "无法安装 WebView2 导航状态回调".into())
+    install().map_err(|_| "无法安装 WebView2 导航状态回调".to_string())?;
+    Ok(stopped)
 }
 
 fn source(view: &ICoreWebView2) -> windows::core::Result<String> {

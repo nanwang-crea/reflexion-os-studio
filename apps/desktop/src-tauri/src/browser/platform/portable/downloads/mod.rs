@@ -84,13 +84,27 @@ pub(crate) fn settled(id: u64, success: bool, stage: &std::path::Path) {
     destination::cleanup(stage);
 }
 
-pub(crate) fn cancellation(id: u64, cancel: impl FnOnce() + 'static) {
-    DOWNLOADS.with(|d| {
-        if let Some(e) = d.borrow_mut().entries.get_mut(&id) {
-            e.cancel = Some(Box::new(cancel));
-        }
+pub(crate) fn cancellation(id: u64, cancel: impl FnOnce() + 'static) -> bool {
+    let mut cancel: Option<Box<dyn FnOnce()>> = Some(Box::new(cancel));
+    let attached = DOWNLOADS.with(|d| {
+        let mut d = d.borrow_mut();
+        let Some(entry) = d
+            .entries
+            .get_mut(&id)
+            .filter(|entry| entry.record.status == "active" && entry.cancel.is_none())
+        else {
+            return false;
+        };
+        entry.cancel = cancel.take();
+        true
     });
+    // A cancellation can arrive before native setup finishes. Do not start that transfer.
+    if let Some(cancel) = cancel {
+        cancel();
+    }
+    attached
 }
+
 pub(crate) fn progress(id: u64, received: u64, total: Option<u64>) {
     DOWNLOADS.with(|d| {
         if let Some(e) = d
@@ -129,11 +143,13 @@ pub(crate) fn finish(id: u64, success: bool) {
             e.record.path = Some(e.target.to_string_lossy().into());
         }
         e.record.notice = result.err();
-        e.cancel.take();
+        let cancel = e.cancel.take();
         destination::cleanup(&e.stage);
-        Some(e.app.clone())
+        Some((e.app.clone(), cancel))
     });
-    if let Some(app) = app {
+    if let Some((app, cancel)) = app {
+        // Releasing a native operation can run callbacks; release the borrow first.
+        drop(cancel);
         let _ = app.emit_to("main", "browser:downloads", ());
     }
 }

@@ -2,11 +2,16 @@ use crate::browser::{preferences::Contact, state};
 use tauri::AppHandle;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
+pub(crate) struct PreparedFill {
+    pub source: String,
+    pub revision: u64,
+}
+
 pub(crate) fn script(
     app: &AppHandle,
     id: u32,
     contact: &Contact,
-) -> Result<Option<String>, String> {
+) -> Result<Option<PreparedFill>, String> {
     let snapshot = state::snapshot(app);
     if snapshot.active_tab_id != Some(id)
         || snapshot.status != "ready"
@@ -37,16 +42,26 @@ pub(crate) fn script(
     {
         return Err("页面已切换，请重新确认".into());
     }
-    let values = serde_json::to_string(contact).map_err(|_| "联系信息无效")?;
+    let values = contact.fill_values();
     let url = serde_json::to_string(url).map_err(|_| "页面网址无效")?;
     let origin = serde_json::to_string(&origin).map_err(|_| "页面来源无效")?;
-    Ok(Some(format!(
-        "({})({values}, {url}, {origin})",
-        include_str!("contact-fill.js")
-    )))
+    Ok(Some(PreparedFill {
+        source: format!(
+            "({})({values}, {url}, {origin})",
+            include_str!("../contact-fill.js")
+        ),
+        revision: snapshot.revision,
+    }))
 }
 
-pub(crate) fn completed(app: &AppHandle, id: u32, success: bool) {
+pub(crate) fn completed(app: &AppHandle, id: u32, revision: u64, success: bool) {
+    let snapshot = state::snapshot(app);
+    if snapshot.revision != revision
+        || snapshot.active_tab_id != Some(id)
+        || snapshot.status != "ready"
+    {
+        return;
+    }
     state::update_tab(app, id, |tab| {
         tab.notice = Some(
             if success {

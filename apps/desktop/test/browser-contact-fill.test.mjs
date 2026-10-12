@@ -4,10 +4,7 @@ import test from 'node:test'
 import vm from 'node:vm'
 
 const source = readFileSync(
-  new URL(
-    '../src-tauri/src/browser/platform/portable/contact-fill.js',
-    import.meta.url,
-  ),
+  new URL('../src-tauri/src/browser/platform/contact-fill.js', import.meta.url),
   'utf8',
 )
 function page({ frame = false, url = 'https://example.test/contact' } = {}) {

@@ -47,7 +47,9 @@ pub(super) fn connect(app: &AppHandle, context: &WebContext) {
                     *destination_stage.borrow_mut() = Some(stage);
                     destination_id.set(Some(id));
                     let cancel = download.clone();
-                    downloads::cancellation(id, move || cancel.cancel());
+                    if !downloads::cancellation(id, move || cancel.cancel()) {
+                        return true;
+                    }
                     download.set_allow_overwrite(false);
                     download.set_destination(destination.as_str());
                 }

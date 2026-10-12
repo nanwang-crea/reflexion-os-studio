@@ -103,8 +103,9 @@ impl Engine for Guest {
                 {
                     let app = self.app.clone();
                     let id = self.id;
+                    let revision = script.revision;
                     self.view.evaluate_javascript(
-                        &script,
+                        &script.source,
                         None,
                         None,
                         None::<&webkit2gtk::gio::Cancellable>,
@@ -112,6 +113,7 @@ impl Engine for Guest {
                             super::portable::contact::completed(
                                 &app,
                                 id,
+                                revision,
                                 result.is_ok_and(|value| value.is_boolean() && value.to_boolean()),
                             );
                         },

@@ -64,7 +64,13 @@ pub fn sensitive(path: &Path) -> bool {
 pub fn filename(raw: &str) -> String {
     let name: String = raw
         .chars()
-        .filter(|c| !c.is_control() && !matches!(c, '/' | '\\' | ':' | '\0'))
+        .filter(|c| {
+            !c.is_control()
+                && !matches!(
+                    c,
+                    '/' | '\\' | ':' | '<' | '>' | '"' | '|' | '?' | '*' | '\0'
+                )
+        })
         .scan(0usize, |length, c| {
             *length += c.len_utf8();
             Some((*length, c))
@@ -74,7 +80,28 @@ pub fn filename(raw: &str) -> String {
         .collect();
     let name = name.trim().trim_matches('.');
     if name.is_empty() {
-        "download".into()
+        return "download".into();
+    }
+    let stem = name
+        .split('.')
+        .next()
+        .unwrap_or_default()
+        .trim_end()
+        .to_ascii_uppercase();
+    let reserved = matches!(
+        stem.as_str(),
+        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
+    ) || stem
+        .strip_prefix("COM")
+        .or_else(|| stem.strip_prefix("LPT"))
+        .is_some_and(|suffix| {
+            matches!(
+                suffix,
+                "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"
+            )
+        });
+    if reserved {
+        format!("_{name}")
     } else {
         name.into()
     }
@@ -90,13 +117,12 @@ pub fn publish(stage: &Path, target: &Path) -> Result<(), String> {
     if directory(&parent.to_string_lossy())? != parent || sensitive(target) {
         return Err("下载目录已变化或目标敏感".into());
     }
-    if stage
+    let file_type = stage
         .symlink_metadata()
         .map_err(|_| "暂存文件已不存在")?
-        .file_type()
-        .is_symlink()
-    {
-        return Err("禁止发布符号链接".into());
+        .file_type();
+    if !file_type.is_file() {
+        return Err("只允许发布普通下载文件".into());
     }
     // Atomic refusal to replace an existing file or symbolic link.
     std::fs::hard_link(stage, target).map_err(|_| "无法安全保存下载文件；目标可能已存在".into())
@@ -104,6 +130,15 @@ pub fn publish(stage: &Path, target: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn suggested_names_are_portable_and_never_windows_devices() {
+        for name in ["CON", "nul.txt", "CoM1.zip", "LPT9", "COM¹.txt", "CONOUT$"] {
+            assert!(filename(name).starts_with('_'), "{name}");
+        }
+        assert_eq!(filename("report<>:\"|?*.pdf"), "report.pdf");
+        assert_eq!(filename("LPT10.txt"), "LPT10.txt");
+        assert_eq!(filename("中文报告.pdf"), "中文报告.pdf");
+    }
     #[test]
     fn untrusted_names_cannot_choose_a_directory_or_sensitive_target() {
         assert_eq!(filename("../../one\\two\n"), "onetwo");
@@ -119,6 +154,28 @@ mod tests {
 #[cfg(test)]
 mod publication_tests {
     use super::*;
+    #[cfg(unix)]
+    #[test]
+    fn special_files_cannot_be_published_as_downloads() {
+        use std::os::unix::ffi::OsStrExt;
+        let root = std::env::temp_dir().join(format!(
+            "reflexion-publish-special-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&root).unwrap();
+        let root = root.canonicalize().unwrap();
+        let stage = root.join("stage-pipe");
+        let native = std::ffi::CString::new(stage.as_os_str().as_bytes()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(native.as_ptr(), 0o600) }, 0);
+        let target = root.join("download.txt");
+        assert!(publish(&stage, &target).is_err());
+        assert!(!target.exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn publishes_without_overwriting_and_rejects_sensitive_targets() {
         let root = std::env::temp_dir().join(format!(

@@ -70,8 +70,7 @@ pub fn control(app: &AppHandle, action: Action) -> Result<Snapshot, String> {
         }
         Action::Attach | Action::Status | Action::Layout { .. } if !platform::available() => {}
         Action::Close => {
-            platform::dispose();
-            super::policy::audit("close", None, "disposed");
+            // Invalidate tabs before native stop callbacks can report obsolete state.
             state::update(app, |state| {
                 state.tabs.clear();
                 state.active_tab_id = None;
@@ -87,6 +86,8 @@ pub fn control(app: &AppHandle, action: Action) -> Result<Snapshot, String> {
                 state.can_go_back = false;
                 state.can_go_forward = false;
             });
+            platform::dispose();
+            super::policy::audit("close", None, "disposed");
         }
         _ => platform::control(app, &action)?,
     }

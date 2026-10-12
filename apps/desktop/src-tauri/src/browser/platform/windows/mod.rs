@@ -17,6 +17,7 @@ struct Guest {
     app: AppHandle,
     id: u32,
     view: WebView,
+    stopped: std::rc::Rc<std::cell::Cell<bool>>,
     _context: WebContext,
     _directory: std::path::PathBuf,
 }
@@ -30,6 +31,7 @@ fn build(
     environment: Option<webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Environment>,
 ) -> Result<Guest, String> {
     // Never use WebView2's default user-data folder (which belongs to the Renderer).
+    let temporary = state::preferences(app).storage_mode == "temporary";
     let directory = storage::directory(app)?;
     let mut context = WebContext::new(Some(directory.clone()));
     let window = app.get_webview_window("main").ok_or("主窗口不可用")?;
@@ -40,7 +42,7 @@ fn build(
         builder = builder.with_environment(environment);
     }
     let view = builder
-        .with_incognito(state::preferences(app).storage_mode == "temporary")
+        .with_incognito(temporary)
         .with_initialization_script(include_str!("../initial-position.js"))
         .with_visible(false)
         .with_devtools(false)
@@ -55,19 +57,23 @@ fn build(
         })
         .build_as_child(&window)
         .map_err(|_| "WebView2 浏览视图创建失败")?;
-    permissions::install(&view, state::preferences(app).storage_mode == "temporary")?;
-    storage::remember(
-        &view,
-        &directory,
-        state::preferences(app).storage_mode == "temporary",
-    )?;
-    navigation::install(app, id, &view)?;
+    // Wry creation can pump native messages. A closed tab must not publish its old profile.
+    if !state::snapshot(app).tabs.iter().any(|tab| tab.id == id) {
+        return Err("标签在视图创建期间已关闭".into());
+    }
+    permissions::install(&view, temporary)?;
+    let stopped = navigation::install(app, id, &view)?;
     downloads::install(app, &view)?;
     popup::install(app, &view)?;
+    if !state::snapshot(app).tabs.iter().any(|tab| tab.id == id) {
+        return Err("标签在视图创建期间已关闭".into());
+    }
+    storage::remember(&view, &directory, temporary)?;
     Ok(Guest {
         app: app.clone(),
         id,
         view,
+        stopped,
         _context: context,
         _directory: directory,
     })
@@ -88,9 +94,15 @@ impl Engine for Guest {
                 {
                     let app = self.app.clone();
                     let id = self.id;
+                    let revision = script.revision;
                     self.view
-                        .evaluate_script_with_callback(&script, move |result| {
-                            super::portable::contact::completed(&app, id, result == "true");
+                        .evaluate_script_with_callback(&script.source, move |result| {
+                            super::portable::contact::completed(
+                                &app,
+                                id,
+                                revision,
+                                result == "true",
+                            );
                         })
                 } else {
                     return Ok(());
@@ -104,7 +116,10 @@ impl Engine for Guest {
             Action::Back => unsafe { self.view.webview().GoBack() }.map_err(wry::Error::from),
             Action::Forward => unsafe { self.view.webview().GoForward() }.map_err(wry::Error::from),
             Action::Reload => unsafe { self.view.webview().Reload() }.map_err(wry::Error::from),
-            Action::Stop => unsafe { self.view.webview().Stop() }.map_err(wry::Error::from),
+            Action::Stop => {
+                self.stopped.set(true);
+                unsafe { self.view.webview().Stop() }.map_err(wry::Error::from)
+            }
             Action::Status => return Ok(()),
             _ => return Err("本平台该浏览器能力尚不可用".into()),
         };

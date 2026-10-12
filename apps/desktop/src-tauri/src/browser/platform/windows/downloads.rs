@@ -18,9 +18,9 @@ pub(super) fn install(app: &AppHandle, view: &WebView) -> Result<(), String> {
                     let Some(args) = args else {
                         return Ok(());
                     };
-                    let _completion = super::deferral::Completion(args.GetDeferral()?);
                     args.SetCancel(true)?;
                     args.SetHandled(true)?;
+                    let _completion = super::deferral::Completion(args.GetDeferral()?);
                     let operation = args.DownloadOperation()?;
                     let source = super::navigation::text(|pointer| operation.Uri(pointer))?;
                     let suggested =
@@ -33,9 +33,11 @@ pub(super) fn install(app: &AppHandle, view: &WebView) -> Result<(), String> {
                         return Ok(());
                     };
                     let cancel = operation.clone();
-                    downloads::cancellation(id, move || {
+                    if !downloads::cancellation(id, move || {
                         let _ = cancel.Cancel();
-                    });
+                    }) {
+                        return Ok(());
+                    }
                     let connect = || -> windows::core::Result<()> {
                         let path = stage
                             .as_os_str()

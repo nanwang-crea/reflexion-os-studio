@@ -1,3 +1,7 @@
+#[cfg(any(test, target_os = "windows", target_os = "linux"))]
+mod guest_registry;
+#[cfg(any(test, target_os = "windows", target_os = "linux"))]
+mod guest_state;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(all(feature = "browser-spike", target_os = "macos"))]

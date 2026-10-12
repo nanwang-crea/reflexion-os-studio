@@ -1,15 +1,10 @@
 use super::{Bounds, Engine};
 use crate::browser::state::{self, Action};
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 use tauri::AppHandle;
 
-#[derive(Default)]
-struct Registry {
-    guests: HashMap<u32, Rc<dyn Engine>>,
-    active: Option<u32>,
-    bounds: Bounds,
-    visible: bool,
-}
+use super::super::guest_registry::{self, Registry};
+
 thread_local! { static REGISTRY: RefCell<Registry> = RefCell::new(Registry::default()); }
 
 pub fn attach(app: &AppHandle) -> Result<(), String> {
@@ -17,52 +12,61 @@ pub fn attach(app: &AppHandle) -> Result<(), String> {
         return Err(super::super::unavailable_notice().into());
     }
     let id = state::snapshot(app).active_tab_id.ok_or("没有活动标签")?;
+    select(app)?;
     let exists = REGISTRY.with(|r| r.borrow().guests.contains_key(&id));
     if !exists {
+        let creating = REGISTRY.with(|r| r.borrow_mut().creating.insert(id));
+        if !creating {
+            return Err("网页视图正在创建".into());
+        }
         // Engine creation can reenter callbacks; never hold a registry borrow here.
         #[cfg(target_os = "windows")]
-        let engine = super::super::windows::create(app, id)?;
+        let result = super::super::windows::create(app, id);
         #[cfg(target_os = "linux")]
-        let engine = super::super::linux::create(app, id)?;
-        REGISTRY.with(|r| r.borrow_mut().guests.insert(id, Rc::from(engine)));
+        let result = super::super::linux::create(app, id);
+        REGISTRY.with(|r| r.borrow_mut().creating.remove(&id));
+        adopt(app, id, result?)?;
     }
-    REGISTRY.with(|r| r.borrow_mut().active = Some(id));
-    refresh()?;
     if !exists {
-        if let Some(url) = state::snapshot(app).url {
-            control(app, &Action::Navigate { url })?;
+        let snapshot = state::snapshot(app);
+        let tab = snapshot
+            .tabs
+            .iter()
+            .find(|tab| tab.id == id)
+            .ok_or("标签已关闭")?;
+        if let Some(url) = &tab.url {
+            control_tab(app, id, &Action::Navigate { url: url.clone() })?;
         }
     }
     Ok(())
 }
 
+pub(super) fn select(app: &AppHandle) -> Result<(), String> {
+    let active = state::snapshot(app).active_tab_id;
+    REGISTRY.with(|r| r.borrow_mut().select(active));
+    refresh()
+}
+
 fn refresh() -> Result<(), String> {
-    let (guests, bounds, active, visible) = REGISTRY.with(|r| {
-        let r = r.borrow();
-        (
-            r.guests
-                .iter()
-                .map(|(id, engine)| (*id, engine.clone()))
-                .collect::<Vec<_>>(),
-            r.bounds,
-            r.active,
-            r.visible,
-        )
-    });
-    // Native layout may emit callbacks. Release the registry borrow first.
-    for (id, engine) in guests {
-        engine.layout(bounds, visible && active == Some(id))?;
-    }
-    Ok(())
+    REGISTRY.with(guest_registry::refresh)
 }
 
 pub(super) fn adopt(app: &AppHandle, id: u32, engine: Box<dyn Engine>) -> Result<(), String> {
+    let snapshot = state::snapshot(app);
+    if super::clearing() || !snapshot.tabs.iter().any(|tab| tab.id == id) {
+        engine.stop();
+        return Err("浏览会话或标签已关闭".into());
+    }
     REGISTRY.with(|r| {
         let mut r = r.borrow_mut();
-        r.guests.insert(id, Rc::from(engine));
-        r.active = state::snapshot(app).active_tab_id;
+        r.insert(id, Rc::from(engine));
+        r.select(snapshot.active_tab_id);
     });
-    refresh()
+    refresh()?;
+    if !state::snapshot(app).tabs.iter().any(|tab| tab.id == id) {
+        return Err("标签已关闭".into());
+    }
+    Ok(())
 }
 
 pub fn control(app: &AppHandle, action: &Action) -> Result<(), String> {
@@ -79,17 +83,23 @@ pub fn control(app: &AppHandle, action: &Action) -> Result<(), String> {
     {
         REGISTRY.with(|r| {
             let mut r = r.borrow_mut();
-            r.bounds = Bounds {
-                x: *x,
-                y: *y,
-                width: *width,
-                height: *height,
-            };
-            r.visible = *visible && *width > 0.0 && *height > 0.0;
+            r.layout(
+                Bounds {
+                    x: *x,
+                    y: *y,
+                    width: *width,
+                    height: *height,
+                },
+                *visible && *width > 0.0 && *height > 0.0,
+            );
         });
         return refresh();
     }
     let id = state::snapshot(app).active_tab_id.ok_or("没有活动标签")?;
+    control_tab(app, id, action)
+}
+
+fn control_tab(app: &AppHandle, id: u32, action: &Action) -> Result<(), String> {
     if let Action::Navigate { url } = action {
         crate::browser::policy::guest_url(url, crate::browser::policy::dev_url(app))?;
     }
@@ -101,15 +111,15 @@ pub fn control(app: &AppHandle, action: &Action) -> Result<(), String> {
 }
 
 pub fn close_tab(id: u32) {
-    if let Some(engine) = REGISTRY.with(|r| r.borrow_mut().guests.remove(&id)) {
+    if let Some(engine) = REGISTRY.with(|r| r.borrow_mut().remove(id)) {
         engine.stop();
     }
 }
 
 pub fn dispose() {
     super::downloads::dispose();
-    let guests = REGISTRY.with(|r| std::mem::take(&mut *r.borrow_mut()));
-    for engine in guests.guests.into_values() {
+    let guests = REGISTRY.with(|r| r.borrow_mut().clear());
+    for engine in guests.into_values() {
         engine.stop();
     }
     #[cfg(target_os = "windows")]

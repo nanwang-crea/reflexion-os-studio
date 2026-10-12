@@ -43,22 +43,12 @@ pub fn fill(app: &AppHandle, view: &WKWebView, contact: &Contact) -> Result<(), 
     {
         return Err("页面已切换，请重新确认".into());
     }
-    let values = serde_json::to_string(contact).map_err(|_| "联系信息无效")?;
+    let values = contact.fill_values();
     let expected_url = serde_json::to_string(&snapshot.url).map_err(|_| "页面无效")?;
     let expected = serde_json::to_string(&expected).map_err(|_| "来源无效")?;
     let script = format!(
-        r#"(() => {{
-      if (location.protocol !== 'https:' || location.origin !== {expected} || location.href !== {expected_url}) return false;
-      const c = {values}; const fields = {{name:c.name,email:c.email,tel:c.phone,'street-address':c.address}};
-      let count = 0;
-      for (const input of document.querySelectorAll('input[autocomplete],textarea[autocomplete]')) {{
-        const key = input.autocomplete.trim().split(/\s+/).at(-1);
-        if (!(key in fields) || !fields[key] || input.type === 'password' || input.type === 'hidden' || input.disabled || input.readOnly || !input.getClientRects().length) continue;
-        const prototype = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-        Object.getOwnPropertyDescriptor(prototype,'value').set.call(input,fields[key]);
-        count++; input.dispatchEvent(new Event('input',{{bubbles:true}})); input.dispatchEvent(new Event('change',{{bubbles:true}}));
-      }} return count > 0;
-    }})()"#
+        "({})({values}, {expected_url}, {expected})",
+        include_str!("../contact-fill.js")
     );
     unsafe {
         view.evaluateJavaScript_completionHandler(
@@ -67,6 +57,13 @@ pub fn fill(app: &AppHandle, view: &WKWebView, contact: &Contact) -> Result<(), 
                 let app = app.clone();
                 move |value: *mut objc2::runtime::AnyObject,
                       error: *mut objc2_foundation::NSError| {
+                    let current = state::snapshot(&app);
+                    if current.revision != snapshot.revision
+                        || current.active_tab_id != snapshot.active_tab_id
+                        || current.status != "ready"
+                    {
+                        return;
+                    }
                     let success = error.is_null()
                         && value
                             .as_ref()

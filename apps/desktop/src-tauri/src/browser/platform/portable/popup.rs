@@ -14,6 +14,10 @@ pub(crate) fn open<T>(
     let mut result = Err("标签创建失败".into());
     state::update(app, |snapshot| result = snapshot.add_tab(None));
     let id = result?;
+    if let Err(error) = super::registry::select(app) {
+        rollback(app, id, previous);
+        return Err(error);
+    }
     match create(id) {
         Ok((engine, handle)) => {
             if let Err(error) = super::registry::adopt(app, id, engine) {
@@ -39,4 +43,5 @@ fn rollback(app: &AppHandle, id: u32, previous: Option<u32>) {
             }
         }
     });
+    let _ = super::registry::select(app);
 }
