@@ -1,3 +1,4 @@
+import { DEFAULT_REASONING_OPTIONS } from '@reflexion-os-studio/runtime-client'
 import type {
   ProviderModel,
   ProviderProfile,
@@ -24,6 +25,8 @@ export function modelOptionsFor(
           label: model,
           group: profile.name,
           reasoningEffortSupported: supported,
+          reasoningOptions:
+            config?.reasoningOptions ?? DEFAULT_REASONING_OPTIONS,
           defaultReasoningEffort: supported
             ? (config.reasoningEffort ?? profile.reasoningEffort)
             : null,
@@ -43,8 +46,15 @@ export function selectedEffort(
   choice: ReasoningChoice | null,
 ): ReasoningEffort | null {
   if (!option?.reasoningEffortSupported) return null
-  const defaultValue = option.defaultReasoningEffort ?? null
-  return choice?.key === option.key && choice.defaultValue === defaultValue
+  const options = option.reasoningOptions ?? DEFAULT_REASONING_OPTIONS
+  const configured = option.defaultReasoningEffort ?? null
+  const defaultValue = options.some((item) => item.value === configured)
+    ? configured
+    : null
+  return choice?.key === option.key &&
+    choice.defaultValue === defaultValue &&
+    (choice.value === null ||
+      options.some((item) => item.value === choice.value))
     ? choice.value
     : defaultValue
 }

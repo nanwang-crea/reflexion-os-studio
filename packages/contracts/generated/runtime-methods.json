@@ -3,6 +3,8 @@
   "methods": [
     "agent.list",
     "agent.set_enabled",
+    "agent_browser_settings.get",
+    "agent_browser_settings.update",
     "agent_settings.get",
     "agent_settings.update",
     "agent_template.list",

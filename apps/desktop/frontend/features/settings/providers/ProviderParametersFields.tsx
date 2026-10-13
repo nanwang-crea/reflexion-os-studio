@@ -1,4 +1,7 @@
-import type { ReasoningEffort } from '@reflexion-os-studio/runtime-client'
+import type {
+  ReasoningEffort,
+  ProviderModel,
+} from '@reflexion-os-studio/runtime-client'
 import { Select } from '../../../components/forms/Select'
 import type { Draft } from '../provider-form'
 import { samplingHint } from '../provider-form'
@@ -43,6 +46,7 @@ export function ProviderParametersFields(props: {
   draft: ParametersDraft
   onChange: (patch: Partial<ParametersDraft>) => void
   apiFormat?: Draft['apiFormat']
+  reasoningOptions?: ProviderModel['reasoningOptions']
   inherited?: boolean
   disabled?: boolean
   reasoningDisabled?: boolean
@@ -89,9 +93,17 @@ export function ProviderParametersFields(props: {
           <option value="">
             {props.inherited ? '继承 Provider 默认' : '自动'}
           </option>
-          <option value="low">低</option>
-          <option value="medium">中</option>
-          <option value="high">高</option>
+          {(
+            props.reasoningOptions ?? [
+              { label: '低', value: 'low' },
+              { label: '中', value: 'medium' },
+              { label: '高', value: 'high' },
+            ]
+          ).map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </Select>
         <span className="field-hint">仅对明确支持思考强度的模型发送。</span>
       </label>

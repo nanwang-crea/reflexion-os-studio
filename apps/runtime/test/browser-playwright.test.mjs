@@ -140,6 +140,7 @@ test('browser approval binds source and target and offers no session rule even u
       hasWorkspace: false,
       approvalOverride: 'default',
       dangerActive: () => true,
+      browserApproval: () => 'ask',
     }).decisionFor({
       toolName: 'browser.navigate',
       subject,
@@ -319,3 +320,48 @@ test('cancellation during worker handshake releases it without waiting for reque
   assert.equal(disposed, true)
   await service.shutdown()
 })
+
+test(
+  'headed browser launches a window and user navigation outside the approved source is rejected before snapshot',
+  {
+    skip:
+      process.platform !== 'darwin'
+        ? 'Windows/Linux headed GUI acceptance pending'
+        : false,
+  },
+  async () => {
+    const server = createServer((_request, response) => {
+      response.setHeader('content-type', 'text/html')
+      response.end(
+        '<title>Visible Agent fixture</title><h1>Visible Agent browser</h1>',
+      )
+    })
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const origin = `http://fixture.test:${server.address().port}`
+    const backend = new PlaywrightBackend(
+      (approved) => createBrowserProxy(approved, async () => '127.0.0.1'),
+      async () => '93.184.216.34',
+      'headed',
+    )
+    try {
+      const metadata = await backend.navigate(origin + '/')
+      assert.match(
+        (await backend.read(metadata.page)).snapshot,
+        /Visible Agent browser/,
+      )
+      const page = backend.context.pages()[0]
+      await page.goto('data:text/html,<h1>Unapproved synthetic page</h1>')
+      let snapshots = 0
+      const call = backend.call.bind(backend)
+      backend.call = (...args) => {
+        if (args[0] === 'browser_snapshot') ++snapshots
+        return call(...args)
+      }
+      await assert.rejects(backend.read(metadata.page), /browser_page_stale/)
+      assert.equal(snapshots, 0)
+    } finally {
+      await backend.close()
+      await new Promise((resolve) => server.close(resolve))
+    }
+  },
+)

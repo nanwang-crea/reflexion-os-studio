@@ -24,6 +24,7 @@ type ModelDraft = Pick<
   | 'contextBudget'
   | 'reasoningEffort'
 > & {
+  reasoningOptionsText: string
   reasoningEffortSupported: boolean
 }
 
@@ -36,6 +37,15 @@ function draftFor(config?: ProviderModel): ModelDraft {
     contextBudget:
       config?.contextBudget == null ? '' : String(config.contextBudget),
     reasoningEffort: config?.reasoningEffort ?? '',
+    reasoningOptionsText: (
+      config?.reasoningOptions ?? [
+        { label: '低', value: 'low' },
+        { label: '中', value: 'medium' },
+        { label: '高', value: 'high' },
+      ]
+    )
+      .map((option) => `${option.label}=${option.value}`)
+      .join('\n'),
     reasoningEffortSupported: config?.reasoningEffortSupported ?? false,
   }
 }
@@ -92,6 +102,19 @@ export function ProviderModelsPanel({
     setSaved(false)
   }, [model])
 
+  const reasoningOptions = draft.reasoningOptionsText
+    .split('\n')
+    .filter((line) => line.trim())
+    .map((line) => {
+      const separator = line.indexOf('=')
+      return separator < 0
+        ? { label: line.trim(), value: line.trim() }
+        : {
+            label: line.slice(0, separator).trim(),
+            value: line.slice(separator + 1).trim(),
+          }
+    })
+
   const persist = async (reset: boolean): Promise<void> => {
     if (busy || !loaded || !model) return
     const payload = {
@@ -102,6 +125,7 @@ export function ProviderModelsPanel({
       contextWindow: parseNumber(draft.contextWindow, true),
       contextBudget: parseNumber(draft.contextBudget, true),
       reasoningEffort: draft.reasoningEffort || null,
+      reasoningOptions,
       reasoningEffortSupported:
         profile.apiFormat !== 'anthropic' && draft.reasoningEffortSupported,
     }
@@ -169,7 +193,28 @@ export function ProviderModelsPanel({
           模型支持思考强度
         </span>
       </label>
+      <label className="field">
+        支持的思考等级
+        <textarea
+          aria-label="支持的思考等级"
+          rows={5}
+          value={draft.reasoningOptionsText}
+          disabled={busy || !loaded || profile.apiFormat === 'anthropic'}
+          onChange={(event) => {
+            setDraft((current) => ({
+              ...current,
+              reasoningOptionsText: event.target.value,
+              reasoningEffort: '',
+            }))
+            setSaved(false)
+          }}
+        />
+        <span className="field-hint">
+          每行填写“显示名称=实际发送值”，例如“极高=xhigh”。默认不发送参数；关闭思考需填写服务端明确支持的值。
+        </span>
+      </label>
       <ProviderParametersFields
+        reasoningOptions={reasoningOptions}
         draft={draft}
         inherited
         disabled={busy || !loaded}

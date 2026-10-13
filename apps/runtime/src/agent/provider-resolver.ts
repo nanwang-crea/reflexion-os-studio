@@ -1,3 +1,4 @@
+import { DEFAULT_REASONING_OPTIONS } from '@reflexion-os-studio/contracts'
 import type {
   ProviderProfile,
   ProviderModel,
@@ -66,6 +67,20 @@ export function resolveModelRuntimeConfig(
   config: ProviderModel | null,
   requestedReasoningEffort?: ReasoningEffort | null,
 ): ProviderProfile {
+  const options = config?.reasoningOptions ?? DEFAULT_REASONING_OPTIONS
+  const supported =
+    config?.reasoningEffortSupported && profile.apiFormat !== 'anthropic'
+  if (
+    supported &&
+    requestedReasoningEffort != null &&
+    !options.some((option) => option.value === requestedReasoningEffort)
+  ) {
+    throw new CommandError(
+      'invalid_request',
+      '所选思考等级不在当前模型支持列表中',
+    )
+  }
+  const inherited = config?.reasoningEffort ?? profile.reasoningEffort
   return {
     ...profile,
     temperature: config?.temperature ?? profile.temperature,
@@ -75,7 +90,9 @@ export function resolveModelRuntimeConfig(
     reasoningEffort:
       config?.reasoningEffortSupported && profile.apiFormat !== 'anthropic'
         ? requestedReasoningEffort === undefined
-          ? (config.reasoningEffort ?? profile.reasoningEffort)
+          ? options.some((option) => option.value === inherited)
+            ? inherited
+            : null
           : requestedReasoningEffort
         : null,
   }

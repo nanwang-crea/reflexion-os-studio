@@ -193,6 +193,8 @@ export class RunLauncher {
       allowedTools: input.allowedTools,
     })
     const gate = new PermissionGate({
+      browserApproval: () =>
+        this.deps.store.browserSettings.get().agentBrowserApproval,
       preset,
       hasWorkspace: workspaceRoot !== null,
       approvalOverride:

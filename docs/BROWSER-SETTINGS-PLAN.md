@@ -265,3 +265,5 @@ store 后复用原容器以保留未勾选数据；切换模式/权限规则关�
 ### B4 路线调整
 
 静态抓取与原生只读快照已移除，不保留备用链路。已接入内置受管官方 Playwright MCP，默认 Agent 开关关闭；当前提供逐次审批的导航、真实页面读取和关闭，点击/输入待后续。详见 [B4 设计](BROWSER-AGENT.md)。
+
+Agent 浏览器设置现独立位于“模型与工具 → Agent 浏览器”。支持默认无头和有头窗口两种显示模式；使用独立 agent_browser_settings.get/update，不通过用户 Surface 配置。切换模式撤销旧 worker，下一次获准导航使用新模式。具体范围见 [B4 设计](BROWSER-AGENT.md)。

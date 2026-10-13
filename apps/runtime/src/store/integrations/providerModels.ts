@@ -3,7 +3,11 @@ import type {
   ProviderModel,
   ReasoningEffort,
 } from '@reflexion-os-studio/contracts'
-import { ReasoningEffortSchema } from '@reflexion-os-studio/contracts'
+import {
+  ReasoningEffortSchema,
+  ReasoningOptionsSchema,
+  DEFAULT_REASONING_OPTIONS,
+} from '@reflexion-os-studio/contracts'
 import { readProviderNumber } from './provider-values.js'
 import { nowIso, type Row } from '../shared.js'
 
@@ -37,16 +41,32 @@ export class ProviderModelStore {
     contextWindow?: number | null
     contextBudget?: number | null
     reasoningEffort?: ReasoningEffort | null
+    reasoningOptions?: ProviderModel['reasoningOptions']
     reasoningEffortSupported?: boolean
   }): ProviderModel {
     const existing = this.get(input.providerId, input.model)
+    const reasoningOptions = ReasoningOptionsSchema.parse(
+      input.reasoningOptions ??
+        existing?.reasoningOptions ??
+        DEFAULT_REASONING_OPTIONS,
+    )
+    const effort =
+      input.reasoningEffort === undefined
+        ? existing?.reasoningEffort
+        : input.reasoningEffort
+    if (
+      effort != null &&
+      !reasoningOptions.some((option) => option.value === effort)
+    ) {
+      throw new Error('默认思考等级必须在支持列表中')
+    }
     const updatedAt = nowIso()
     this.db
       .prepare(
         `INSERT INTO provider_models
           (provider_id, model, temperature, max_tokens, context_window, context_budget,
-           reasoning_effort, reasoning_effort_supported, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           reasoning_effort, reasoning_effort_supported, reasoning_options_json, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(provider_id, model) DO UPDATE SET
            temperature = excluded.temperature,
            max_tokens = excluded.max_tokens,
@@ -54,6 +74,7 @@ export class ProviderModelStore {
            context_budget = excluded.context_budget,
            reasoning_effort = excluded.reasoning_effort,
            reasoning_effort_supported = excluded.reasoning_effort_supported,
+           reasoning_options_json = excluded.reasoning_options_json,
            updated_at = excluded.updated_at`,
       )
       .run(
@@ -81,6 +102,7 @@ export class ProviderModelStore {
           : input.reasoningEffortSupported
             ? 1
             : 0,
+        JSON.stringify(reasoningOptions),
         updatedAt,
       )
     const row = this.db
@@ -110,8 +132,18 @@ export class ProviderModelStore {
       contextWindow: readProviderNumber('contextWindow', row.context_window),
       contextBudget: readProviderNumber('contextBudget', row.context_budget),
       reasoningEffort: this.parseReasoningEffort(row.reasoning_effort),
+      reasoningOptions: this.parseOptions(row.reasoning_options_json),
       reasoningEffortSupported: Number(row.reasoning_effort_supported) === 1,
       updatedAt: String(row.updated_at),
+    }
+  }
+
+  private parseOptions(value: unknown): ProviderModel['reasoningOptions'] {
+    try {
+      const result = ReasoningOptionsSchema.safeParse(JSON.parse(String(value)))
+      return result.success ? result.data : DEFAULT_REASONING_OPTIONS
+    } catch {
+      return DEFAULT_REASONING_OPTIONS
     }
   }
 

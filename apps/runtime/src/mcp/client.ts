@@ -62,6 +62,12 @@ export class McpClient {
               'HOME',
               'USERPROFILE',
               'LOCALAPPDATA',
+              'DISPLAY',
+              'WAYLAND_DISPLAY',
+              'XDG_RUNTIME_DIR',
+              'XDG_SESSION_TYPE',
+              'XAUTHORITY',
+              'DBUS_SESSION_BUS_ADDRESS',
             ].flatMap((key) =>
               process.env[key] ? [[key, process.env[key]]] : [],
             ),

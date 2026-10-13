@@ -169,6 +169,7 @@ CREATE TABLE IF NOT EXISTS provider_models (
   context_window INTEGER,
   context_budget INTEGER,
   reasoning_effort TEXT,
+  reasoning_options_json TEXT NOT NULL DEFAULT '[{"label":"低","value":"low"},{"label":"中","value":"medium"},{"label":"高","value":"high"}]',
   reasoning_effort_supported INTEGER NOT NULL DEFAULT 0,
   updated_at TEXT NOT NULL,
   PRIMARY KEY (provider_id, model)
@@ -319,4 +320,4 @@ CREATE INDEX IF NOT EXISTS idx_run_events_run ON run_events(run_id, created_at);
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 42
+export const LATEST_SCHEMA_VERSION = 43

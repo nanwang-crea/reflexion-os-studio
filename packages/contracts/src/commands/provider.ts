@@ -6,6 +6,7 @@ import {
   ApiFormatSchema,
   ProviderHeadersSchema,
   ReasoningEffortSchema,
+  ReasoningOptionsSchema,
 } from '../entities.js'
 import { RequestIdSchema } from './params.js'
 
@@ -61,6 +62,7 @@ export const providerCommands = {
       contextWindow: z.number().int().positive().nullable().optional(),
       contextBudget: z.number().int().positive().nullable().optional(),
       reasoningEffort: ReasoningEffortSchema.nullable().optional(),
+      reasoningOptions: ReasoningOptionsSchema.optional(),
       reasoningEffortSupported: z.boolean().optional(),
     }),
     result: z.object({ model: ProviderModelSchema }),

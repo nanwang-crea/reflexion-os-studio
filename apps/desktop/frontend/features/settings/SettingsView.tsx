@@ -7,6 +7,7 @@ import { McpPanel } from './McpPanel'
 import { ProviderEditor } from './ProviderEditor'
 import { ProviderList } from './ProviderList'
 import { AppearancePanel } from './appearance/AppearancePanel'
+import { AgentBrowserSettingsPanel } from './agent-browser/AgentBrowserSettingsPanel'
 import { BrowserSettingsPanel } from '../../components/browser-settings/BrowserSettingsPanel'
 
 interface SettingsViewProps {
@@ -50,6 +51,7 @@ export function SettingsView(props: SettingsViewProps): React.JSX.Element {
           <div className={`settings-content-inner settings-content-${section}`}>
             {section === 'appearance' && <AppearancePanel />}
             {section === 'browser' && <BrowserSettingsPanel />}
+            {section === 'agent-browser' && <AgentBrowserSettingsPanel />}
             {section === 'models' && (
               <>
                 <div className="settings-panel-head settings-page-heading">

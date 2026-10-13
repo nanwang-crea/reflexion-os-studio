@@ -60,7 +60,7 @@ test('v40 database upgrades to browser settings while retaining project data', (
   assert.equal(upgraded.browserSettings.get().defaultRoute, 'system')
   upgraded.close()
   const inspect = new DatabaseSync(join(dir, 'reflexion.db'))
-  assert.equal(inspect.prepare('PRAGMA user_version').get().user_version, 42)
+  assert.ok(inspect.prepare('PRAGMA user_version').get().user_version >= 42)
   inspect.close()
 })
 
@@ -136,6 +136,65 @@ test('removing the static Agent toggle preserves saved user browser preferences'
   const reopened = new Store(dir)
   try {
     assert.deepEqual(reopened.browserSettings.get(), settings)
+  } finally {
+    reopened.close()
+  }
+})
+
+test('independent Agent settings preserve user browser preferences, persist display and revoke on change', async () => {
+  const { agentBrowserSettingsCommandHandlers: agentHandlers } =
+    await import('../dist/browser/agent/handlers.js')
+  const { browserSettingsCommandHandlers: userHandlers } =
+    await import('../dist/browser-settings/handlers.js')
+  const dir = mkdtempSync(join(tmpdir(), 'reflexion-agent-display-'))
+  const store = new Store(dir)
+  const user = {
+    ...store.browserSettings.get(),
+    defaultRoute: 'embedded',
+    saveHistory: true,
+  }
+  store.browserSettings.upsert(user)
+  let revoked = 0
+  const context = { store, browser: { revoke: () => ++revoked } }
+  try {
+    agentHandlers['agent_browser_settings.update'](
+      { settings: { enabled: true, display: 'headed' } },
+      context,
+    )
+    assert.equal(revoked, 1)
+    assert.equal(store.browserSettings.get().saveHistory, true)
+    assert.equal(store.browserSettings.get().defaultRoute, 'embedded')
+    // A stale ordinary-browser update cannot overwrite the independent Agent settings.
+    userHandlers['browser_settings.update'](
+      { settings: { ...user, showFullUrl: false } },
+      context,
+    )
+    assert.deepEqual(
+      agentHandlers['agent_browser_settings.get']({}, context).settings,
+      { enabled: true, display: 'headed', approval: 'follow-session' },
+    )
+    agentHandlers['agent_browser_settings.update'](
+      { settings: { enabled: true, display: 'headed' } },
+      context,
+    )
+    assert.equal(revoked, 1)
+    agentHandlers['agent_browser_settings.update'](
+      { settings: { enabled: true, display: 'headed', approval: 'ask' } },
+      context,
+    )
+    assert.equal(revoked, 2)
+    assert.equal(store.browserSettings.get().agentBrowserApproval, 'ask')
+    agentHandlers['agent_browser_settings.update'](
+      { settings: { enabled: false, display: 'headed' } },
+      context,
+    )
+    assert.equal(revoked, 3)
+  } finally {
+    store.close()
+  }
+  const reopened = new Store(dir)
+  try {
+    assert.equal(reopened.browserSettings.get().agentBrowserDisplay, 'headed')
   } finally {
     reopened.close()
   }

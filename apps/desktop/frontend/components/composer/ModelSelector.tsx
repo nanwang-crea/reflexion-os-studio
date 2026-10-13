@@ -1,4 +1,7 @@
-import type { ReasoningEffort } from '@reflexion-os-studio/runtime-client'
+import type {
+  ReasoningEffort,
+  ProviderModel,
+} from '@reflexion-os-studio/runtime-client'
 import { Select } from '../forms/Select'
 import { ChevronIcon } from '../../ui/icons'
 
@@ -7,11 +10,13 @@ export interface ComposerModelOption {
   label: string
   group: string
   reasoningEffortSupported?: boolean
+  reasoningOptions?: ProviderModel['reasoningOptions']
   defaultReasoningEffort?: ReasoningEffort | null
 }
 
 export interface ReasoningSelection {
   value: ReasoningEffort | null
+  options: ProviderModel['reasoningOptions']
   supported: boolean
   loading: boolean
   error: string | null
@@ -77,11 +82,13 @@ export function ModelSelector(props: {
                   ? '加载失败'
                   : !props.reasoning.supported
                     ? '自动（不支持调整）'
-                    : '自动'}
+                    : '服务端默认'}
             </option>
-            <option value="low">思考：低</option>
-            <option value="medium">思考：中</option>
-            <option value="high">思考：高</option>
+            {props.reasoning.options.map((option) => (
+              <option key={option.value} value={option.value}>
+                思考：{option.label}
+              </option>
+            ))}
           </Select>
         </label>
       )}

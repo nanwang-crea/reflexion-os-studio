@@ -26,6 +26,7 @@ import {
 } from './provider/handlers.js'
 import { agentCommandHandlers } from './agent/handlers.js'
 import { browserDataCommandHandlers } from './browser/data/handlers.js'
+import { agentBrowserSettingsCommandHandlers } from './browser/agent/handlers.js'
 import { browserSettingsCommandHandlers } from './browser-settings/handlers.js'
 
 /**
@@ -366,6 +367,7 @@ export const commandHandlers: Record<string, CommandHandler> = {
   ...providerCommandHandlers,
   ...agentCommandHandlers,
   ...browserSettingsCommandHandlers,
+  ...agentBrowserSettingsCommandHandlers,
   ...browserDataCommandHandlers,
 }
 

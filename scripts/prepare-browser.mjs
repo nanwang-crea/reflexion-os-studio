@@ -22,7 +22,7 @@ const browsers = join(root, '.cache', 'agent-browser')
 const playwright = dirname(require.resolve('playwright/package.json'))
 const installed = spawnSync(
   process.execPath,
-  [join(playwright, 'cli.js'), 'install', '--only-shell', 'chromium'],
+  [join(playwright, 'cli.js'), 'install', 'chromium'],
   {
     stdio: 'inherit',
     env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: browsers },
@@ -68,6 +68,7 @@ await cp(browsers, join(output, 'browsers'), {
     const name = source.slice(browsers.length).split(/[\\/]/).filter(Boolean)[0]
     return (
       !name ||
+      name.startsWith('chromium-') ||
       name.startsWith('chromium_headless_shell-') ||
       name.startsWith('ffmpeg-') ||
       name.startsWith('winldd-')

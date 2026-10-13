@@ -72,3 +72,53 @@ test('UI effort is scoped to the selected model and resets when its default chan
   assert.equal(selectedEffort(options[0], { ...choice, value: null }), null)
   assert.equal(selectedEffort(options[0], null), 'high')
 })
+
+test('custom options reject stale selection and incompatible inherited defaults', () => {
+  const options = modelOptionsFor(
+    [provider],
+    [
+      {
+        ...configs[0],
+        reasoningEffort: null,
+        reasoningOptions: [{ label: '极高', value: 'xhigh' }],
+      },
+    ],
+  )
+  assert.equal(selectedEffort(options[0], null), null)
+  const option = { ...options[0], defaultReasoningEffort: 'xhigh' }
+  assert.equal(
+    selectedEffort(option, {
+      key: option.key,
+      defaultValue: 'xhigh',
+      value: 'high',
+    }),
+    'xhigh',
+  )
+  assert.equal(
+    selectedEffort(option, {
+      key: option.key,
+      defaultValue: 'xhigh',
+      value: 'xhigh',
+    }),
+    'xhigh',
+  )
+})
+
+test('choice remains usable when inherited default is outside supported values', () => {
+  const [option] = modelOptionsFor(
+    [provider],
+    [
+      {
+        ...configs[0],
+        reasoningEffort: null,
+        reasoningOptions: [{ label: '极高', value: 'xhigh' }],
+      },
+    ],
+  )
+  const defaultValue = selectedEffort(option, null)
+  assert.equal(defaultValue, null)
+  assert.equal(
+    selectedEffort(option, { key: option.key, defaultValue, value: 'xhigh' }),
+    'xhigh',
+  )
+})

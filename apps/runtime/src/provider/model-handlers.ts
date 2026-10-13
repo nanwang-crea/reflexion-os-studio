@@ -1,5 +1,6 @@
 import {
   CommandSchemaRegistry,
+  DEFAULT_REASONING_OPTIONS,
   type ProviderProfile,
 } from '@reflexion-os-studio/contracts'
 import { CommandError } from '../agent/errors.js'
@@ -32,6 +33,18 @@ export const providerModelCommandHandlers: Record<string, CommandHandler> = {
         'invalid_request',
         '当前 Anthropic 适配器不支持思考强度参数',
       )
+    }
+    const existing = store.providerModels.get(input.providerId, input.model)
+    const options =
+      input.reasoningOptions ??
+      existing?.reasoningOptions ??
+      DEFAULT_REASONING_OPTIONS
+    const effort =
+      input.reasoningEffort === undefined
+        ? existing?.reasoningEffort
+        : input.reasoningEffort
+    if (effort != null && !options.some((option) => option.value === effort)) {
+      throw new CommandError('invalid_request', '默认思考等级必须在支持列表中')
     }
     return { model: store.providerModels.upsert(input) }
   },

@@ -148,4 +148,4 @@ AGENTS.md 第 12 节 no-read 清单；Provider secret 及 `secretRef` 原值、�
 
 ## B4 Playwright 审批（首批）
 
-静态读取链路已移除。内置 Playwright 工具通过 browser-page subject 绑定实际操作、来源、标签与页面版本；仅 allow-once/deny，通用会话规则与 Danger 不旁路。导航审批展示目标来源及可选原页面，读取审批绑定精确页面版本；执行时核对实时快照摘要，陈旧页面拒绝读取。网页内容按不可信外部资料处理，用户凭据不向 Agent 开放。详见 [B4 设计](BROWSER-AGENT.md)。
+静态读取链路已移除。内置 Playwright 工具通过 browser-page subject 绑定实际操作、来源、标签与页面版本；出现审批时仅 allow-once/deny，通用会话规则与 Danger 不旁路。浏览器批准模式默认跟随对话权限（workspace-full 自动、其他档位询问），可设置强制询问或自动只读；ask-everything 优先。导航审批展示目标来源及可选原页面，读取审批绑定精确页面版本；执行时核对实时快照摘要，陈旧页面拒绝读取。网页内容按不可信外部资料处理，用户凭据不向 Agent 开放。详见 [B4 设计](BROWSER-AGENT.md)。

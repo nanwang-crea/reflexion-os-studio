@@ -2,6 +2,7 @@ import {
   AgentBrowserDocumentSchema,
   AgentBrowserPageSchema,
   type AgentBrowserPage,
+  type AgentBrowserDisplay,
 } from '@reflexion-os-studio/contracts'
 import type { Store } from '../../store/index.js'
 import { McpClient } from '../../mcp/client.js'
@@ -17,11 +18,15 @@ export class BrowserAgentService {
   private readonly cleanup = new Set<Promise<void>>()
   constructor(
     private readonly store: Store,
-    private readonly createClient = () => {
+    private readonly createClient = (display: AgentBrowserDisplay) => {
       const paths = browserWorkerPaths()
       return new McpClient({
         command: process.execPath,
-        args: ['--disable-warning=ExperimentalWarning', paths.worker],
+        args: [
+          '--disable-warning=ExperimentalWarning',
+          paths.worker,
+          `--display=${display}`,
+        ],
         env: paths.browsers ? { PLAYWRIGHT_BROWSERS_PATH: paths.browsers } : {},
         managed: true,
       })
@@ -54,7 +59,9 @@ export class BrowserAgentService {
     }
     if (!entry) {
       if (this.clients.size >= 8) throw new Error('browser_capacity')
-      const client = this.createClient()
+      const client = this.createClient(
+        this.store.browserSettings.get().agentBrowserDisplay,
+      )
       entry = { sessionId, client, page: null }
       this.clients.set(runId, entry)
       const abortConnect = () => this.release(runId)

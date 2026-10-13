@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { IsoDateTimeSchema } from '../shared.js'
-import { ReasoningEffortSchema } from './reasoning.js'
+import { ReasoningEffortSchema, ReasoningOptionsSchema } from './reasoning.js'
 
 /** Provider 下单个模型的能力与运行参数覆盖。null 表示继承 Provider 默认。 */
 export const ProviderModelSchema = z.object({
@@ -11,6 +11,7 @@ export const ProviderModelSchema = z.object({
   contextWindow: z.number().int().positive().nullable(),
   contextBudget: z.number().int().positive().nullable(),
   reasoningEffort: ReasoningEffortSchema.nullable(),
+  reasoningOptions: ReasoningOptionsSchema,
   reasoningEffortSupported: z.boolean(),
   updatedAt: IsoDateTimeSchema,
 })

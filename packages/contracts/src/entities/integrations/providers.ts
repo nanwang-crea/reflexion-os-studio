@@ -66,7 +66,11 @@ export const ProviderHeadersSchema = z
     })
   })
 
-export { ReasoningEffortSchema } from './reasoning.js'
+export {
+  ReasoningEffortSchema,
+  ReasoningOptionsSchema,
+  DEFAULT_REASONING_OPTIONS,
+} from './reasoning.js'
 export type { ReasoningEffort } from './reasoning.js'
 
 export const ProviderProfileSchema = z.object({

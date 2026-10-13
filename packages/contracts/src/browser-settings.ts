@@ -1,10 +1,13 @@
 import { z } from 'zod'
+import { AgentBrowserSettingsSchema } from './browser/agent-settings.js'
 import { BrowserSiteRuleSchema } from './browser/data.js'
 import { normalizeBrowserUrl } from './browser/url.js'
 
 /** Low-sensitivity preferences only; website data stays in the native adapter. */
 export const BrowserSettingsSchema = z.strictObject({
-  agentBrowserEnabled: z.boolean().default(false),
+  agentBrowserEnabled: AgentBrowserSettingsSchema.shape.enabled,
+  agentBrowserDisplay: AgentBrowserSettingsSchema.shape.display,
+  agentBrowserApproval: AgentBrowserSettingsSchema.shape.approval,
   mode: z.enum(['embedded', 'system']),
   defaultRoute: z.enum(['embedded', 'system']),
   localRoute: z.enum(['embedded', 'system']).default('system'),

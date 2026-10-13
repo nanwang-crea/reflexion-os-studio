@@ -15,8 +15,15 @@ import { createRunExecutionState } from '../dist/agent/run/run-state.js'
 import { McpClient } from '../dist/mcp/client.js'
 import { browserWorkerPaths } from '../dist/browser/agent/paths.js'
 
-for (const choice of ['deny', 'allow-once']) {
-  test(`browser execution under Danger still requires explicit ${choice} choice`, async () => {
+for (const [policy, override, choice] of [
+  ['ask', 'default', 'deny'],
+  ['ask', 'default', 'allow-once'],
+  ['follow-session', 'default', 'automatic'],
+  ['allow-read-only', 'default', 'automatic'],
+  ['follow-session', 'ask-everything', 'deny'],
+  ['allow-read-only', 'ask-everything', 'deny'],
+]) {
+  test(`browser execution policy ${policy}, override ${override}, result ${choice}`, async () => {
     const store = new Store(
       mkdtempSync(join(tmpdir(), 'reflexion-browser-approval-')),
     )
@@ -74,8 +81,9 @@ for (const choice of ['deny', 'allow-once']) {
           gate: new PermissionGate({
             preset: 'workspace-full',
             hasWorkspace: false,
-            approvalOverride: 'default',
+            approvalOverride: override,
             dangerActive: () => true,
+            browserApproval: () => policy,
           }),
         },
         {
@@ -88,6 +96,12 @@ for (const choice of ['deny', 'allow-once']) {
       const approval = events.find(
         (event) => event.type === 'approval.required',
       )
+      if (choice === 'automatic') {
+        assert.equal(approval, undefined)
+        assert.equal(calls, 1)
+        assert.equal(result.isError, false)
+        return
+      }
       assert.ok(approval)
       assert.equal(approval.subject.kind, 'browser-page')
       assert.equal(approval.context.network, true)
@@ -132,4 +146,54 @@ test('managed stdio worker exposes only the adapter and refuses script tools and
   } finally {
     await client.disposeAndWait()
   }
+})
+
+test('browser policy matrix is narrow and honors live configuration', async () => {
+  const { browserDecision } =
+    await import('../dist/agent/permissions/browser-policy.js')
+  for (const operation of [
+    'browser.navigate',
+    'browser.read',
+    'browser.close',
+  ]) {
+    for (const preset of [
+      'workspace-read',
+      'workspace-write',
+      'workspace-full',
+    ]) {
+      assert.equal(
+        browserDecision(operation, 'follow-session', preset),
+        preset === 'workspace-full' ? 'automatic' : 'ask',
+      )
+      assert.equal(browserDecision(operation, 'ask', preset), 'ask')
+      assert.equal(
+        browserDecision(operation, 'allow-read-only', preset),
+        'automatic',
+      )
+      assert.equal(
+        browserDecision(operation, 'allow-read-only', preset, 'ask-everything'),
+        'ask',
+      )
+    }
+  }
+  for (const name of ['browser.click', 'server/browser_navigate'])
+    assert.equal(
+      browserDecision(name, 'allow-read-only', 'workspace-full'),
+      'ask',
+    )
+  let policy = 'follow-session'
+  const gate = new PermissionGate({
+    preset: 'workspace-full',
+    hasWorkspace: false,
+    approvalOverride: 'default',
+    dangerActive: () => false,
+    browserApproval: () => policy,
+  })
+  const request = {
+    toolName: 'browser.navigate',
+    subject: { kind: 'browser-page' },
+  }
+  assert.equal(gate.decisionFor(request), 'automatic')
+  policy = 'ask'
+  assert.equal(gate.decisionFor(request), 'ask')
 })

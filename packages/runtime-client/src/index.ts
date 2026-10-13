@@ -1,3 +1,4 @@
+export { DEFAULT_REASONING_OPTIONS } from '@reflexion-os-studio/contracts'
 export {
   MAX_IMAGE_BYTES,
   MAX_MESSAGE_IMAGES,

@@ -189,7 +189,7 @@ test('message commands strip per-message sampling and model contract validates r
       requestId: 'x',
       providerId: 'p',
       model: 'a',
-      reasoningEffort: 'invalid',
+      reasoningEffort: 'invalid value',
     }).success,
     false,
   )
@@ -223,16 +223,16 @@ for (const apiFormat of ['openai-chat', 'openai-responses']) {
       maxRetries: 0,
     }
     await streamChat(
-      { ...options, reasoningEffort: 'high' },
+      { ...options, reasoningEffort: 'xhigh' },
       apiFormat,
       () => {},
     )
     await streamChat(options, apiFormat, () => {})
     if (apiFormat === 'openai-chat') {
-      assert.equal(bodies[0].reasoning_effort, 'high')
+      assert.equal(bodies[0].reasoning_effort, 'xhigh')
       assert.equal(Object.hasOwn(bodies[1], 'reasoning_effort'), false)
     } else {
-      assert.deepEqual(bodies[0].reasoning, { effort: 'high' })
+      assert.deepEqual(bodies[0].reasoning, { effort: 'xhigh' })
       assert.equal(Object.hasOwn(bodies[1], 'reasoning'), false)
     }
   })
@@ -364,7 +364,7 @@ test('invalid stored model values fall back safely at the read boundary', (t) =>
   store.providerModels.upsert({ providerId: profile.id, model: 'a' })
   const db = new DatabaseSync(join(store.dataDir, 'reflexion.db'))
   db.prepare(
-    "UPDATE provider_models SET temperature = 3, max_tokens = -1, context_window = 0, context_budget = 'broken', reasoning_effort = 'invalid' WHERE provider_id = ?",
+    "UPDATE provider_models SET temperature = 3, max_tokens = -1, context_window = 0, context_budget = 'broken', reasoning_effort = 'invalid value' WHERE provider_id = ?",
   ).run(profile.id)
   db.close()
   const config = store.providerModels.get(profile.id, 'a')
@@ -377,4 +377,113 @@ test('invalid stored model values fall back safely at the read boundary', (t) =>
   ])
     assert.equal(config[key], null)
   assert.equal(resolveProvider(store, profile.id, 'a').profile.temperature, 0.7)
+})
+
+test('custom reasoning levels persist and validate defaults and per-run selections', (t) => {
+  const { store, profile } = fixture(t)
+  const reasoningOptions = [
+    { label: '关闭', value: 'none' },
+    { label: '极高', value: 'xhigh' },
+  ]
+  store.providerModels.upsert({
+    providerId: profile.id,
+    model: 'a',
+    reasoningEffortSupported: true,
+    reasoningOptions,
+    reasoningEffort: 'xhigh',
+  })
+  const reopened = new Store(store.dataDir)
+  assert.deepEqual(
+    reopened.providerModels.get(profile.id, 'a').reasoningOptions,
+    reasoningOptions,
+  )
+  reopened.close()
+  assert.equal(
+    resolveProvider(store, profile.id, 'a').profile.reasoningEffort,
+    'xhigh',
+  )
+  assert.equal(
+    resolveProvider(store, profile.id, 'a', 'none').profile.reasoningEffort,
+    'none',
+  )
+  assert.equal(
+    resolveProvider(store, profile.id, 'a', null).profile.reasoningEffort,
+    null,
+  )
+  assert.throws(
+    () => resolveProvider(store, profile.id, 'a', 'high'),
+    /支持列表/,
+  )
+  assert.throws(
+    () =>
+      store.providerModels.upsert({
+        providerId: profile.id,
+        model: 'a',
+        reasoningEffort: 'high',
+      }),
+    /支持列表/,
+  )
+  store.providerModels.upsert({
+    providerId: profile.id,
+    model: 'a',
+    reasoningEffort: null,
+  })
+  assert.equal(
+    resolveProvider(store, profile.id, 'a').profile.reasoningEffort,
+    null,
+  )
+})
+
+test('v42 upgrades existing model rows with legacy options', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'model-migration-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const store = new Store(dir)
+  const profile = store.providers.upsert({
+    name: 'Migration',
+    baseUrl: 'https://example.invalid',
+    models: ['a'],
+    secretRef: 'local:synthetic',
+  })
+  store.providerModels.upsert({
+    providerId: profile.id,
+    model: 'a',
+    reasoningEffortSupported: true,
+    reasoningEffort: 'high',
+  })
+  store.close()
+  const db = new DatabaseSync(join(dir, 'reflexion.db'))
+  db.exec(
+    'ALTER TABLE provider_models DROP COLUMN reasoning_options_json; PRAGMA user_version = 42',
+  )
+  db.close()
+  const reopened = new Store(dir)
+  try {
+    const model = reopened.providerModels.get(profile.id, 'a')
+    assert.deepEqual(
+      model.reasoningOptions.map((option) => option.value),
+      ['low', 'medium', 'high'],
+    )
+    assert.equal(model.reasoningEffort, 'high')
+  } finally {
+    reopened.close()
+  }
+})
+
+test('model contract rejects empty and duplicate options', () => {
+  const input = { requestId: 'x', providerId: 'p', model: 'a' }
+  const schema = CommandSchemaRegistry['provider.model.configure'].params
+  assert.equal(
+    schema.safeParse({ ...input, reasoningOptions: [] }).success,
+    false,
+  )
+  assert.equal(
+    schema.safeParse({
+      ...input,
+      reasoningOptions: [
+        { label: '高', value: 'high' },
+        { label: '极高', value: 'high' },
+      ],
+    }).success,
+    false,
+  )
 })

@@ -11,19 +11,22 @@ Provider 错误统一映射为稳定的 `configuration`、`authentication`、`ra
 ## 模型参数配置
 
 Provider 保存默认 `temperature`、`maxTokens`、`contextWindow`、`contextBudget` 和 `reasoningEffort`。
-`provider_models` 按 `(provider_id, model)` 保存模型独立覆盖和 `reasoningEffortSupported`；
+`provider_models` 按 `(provider_id, model)` 保存模型独立覆盖、`reasoningEffortSupported` 和 `reasoningOptions`（显示名称与实际发送值）；
 `provider.model.list/configure/delete` 经同一 Runtime 请求门面与宿主白名单调用。
 省略字段保留原值，`null` 表示继承 Provider 默认；删除模型配置恢复全部继承，删除 Provider 级联删除配置。
 模型配置命令要求模型在 Provider 已保存的模型列表中；发送与重试仍保留显式指定模型 ID 的兼容行为。
 
 发送、排队出队、重试和编辑重发统一按「模型覆盖 → Provider 默认 → 适配器默认」解析参数；
 消息命令不再接收采样参数。对话页可传非持久化的 `reasoningEffort` 请求意图，
-省略使用配置默认，`null` 表示自动；仅在能力允许时覆盖执行期配置，不写入 Run/Message。根 Run 使用解析后的配置装配执行，子 Agent 继承父 Run 配置。
-思考强度仅在模型明确声明支持时发送，取值为 `low/medium/high`；
+省略使用配置默认，`null` 表示服务端默认（不发送参数）；仅在能力允许时覆盖执行期配置，不写入 Run/Message。根 Run 使用解析后的配置装配执行，子 Agent 继承父 Run 配置。
+思考强度仅在模型明确声明支持时发送，实际发送值按模型的 `reasoningOptions` 校验，不再固定为三个等级；
+旧配置由 v43 加法迁移保留 `low/medium/high`。选项列表禁止空项与重复值，默认等级必须属于列表。
+继承的 Provider 默认不属于列表时不发送参数；显式请求不支持的等级返回配置错误。
 Chat Completions 投影为 `reasoning_effort`，Responses 投影为 `reasoning.effort`。
 当前 Anthropic 适配器不发送该参数，设置页禁用对应能力开关。
 
 设置页提供 Provider 默认参数与模型独立配置；对话模型选择器继续按 Provider 分组，
-切换模型时重置思考强度为模型/Provider 默认，不支持时显示禁用的自动状态。
+每个模型可填写“显示名称=实际发送值”，如“极高=xhigh”；关闭思考只能配置服务端明确支持的值，与不发送参数不同。
+切换模型时重置思考强度为模型/Provider 默认；支持列表变化使选择失效时回退默认，不支持时显示禁用状态。
 模型和 effort 控件复用 Radix Select，实际参数由 Runtime 解析，存储与解析使用
 TypeScript/SQLite，macOS、Windows 和 Linux 共用相同实现，不引入平台专属依赖。

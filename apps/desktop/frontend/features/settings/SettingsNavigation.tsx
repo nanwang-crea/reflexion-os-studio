@@ -14,6 +14,7 @@ const groups = [
     entries: [
       { id: 'models', label: '模型供应商', icon: SparkIcon },
       { id: 'runtime', label: 'Agent 运行时', icon: GearIcon },
+      { id: 'agent-browser', label: 'Agent 浏览器', icon: BoxIcon },
       { id: 'mcp', label: 'MCP 服务器', icon: BoxIcon },
     ],
   },

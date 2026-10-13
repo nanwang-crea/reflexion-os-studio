@@ -1,5 +1,7 @@
+import { browserDecision } from './browser-policy.js'
 import type {
   ApprovalSubject,
+  AgentBrowserApproval,
   PermissionPreset,
   ToolOperation,
 } from '@reflexion-os-studio/contracts'
@@ -143,6 +145,7 @@ export interface PermissionGateOptions {
   /** Danger lease 活跃查询：每次决策实时读取（租约可随时撤销）。 */
   dangerActive: () => boolean
   /** 会话执行模式实时查询；plan 模式优先于 preset/Danger 强制只读。 */
+  browserApproval?: () => AgentBrowserApproval
   executionMode?: () => 'execute' | 'plan'
 }
 
@@ -186,6 +189,14 @@ export class PermissionGate {
   /** 当前 ask 是否由“所有操作均询问”把原 automatic 决策提升而来。 */
   approvalOverrideAppliesTo(request: PermissionRequest): boolean {
     if (this.opts.approvalOverride !== 'ask-everything') return false
+    if (request.subject.kind === 'browser-page')
+      return (
+        browserDecision(
+          request.toolName,
+          this.opts.browserApproval?.() ?? 'follow-session',
+          this.opts.preset,
+        ) === 'automatic'
+      )
     if (!isToolOperation(request.toolName)) return false
     if (this.dangerActive || !this.opts.hasWorkspace) return false
     if (request.toolName === 'shell.execute' && request.escalation) return false
@@ -203,6 +214,13 @@ export class PermissionGate {
     ) {
       return 'denied'
     }
+    if (request.subject.kind === 'browser-page')
+      return browserDecision(
+        request.toolName,
+        this.opts.browserApproval?.() ?? 'follow-session',
+        this.opts.preset,
+        this.opts.approvalOverride,
+      )
     if (!isToolOperation(request.toolName)) {
       // MCP 与其它未知工具默认 ask（需用户审批），内置纯计算工具白名单放行。
       // Danger lease 不旁路 MCP：系统范围访问经 shell 承担，工具审批语义不变。

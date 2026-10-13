@@ -7,6 +7,7 @@ import { agentTemplateCommands } from './commands/agent-template.js'
 import { delegationCommands } from './commands/delegation.js'
 import { mutationReceiptCommands } from './commands/mutation-receipt.js'
 import { agentSettingsCommands } from './commands/agent-settings.js'
+import { agentBrowserSettingsCommands } from './commands/agent-browser-settings.js'
 import { browserSettingsCommands } from './commands/browser-settings.js'
 import { mcpCommands } from './commands/mcp.js'
 import { permissionsCommands } from './commands/permissions.js'
@@ -31,6 +32,7 @@ export const CommandSchemaRegistry = {
   ...mutationReceiptCommands,
   ...agentSettingsCommands,
   ...browserSettingsCommands,
+  ...agentBrowserSettingsCommands,
   ...mcpCommands,
   ...permissionsCommands,
   ...interactionsCommands,

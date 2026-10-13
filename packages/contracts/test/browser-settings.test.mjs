@@ -90,3 +90,27 @@ test('address search and fixed homepages cannot smuggle executable schemes', asy
     false,
   )
 })
+
+test('Agent browser display defaults to headless and only accepts supported modes', async () => {
+  const { AgentBrowserSettingsSchema } = await import('../dist/index.js')
+  assert.deepEqual(AgentBrowserSettingsSchema.parse({}), {
+    enabled: false,
+    display: 'headless',
+    approval: 'follow-session',
+  })
+  assert.equal(
+    BrowserSettingsSchema.parse({ mode: 'embedded', defaultRoute: 'system' })
+      .agentBrowserDisplay,
+    'headless',
+  )
+  assert.equal(
+    AgentBrowserSettingsSchema.parse({ enabled: true, display: 'headed' })
+      .display,
+    'headed',
+  )
+  assert.equal(
+    AgentBrowserSettingsSchema.safeParse({ enabled: true, display: 'auto' })
+      .success,
+    false,
+  )
+})

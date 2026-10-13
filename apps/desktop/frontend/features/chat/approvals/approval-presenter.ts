@@ -90,7 +90,7 @@ function chipsFor(
     chips.push('因“所有操作均询问”而确认')
   }
   if (operation.startsWith('browser.')) {
-    chips.push('隔离 Playwright 浏览器', '逐次授权')
+    chips.push('隔离 Playwright 浏览器', '本次授权')
     if (operation === 'browser.navigate')
       chips.push('目标来源联网，跨来源请求拒绝')
     return chips

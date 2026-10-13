@@ -1,3 +1,4 @@
+import { migrateReasoningOptions } from './migrations/reasoning-options.js'
 import { migrateBrowserData } from './migrations/browser-data.js'
 import { migrateEarlySchema } from './migrations/early-schema.js'
 import { migrateImageAssets } from './migrations/image-assets.js'
@@ -93,6 +94,7 @@ function tableColumns(db: DatabaseSync, table: string): TableColumn[] {
  * v35 → v36：plugins 增加 global/project 作用域和可选 project_id。
  * v36 → v37：provider_profiles 增加附加请求头 JSON。
  * v39 → v40：Provider 默认思考强度与模型独立配置表。
+ * v42 → v43：模型支持的思考等级列表。
  * 各步骤带形状检测：SCHEMA 刚建好的新库不会空跑重建。
  */
 export function runMigrations(db: DatabaseSync, dir: string): void {
@@ -419,6 +421,7 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
       `)
     }
     if (version < 39) migrateImageAssets(db)
+    if (version < 43) migrateReasoningOptions(db)
     db.exec('COMMIT')
     // 迁移全部执行完毕才推进版本号；否则下次启动会重复进入迁移分支。
     version = LATEST_SCHEMA_VERSION

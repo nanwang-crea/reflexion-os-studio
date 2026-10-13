@@ -72,7 +72,7 @@ export function useModelSelection(
   const selected = modelOptions.find(
     (option) => option.key === selectedModelKey,
   )
-  const defaultValue = selected?.defaultReasoningEffort ?? null
+  const defaultValue = selectedEffort(selected, null)
   const value = selectedEffort(selected, choice)
   const onReasoningChange = useCallback(
     (value: ReasoningEffort | null) => {
@@ -84,6 +84,7 @@ export function useModelSelection(
     selected?.reasoningEffortSupported === true && !loading && error === null
   const reasoningSelection = {
     value: supported ? value : null,
+    options: selected?.reasoningOptions ?? [],
     supported,
     loading,
     error,

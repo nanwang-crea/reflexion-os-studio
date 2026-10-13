@@ -11,6 +11,7 @@ import {
   isSafeAgentBrowserUrl,
   type AgentBrowserDocument,
   type AgentBrowserPage,
+  type AgentBrowserDisplay,
 } from '@reflexion-os-studio/contracts'
 import { createBrowserProxy } from '../security/proxy.js'
 import { allowedRequest, publicAddress } from '../security/network.js'
@@ -27,10 +28,12 @@ export class PlaywrightBackend {
   private digest: string | null = null
   private generation = 0
   private output: string | null = null
+  private origin: string | null = null
 
   constructor(
     private readonly proxyFactory = createBrowserProxy,
     private readonly resolveAddress = publicAddress,
+    private readonly display: AgentBrowserDisplay = 'headless',
   ) {}
 
   async navigate(
@@ -42,16 +45,23 @@ export class PlaywrightBackend {
     await this.close()
     const generation = this.generation
     const origin = new URL(url).origin
+    this.origin = origin
     try {
       await this.resolveAddress(new URL(url).hostname)
       if (generation !== this.generation) throw new Error('browser_closed')
       this.proxy = await this.proxyFactory(origin)
       if (generation !== this.generation) throw new Error('browser_closed')
       this.browser = await chromium.launch({
-        headless: true,
+        headless: this.display === 'headless',
         chromiumSandbox: true,
         proxy: { server: this.proxy.server, bypass: '<-loopback>' },
         args: [
+          ...(process.platform === 'linux' &&
+          this.display === 'headed' &&
+          process.env.WAYLAND_DISPLAY &&
+          !process.env.DISPLAY
+            ? ['--ozone-platform=wayland']
+            : []),
           '--disable-background-networking',
           '--disable-quic',
           '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
@@ -136,6 +146,7 @@ export class PlaywrightBackend {
     ++this.generation
     this.document = null
     this.digest = null
+    this.origin = null
     const [client, server, browser, proxy] = [
       this.client,
       this.server,
@@ -175,11 +186,16 @@ export class PlaywrightBackend {
   private async observe() {
     const page = this.context?.pages()[0]
     if (!page || page.isClosed()) throw new Error('browser_page_stale')
+    const before = page.url()
+    if (
+      !isSafeAgentBrowserUrl(before) ||
+      new URL(before).origin !== this.origin
+    )
+      throw new Error('browser_page_stale')
     for (const frame of page.frames()) {
       if (await frame.locator('input[type="password"]').count())
         throw new Error('browser_sensitive_content')
     }
-    const before = page.url()
     const result = await this.call('browser_snapshot', {})
     const sourceUrl = page.url()
     if (sourceUrl !== before || !isSafeAgentBrowserUrl(sourceUrl))

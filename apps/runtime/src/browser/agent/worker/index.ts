@@ -6,13 +6,19 @@ import {
 } from '@modelcontextprotocol/sdk/types.js'
 import {
   AgentBrowserNavigateSchema,
+  AgentBrowserDisplaySchema,
   AgentBrowserNavigateJsonSchema,
   AgentBrowserPageJsonSchema,
   AgentBrowserPageSchema,
 } from '@reflexion-os-studio/contracts'
 import { PlaywrightBackend } from './backend.js'
 
-const backend = new PlaywrightBackend()
+const display = AgentBrowserDisplaySchema.parse(
+  process.argv
+    .find((arg) => arg.startsWith('--display='))
+    ?.slice('--display='.length) ?? 'headless',
+)
+const backend = new PlaywrightBackend(undefined, undefined, display)
 const server = new Server(
   { name: 'reflexion-playwright', version: '1' },
   { capabilities: { tools: {} } },
