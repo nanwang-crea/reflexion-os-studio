@@ -1,3 +1,4 @@
+import { BrowserRuntimeService } from './runtime/service.js'
 import {
   AgentBrowserDocumentSchema,
   AgentBrowserPageSchema,
@@ -10,6 +11,7 @@ import { browserWorkerPaths } from './paths.js'
 import { filterBrowserContent } from './security/content.js'
 
 export class BrowserAgentService {
+  readonly runtime: BrowserRuntimeService
   private readonly clients = new Map<
     string,
     { sessionId: string; client: McpClient; page: AgentBrowserPage | null }
@@ -19,6 +21,7 @@ export class BrowserAgentService {
   constructor(
     private readonly store: Store,
     private readonly createClient = (display: AgentBrowserDisplay) => {
+      const browsers = this.runtime.requireInstalled()
       const paths = browserWorkerPaths()
       return new McpClient({
         command: process.execPath,
@@ -27,11 +30,13 @@ export class BrowserAgentService {
           paths.worker,
           `--display=${display}`,
         ],
-        env: paths.browsers ? { PLAYWRIGHT_BROWSERS_PATH: paths.browsers } : {},
+        env: { PLAYWRIGHT_BROWSERS_PATH: browsers },
         managed: true,
       })
     },
-  ) {}
+  ) {
+    this.runtime = new BrowserRuntimeService(store.dataDir)
+  }
   get enabled(): boolean {
     return this.store.browserSettings.get().agentBrowserEnabled
   }
@@ -146,6 +151,7 @@ export class BrowserAgentService {
   }
   async shutdown(): Promise<void> {
     this.revoke()
+    await this.runtime.shutdown()
     await Promise.all(this.cleanup)
   }
   revoke(): void {

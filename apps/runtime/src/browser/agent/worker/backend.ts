@@ -52,6 +52,7 @@ export class PlaywrightBackend {
       this.proxy = await this.proxyFactory(origin)
       if (generation !== this.generation) throw new Error('browser_closed')
       this.browser = await chromium.launch({
+        channel: 'chromium',
         headless: this.display === 'headless',
         chromiumSandbox: true,
         proxy: { server: this.proxy.server, bypass: '<-loopback>' },

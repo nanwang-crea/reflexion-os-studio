@@ -20,7 +20,7 @@ browser.navigate、browser.read、browser.close；先导航取得页面身份，
 
 ## 分发与平台
 
-固定 @playwright/mcp 版本和匹配 Playwright 版本；开发与打包准备脚本安装对应 Chromium，安装包携带受管 worker、官方依赖及浏览器，不运行 npx/latest，不要求用户 npm 或外部 Node。
+固定 @playwright/mcp 版本和匹配 Playwright 版本；安装包仅携带受管 worker 和官方依赖，Chromium 由用户在设置 → Agent 浏览器中点击下载，不运行 npx/latest，不要求用户 npm 或外部 Node。
 
 macOS、Windows、Linux 共用 Runtime/worker；Windows 使用 node.exe 与进程树回收，POSIX 使用进程组回收。Linux 仍需要 Chromium 系统库，缺失时明确报不可用，不能静默禁用沙箱。三平台分别构建并验收；Windows/Linux 真机状态保留待验收。本批不宣称完成点击/填表或完整 B4。
 
@@ -30,7 +30,7 @@ macOS 合成动态页面已通过官方 MCP 渲染与快照读取；导航不泄
 
 本机 Fake-IP DNS 返回 198.18/15 时会被公网策略拒绝；使用正常公网解析的环境才能导航对应站点，不提供绕过内网拒绝的开关。Windows/Linux 真机及完整网站兼容性待验收。
 
-固定依赖：@playwright/mcp 0.0.83、Playwright 1.64.0-alpha-1790635538000（官方 MCP 对应版本）。首次构建需下载匹配 Chromium；产品运行不下载依赖。随包包含有头 Chromium 与 headless shell；默认无头，可在独立 Agent 浏览器设置中选择显示窗口。用户原生浏览器面板仍独立。Linux 缺失系统库时按 Playwright 官方安装说明配置构建/运行环境，不使用 --no-sandbox 变通。
+固定依赖：@playwright/mcp 0.0.83、Playwright 1.64.0-alpha-1790635538000（官方 MCP 对应版本）。构建不下载 Chromium。用户显式下载固定版本的完整 Chromium 到数据目录；有头/无头共用同一套浏览器，不再包含 headless shell。默认无头，可在独立 Agent 浏览器设置中选择显示窗口。用户原生浏览器面板仍独立。Linux 缺失系统库时按 Playwright 官方安装说明配置构建/运行环境，不使用 --no-sandbox 变通。
 
 最终验证：format/lint、根与前端 typecheck、全量构建/测试通过（Runtime 497 通过、4 个 Windows 项按平台跳过；前端 78、System Runtime 233、宿主 41 通过；终端故障矩阵 26/26）。macOS app/DMG 已生成；随包 Node/Headless Chromium 沙箱及 worker stdio 冒烟通过。受管导航取消和 worker SIGKILL 的本机检查确认记录到的 Chromium 子进程已回收。新 GUI/长稳和 Windows/Linux 真机验收按用户决定后置。
 
@@ -38,6 +38,20 @@ macOS 合成动态页面已通过官方 MCP 渲染与快照读取；导航不泄
 
 显示模式：headless（默认）/headed。配置独立通过 agent_browser_settings.get/update；更新只合并 Agent 字段，不调用用户 Surface 或修改普通浏览器偏好。切换模式和关闭开关撤销当前 worker，下一次审批通过的导航按新模式启动。macOS/Windows 显示独立 Chromium 窗口；Linux 有头需要桌面显示服务，缺失时启动失败，不自动扩大权限或关闭沙箱。用户手动关闭窗口或改动页面后，原页面身份可能失效，需要重新导航；任务结束仍回收窗口。
 
-显示模式补齐验收：macOS 有头 Chromium 的真实页面读取与手动导航失效检查通过；独立配置的持久化、普通浏览器偏好隔离和模式变更撤销通过。完整回归 Runtime 499 pass + 4 Windows skip、contracts 74 pass、前端 78 pass；宿主与构建检查通过。最终安装包同时携带 Chromium 与 headless shell；Windows/Linux 有头 GUI 验收仍待验证。
+显示模式补齐验收：macOS 有头 Chromium 的真实页面读取与手动导航失效检查通过；独立配置的持久化、普通浏览器偏好隔离和模式变更撤销通过。完整回归 Runtime 499 pass + 4 Windows skip、contracts 74 pass、前端 78 pass；宿主与构建检查通过。此前安装包曾同时携带 Chromium 与 headless shell；Windows/Linux 有头 GUI 验收仍待验证。
 
 批准模式：follow-session（默认）、ask、allow-read-only。策略只覆盖当前三项只读工具，不自动授权未来点击、输入、提交或下载。浏览器开关仍须开启；无工作区会话也可以跟随本次 Run 的显式权限档位。改变批准模式收回现有 worker；配置持久化，页面身份和安全检查不随自动放行取消。
+
+## 浏览器组件按需安装（2026-10-13）
+
+设置展示未安装、下载中、已安装与失败状态，只有用户点击下载才联网；打开工具开关或 Agent 调用不触发下载。下载命令不向 Agent 工具注册表开放。用户原生 WebView Surface 不依赖该组件。
+
+使用随包固定版本 Playwright 官方安装器（不运行 npx、不读取用户浏览器资料）。组件按 Playwright 版本、系统与架构隔离缓存。下载先进入暂存目录，检查可执行文件后原子发布，失败不发布半成品；重启后可重试。每个 Runtime 仅允许一个安装任务，关闭应用或取消下载回收进程树。
+
+macOS、Windows、Linux 共用 Node 下载和安装代码；平台发行版由 Playwright 官方安装器选择。Linux 系统库仍需由用户/发行版提供，不自动调用 sudo，也不关闭 Chromium 沙箱。版本不匹配显示未安装，需要用户再次下载。
+
+状态轮询仅在设置页有下载任务时启用，离开页面清理定时器；后台下载继续，重新打开设置可读取状态。进度表示当前组件的下载进度，未知进度显示不定进度状态，不伪造总百分比。
+
+按需安装验证：新增 Runtime 安装生命周期测试 6 项、设置页真实 DOM 下载/取消/重试与空闲停止轮询测试通过；真实固定版本 Playwright CLI、可执行文件检查与原子发布通过（使用已有官方 Chromium 缓存的临时副本，没有重复联网下载大文件）。有头/无头与浏览器安全回归通过。完整 Runtime 503 pass + 14 skip，其中 10 项缺省路径跳过的 Rust/核心端到端测试在显式配置已构建二进制后补测全部通过，剩余 4 项为 Windows 平台测试；前端 81 pass，System Runtime 233 pass，契约、格式、lint、根/前端 typecheck 和宿主检查通过。包内 Node/Runtime 未安装状态及协议 shutdown 冒烟通过。
+
+macOS 应用包约 156 MB，DMG 约 57 MB；浏览器工具代码约 20 MB，不再包含 Chromium。开发模式四次空闲瞬时采样：宿主、Node Runtime、新建 WebView CPU 均为 0%；该采样是本轮空闲观测，不是修改前后性能基线对比。Windows/Linux 真机、完整生产网络下载矩阵及原生设置窗口验收仍待验证；设置交互已由本地合成服务的真实 DOM 测试覆盖。

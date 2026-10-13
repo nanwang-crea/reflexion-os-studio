@@ -71,7 +71,10 @@ export function browserTools(ctx: ToolContext): ToolDefinition[] {
               ? error.message
               : 'browser_operation_failed'
           return {
-            content: `浏览器操作被拒绝或失败（${code}）。页面版本失效时重新导航；浏览器不可用时检查内置 Chromium 与系统依赖。`,
+            content:
+              code === 'browser_runtime_not_installed'
+                ? '浏览器组件未安装。请用户在“设置 → Agent 浏览器”点击下载浏览器组件；Agent 不会自动下载。'
+                : `浏览器操作被拒绝或失败（${code}）。页面版本失效时重新导航；浏览器不可用时检查浏览器组件与系统依赖。`,
             code,
             isError: true,
           }

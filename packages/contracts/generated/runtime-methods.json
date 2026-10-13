@@ -3,6 +3,9 @@
   "methods": [
     "agent.list",
     "agent.set_enabled",
+    "agent_browser_runtime.cancel",
+    "agent_browser_runtime.install",
+    "agent_browser_runtime.status",
     "agent_browser_settings.get",
     "agent_browser_settings.update",
     "agent_settings.get",

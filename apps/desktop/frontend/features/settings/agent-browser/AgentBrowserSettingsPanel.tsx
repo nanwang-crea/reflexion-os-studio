@@ -1,3 +1,4 @@
+import { BrowserRuntimePanel } from './BrowserRuntimePanel'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   DEFAULT_AGENT_BROWSER_SETTINGS,
@@ -57,6 +58,7 @@ export function AgentBrowserSettingsPanel(): React.JSX.Element {
         <h3 className="settings-panel-title">Agent 浏览器</h3>
         <p className="hint">配置 Agent 使用的独立 Playwright 浏览器。</p>
       </div>
+      <BrowserRuntimePanel />
       {notice && (
         <p className="settings-error" role="alert">
           {notice}
