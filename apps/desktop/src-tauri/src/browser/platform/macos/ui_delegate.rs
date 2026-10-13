@@ -63,6 +63,7 @@ define_class!(
                     }
                 )
             };
+            let revision = state::snapshot(&self.ivars().app).revision;
             let prefs = state::preferences(&self.ivars().app);
             let camera = kind == WKMediaCaptureType::Camera
                 || kind == WKMediaCaptureType::CameraAndMicrophone;
@@ -89,6 +90,7 @@ define_class!(
                 .is_some_and(|u| u.origin().ascii_serialization() == source);
             let prefs = state::preferences(&self.ivars().app);
             let unchanged = unchanged
+                && state::snapshot(&self.ivars().app).revision == revision
                 && state::snapshot(&self.ivars().app).active_tab_id == Some(self.ivars().id)
                 && (!camera || prefs.asks(&source, "camera"))
                 && (!microphone || prefs.asks(&source, "microphone"));

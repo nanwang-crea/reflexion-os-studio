@@ -13,6 +13,7 @@ RESOURCES="$ROOT/apps/desktop/src-tauri/package-resources"
 
 node "$SCRIPT_DIR/bundle-runtime.mjs"
 node "$SCRIPT_DIR/fetch-node-dist.mjs"
+node "$SCRIPT_DIR/prepare-browser.mjs"
 
 SIDECAR_SRC="$ROOT/crates/target/release/reflexion-system-runtime"
 SIDECAR_SRC_EXE="$SIDECAR_SRC.exe"

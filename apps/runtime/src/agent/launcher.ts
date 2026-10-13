@@ -76,6 +76,7 @@ export interface LaunchOptions {
 
 /** launch 依赖：跨 Run 共享的服务集合（由 ChatAgent 注入）。 */
 export interface LaunchDeps {
+  browser?: ToolContext['browser']
   store: Store
   system: SystemRuntimeClient | null
   mcp: McpManager | null
@@ -187,6 +188,7 @@ export class RunLauncher {
       projectId: session.projectId,
       skills: this.deps.skills,
       mcp: this.deps.mcp,
+      browser: this.deps.browser,
       childRunStarter: input.childRunStarter,
       allowedTools: input.allowedTools,
     })
@@ -245,6 +247,7 @@ export class RunLauncher {
       // runner 自吞全部执行期异常；此处仅保证取消句柄必然清理。
       .catch(() => {})
       .finally(() => {
+        this.deps.browser?.release(run.id)
         parentSignal?.removeEventListener('abort', abortChild)
         this.streams.delete(run.id)
         this.runDepth.delete(run.id)

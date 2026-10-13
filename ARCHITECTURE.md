@@ -138,33 +138,23 @@ Agent、Memory、Skill、Context 和 Delegation/Policy 是一等领域，分别�
 
 单次解除 Shell 沙箱：用户显式批准 `require_unsandboxed` 后，Rust 以当前用户身份直接执行命令；精确绑定、过期及一次性消费校验仍生效。该模式解除文件、敏感路径与网络的 OS 隔离，不受 preset、Danger 或会话规则自动授权。三平台执行方式及安全承诺例外见 `docs/PERMISSION-MODEL.md` §7.0。
 
-## 14. Browser Surface Spike（2026-10-11）
+## 14. Browser Surface 与 Playwright Agent 路线（2026-10-13）
 
-用户 Surface 与未来 Agent Browser Tool 分离。首版支持 HTTP / HTTPS 任意域名及内网，网站自身脚本正常运行，Agent 当前不读取和操作网页；后续 Browser Tool 经 Runtime / PermissionGate 独立授权。
+用户 Surface 与 Agent Browser Tool 分开授权。macOS 12+ 默认开发/发布启用
+独立 WKWebView；Windows/Linux 保持 fail-closed 与系统浏览器回退。
+用户网页支持 HTTP/HTTPS、内网及网站脚本；不注册 Tauri IPC、应用脚本消息
+处理器和内部协议。可信工具栏经 contracts/runtime-client Host facade 控制
+右侧原生面板，弹层显示时隐藏网页。显式 `--no-default-features` 可关闭。
 
-可信工具栏经 contracts / runtime-client 的 Host facade 调用结构化 Surface 命令。Host 在主窗口右侧面板挂载没有 Tauri IPC、应用脚本、自定义协议和持久化数据的原生网页视图；不把网页当作应用 Renderer，不修改 Chat 的可用性与系统工具边界。macOS 原型采用非持久化 WKWebView；Windows / Linux 在原生隔离未验证前 fail-closed，走系统浏览器回退。
+用户网页默认临时 store，macOS 14+ 可选择独立 UUID 的持久 store，与应用
+Renderer 隔离。引擎数据清理关闭网页、等待完成，本地历史单独清理，未选择的数据保留；下载
+使用临时文件安全发布、禁止覆盖与跨来源重定向。网站权限默认拒绝，HTTPS
+主页面的询问规则仍需逐次原生确认；规则变化关闭标签撤销现有授权。
+媒体确认还复核来源、活动标签和状态 revision，拒绝确认期间变化。
+密码与系统浏览器迁移属于原生用户功能，凭据不经过 Runtime/Agent/IPC。
+Runtime v42 的历史和联系信息不随 Agent 网页权限开放。
 
-实验仅在显式启用 `browser-spike` feature 的 macOS debug 构建开放，发布默认关闭。右侧面板布局已接入，原生视图使用测量后的 viewport 坐标，弹层出现时隐藏；完整安全边界与发布阻塞项见 [Browser Surface](docs/BROWSER-SURFACE.md) 与 [Spike 报告](docs/BROWSER-SPIKE-REPORT.md)。
+B4 采用内置受管官方 Playwright MCP：每 Run 独立 stdio worker 与临时 Chromium 上下文，内存 MCP 调用官方服务。内置工具门面统一执行逐次审批、页面身份与快照摘要绑定、受控公网出口和敏感过滤；首批导航/读取/关闭，不开放任意脚本或用户资料。用户 Surface 独立；三平台分发与验收分别处理。详见 [B4 设计](docs/BROWSER-AGENT.md)。
 
-Browser 基础扩展：用户 Surface 多标签各自维护原生视图/历史，共享独立临时
-存储，后台导航事件只更新所属标签。系统浏览器直接迁移为原生 OS 集成例外：
-用户二次确认后处理来源只读快照和平台解密，凭据不经过 Runtime/Agent/IPC。
-macOS 实验构建支持 Chrome/Edge v10 和 Keychain 存储、显式同来源 HTTPS
-密码填充；Windows/Linux 及正常发布构建暂不开放，详见 BROWSER-SURFACE.md。
-
-B2–B3 实验扩展：Runtime 的 `browser_history` / `browser_contacts` 仅保存显式允许的
-本地元数据（v42），不注册 Agent 工具。默认临时 store；macOS 14+ 通过固定独立
-UUID 的 WKWebsiteDataStore 支持单个持久配置，不使用应用 Renderer 的 store。
-原生分项清理关闭网页后等待引擎完成，未选择的数据保留，期间拒绝重建页面。
-查找、缩放、打印、下载及网站权限由原生适配实现；密码增删改/揭示经系统
-LocalAuthentication 和原生窗口，凭据不经 IPC。联系信息只在用户明确选取并确认
-精确 HTTPS 来源后填充主页面，不自动提交。发布与跨平台验收仍见浏览器规划。
-
-### macOS 默认启用更新（2026-10-12）
-
-按用户决定，macOS 12+ 的原生内嵌浏览器在默认开发与发布构建中启用；
-不再受 debug-only 限制。Cargo 默认启用现有 browser-spike feature，显式
-`--no-default-features` 仍可关闭。Windows/Linux 保持不可用并回退系统浏览器。
-持久配置仍需 macOS 14+，媒体权限仍检查 bundle 的用途说明，其余权限约束不变。
-此更新取代上文历史记录中的 macOS 发布关闭规则，不代表待补真机验收已完成。
-默认链接路由仍尊重已有设置，用户可在浏览器设置中选择内嵌打开。
+本机验收及剩余门槛见 [验收报告](docs/BROWSER-ACCEPTANCE-2026-10-13.md)；
+硬件媒体、旧 macOS 和三平台矩阵不能用代码测试代替。

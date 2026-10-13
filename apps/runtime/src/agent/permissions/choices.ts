@@ -59,7 +59,8 @@ export function buildApprovalChoices(input: {
     },
     effect: { kind: 'deny' },
   }
-  if (input.sandbox === 'unsandboxed') return [once, deny]
+  if (input.subject.kind === 'browser-page' || input.sandbox === 'unsandboxed')
+    return [once, deny]
   const choices: ChoiceSpec[] = [once]
 
   // §6.2：read-only 档的 Shell 审批若需要写能力，choice 必须显式携带

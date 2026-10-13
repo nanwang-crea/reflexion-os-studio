@@ -147,6 +147,9 @@ export interface PermissionGateOptions {
 }
 
 const PLAN_MODE_ALLOWED_TOOLS = new Set([
+  'browser.navigate',
+  'browser.read',
+  'browser.close',
   'get_current_time',
   'web.fetch',
   'skill.use',

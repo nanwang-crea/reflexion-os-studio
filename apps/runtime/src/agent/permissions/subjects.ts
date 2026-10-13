@@ -1,3 +1,7 @@
+import {
+  AgentBrowserNavigateSchema,
+  AgentBrowserPageSchema,
+} from '@reflexion-os-studio/contracts'
 import { createHash } from 'node:crypto'
 import type {
   ApprovalSubject,
@@ -116,6 +120,26 @@ export function buildApprovalSubject(
   shell?: ShellSubjectInput,
 ): { subject: ApprovalSubject; digest: string } {
   switch (toolName) {
+    case 'browser.navigate':
+    case 'browser.read':
+    case 'browser.close': {
+      const navigation =
+        toolName === 'browser.navigate'
+          ? AgentBrowserNavigateSchema.parse(args)
+          : null
+      const source = navigation
+        ? navigation.from
+        : AgentBrowserPageSchema.parse(args)
+      return {
+        subject: {
+          kind: 'browser-page',
+          operation: toolName,
+          origin: navigation ? new URL(navigation.url).origin : source!.origin,
+          ...(source ? { source } : {}),
+        },
+        digest: canonicalDigest(toolName, [JSON.stringify(args)]),
+      }
+    }
     case 'file.read':
     case 'file.list':
     case 'file.write':

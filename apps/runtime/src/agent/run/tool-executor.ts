@@ -1,7 +1,6 @@
-import type { SystemRuntimeClient } from '../../system.js'
+import { validateToolAdmission } from './browser-admission.js'
 import {
   type ToolCallRequest,
-  type ToolRegistry,
   type ToolResult,
 } from '@reflexion-os-studio/agent-core'
 import {
@@ -9,12 +8,9 @@ import {
   type ApprovalRisk,
   type ApprovalSubject,
   type JsonValue,
-  type Run,
   type SandboxPolicy,
   type ToolCall,
 } from '@reflexion-os-studio/contracts'
-import type { RunEventEmitter } from '../../events.js'
-import type { Store } from '../../store/index.js'
 import { capToolResultForModel, normalizeToolOutput } from './toolResults.js'
 import {
   buildApprovalChoices,
@@ -29,17 +25,11 @@ import {
   currentShellInterpreter,
   shellDigestWithSandbox,
   summarizeArgs,
-  type ApprovalGateway,
   type ApprovalOutcome,
   type ChoiceSpec,
   type ShellSubjectInput,
-  type PermissionGate,
 } from '../permissions/index.js'
-import {
-  finalizeToolCall,
-  finalizeRejectedTool,
-  type RunExecutionState,
-} from './run-state.js'
+import { finalizeToolCall, finalizeRejectedTool } from './run-state.js'
 import {
   argsRecord,
   buildApprovalContext,
@@ -47,28 +37,11 @@ import {
   riskFor,
   requestToolApproval,
 } from './tool-execution-context.js'
-import {
-  isMutatingTool,
-  type RootMutationCoordinator,
-} from '../delegation/mutations.js'
+import { isMutatingTool } from '../delegation/mutations.js'
 import { agentContextForRun } from './agent-context.js'
 
-export interface ToolExecutorInput {
-  store: Store
-  state: RunExecutionState
-  run: Run
-  gate: PermissionGate
-  approvals: ApprovalGateway
-  workspaceRoot: string | null
-  registry: ToolRegistry
-  emitter: RunEventEmitter
-  /** Rust 沙箱 provider 标识（"none"/"seatbelt"/"bwrap"/"windows-token"）。 */
-  system?: SystemRuntimeClient | null
-  sandboxProvider: string | null
-  permissionDomainId: string
-  rootRunId: string
-  mutationCoordinator?: RootMutationCoordinator
-}
+export type { ToolExecutorInput } from './tool-executor-types.js'
+import type { ToolExecutorInput } from './tool-executor-types.js'
 
 /**
  * 单次工具调用（统一编排，§12）：
@@ -87,7 +60,7 @@ export async function executeToolCall(
     finalizeRejectedTool(input, request, result, args, projectId)
   // Tool schema is the single admission boundary. Invalid input is rejected before
   // subject construction or approval, so UI/audit/execution all see one meaning.
-  const validation = input.registry.validateRequest(request)
+  const validation = validateToolAdmission(input.registry, request)
   if (!validation.ok) {
     return finalizeRejected(validation.result, {})
   }
@@ -247,7 +220,10 @@ export async function executeToolCall(
         built.subject.operation,
         built.subject.path,
       )
-    } else if (!isToolOperation(request.name)) {
+    } else if (
+      !isToolOperation(request.name) &&
+      built.subject.kind !== 'browser-page'
+    ) {
       sessionRuleHit = input.approvals.hasSessionOperationGrant(
         request.name,
         scope,
@@ -255,7 +231,9 @@ export async function executeToolCall(
     }
   }
   let askNeeded =
-    decision === 'ask' && !sessionRuleHit && (!dangerActive || unsandboxed)
+    decision === 'ask' &&
+    !sessionRuleHit &&
+    (!dangerActive || unsandboxed || built.subject.kind === 'browser-page')
 
   const row = ensureRow(askNeeded ? 'awaiting_approval' : 'running')
   if (precreatedId === undefined) {
@@ -280,10 +258,11 @@ export async function executeToolCall(
           ? 'preset-policy'
           : 'dynamic-tool',
     sandbox,
-    sandboxProvider: unsandboxed
-      ? null
-      : (prepared?.sandboxProvider ?? input.sandboxProvider),
-    network: networkRequested,
+    sandboxProvider:
+      unsandboxed || built.subject.kind === 'browser-page'
+        ? null
+        : (prepared?.sandboxProvider ?? input.sandboxProvider),
+    network: networkRequested || request.name === 'browser.navigate',
     escalation,
     justification:
       typeof record.justification === 'string'

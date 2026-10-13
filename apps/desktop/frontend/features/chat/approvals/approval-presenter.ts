@@ -45,6 +45,9 @@ const OPERATION_LABELS: Record<string, string> = {
   'file.move': '移动文件',
   'file.mkdir': '创建目录',
   'shell.execute': '执行命令',
+  'browser.navigate': '打开浏览器网页',
+  'browser.read': '读取渲染页面',
+  'browser.close': '关闭 Agent 浏览器',
   sandbox_network: '命令联网',
 }
 
@@ -86,6 +89,12 @@ function chipsFor(
   if (context.approvalReason === 'ask-everything') {
     chips.push('因“所有操作均询问”而确认')
   }
+  if (operation.startsWith('browser.')) {
+    chips.push('隔离 Playwright 浏览器', '逐次授权')
+    if (operation === 'browser.navigate')
+      chips.push('目标来源联网，跨来源请求拒绝')
+    return chips
+  }
   if (context.sandbox === 'read-only') chips.push('批准后沙箱只读')
   else if (context.sandbox === 'workspace-write') chips.push('批准后工作区可写')
   else if (context.sandbox === 'escalated') chips.push('提权：工作区外路径')
@@ -121,6 +130,11 @@ function subjectOf(
     return { kind: 'text', value: fallbackSummary }
   }
   switch (subject.kind) {
+    case 'browser-page':
+      return {
+        kind: 'text',
+        value: `${subject.source ? `${subject.source.origin} → ` : ''}${subject.origin}${subject.source ? ` · 标签 ${subject.source.tabId} · 页面 ${subject.source.pageVersion}` : ''}`,
+      }
     case 'workspace-path':
       return { kind: 'path', value: subject.path }
     case 'shell-command':

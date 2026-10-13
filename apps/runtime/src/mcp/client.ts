@@ -17,6 +17,7 @@ export interface McpServerConfig {
   command: string
   args: string[]
   env: Record<string, string>
+  managed?: boolean
 }
 
 export interface McpToolSpec {
@@ -46,7 +47,27 @@ export class McpClient {
 
   async connect(): Promise<void> {
     if (this.disposed) throw new Error('mcp client disposed')
-    const env = mcpEnvironment(this.config.env)
+    const env = this.config.managed
+      ? mcpEnvironment(
+          this.config.env,
+          Object.fromEntries(
+            [
+              'PATH',
+              'Path',
+              'SystemRoot',
+              'WINDIR',
+              'TEMP',
+              'TMP',
+              'TMPDIR',
+              'HOME',
+              'USERPROFILE',
+              'LOCALAPPDATA',
+            ].flatMap((key) =>
+              process.env[key] ? [[key, process.env[key]]] : [],
+            ),
+          ),
+        )
+      : mcpEnvironment(this.config.env)
     const launch = await resolveMcpLaunch(
       this.config.command,
       this.config.args,
@@ -56,6 +77,7 @@ export class McpClient {
     const child = spawn(launch.command, launch.args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
+      detached: this.config.managed && process.platform !== 'win32',
       env,
     })
     if (!child.stdout || !child.stdin || !child.stderr) {
@@ -64,14 +86,21 @@ export class McpClient {
     this.child = child as ChildProcessWithoutNullStreams
     child.on('error', (error) => {
       this.rejectPending(error)
-      process.stderr.write(`[mcp] server process error: ${error.message}\n`)
+      if (!this.config.managed)
+        process.stderr.write(`[mcp] server process error: ${error.message}\n`)
     })
     const readline = createInterface({ input: child.stdout })
     readline.on('line', (line) => this.handleLine(line.trim()))
     child.stderr?.on('data', (chunk: Buffer) => {
-      process.stderr.write(`[mcp] ${chunk.toString()}`)
+      if (!this.config.managed)
+        process.stderr.write(`[mcp] ${chunk.toString()}`)
     })
     child.once('exit', (code, signal) => {
+      if (this.config.managed && process.platform !== 'win32' && child.pid) {
+        try {
+          process.kill(-child.pid, 'SIGKILL')
+        } catch {}
+      }
       this.rejectPending(
         new Error(
           `mcp server exited (code=${String(code)} signal=${String(signal)})`,
@@ -161,6 +190,21 @@ export class McpClient {
     )
   }
 
+  async disposeAndWait(): Promise<void> {
+    const child = this.child
+    this.dispose()
+    if (!child || child.exitCode !== null || child.signalCode !== null) return
+    await new Promise<void>((resolve) => {
+      const done = () => {
+        clearTimeout(timer)
+        child.removeListener('exit', done)
+        resolve()
+      }
+      const timer = setTimeout(done, 3000)
+      child.once('exit', done)
+    })
+  }
+
   dispose(): void {
     this.disposed = true
     for (const [, entry] of this.pending) {
@@ -198,6 +242,17 @@ export class McpClient {
             if (error) child.kill()
           },
         )
+      } else if (this.config.managed && child.pid) {
+        try {
+          process.kill(-child.pid, 'SIGTERM')
+        } catch {
+          child.kill()
+        }
+        setTimeout(() => {
+          try {
+            process.kill(-child.pid!, 'SIGKILL')
+          } catch {}
+        }, 2000).unref()
       } else {
         child.kill()
       }

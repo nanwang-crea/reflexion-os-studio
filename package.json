@@ -3,7 +3,8 @@
   "private": true,
   "packageManager": "pnpm@9.15.0",
   "scripts": {
-    "dev": "pnpm build:packages && pnpm --filter @reflexion-os-studio/desktop dev",
+    "dev": "pnpm browser:prepare && pnpm build:packages && pnpm --filter @reflexion-os-studio/desktop dev",
+    "browser:prepare": "node scripts/prepare-browser.mjs --dev",
     "dev:runtime": "bash scripts/dev-runtime.sh",
     "build": "bash scripts/build-all.sh",
     "build:desktop": "pnpm --filter @reflexion-os-studio/desktop build",

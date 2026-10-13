@@ -9,13 +9,14 @@ use objc2_web_kit::{
     WKNavigation, WKNavigationAction, WKNavigationActionPolicy, WKNavigationDelegate,
     WKNavigationResponse, WKNavigationResponsePolicy, WKNavigationType, WKWebView,
 };
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use tauri::AppHandle;
 
 pub struct NavigationIvars {
     app: AppHandle,
     id: u32,
     active_navigation: Cell<usize>,
+    navigation_origin: RefCell<Option<String>>,
 }
 define_class!(
     #[unsafe(super(NSObject))]
@@ -52,7 +53,7 @@ define_class!(
         #[unsafe(method(webView:decidePolicyForNavigationAction:decisionHandler:))]
         fn decide(
             &self,
-            _view: &WKWebView,
+            view: &WKWebView,
             action: &WKNavigationAction,
             handler: &Block<dyn Fn(WKNavigationActionPolicy)>,
         ) {
@@ -81,6 +82,9 @@ define_class!(
             };
             if allowed && main_frame && !downloading && !blank {
                 let kind = unsafe { action.navigationType() };
+                if kind != WKNavigationType::Other || self.ivars().navigation_origin.borrow().is_none() || !unsafe { view.isLoading() } {
+                    if let Some(url) = url.as_deref() { self.begin_origin(url); }
+                }
                 super::registry::REGISTRY.with(|registry| {
                     if let Some(guest) = registry.borrow_mut().guests.get_mut(&self.ivars().id) {
                         // Redirects are Other; preserve the initiating history/reload decision.
@@ -139,6 +143,15 @@ define_class!(
             };
             let allowed = unsafe { response.canShowMIMEType() } && !attachment;
             if !allowed && unsafe { response.isForMainFrame() } {
+                super::hide(self.ivars().id);
+                let response_url = unsafe { response.response().URL().and_then(|url| url.absoluteString()) }.map(|url| url.to_string());
+                let initial = self.ivars().navigation_origin.borrow().clone();
+                if !crate::browser::downloads::redirects::same_origin(initial.as_deref(), response_url.as_deref()) {
+                    publish(&self.ivars().app, self.ivars().id, _view, "failed", Some("跨来源下载重定向已拒绝".into()), false);
+                    policy::audit("download", None, "cross-origin-blocked");
+                    handler.call((WKNavigationResponsePolicy::Cancel,));
+                    return;
+                }
                 publish(&self.ivars().app, self.ivars().id, _view, "failed", Some("正在准备下载".into()), false);
                 policy::audit("download", None, "requested");
             }
@@ -202,6 +215,12 @@ define_class!(
 );
 
 impl NavigationDelegate {
+    pub(super) fn begin_origin(&self, raw: &str) {
+        *self.ivars().navigation_origin.borrow_mut() = policy::web_url(raw)
+            .ok()
+            .map(|url| url.origin().ascii_serialization());
+    }
+
     pub(super) fn track(&self, navigation: Option<&WKNavigation>) {
         if let Some(navigation) = navigation {
             self.ivars()
@@ -219,6 +238,7 @@ impl NavigationDelegate {
             app,
             id,
             active_navigation: Cell::new(0),
+            navigation_origin: RefCell::new(None),
         });
         unsafe { msg_send![super(object), init] }
     }

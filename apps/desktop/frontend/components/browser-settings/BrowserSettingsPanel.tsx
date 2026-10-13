@@ -1,3 +1,4 @@
+import { BrowserAgentSettings } from './BrowserAgentSettings'
 import { useEffect, useRef, useState } from 'react'
 import './browser-settings.css'
 import { DEFAULT_BROWSER_SETTINGS } from '@reflexion-os-studio/contracts'
@@ -178,6 +179,11 @@ export function BrowserSettingsPanel(): React.JSX.Element {
       <BrowserDownloads
         settings={settings}
         supported={capabilities?.features?.downloads === true}
+        save={save}
+      />
+      <BrowserAgentSettings
+        settings={settings}
+        disabled={!loaded || saving}
         save={save}
       />
       {capabilities && (

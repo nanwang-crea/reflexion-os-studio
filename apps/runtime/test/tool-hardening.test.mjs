@@ -17,6 +17,9 @@ test('web address filter rejects local and reserved networks', () => {
     'fe80::1',
     'fc00::1',
     '::ffff:127.0.0.1',
+    '::ffff:7f00:1',
+    '2001:0000::1',
+    '3fff::1',
   ]) {
     assert.equal(isPublicIp(address), false, address)
   }

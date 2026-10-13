@@ -182,6 +182,11 @@ pub fn control(app: &AppHandle, action: &Action) -> Result<(), String> {
                 });
                 let native_url = NSURL::URLWithString(&NSString::from_str(url.as_str()))
                     .ok_or("invalid native URL")?;
+                REGISTRY.with(|registry| {
+                    if let Some(guest) = registry.borrow().guests.get(&id) {
+                        guest._navigation.begin_origin(url.as_str());
+                    }
+                });
                 let navigation = view.loadRequest(&NSURLRequest::requestWithURL(&native_url));
                 REGISTRY.with(|registry| {
                     if let Some(guest) = registry.borrow().guests.get(&id) {

@@ -1,3 +1,4 @@
+import { BrowserAgentService } from './browser/agent/service.js'
 import { OperationRegistry, registerOperations } from './operations/index.js'
 import { cleanupPlanDocuments } from './agent/tools/plan-documents.js'
 import { createInterface } from 'node:readline'
@@ -143,12 +144,14 @@ registerOperations(
 )
 const skillPlugins = new SkillPluginService(store, resolveDataDir(), notify)
 const mcpManager = new McpManager(store, notify)
+const browser = new BrowserAgentService(store)
 const agent = new ChatAgent(
   store,
   notify,
   systemRuntime,
   mcpManager,
   skillPlugins.registry,
+  browser,
 )
 agentBox.current = agent
 const workspaceIndexer = new WorkspaceIndexer(store, notify)
@@ -165,6 +168,7 @@ const terminalService = new TerminalService({
 })
 terminalServiceBox.current = terminalService
 const commandContext = {
+  browser,
   store,
   agent,
   approvals: agent.approvals,
@@ -236,7 +240,8 @@ async function handleRequestAsync(request: JsonRpcRequest): Promise<void> {
           )
         })
         .finally(() => {
-          void systemRuntime.shutdown().finally(() => {
+          void systemRuntime.shutdown().finally(async () => {
+            await browser.shutdown()
             agent.dispose()
             workspaceWatch.clear()
             mcpManager.dispose()

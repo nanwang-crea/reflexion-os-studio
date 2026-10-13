@@ -1,3 +1,4 @@
+import { redactBrowserCalls } from './browser-admission.js'
 import { resolveOutputBudget } from '../../provider/output-budget.js'
 import { resolveModelImages } from '../context/model-images.js'
 import {
@@ -168,6 +169,8 @@ export async function executeModelTurn(
       })
     },
   )
+
+  result.toolCalls = redactBrowserCalls(result.toolCalls)
 
   process.stderr.write(
     `${JSON.stringify({

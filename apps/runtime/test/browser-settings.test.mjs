@@ -115,3 +115,28 @@ test('history is opt-in, searchable literally, paginated and cleared per exact o
     store.close()
   }
 })
+
+test('removing the static Agent toggle preserves saved user browser preferences', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'reflexion-browser-retired-agent-'))
+  const store = new Store(dir)
+  const settings = {
+    ...DEFAULT_BROWSER_SETTINGS,
+    defaultRoute: 'embedded',
+    showFullUrl: false,
+    storageMode: 'persistent',
+    saveHistory: true,
+  }
+  store.browserSettings.upsert(settings)
+  store.close()
+  const db = new DatabaseSync(join(dir, 'reflexion.db'))
+  db.prepare('UPDATE browser_settings SET settings_json = ? WHERE id = 1').run(
+    JSON.stringify({ ...settings, agentEnabled: true }),
+  )
+  db.close()
+  const reopened = new Store(dir)
+  try {
+    assert.deepEqual(reopened.browserSettings.get(), settings)
+  } finally {
+    reopened.close()
+  }
+})

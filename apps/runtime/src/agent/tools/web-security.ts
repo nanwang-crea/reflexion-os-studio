@@ -1,3 +1,5 @@
+import { isPublicIp } from '../../network/address-policy.js'
+export { isPublicIp } from '../../network/address-policy.js'
 import { lookup } from 'node:dns/promises'
 import http from 'node:http'
 import https from 'node:https'
@@ -114,44 +116,4 @@ function requestPinned(
     request.once('error', reject)
     request.end()
   })
-}
-
-export function isPublicIp(address: string): boolean {
-  const normalized = address.toLowerCase().split('%')[0]
-  if (normalized.includes(':')) {
-    if (
-      normalized === '::1' ||
-      normalized === '::' ||
-      normalized.startsWith('fe8') ||
-      normalized.startsWith('fe9') ||
-      normalized.startsWith('fea') ||
-      normalized.startsWith('feb') ||
-      normalized.startsWith('fc') ||
-      normalized.startsWith('fd') ||
-      normalized.startsWith('ff')
-    )
-      return false
-    if (normalized.startsWith('::ffff:')) return isPublicIp(normalized.slice(7))
-    return !normalized.startsWith('2001:db8:')
-  }
-  const parts = normalized.split('.').map(Number)
-  if (
-    parts.length !== 4 ||
-    parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)
-  )
-    return false
-  const [a, b] = parts
-  return !(
-    a === 0 ||
-    a === 10 ||
-    a === 127 ||
-    a >= 224 ||
-    (a === 100 && b >= 64 && b <= 127) ||
-    (a === 169 && b === 254) ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 0) ||
-    (a === 192 && b === 168) ||
-    (a === 198 && (b === 18 || b === 19 || b === 51)) ||
-    (a === 203 && b === 0)
-  )
 }

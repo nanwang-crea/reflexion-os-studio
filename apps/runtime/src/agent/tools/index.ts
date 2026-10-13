@@ -29,6 +29,7 @@ import { createSkillUseTool } from './skills.js'
 import { createMemoryRememberTool } from './instructions.js'
 import type { ToolContext } from './shared.js'
 import { createCurrentTimeTool } from './time.js'
+import { browserTools } from './browser.js'
 import { createWebFetchTool } from './web.js'
 import { createMcpTool } from './mcp.js'
 import { createLegacyUpdatePlanTool, createManagePlanTool } from './plans.js'
@@ -75,6 +76,7 @@ export function createToolRegistry(ctx: ToolContext): ToolRegistry {
   const shellOutputStore = new ShellOutputStore()
   const tools = [
     ...alwaysAvailableTools(ctx),
+    ...browserTools(ctx),
     ...mcpTools(ctx),
     ...(ctx.system !== null &&
     ctx.system.available &&

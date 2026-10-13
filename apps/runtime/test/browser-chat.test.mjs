@@ -1,0 +1,186 @@
+import assert from 'node:assert/strict'
+import { test } from 'node:test'
+import { createServer } from 'node:http'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { ToolRegistry } from '@reflexion-os-studio/agent-core'
+import { Store } from '../dist/store/index.js'
+import { BrowserAgentService } from '../dist/browser/agent/service.js'
+import { createBrowserProxy } from '../dist/browser/agent/security/proxy.js'
+import { browserWorkerPaths } from '../dist/browser/agent/paths.js'
+import { browserTools } from '../dist/agent/tools/browser.js'
+import { RunRunner } from '../dist/agent/run/runner.js'
+import { RunEventEmitter } from '../dist/events.js'
+import {
+  ApprovalGateway,
+  PermissionGate,
+} from '../dist/agent/permissions/index.js'
+
+process.env.PLAYWRIGHT_BROWSERS_PATH = browserWorkerPaths().browsers
+const { PlaywrightBackend } =
+  await import('../dist/browser/agent/worker/backend.js')
+
+function send(response, delta, finish) {
+  response.writeHead(200, { 'content-type': 'text/event-stream' })
+  response.write(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\n`)
+  response.end(
+    `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: finish }] })}\n\ndata: [DONE]\n\n`,
+  )
+}
+
+test('Agent receives approved rendered browser evidence through canonical ToolOutput and can answer', async () => {
+  const store = new Store(
+    mkdtempSync(join(tmpdir(), 'reflexion-browser-chat-')),
+  )
+  store.browserSettings.upsert({
+    ...store.browserSettings.get(),
+    agentBrowserEnabled: true,
+  })
+  const session = store.sessions.create(null)
+  const run = store.runs.create({
+    sessionId: session.id,
+    providerId: 'fixture',
+    model: 'fixture',
+  })
+  const firstAssistantMessage = store.messages.create({
+    sessionId: session.id,
+    runId: run.id,
+    role: 'assistant',
+    content: '',
+    status: 'pending',
+  })
+  const pageServer = createServer((_request, response) => {
+    response.setHeader('content-type', 'text/html')
+    response.end(
+      '<title>Research fixture</title><main id="root"></main><script>document.querySelector("#root").innerHTML="<h1>Rendered research fact</h1><p>The fixture count is 42.</p>"</script>',
+    )
+  })
+  await new Promise((resolve) => pageServer.listen(0, '127.0.0.1', resolve))
+  const url = `http://fixture.test:${pageServer.address().port}/`
+  const backend = new PlaywrightBackend(
+    (origin) => createBrowserProxy(origin, async () => '127.0.0.1'),
+    async () => '93.184.216.34',
+  )
+  let identity
+  const browser = new BrowserAgentService(store, () => ({
+    connect: async () => {},
+    disposeAndWait: () => backend.close(),
+    callTool: async (name, args) => {
+      const document =
+        name === 'navigate'
+          ? await backend.navigate(args.url, args.from)
+          : await backend.read(args)
+      identity = document.page
+      return JSON.stringify(document)
+    },
+  }))
+  const registry = new ToolRegistry()
+  for (const tool of browserTools({
+    browser,
+    sessionId: session.id,
+    runId: run.id,
+  }))
+    registry.register(tool)
+  for (const spec of registry.specs()) {
+    assert.equal(typeof spec.description, 'string')
+    assert.ok(spec.description.length > 0)
+  }
+  const approvals = new ApprovalGateway()
+  const events = []
+  const emitter = new RunEventEmitter(run.id, (event) => {
+    events.push(event)
+    if (event.type === 'approval.required')
+      queueMicrotask(() =>
+        approvals.resolveChoice(event.toolCallId, 'allow-once'),
+      )
+  })
+  let turn = 0
+  let observed = false
+  const provider = createServer(async (request, response) => {
+    let raw = ''
+    for await (const chunk of request) raw += chunk
+    const input = JSON.parse(raw)
+    ++turn
+    if (turn <= 2) {
+      send(
+        response,
+        {
+          tool_calls: [
+            {
+              index: 0,
+              id: `call-${turn}`,
+              type: 'function',
+              function: {
+                name: turn === 1 ? 'browser.navigate' : 'browser.read',
+                arguments: JSON.stringify(turn === 1 ? { url } : identity),
+              },
+            },
+          ],
+        },
+        'tool_calls',
+      )
+    } else {
+      const messages = JSON.stringify(input.messages)
+      observed =
+        messages.includes('Rendered research fact') &&
+        messages.includes('不可信网页资料') &&
+        messages.includes(url)
+      send(response, { content: '网页的渲染正文给出的数量是 42。' }, 'stop')
+    }
+  })
+  await new Promise((resolve) => provider.listen(0, '127.0.0.1', resolve))
+  try {
+    await new RunRunner(store).execute({
+      run,
+      provider: {
+        baseUrl: `http://127.0.0.1:${provider.address().port}/v1`,
+        apiKey: 'fixture-key',
+        model: 'fixture',
+        maxRetries: 0,
+      },
+      buildHistory: async () => [
+        { role: 'user', content: '请阅读网页并回答数量。' },
+      ],
+      registry,
+      workspaceRoot: null,
+      gate: new PermissionGate({
+        preset: 'workspace-read',
+        hasWorkspace: false,
+        approvalOverride: 'default',
+        dangerActive: () => false,
+      }),
+      approvals,
+      settings: { maxTurns: 4 },
+      controller: new AbortController(),
+      emitter,
+      firstAssistantMessage,
+    })
+    assert.equal(
+      observed,
+      true,
+      'provider must receive rendered evidence only after the read approval',
+    )
+    assert.equal(store.runs.get(run.id).status, 'completed')
+    const calls = store.toolCalls.listByRun(run.id)
+    assert.deepEqual(
+      calls.map((call) => call.toolName),
+      ['browser.navigate', 'browser.read'],
+    )
+    assert.equal(calls[0].output.data.snapshot, undefined)
+    assert.match(calls[1].output.data.snapshot, /fixture count is 42/)
+    assert.equal(calls[1].output.provenance.trust, 'untrusted_external')
+    assert.deepEqual(
+      events
+        .filter((event) => event.type === 'approval.required')
+        .map((event) => event.operation),
+      ['browser.navigate', 'browser.read'],
+    )
+  } finally {
+    await browser.shutdown()
+    await backend.close()
+    await new Promise((resolve) => provider.close(resolve))
+    await new Promise((resolve) => pageServer.close(resolve))
+    store.close()
+  }
+})

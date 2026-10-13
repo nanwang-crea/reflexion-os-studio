@@ -1,6 +1,6 @@
 # ReflexionOS Studio 分阶段路线图
 
-## 当前状态（2026-10-07）
+## 当前状态（2026-10-13）
 
 Phase 1A 全部完成；Phase 2 的技能（Skills）、记忆（Memory V2，文件即记忆）与 MCP 子集已完成，其余待办如下：
 工具（`file.*`/`shell.execute`）、审批与权限 Profile、技能斜杠激活、文件即记忆注入与 remember、MCP 工具桥（stdio,默认 ask 审批）均已接入对话链路与 UI。
@@ -27,7 +27,7 @@ Rust File/Shell Service、Workspace 边界、read-only/workspace Profile、Chat 
 
 - **已完成第一阶段（2026-08-31）**：异步 Workspace Indexer（纯 TS worker、progress/cancel/stale/failed 状态、忽略目录与符号链接、快照落库+版本号）、文件树（按需懒加载，经 Rust 侧 workspace 边界）、文件/文档查看器（行号、复制、跳转行、分段加载、Markdown/JSON 预览）、Git 变更面（`git.status`/`git.diff`：文件状态列表 + 单文件 diff 预览，只读查看与定位）、`workspace.*` 命令与白名单、工作区页面 UI。
 - **已完成第二阶段（2026-08-31）**：Asset Store（数据目录隔离、sha256 元数据、导入/列表/预览/删除/复制引用，`asset.*` 命令）、ResourceLink（消息内 `workspace://`/`asset://`/https 引用渲染与点击分发——查看器定位行列、资产预览、系统浏览器安全打开）、会话变更文件列表（2026-10-07 收敛：仅汇总成功工具变更，文件/资产引用保留在正文，移除独立 Artifact 卡）；导出/下载/系统应用打开留后续阶段（需权限）。
-- **待完成**：安全 URL 系统浏览器打开（已就位，Browser Surface 已进入隔离浏览 Spike：支持 HTTP / HTTPS，用户交互与网页脚本可用，Agent 暂不读写；实验默认关闭，右侧面板已接入，三平台发布验收待完成，见 `BROWSER-SPIKE-REPORT.md`）。Git 写操作已交付方案 A 子集（编辑器保存 + stage/unstage/commit/fetch/push/pull(--ff-only)/分支创建与切换，UI 直接动作免审批、内存脏 buffer 三键守卫），提交历史浏览（分页 log/commit 文件/diff/基于 commit 建分支与分离切换）与远程管理（remote 增删列表、远程分支检出为本地跟踪、发布=推送）已随增补批交付；剩余 discard/amend/stash/force-push/删远程分支/revert-reset 仍待后续,须经明确命令与权限策略（集成终端已作为 Phase 2 Terminal Surface 交付，见下）。
+- **待完成**：安全 URL 系统浏览器打开（已就位，Browser Surface 的 macOS 用户浏览已默认启用，持久配置/清理/下载与权限治理已接入；本机验收和剩余门槛见 `BROWSER-ACCEPTANCE-2026-10-13.md`，Windows/Linux 待验收）。Git 写操作已交付方案 A 子集（编辑器保存 + stage/unstage/commit/fetch/push/pull(--ff-only)/分支创建与切换，UI 直接动作免审批、内存脏 buffer 三键守卫），提交历史浏览（分页 log/commit 文件/diff/基于 commit 建分支与分离切换）与远程管理（remote 增删列表、远程分支检出为本地跟踪、发布=推送）已随增补批交付；剩余 discard/amend/stash/force-push/删远程分支/revert-reset 仍待后续,须经明确命令与权限策略（集成终端已作为 Phase 2 Terminal Surface 交付，见下）。
 
 ## Phase 2：Agent Platform（进行中）
 
@@ -36,9 +36,9 @@ Rust File/Shell Service、Workspace 边界、read-only/workspace Profile、Chat 
 - **已完成（2026-09，Agent Loop Hardening 与 Context Engine V2）**：完成状态机（只有 stop 且无工具才算完成；length 限次续写；provider_protocol 如实失败）、Atomic Run Finalizer（单事务终态收敛）、Atomic Frames 与请求前校验、副作用感知调度（read 并行/mutation 串行/ToolCall 批量预建）、Loop Guard（重复/无进展拦截）、Run 预算（时长/token/工具数/续写）、增量 Context Checkpoint（source hash/single-flight）、AgentSettings 新预算字段与设置页循环分组。
 - **Terminal Surface（集成终端）**：设计与范围见 `docs/superpowers/specs/2026-09-12-integrated-terminal-design.md`，架构定位见 `ARCHITECTURE.md` §13。**W0–W4 macOS 已验证**（事件信封 1.1 与 terminal 契约冻结；portable-pty 纵向切片；后端多会话服务 + attach/ack/窗口背压/公平调度；前端多标签保活面板 xterm v6；故障矩阵 26/26、性能门槛 P0/P1/P2 实测全 PASS——见 `docs/TERMINAL-SPIKE-REPORT.md` §9/§11；打包冒烟见 §12）。**GUI 人工清单待执行**（`docs/TERMINAL-GUI-ACCEPTANCE.md`）；**Windows/Linux 待对应环境真机验收，不得宣称三平台完成**。发布入口开关：构建期 `VITE_TERMINAL_DISABLED=1`，或运行期 localStorage `terminal.forceDisabled='1'`（逃生舱，重启后生效）——禁用新建终端入口（顶栏按钮隐藏、create/recreate 拒绝），已打开的终端不受影响。`terminal.*` 不注册为 Agent 工具。
 - **已完成（2026-09，权限模型 V2 / Codex 风格）**：`permissionMode + trusted` 双轨合并为三档 `PermissionPreset`（谨慎模式 / 工作区读写 / 工作区完全允许）+ 会话级 `ask-everything` 覆盖项 + 两段确认的 Danger 租约（capability fail-closed）；文件审批绑定"操作 + 工作区相对路径"精确资源、Shell 按 token 前缀会话规则（复合命令只允许一次）、工作区外走显式提权（escalated 档 + 提权根 digest 绑定）、网络授权收敛到 shell rule 维度；grant 升级 ApprovalGrantV2（source/subjectDigest/sandbox），Rust 按实际请求重算 digest 复核并落实 read-only/workspace-write/escalated 三档沙箱（macOS 真机验证，Linux 渲染完成待真机、Windows 提权沿用受限令牌待真机）；审批 UI 重构为单焦点队列 + choice 驱动（Runtime 下发 choices，前端只回传 choiceId）。协议 1.1→1.2（握手 fail-closed，legacy message.send 字段兼容一个版本）。设计见 `docs/PERMISSION-MODEL.md`。**Windows/Linux 运行时边界待对应真机验收；Danger 在 Linux（待真机）与 Windows（无可验证凭据守卫）保持 fail-closed，不得宣称三平台完成。**
-- **待完成**：Provider/Tool Plugins（动态代码隔离模型确定后开放）、Browser Tool、检索式记忆（mem0 候选）、更完整的资产检索；权限规则持久化（当前刻意 session-only）与 Windows Danger credential guard spike。
+- **待完成**：Provider/Tool Plugins（动态代码隔离模型确定后开放）、Browser Tool 后续批次（点击/输入/登录）、检索式记忆（mem0 候选）、更完整的资产检索；权限规则持久化（当前刻意 session-only）与 Windows Danger credential guard spike。
 
-Browser B2–B3 已接入 macOS debug 实验实现，发布仍关闭；持久 store 需 macOS 14+，三平台真机验收及下载覆盖策略待补，详见 [浏览器规划](BROWSER-SETTINGS-PLAN.md)。
+Browser B2–B3 macOS 收尾与验收记录保留；B4 静态导航/只读快照已移除；内置受管 Playwright MCP 首批导航/读取/关闭已实现。见 [B4 设计](BROWSER-AGENT.md) 与 [验收报告](BROWSER-ACCEPTANCE-2026-10-13.md)。
 
 ## Phase 3：Multi-Agent Orchestration（进行中）
 
@@ -78,8 +78,8 @@ Node SDK、Workflow Definition、DAG 校验、调度、checkpoint、React Flow �
 
 Browser 基础扩展（2026-10-11）：右侧多标签保活、标题、关闭、独立导航历史
 与共享临时 Cookie 已实现。直接 Chrome/Edge 迁移、Keychain 密码存储/手动填充
-为 macOS 实验适配；正常发布构建、Windows/Linux、Safari/Firefox 未开放。
-不计作 Phase 2 Browser Tool 完成，Agent 仍无页面内容或操作权限。
+为 macOS 原生适配；Windows/Linux、Safari/Firefox 迁移未开放。
+B4 内置受管 Playwright MCP 首批导航/读取/关闭已实现，交互工具仍待后续。
 
 浏览器设置及能力交付按 [BROWSER-SETTINGS-PLAN.md](BROWSER-SETTINGS-PLAN.md) 执行：
 B1 设置与路由 → B2 三平台用户浏览及数据治理 → B3 下载/网站权限/自动填充 →

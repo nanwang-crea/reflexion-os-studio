@@ -43,6 +43,8 @@ export class BrowserSettingsStore {
           showFullUrl: true,
         })
       }
+      // Retire the static Agent toggle without resetting user browser preferences.
+      delete stored.agentEnabled
       return BrowserSettingsSchema.parse(stored)
     } catch {
       return { ...DEFAULT_BROWSER_SETTINGS }

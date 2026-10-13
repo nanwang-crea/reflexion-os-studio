@@ -1,3 +1,4 @@
+import type { BrowserAgentService } from '../browser/agent/service.js'
 import { userContentParts } from './context/image-parts.js'
 import { randomUUID } from 'node:crypto'
 import type {
@@ -67,6 +68,7 @@ export class ChatAgent {
     private readonly system: SystemRuntimeClient | null,
     private readonly mcp: McpManager | null = null,
     private readonly skills: SkillRegistry = createSkillRegistry(),
+    browser: BrowserAgentService | null = null,
   ) {
     this.resubmissions = new RunResubmissionService(
       store,
@@ -93,6 +95,7 @@ export class ChatAgent {
         interactions: this.interactions,
         danger: this.danger,
         skills: this.skills,
+        browser,
       },
       {
         onRunSettled: (sessionId) => this.pumpQueue(sessionId),

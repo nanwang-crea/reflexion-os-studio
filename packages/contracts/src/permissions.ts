@@ -1,4 +1,8 @@
 import { z } from 'zod'
+import {
+  AgentBrowserOperationSchema,
+  AgentBrowserPageSchema,
+} from './browser/agent.js'
 import { JsonValueSchema } from './json-value.js'
 import {
   PermissionPresetSchema,
@@ -33,6 +37,12 @@ export const EscalationRootsSchema = z
  * 授权身份用 kind + 结构化字段（digest/规则），displayCommand 仅供 UI。
  */
 export const ApprovalSubjectSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('browser-page'),
+    operation: AgentBrowserOperationSchema,
+    origin: z.string().min(1),
+    source: AgentBrowserPageSchema.optional(),
+  }),
   z.object({
     kind: z.literal('operation'),
     operation: z.string().min(1),

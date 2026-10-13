@@ -1,5 +1,9 @@
 # Browser Surface
 
+当前状态（2026-10-13）：macOS 默认开发/发布启用，B4 已接入内置受管 Playwright MCP 首批工具，静态读取已移除，见 [B4 设计](BROWSER-AGENT.md) 与 [本机验收记录](BROWSER-ACCEPTANCE-2026-10-13.md)。
+下文早期 Spike 的 debug-only/发布关闭描述由此更新替代；
+Windows/Linux 用户原生 Surface 保持待验收；Agent 的点击、输入与登录能力仍未开放。
+
 Browser Surface 是用户操作的隔离网页浏览区域，不是 Chat Core 的依赖。
 
 ## 首版范围（2026-10-11）

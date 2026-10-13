@@ -11,7 +11,10 @@ import type { Store } from '../../store/index.js'
 import type { RunEventEmitter } from '../../events.js'
 import type { InteractionGateway } from '../interactions/index.js'
 
+import type { BrowserAgentService } from '../../browser/agent/service.js'
+
 export interface ToolContext {
+  browser?: BrowserAgentService | null
   store: Store
   sessionId: string
   messageId: string

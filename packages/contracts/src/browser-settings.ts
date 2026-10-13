@@ -4,6 +4,7 @@ import { normalizeBrowserUrl } from './browser/url.js'
 
 /** Low-sensitivity preferences only; website data stays in the native adapter. */
 export const BrowserSettingsSchema = z.strictObject({
+  agentBrowserEnabled: z.boolean().default(false),
   mode: z.enum(['embedded', 'system']),
   defaultRoute: z.enum(['embedded', 'system']),
   localRoute: z.enum(['embedded', 'system']).default('system'),

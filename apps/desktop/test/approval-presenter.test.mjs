@@ -269,3 +269,29 @@ test('unsandboxed approval clearly discloses filesystem and network access', () 
     false,
   )
 })
+
+test('managed browser approval shows bound source/version without a shell sandbox claim', () => {
+  const display = presentApproval({
+    toolCallId: 'browser',
+    runId: 'run',
+    operation: 'browser.read',
+    summary: '',
+    risk: 'normal',
+    context: CONTEXT,
+    choices: [],
+    subject: {
+      kind: 'browser-page',
+      operation: 'browser.read',
+      origin: 'https://example.com',
+      source: {
+        origin: 'https://example.com',
+        tabId: 'tab',
+        pageVersion: 'version',
+      },
+    },
+  })
+  assert.equal(display.actionLabel, '读取渲染页面')
+  assert.ok(display.subject.value.includes('version'))
+  assert.ok(display.chips.includes('隔离 Playwright 浏览器'))
+  assert.ok(!display.chips.includes('沙箱 seatbelt'))
+})
