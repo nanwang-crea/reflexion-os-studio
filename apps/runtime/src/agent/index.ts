@@ -1,3 +1,4 @@
+import { createWorkflowBridge } from './run/workflow-bridge.js'
 import type { BrowserAgentService } from '../browser/agent/service.js'
 import { userContentParts } from './context/image-parts.js'
 import { randomUUID } from 'node:crypto'
@@ -55,6 +56,7 @@ export class ChatAgent {
   readonly interactions: InteractionGateway
   /** Danger 高级能力租约：Runtime 是唯一真源，内存态、会话绑定。 */
   readonly danger: DangerLeaseService
+  readonly workflow: ReturnType<typeof createWorkflowBridge>
   private readonly contextBuilder: ContextBuilder
   private readonly runner: RunRunner
   private readonly queues: QueueService
@@ -101,6 +103,7 @@ export class ChatAgent {
         onRunSettled: (sessionId) => this.pumpQueue(sessionId),
       },
     )
+    this.workflow = createWorkflowBridge(store, this.launcher, system, mcp)
   }
 
   /**

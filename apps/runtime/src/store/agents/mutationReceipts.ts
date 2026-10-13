@@ -11,6 +11,7 @@ export class MutationReceiptStore {
   constructor(private readonly db: DatabaseSync) {}
 
   record(input: {
+    workflowRunId?: string
     rootRunId: string
     runId: string
     delegationId: string | null
@@ -23,6 +24,7 @@ export class MutationReceiptStore {
     const receipt: MutationReceipt = {
       id: randomUUID(),
       rootRunId: input.rootRunId,
+      workflowRunId: input.workflowRunId ?? null,
       runId: input.runId,
       delegationId: input.delegationId,
       agentInstanceId: input.agentInstanceId,
@@ -34,13 +36,14 @@ export class MutationReceiptStore {
     this.db
       .prepare(
         `INSERT OR IGNORE INTO mutation_receipts (
-        id, root_run_id, run_id, delegation_id, agent_instance_id,
+        id, root_run_id, workflow_run_id, run_id, delegation_id, agent_instance_id,
         tool_call_id, tool_name, changed_files_json, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         receipt.id,
         receipt.rootRunId,
+        receipt.workflowRunId ?? null,
         receipt.runId,
         receipt.delegationId,
         receipt.agentInstanceId,
@@ -65,6 +68,8 @@ export class MutationReceiptStore {
     return {
       id: String(row.id),
       rootRunId: String(row.root_run_id),
+      workflowRunId:
+        row.workflow_run_id == null ? null : String(row.workflow_run_id),
       runId: String(row.run_id),
       delegationId:
         row.delegation_id == null ? null : String(row.delegation_id),

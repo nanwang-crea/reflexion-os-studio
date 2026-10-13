@@ -86,6 +86,8 @@ export const AgentContextSchema = z.object({
   depth: z.number().int().nonnegative().max(4),
   rootRunId: z.string().min(1),
   rootTask: z.string().min(1),
+  workflowRunId: z.string().min(1).optional(),
+  workflowNodeId: z.string().min(1).optional(),
 })
 export type AgentContextView = z.infer<typeof AgentContextSchema>
 

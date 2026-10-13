@@ -1,3 +1,9 @@
+import { recoverWorkflows } from './workflows/execution/recovery.js'
+import { WorkflowConfirmationStore } from './workflows/execution/confirmations.js'
+import { WorkflowOutputStore } from './workflows/execution/outputs.js'
+import { WorkflowAttemptStore } from './workflows/execution/attempts.js'
+import { WorkflowRunStore } from './workflows/execution/runs.js'
+import { WorkflowDefinitionStore } from './workflows/definitions.js'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -61,6 +67,11 @@ export class Store {
   readonly runEvents: RunEventStore
   readonly contextCheckpoints: ContextCheckpointStore
   readonly plugins: PluginStore
+  readonly workflowRuns: WorkflowRunStore
+  readonly workflowAttempts: WorkflowAttemptStore
+  readonly workflowOutputs: WorkflowOutputStore
+  readonly workflowConfirmations: WorkflowConfirmationStore
+  readonly workflows: WorkflowDefinitionStore
 
   constructor(readonly dataDir: string) {
     const dir = dataDir
@@ -97,7 +108,14 @@ export class Store {
     this.mutationReceipts = new MutationReceiptStore(this.db)
     this.runEvents = new RunEventStore(this.db)
     this.contextCheckpoints = new ContextCheckpointStore(this.db)
+    this.workflowRuns = new WorkflowRunStore(this.db)
+    this.workflowAttempts = new WorkflowAttemptStore(this.db)
+    this.workflowOutputs = new WorkflowOutputStore(this.db)
+    this.workflowConfirmations = new WorkflowConfirmationStore(this.db)
     this.plugins = new PluginStore(this.db)
+    this.workflows = new WorkflowDefinitionStore(this.db, (fn) =>
+      this.transaction(fn),
+    )
     for (const agent of BUILTIN_AGENTS) {
       const current = this.agents.get(agent.id)
       this.agents.upsert({
@@ -138,6 +156,7 @@ export class Store {
     this.messages.recoverInterrupted()
     this.toolCalls.recoverUnfinished()
     this.workspaceIndex.recoverInterrupted()
+    recoverWorkflows(this)
   }
 
   close(): void {

@@ -1,4 +1,14 @@
 import {
+  WorkflowDefinitionSchema,
+  WorkflowVersionSchema,
+  WorkflowExecutionSnapshotSchema,
+  WorkflowAttemptSchema,
+  WorkflowRunSchema,
+  WorkflowRunDetailSchema,
+  WorkflowConfirmationSchema,
+  WorkflowPublishedOutputSchema,
+} from './workflow/index.js'
+import {
   BrowserImportRequestSchema,
   BrowserImportResultSchema,
   BrowserCredentialsSchema,
@@ -69,6 +79,14 @@ function toJSONSchema(name: string, schema: z.ZodType): [string, unknown] {
 export const jsonSchemas: Readonly<Record<string, unknown>> = Object.freeze(
   Object.fromEntries([
     toJSONSchema('JsonRpcMessage', JsonRpcMessageSchema),
+    toJSONSchema('WorkflowDefinition', WorkflowDefinitionSchema),
+    toJSONSchema('WorkflowVersion', WorkflowVersionSchema),
+    toJSONSchema('WorkflowExecutionSnapshot', WorkflowExecutionSnapshotSchema),
+    toJSONSchema('WorkflowAttempt', WorkflowAttemptSchema),
+    toJSONSchema('WorkflowRun', WorkflowRunSchema),
+    toJSONSchema('WorkflowRunDetail', WorkflowRunDetailSchema),
+    toJSONSchema('WorkflowConfirmation', WorkflowConfirmationSchema),
+    toJSONSchema('WorkflowPublishedOutput', WorkflowPublishedOutputSchema),
     toJSONSchema('Project', ProjectSchema),
     toJSONSchema('Session', SessionSchema),
     toJSONSchema('Message', MessageSchema),

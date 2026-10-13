@@ -25,6 +25,8 @@ export const RuntimeErrorCodeSchema = z.enum([
   'run_timeout',
   'run_token_budget',
   'tool_call_budget',
+  'workflow_token_budget',
+  'workflow_tool_budget',
 ])
 export type RuntimeErrorCode = z.infer<typeof RuntimeErrorCodeSchema>
 

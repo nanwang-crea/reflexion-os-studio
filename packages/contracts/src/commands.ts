@@ -1,3 +1,4 @@
+import { workflowCommands } from './commands/workflow.js'
 import { z } from 'zod'
 import { operationCommands } from './operations.js'
 import { runtimeCommands } from './commands/runtime.js'
@@ -23,6 +24,7 @@ import { terminalCommands } from './commands/terminal.js'
 export * from './commands/params.js'
 
 export const CommandSchemaRegistry = {
+  ...workflowCommands,
   ...runtimeCommands,
   ...operationCommands,
   ...chatCommands,
@@ -66,3 +68,10 @@ export function lookupCommandSchema(
   ]
   return entry
 }
+
+export { workflowCommands } from './commands/workflow.js'
+
+export type {
+  WorkflowCommandParams,
+  WorkflowCommandResult,
+} from './commands/workflow.js'

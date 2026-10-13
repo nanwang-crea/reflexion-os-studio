@@ -1,5 +1,6 @@
+import { composeSystemPrompt } from './prompts/system-prompt.js'
+export { composeSystemPrompt } from './prompts/system-prompt.js'
 import type {
-  AgentDefinition,
   ApprovalOverride,
   Message,
   PermissionPreset,
@@ -8,12 +9,7 @@ import type {
   Session,
 } from '@reflexion-os-studio/contracts'
 import { RunEventEmitter } from '../events.js'
-import {
-  activeSkillPromptSection,
-  skillsPromptSection,
-  type SkillDefinition,
-  type SkillRegistry,
-} from '../skills/index.js'
+import { type SkillDefinition, type SkillRegistry } from '../skills/index.js'
 import type { Store } from '../store/index.js'
 import type { SystemRuntimeClient } from '../system.js'
 import type { McpManager } from '../mcp/manager.js'
@@ -28,10 +24,6 @@ import {
   PermissionGate,
   resolveInputPreset,
 } from './permissions/index.js'
-import {
-  PRIMARY_AGENT_SYSTEM_PROMPT,
-  availableAgentsPromptSection,
-} from './prompts/index.js'
 import type { RunRunner } from './run/runner.js'
 import { createToolRegistry } from './tools/index.js'
 import type { ToolContext } from './tools/shared.js'
@@ -72,6 +64,16 @@ export interface LaunchOptions {
   rootRunId?: string
   mutationCoordinator?: RootMutationCoordinator
   defaultChildTemplateId?: string
+  workflowRunId?: string
+  runSettings?: import('@reflexion-os-studio/contracts').AgentSettings
+  onBeforeModel?: () => void
+  onToolBatch?: (toolNames: string[]) => void
+  beforeToolInvoke?: (toolName: string) => void
+  onModelResult?: (
+    usage: import('@reflexion-os-studio/contracts').Usage,
+    estimated?: boolean,
+  ) => void
+  persistResult?: (content: string) => void
 }
 
 /** launch 依赖：跨 Run 共享的服务集合（由 ChatAgent 注入）。 */
@@ -150,7 +152,7 @@ export class RunLauncher {
       permissionPreset: input.permissionPreset,
     })
     this.runPermissionPresets.set(run.id, preset)
-    const settings = this.deps.store.agentSettings.get()
+    const settings = input.runSettings ?? this.deps.store.agentSettings.get()
     const provider: ProviderRuntimeConfig = {
       baseUrl: profile.baseUrl,
       apiKey,
@@ -200,7 +202,9 @@ export class RunLauncher {
       approvalOverride:
         input.approvalOverride ??
         this.deps.approvals.approvalOverrideFor(sessionId),
-      dangerActive: () => this.deps.danger.isActive(sessionId),
+      dangerActive: () =>
+        input.workflowRunId === undefined &&
+        this.deps.danger.isActive(sessionId),
       executionMode: () =>
         this.deps.store.sessions.get(sessionId)?.executionMode ?? 'execute',
     })
@@ -241,6 +245,12 @@ export class RunLauncher {
         emitter,
         firstAssistantMessage: assistantMessage,
         settings,
+        workflowRunId: input.workflowRunId,
+        onBeforeModel: input.onBeforeModel,
+        onToolBatch: input.onToolBatch,
+        beforeToolInvoke: input.beforeToolInvoke,
+        onModelResult: input.onModelResult,
+        persistResult: input.persistResult,
         onResult: input.onResult,
         onFailure: input.onFailure,
         onCancel: input.onCancel,
@@ -258,17 +268,6 @@ export class RunLauncher {
         this.hooks.onRunSettled(run.sessionId)
       })
   }
-}
-
-/** system prompt = 主 prompt + 可用 Skills 清单 +（可选）本次激活技能的完整说明。 */
-export function composeSystemPrompt(
-  skills: SkillRegistry,
-  skill: SkillDefinition | null,
-  agents: readonly AgentDefinition[] = [],
-  projectId: string | null = null,
-): string {
-  const base = `${PRIMARY_AGENT_SYSTEM_PROMPT}${skillsPromptSection(skills.list(projectId))}${availableAgentsPromptSection(agents)}`
-  return skill === null ? base : `${base}${activeSkillPromptSection(skill)}`
 }
 
 /** 会话的工作区根：项目 folderPath；独立会话/空路径返回 null（工具被拒绝）。 */

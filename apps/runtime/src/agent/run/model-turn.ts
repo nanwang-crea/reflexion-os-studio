@@ -31,6 +31,10 @@ export interface ModelTurnInput {
   /** 子 Run 单次累计输出 token 预算；超出以 child_token_budget 稳定错误码中止。 */
   childTokenBudget?: number
   /** Run 累计 token 总量预算（W4）；超出以 run_token_budget 中止。 */
+  onModelResult?: (
+    usage: import('@reflexion-os-studio/contracts').Usage,
+    estimated?: boolean,
+  ) => void
   runTotalTokenBudget?: number
 }
 
@@ -170,6 +174,15 @@ export async function executeModelTurn(
     },
   )
 
+  if (input.onModelResult && result.usage)
+    store.runs.addUsage(run.id, result.usage)
+  input.onModelResult?.(
+    result.usage ?? {
+      promptTokens: new TextEncoder().encode(JSON.stringify(messages)).length,
+      completionTokens: new TextEncoder().encode(JSON.stringify(result)).length,
+    },
+    result.usage === undefined,
+  )
   result.toolCalls = redactBrowserCalls(result.toolCalls)
 
   process.stderr.write(
@@ -219,7 +232,7 @@ export async function executeModelTurn(
         continuationReason: 'content_filtered',
       })
     }
-    if (result.usage) {
+    if (result.usage && !input.onModelResult) {
       store.runs.addUsage(run.id, result.usage)
     }
     return {
@@ -254,7 +267,7 @@ export async function executeModelTurn(
     usage: result.usage,
     parts: normalized.parts,
   })
-  if (result.usage) {
+  if (result.usage && !input.onModelResult) {
     store.runs.addUsage(run.id, result.usage)
   }
   // W3 ToolCall 批量预建：provider 返回合法 tool_calls 后，一个事务内

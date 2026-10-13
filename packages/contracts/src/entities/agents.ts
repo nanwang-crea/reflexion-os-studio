@@ -72,6 +72,7 @@ export type AgentInstance = z.infer<typeof AgentInstanceSchema>
 export const MutationReceiptSchema = z.object({
   id: z.string().min(1),
   rootRunId: z.string().min(1),
+  workflowRunId: z.string().min(1).nullable().optional(),
   runId: z.string().min(1),
   delegationId: z.string().min(1).nullable(),
   agentInstanceId: z.string().min(1).nullable(),

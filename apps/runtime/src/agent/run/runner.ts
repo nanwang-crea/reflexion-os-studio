@@ -49,6 +49,15 @@ export interface RunStreamInput {
   onCancel?: () => void
   /** 子 Run 单次累计输出 token 预算；超出以 child_token_budget 稳定错误码中止。 */
   childTokenBudget?: number
+  workflowRunId?: string
+  onBeforeModel?: () => void
+  onToolBatch?: (toolNames: string[]) => void
+  beforeToolInvoke?: (toolName: string) => void
+  onModelResult?: (
+    usage: import('@reflexion-os-studio/contracts').Usage,
+    estimated?: boolean,
+  ) => void
+  persistResult?: (content: string) => void
   permissionDomainId: string
   rootRunId: string
   mutationCoordinator?: RootMutationCoordinator
@@ -135,6 +144,8 @@ export class RunRunner {
           system: input.system,
           permissionDomainId: input.permissionDomainId,
           rootRunId: input.rootRunId,
+          workflowRunId: input.workflowRunId,
+          beforeToolInvoke: input.beforeToolInvoke,
           mutationCoordinator: input.mutationCoordinator,
         },
         request,
@@ -148,6 +159,7 @@ export class RunRunner {
           state,
           emitter,
           onResult: input.onResult,
+          persistResult: input.persistResult,
           onFailure: input.onFailure,
           onCancel: input.onCancel,
         },
@@ -195,6 +207,7 @@ export class RunRunner {
           },
           reflectionThreshold: input.settings.reflectionThreshold ?? undefined,
           callModel: async (messages, signal) => {
+            input.onBeforeModel?.()
             modelTurnsUsed += 1
             turnAttempt += 1
             const turnExecution = this.store.turnExecutions.create({
@@ -224,6 +237,7 @@ export class RunRunner {
                 firstAssistantMessage: input.firstAssistantMessage,
                 childTokenBudget: input.childTokenBudget,
                 runTotalTokenBudget: budgets.maxRunTotalTokens,
+                onModelResult: input.onModelResult,
               },
               messages,
               signal,
@@ -251,6 +265,7 @@ export class RunRunner {
                 `Run 工具调用次数超出预算：已用 ${toolCallsUsed} + 本批 ${requests.length} > 上限 ${budgets.maxToolCalls}`,
               )
             }
+            input.onToolBatch?.(requests.map((request) => request.name))
             toolCallsUsed += requests.length
             if (state.currentTurnId !== null) {
               this.store.turnExecutions.transition(

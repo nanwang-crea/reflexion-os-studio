@@ -26,6 +26,7 @@ export interface FinalizeContext {
   run: Run
   state: RunExecutionState
   emitter: RunEventEmitter
+  persistResult?: (content: string) => void
   onResult?: (content: string) => void
   onFailure?: (error: Error) => void
   onCancel?: () => void
@@ -55,13 +56,23 @@ export class RunFinalizer {
     }
     let committed: CommittedOutcome
     try {
-      committed = this.commitTerminalState(run, snapshot, decision)
+      committed = this.commitTerminalState(
+        run,
+        snapshot,
+        decision,
+        context.persistResult,
+      )
     } catch (firstError) {
       // 事务失败：Run 保持非终态，记录后受控重试一次。
       process.stderr.write(
         `[runtime] run finalization failed (${run.id}): ${describeError(firstError)}; retrying once\n`,
       )
-      committed = this.commitTerminalState(run, snapshot, decision)
+      committed = this.commitTerminalState(
+        run,
+        snapshot,
+        decision,
+        context.persistResult,
+      )
     }
     // 提交成功：清理内存态。
     state.turn = null
@@ -123,6 +134,7 @@ export class RunFinalizer {
       inFlightToolCallIds: string[]
     },
     decision: RunTerminalDecision,
+    persistResult?: (content: string) => void,
   ): CommittedOutcome {
     return this.store.transaction(() => {
       // 1. 收尾当前 assistant 草稿：取消 → interrupted，失败 → failed。
@@ -170,6 +182,9 @@ export class RunFinalizer {
       for (const id of cancelledToolCallIds) {
         this.store.toolCalls.finalize(id, 'cancelled')
       }
+      // Workflow checkpoint is committed in the same transaction as Run completion.
+      if (decision.status === 'completed')
+        persistResult?.(decision.resultContent ?? '')
       // 3. Run 终态。
       this.store.runs.finalize(
         run.id,

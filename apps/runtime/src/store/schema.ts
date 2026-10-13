@@ -1,7 +1,15 @@
+import {
+  WORKFLOW_SCHEMA,
+  WORKFLOW_EXECUTION_SCHEMA,
+  WORKFLOW_RESULT_SCHEMA,
+} from './migrations/workflows.js'
 import { BROWSER_DATA_SCHEMA } from './migrations/browser-data.js'
 // 存储结构定义：schema DDL 与当前版本号（版本迁移逻辑见 migrations.ts）。
 
 export const SCHEMA = `
+${WORKFLOW_SCHEMA}
+${WORKFLOW_EXECUTION_SCHEMA}
+${WORKFLOW_RESULT_SCHEMA}
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -275,6 +283,7 @@ CREATE INDEX IF NOT EXISTS idx_delegations_session ON delegations(session_id, cr
 CREATE TABLE IF NOT EXISTS mutation_receipts (
   id TEXT PRIMARY KEY,
   root_run_id TEXT NOT NULL,
+  workflow_run_id TEXT,
   run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
   delegation_id TEXT REFERENCES delegations(id) ON DELETE SET NULL,
   agent_instance_id TEXT,
@@ -320,4 +329,4 @@ CREATE INDEX IF NOT EXISTS idx_run_events_run ON run_events(run_id, created_at);
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 43
+export const LATEST_SCHEMA_VERSION = 45

@@ -11,6 +11,7 @@ export type EventNotifier = (event: RuntimeEvent) => void
 /** 发射器身份 = 事件作用域 + 真实资源 ID（信封字段来源，单一构造点）。 */
 export type EventIdentity =
   | { scope: 'runtime' }
+  | { scope: 'workflow'; projectId: string; workflowRunId: string }
   | { scope: 'run'; runId: string }
   | { scope: 'session'; sessionId: string }
   | { scope: 'project'; projectId: string }
@@ -85,6 +86,7 @@ export class EmitterRegistry {
     return [
       identity.scope,
       (id.runId as string) ?? '',
+      (id.workflowRunId as string) ?? '',
       (id.sessionId as string) ?? '',
       (id.projectId as string) ?? '',
       (id.terminalId as string) ?? '',

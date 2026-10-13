@@ -7,6 +7,22 @@ export function agentContextForRun(
   run: Run,
   explicitRootRunId?: string,
 ): AgentContextView {
+  const workflowAttempt = store.workflowAttempts?.byAgentRun(run.id)
+  if (workflowAttempt) {
+    const flow = store.workflowRuns.get(workflowAttempt.workflowRunId)
+    const node = flow?.snapshot.definition.nodes.find(
+      (item) => item.id === workflowAttempt.nodeId,
+    )
+    return {
+      instanceId: run.agentId,
+      displayName: node?.name ?? 'Workflow Agent',
+      depth: 0,
+      rootRunId: run.id,
+      rootTask: flow?.snapshot.definition.name ?? 'Workflow',
+      workflowRunId: workflowAttempt.workflowRunId,
+      workflowNodeId: workflowAttempt.nodeId,
+    }
+  }
   const delegation =
     run.delegationId === null ? null : store.delegations.get(run.delegationId)
   const rootRunId =

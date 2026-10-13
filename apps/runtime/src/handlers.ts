@@ -1,3 +1,4 @@
+import { workflowCommandHandlers } from './workflow/handlers.js'
 import { CommandSchemaRegistry } from '@reflexion-os-studio/contracts'
 import { CoreMutationMethodSchema } from '@reflexion-os-studio/contracts'
 import { operationsFor } from './operations/index.js'
@@ -143,6 +144,8 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
   },
   'session.delete': async (p, { store, agent, assets, approvals, danger }) => {
     const sessionId = requireString(p, 'sessionId')
+    if (store.workflowAttempts?.bySession(sessionId))
+      throw new CommandError('invalid_state', 'Workflow 节点轨迹不能单独删除')
     // 有进行中的 Run 时拒绝删除，避免流式写入悬空会话。
     if (store.runs.activeForSession(sessionId)) {
       throw new CommandError(
@@ -165,6 +168,11 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
     { store, agent, assets, terminal, approvals, danger, plugins },
   ) => {
     const projectId = requireString(p, 'projectId')
+    if (store.workflowRuns?.hasActiveProject(projectId))
+      throw new CommandError(
+        'invalid_state',
+        '请先取消项目中的 Workflow 再删除项目',
+      )
     // 终端回收先于删除：任一 close 失败即抛 terminal_cleanup_failed 且**保留项目**
     // （spec §2，不留无主 shell）。项目无终端时 closeProject 快速 no-op。
     await terminal.closeProject(projectId)
@@ -178,6 +186,11 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
       }
     }
     const removed = store.transaction(() => {
+      if (store.workflowRuns?.hasActiveProject(projectId))
+        throw new CommandError(
+          'invalid_state',
+          '请先取消项目中的 Workflow 再删除项目',
+        )
       const removed = store.projects.delete(projectId)
       if (removed) {
         for (const session of sessions) {
@@ -358,6 +371,7 @@ export const commandHandlers: Record<string, CommandHandler> = {
       String(p.targetRequestId),
     ),
   }),
+  ...workflowCommandHandlers,
   ...chatCommandHandlers,
   ...instructionsCommandHandlers,
   ...workspaceCommandHandlers,

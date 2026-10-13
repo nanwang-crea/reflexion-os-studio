@@ -30,3 +30,5 @@ export * from './browser-capabilities.js'
 export * from './browser/data.js'
 export * from './browser/agent.js'
 export * from './browser/agent-settings.js'
+
+export * from './workflow/index.js'

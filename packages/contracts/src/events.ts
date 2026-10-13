@@ -1,3 +1,4 @@
+import { WorkflowRunStatusSchema } from './workflow/execution.js'
 import { z } from 'zod'
 import { OperationSnapshotSchema } from './operations.js'
 import {
@@ -59,6 +60,7 @@ export const EventScopeSchema = z.enum([
   'mcp',
   'terminal',
   'plugin',
+  'workflow',
 ])
 export type EventScope = z.infer<typeof EventScopeSchema>
 
@@ -85,6 +87,14 @@ const TerminalEnvelopeSchema = RuntimeEventEnvelopeSchema.extend({
 })
 
 export const RuntimeEventSchema = z.discriminatedUnion('type', [
+  RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('workflow.run.updated'),
+    scope: z.literal('workflow'),
+    projectId: z.string().min(1),
+    workflowRunId: z.string().min(1),
+    stateVersion: z.number().int().nonnegative(),
+    status: WorkflowRunStatusSchema,
+  }),
   RuntimeEventEnvelopeSchema.extend({
     type: z.literal('operation.changed'),
     scope: z.literal('runtime'),

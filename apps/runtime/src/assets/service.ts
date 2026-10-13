@@ -208,6 +208,19 @@ export class AssetService {
       : this.pathFor(asset.projectId!, asset.assetId)
   }
 
+  /** Check immutable Workflow references without exposing asset content. */
+  async verifyHash(asset: AssetRef): Promise<boolean> {
+    const content = await readAssetContent(
+      this.dataDir,
+      this.contentPath(asset),
+      MAX_IMPORT_BYTES,
+    )
+    return (
+      content !== null &&
+      createHash('sha256').update(content).digest('hex') === asset.hash
+    )
+  }
+
   list(projectId: string): AssetRef[] {
     return this.store.assetStore.list(projectId)
   }

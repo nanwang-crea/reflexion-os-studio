@@ -36,6 +36,11 @@ export function dangerCapability(
 }
 
 export function requireSession(store: Store, sessionId: string): Session {
+  if (store.workflowAttempts?.bySession(sessionId))
+    throw new CommandError(
+      'invalid_state',
+      'Workflow 节点会话只能经 Workflow 控制命令运行',
+    )
   const session = store.sessions.get(sessionId)
   if (!session) {
     throw new CommandError('invalid_request', `session not found: ${sessionId}`)

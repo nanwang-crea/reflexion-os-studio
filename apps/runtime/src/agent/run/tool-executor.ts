@@ -11,7 +11,7 @@ import {
   type SandboxPolicy,
   type ToolCall,
 } from '@reflexion-os-studio/contracts'
-import { capToolResultForModel, normalizeToolOutput } from './toolResults.js'
+import { normalizeToolOutput } from './toolResults.js'
 import {
   buildApprovalChoices,
   buildApprovalSubject,
@@ -37,7 +37,7 @@ import {
   riskFor,
   requestToolApproval,
 } from './tool-execution-context.js'
-import { isMutatingTool } from '../delegation/mutations.js'
+import { invokeAdmittedTool } from './tool-invocation.js'
 import { agentContextForRun } from './agent-context.js'
 
 export type { ToolExecutorInput } from './tool-executor-types.js'
@@ -202,8 +202,16 @@ export async function executeToolCall(
     sessionId: input.permissionDomainId,
     workspaceRoot: input.workspaceRoot,
   }
+  const requireEachApproval =
+    input.workflowRunId !== undefined &&
+    input.gate.approvalOverride === 'ask-everything'
   let sessionRuleHit = false
-  if (decision === 'ask' && !dangerActive && !unsandboxed) {
+  if (
+    decision === 'ask' &&
+    !dangerActive &&
+    !unsandboxed &&
+    !requireEachApproval
+  ) {
     if (shellInput && built.subject.kind === 'shell-command') {
       sessionRuleHit =
         input.approvals.matchShellPrefixRule(scope, {
@@ -332,6 +340,7 @@ export async function executeToolCall(
       // Danger lease 自动放行网络，grant 仍显式记录 sandboxNetwork=true。
       sandboxNetwork = true
     } else if (
+      !requireEachApproval &&
       shellInput &&
       input.approvals.matchShellPrefixRule(scope, {
         interpreter: shellInput.interpreter,
@@ -365,7 +374,7 @@ export async function executeToolCall(
       sandboxNetwork = true
       // 网络卡若选择"本会话允许该前缀联网"，规则已覆盖命令审批本身：
       // 复查命中则免掉主卡（会话网络授权语义 = 前缀 + 网络 + 维度全等）。
-      if (shellInput && !sessionRuleHit) {
+      if (shellInput && !sessionRuleHit && !requireEachApproval) {
         sessionRuleHit =
           input.approvals.matchShellPrefixRule(scope, {
             interpreter: shellInput.interpreter,
@@ -431,34 +440,7 @@ export async function executeToolCall(
     store.toolCalls.markStatus(row.id, 'running', grant)
   }
 
-  const invoke = () => input.registry.call(request, signal, grant, row.id)
-  const result =
-    input.mutationCoordinator && isMutatingTool(request.name)
-      ? await input.mutationCoordinator.run(invoke)
-      : await invoke()
-  state.toolCallRowIds.delete(row.id)
-  const output = normalizeToolOutput(result, projectId, request.name)
-  // 持久化保存完整结果（审计不做盲区），回填模型前只取截断副本。
-  const modelResult: ToolResult = {
-    ...result,
-    content: capToolResultForModel(result.content),
-  }
-  if (result.isError) {
-    const errorCode = result.code ?? 'tool_error'
-    finalizeToolCall(store, state, emitter, row.id, 'failed', errorCode, output)
-  } else {
-    finalizeToolCall(store, state, emitter, row.id, 'completed', null, output)
-    store.mutationReceipts.record({
-      rootRunId: input.rootRunId,
-      runId: run.id,
-      delegationId: run.delegationId,
-      agentInstanceId: run.agentId,
-      toolCallId: row.id,
-      toolName: request.name,
-      output,
-    })
-  }
-  return modelResult
+  return invokeAdmittedTool(input, request, signal, grant, row.id, projectId)
 }
 
 export function parseToolArgs(arguments_: string): JsonValue {

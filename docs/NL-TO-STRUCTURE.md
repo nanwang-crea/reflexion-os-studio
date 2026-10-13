@@ -1,6 +1,11 @@
 # 自然语言生成结构化定义（NL → Structure）
 
 > 草案，待评审。设计"用自然语言生成结构化节点 / Agent 定义"的契约、管线、存储与验收标准。
+> 2026-10-13：首版范围以 [Workflow MVP](WORKFLOW-ENGINE.md) 为准。本文的节点枚举、
+> AgentDefinition/权限示例、v22 迁移与“节点即 Agent”映射属于早期设想，不作为实施契约。
+> 当前首版同时交付人工定义与自然语言生成的语言模型协作图；角色复用现有 AgentTemplate，工具留在 Agent 内部，
+> Workflow 调度不伪造 task/Delegation 生命周期。生成模式、命令、预算与审阅链路
+> 已在 Workflow MVP 定义，本文以下旧接口和迁移方案仍需修订，不能直接实施。
 > 领域依赖：`AGENT-MODEL.md`（AgentDefinition）、`MULTI-AGENT.md` 与 `DELEGATION-AND-POLICY.md`
 > （委派与策略）、`WORKFLOW-ENGINE.md`（Workflow DAG）、`PLUGIN-SYSTEM.md`（节点插件）、
 > `PERMISSION-MODEL.md`（权限模型）。本文件**不改变各阶段范围边界**（见 `ROADMAP.md`），
