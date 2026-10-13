@@ -369,7 +369,7 @@ test(
 for (const display of ['headless', 'headed']) {
   test(`installed system Chrome runs ${display} with an isolated context and the same network boundary`, async (t) => {
     const { detectSystemChrome } =
-      await import('../dist/browser/agent/runtime/system-chrome.js')
+      await import('../dist/browser/agent/runtime/sources/chrome.js')
     const executablePath = detectSystemChrome()
     if (
       !executablePath ||

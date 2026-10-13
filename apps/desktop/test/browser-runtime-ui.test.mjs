@@ -45,9 +45,10 @@ test('settings install flow shows progress, supports cancellation and stops idle
             let settings = { enabled: false, source: 'auto', display: 'headless', approval: 'follow-session' };
             export async function getAgentBrowserSettings() { return { ...settings }; }
             export async function updateAgentBrowserSettings(next) { settings = next; window.requests.sources.push(next.source); return { ...settings }; }
-            export async function getAgentBrowserRuntime() { window.requests.status++; return { ...state }; }
+            export async function getAgentBrowserRuntime() { window.requests.status++; const snapshot = { ...state }; if (window.holdNextStatus) { window.holdNextStatus = false; return new Promise(resolve => window.releaseStatus = () => resolve(snapshot)); } return snapshot; }
             export async function installAgentBrowserRuntime() { window.requests.install++; state = { ...state, state: 'downloading', phase: 'download', progress: 25 }; return { ...state }; }
             export async function cancelAgentBrowserRuntime() { window.requests.cancel++; state = { ...state, state: 'failed', phase: 'failed', error: 'download-cancelled' }; return { ...state }; }
+            window.corruptManager = () => state = { ...state, state: 'not-installed', error: 'runtime-unavailable' };
             window.complete = () => state = { ...state, state: 'installed', phase: 'ready', progress: null, error: null };
           `,
                 loader: 'js',
@@ -100,7 +101,11 @@ test('settings install flow shows progress, supports cancellation and stops idle
       await page.getByRole('progressbar').getAttribute('value'),
       '25',
     )
+    await page.evaluate(() => (window.holdNextStatus = true))
+    await page.waitForFunction(() => typeof window.releaseStatus === 'function')
     await page.getByRole('button', { name: '取消下载' }).click()
+    await page.getByText('下载已取消', { exact: true }).waitFor()
+    await page.evaluate(() => window.releaseStatus())
     await page.getByText('下载已取消', { exact: true }).waitFor()
     await page.getByRole('button', { name: '重新下载' }).click()
     await page.evaluate(() => window.complete())
@@ -108,6 +113,17 @@ test('settings install flow shows progress, supports cancellation and stops idle
     const requests = await page.evaluate(() => window.requests.status)
     await new Promise((resolve) => setTimeout(resolve, 1250))
     assert.equal(await page.evaluate(() => window.requests.status), requests)
+    await page.evaluate(() => window.corruptManager())
+    await page.getByRole('button', { name: '重新检查', exact: true }).click()
+    await page
+      .getByText('浏览器组件管理程序不可用，请重新安装应用。', { exact: true })
+      .waitFor()
+    assert.equal(
+      await page
+        .getByRole('button', { name: '下载浏览器组件', exact: true })
+        .isDisabled(),
+      true,
+    )
     await page.evaluate(() => window.unmount())
     assert.equal(await page.evaluate(() => window.requests.install), 2)
     assert.equal(await page.evaluate(() => window.requests.cancel), 1)

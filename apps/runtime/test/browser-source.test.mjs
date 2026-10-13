@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile, chmod, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { BrowserRuntimeService } from '../dist/browser/agent/runtime/service.js'
-import { systemChromeCandidates } from '../dist/browser/agent/runtime/system-chrome.js'
+import { systemChromeCandidates } from '../dist/browser/agent/runtime/sources/chrome.js'
 import { launchAgentBrowser } from '../dist/browser/agent/worker/launch.js'
 
 test('Chrome detection is limited to program locations on all three platforms', () => {
@@ -140,4 +140,45 @@ test('explicit Chrome failures and cancellation cannot launch a fallback', async
     )
     assert.equal(calls, 1)
   }
+})
+
+test('auto source cannot use a managed cache while its installation task is in progress', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'browser-source-pending-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const paths = {
+    root,
+    browsers: join(root, 'managed'),
+    version: 'fixture',
+    cli: 'unused',
+    probe: 'unused',
+  }
+  const service = new BrowserRuntimeService(
+    root,
+    async (_script, _args, _cache, signal) => {
+      await new Promise((resolve, reject) => {
+        if (signal.aborted) reject(new Error('cancelled'))
+        else
+          signal.addEventListener(
+            'abort',
+            () => reject(new Error('cancelled')),
+            { once: true },
+          )
+      })
+      return ''
+    },
+    paths,
+    () => '/fixture/chrome',
+  )
+  service.install()
+  await mkdir(paths.browsers)
+  await writeFile(join(paths.browsers, 'chrome'), 'fixture')
+  await chmod(join(paths.browsers, 'chrome'), 0o755)
+  await writeFile(
+    join(paths.browsers, 'installed.json'),
+    JSON.stringify({ version: 'fixture', executable: 'chrome' }),
+  )
+  assert.equal(service.status.state, 'downloading')
+  assert.equal(service.resolveLaunch('auto').launch.fallbackManaged, false)
+  assert.throws(() => service.resolveLaunch('managed'), /not_installed/)
+  await service.shutdown()
 })

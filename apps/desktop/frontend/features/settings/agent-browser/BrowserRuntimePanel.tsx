@@ -1,75 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
-import type { AgentBrowserRuntime } from '@reflexion-os-studio/contracts'
-import {
-  getAgentBrowserRuntime,
-  installAgentBrowserRuntime,
-  cancelAgentBrowserRuntime,
-} from '../../../api/agent-browser-settings'
-
+import { useBrowserRuntime } from './useBrowserRuntime'
 export function BrowserRuntimePanel(): React.JSX.Element {
-  const [runtime, setRuntime] = useState<AgentBrowserRuntime | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  useEffect(() => {
-    let active = true
-    void getAgentBrowserRuntime()
-      .then((result) => {
-        if (active) setRuntime(result)
-      })
-      .catch(() => {
-        if (active) setError('无法读取浏览器组件状态，请重新检查。')
-      })
-    return () => {
-      active = false
-    }
-  }, [])
-  const downloading = runtime?.state === 'downloading'
-  useEffect(() => {
-    if (!downloading) return
-    let active = true
-    let timer: ReturnType<typeof setTimeout>
-    const refresh = async () => {
-      try {
-        const result = await getAgentBrowserRuntime()
-        if (active) {
-          setRuntime(result)
-          setError(null)
-        }
-      } catch {
-        if (active) setError('暂时无法读取下载进度。')
-      }
-      if (active) timer = setTimeout(() => void refresh(), 1000)
-    }
-    timer = setTimeout(() => void refresh(), 1000)
-    return () => {
-      active = false
-      clearTimeout(timer)
-    }
-  }, [downloading])
-  const act = useCallback(async (action: 'install' | 'cancel' | 'refresh') => {
-    setBusy(true)
-    setError(null)
-    try {
-      setRuntime(
-        await (action === 'install'
-          ? installAgentBrowserRuntime()
-          : action === 'cancel'
-            ? cancelAgentBrowserRuntime()
-            : getAgentBrowserRuntime()),
-      )
-    } catch {
-      setError('操作失败，请重试。')
-    } finally {
-      setBusy(false)
-    }
-  }, [])
+  const { runtime, busy, error, act, downloading } = useBrowserRuntime()
   const installed = runtime?.state === 'installed'
   return (
     <section className="browser-settings-card" aria-label="浏览器组件">
       <h4>受管 Chromium（可选）</h4>
       <p className="hint">
-        按需下载 Chromium，只有使用 Agent
-        浏览网页才需要。普通内嵌浏览器无需下载。组件下载后保存在本机，关闭工具开关不会删除组件。
+        可复用本机 Chrome，或按需下载受管
+        Chromium。普通内嵌浏览器无需下载。组件下载后保存在本机，关闭工具开关不会删除组件。
       </p>
       {runtime && (
         <p className="hint">
@@ -81,17 +19,19 @@ export function BrowserRuntimePanel(): React.JSX.Element {
       <p role="status" aria-live="polite">
         {!runtime
           ? '正在检查组件状态…'
-          : installed
-            ? '已安装'
-            : downloading
-              ? runtime.phase === 'verify'
-                ? '正在验证浏览器组件…'
-                : '正在下载浏览器组件…'
-              : runtime.state === 'failed'
-                ? runtime.error === 'download-cancelled'
-                  ? '下载已取消'
-                  : '下载失败，请检查网络后重试。'
-                : '未安装'}
+          : runtime.error === 'runtime-unavailable'
+            ? '浏览器组件管理程序不可用，请重新安装应用。'
+            : installed
+              ? '已安装'
+              : downloading
+                ? runtime.phase === 'verify'
+                  ? '正在验证浏览器组件…'
+                  : '正在下载浏览器组件…'
+                : runtime.state === 'failed'
+                  ? runtime.error === 'download-cancelled'
+                    ? '下载已取消'
+                    : '下载失败，请检查网络和磁盘空间后重试。'
+                  : '未安装'}
       </p>
       {downloading && (
         <>
@@ -109,7 +49,9 @@ export function BrowserRuntimePanel(): React.JSX.Element {
         {!installed && !downloading && (
           <button
             className="primary"
-            disabled={busy || !runtime}
+            disabled={
+              busy || !runtime || runtime.error === 'runtime-unavailable'
+            }
             onClick={() => void act('install')}
           >
             {runtime?.state === 'failed' ? '重新下载' : '下载浏览器组件'}

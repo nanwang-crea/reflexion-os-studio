@@ -1,14 +1,9 @@
-import { detectSystemChrome } from './system-chrome.js'
-import {
-  accessSync,
-  constants,
-  existsSync,
-  readFileSync,
-  realpathSync,
-  statSync,
-} from 'node:fs'
-import { mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises'
-import { isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { isBrowserInstallation } from './installation/record.js'
+import { publishBrowserInstallation } from './installation/publish.js'
+import { detectSystemChrome } from './sources/chrome.js'
+import { existsSync } from 'node:fs'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { isAbsolute, join, relative } from 'node:path'
 import {
   AgentBrowserInstallationSchema,
   type AgentBrowserRuntime,
@@ -16,7 +11,7 @@ import {
   type AgentBrowserLaunch,
 } from '@reflexion-os-studio/contracts'
 import { browserRuntimePaths } from './paths.js'
-import { runBrowserInstaller } from './process.js'
+import { runBrowserInstaller } from './installation/process.js'
 
 export class BrowserRuntimeService {
   private current: AgentBrowserRuntime
@@ -75,7 +70,7 @@ export class BrowserRuntimeService {
     browsers?: string
   } {
     const chrome = source !== 'managed' ? this.detectChrome() : null
-    const managed = this.isInstalled()
+    const managed = this.current.state !== 'downloading' && this.isInstalled()
     if (chrome)
       return {
         launch: {
@@ -126,30 +121,10 @@ export class BrowserRuntimeService {
     await this.task
   }
   private isInstalled(): boolean {
-    if (!this.paths) return false
-    try {
-      const record = AgentBrowserInstallationSchema.parse(
-        JSON.parse(
-          readFileSync(join(this.paths.browsers, 'installed.json'), 'utf8'),
-        ),
-      )
-      if (
-        record.version !== this.paths.version ||
-        isAbsolute(record.executable)
-      )
-        return false
-      const root = realpathSync(this.paths.browsers)
-      const executable = realpathSync(resolve(root, record.executable))
-      if (!executable.startsWith(root + sep) || !statSync(executable).isFile())
-        return false
-      accessSync(
-        executable,
-        process.platform === 'win32' ? constants.F_OK : constants.X_OK,
-      )
-      return true
-    } catch {
-      return false
-    }
+    return (
+      this.paths !== null &&
+      isBrowserInstallation(this.paths.browsers, this.paths.version)
+    )
   }
   private async download(signal: AbortSignal): Promise<void> {
     const paths = this.paths!
@@ -199,10 +174,16 @@ export class BrowserRuntimeService {
         'utf8',
       )
       signal.throwIfAborted()
-      await rm(paths.browsers, { recursive: true, force: true })
-      await rename(staging, paths.browsers)
+      if (!isBrowserInstallation(staging, paths.version))
+        throw new Error('download-failed')
+      await publishBrowserInstallation(
+        staging,
+        paths.browsers,
+        signal,
+        undefined,
+        (directory) => isBrowserInstallation(directory, paths.version),
+      )
       staging = null
-      if (!this.isInstalled()) throw new Error('download-failed')
       this.current = {
         ...this.current,
         state: 'installed',

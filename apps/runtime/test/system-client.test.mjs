@@ -99,7 +99,7 @@ test('startup failure exhausts restart budget and stays degraded', async () => {
   process.env.FAKE_MODE = 'fail-startup'
   client.start()
   // 3 次退避重启（500ms/1s/2s）全部失败后保持 degraded。
-  await new Promise((resolve) => setTimeout(resolve, 4500))
+  await waitForStatus(transitions, 'degraded', 4, 10000)
   assert.equal(client.available, false)
   const degradedCount = transitions.filter(
     (entry) => entry.status === 'degraded',
@@ -117,7 +117,7 @@ test('system.ready with incompatible protocolVersion never reaches ready', async
   // 每次启动都发不兼容版本：握手被拒 → 有限重启 → 预算耗尽后保持 degraded。
   process.env.FAKE_MODE = 'bad-protocol'
   client.start()
-  await new Promise((resolve) => setTimeout(resolve, 4500))
+  await waitForStatus(transitions, 'degraded', 4, 10000)
   assert.equal(client.available, false)
   assert.equal(
     transitions.some((entry) => entry.status === 'ready'),
@@ -139,7 +139,7 @@ test('system.ready with malformed params never reaches ready', async () => {
   )
   process.env.FAKE_MODE = 'malformed-ready'
   client.start()
-  await new Promise((resolve) => setTimeout(resolve, 4500))
+  await waitForStatus(transitions, 'degraded', 4, 10000)
   assert.equal(client.available, false)
   assert.equal(
     transitions.some((entry) => entry.status === 'ready'),
