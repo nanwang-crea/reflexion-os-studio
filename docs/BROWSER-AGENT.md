@@ -55,3 +55,15 @@ macOS、Windows、Linux 共用 Node 下载和安装代码；平台发行版由 P
 按需安装验证：新增 Runtime 安装生命周期测试 6 项、设置页真实 DOM 下载/取消/重试与空闲停止轮询测试通过；真实固定版本 Playwright CLI、可执行文件检查与原子发布通过（使用已有官方 Chromium 缓存的临时副本，没有重复联网下载大文件）。有头/无头与浏览器安全回归通过。完整 Runtime 503 pass + 14 skip，其中 10 项缺省路径跳过的 Rust/核心端到端测试在显式配置已构建二进制后补测全部通过，剩余 4 项为 Windows 平台测试；前端 81 pass，System Runtime 233 pass，契约、格式、lint、根/前端 typecheck 和宿主检查通过。包内 Node/Runtime 未安装状态及协议 shutdown 冒烟通过。
 
 macOS 应用包约 156 MB，DMG 约 57 MB；浏览器工具代码约 20 MB，不再包含 Chromium。开发模式四次空闲瞬时采样：宿主、Node Runtime、新建 WebView CPU 均为 0%；该采样是本轮空闲观测，不是修改前后性能基线对比。Windows/Linux 真机、完整生产网络下载矩阵及原生设置窗口验收仍待验证；设置交互已由本地合成服务的真实 DOM 测试覆盖。
+
+## 本机 Chrome 复用
+
+浏览器来源支持 auto（默认，优先本机 Chrome）、system-chrome（仅本机 Chrome）与 managed（仅下载的受管 Chromium）。检测只检查 macOS 系统/用户 Applications、Windows 系统/每用户常见安装位置、Linux 常见 Chrome 启动路径的可执行文件，不扫描或读取浏览器 profile。
+
+Runtime 在每次创建 worker 时重新检测并传入已解析的启动配置；设置只接受来源枚举，不接受任意可执行路径。自动模式只有本机 Chrome 在浏览器启动阶段失败且受管组件已安装时回退；导航/读取失败不重放，显式选择本机 Chrome 不静默换来源。无可用浏览器时提示用户选择来源或下载，Agent 不触发下载。
+
+无论来源如何，仍使用新进程、独立临时上下文、相同代理/网络边界与 Chromium 沙箱。复用程序不复用用户登录态或资料。更换来源撤销活动 worker；旧设置缺失来源时默认 auto，普通 Browser Surface 的偏好更新不得覆盖 Agent 来源。
+
+本机 Chrome 复用验收：macOS 已安装的 Google Chrome 在有头/无头模式均通过真实合成页面导航与快照读取，临时上下文 Cookie 为空；设置页来源选择保存与下载/取消/重试/完成后停止轮询通过。最终 Runtime 520 pass + 4 Windows skip、前端 81 pass，契约、格式/lint、根/前端 typecheck、System Runtime 233 项测试、宿主检查与应用/DMG 构建通过。
+
+代码 review 覆盖协议响应与默认值兼容、普通设置更新对 Agent 来源的隔离、检测路径、取消与回退边界、沙箱/代理选项及临时上下文。发现并修复了旧 Agent 设置响应 schema 误声明额外字段的问题，增加契约回归；未发现剩余阻塞问题。Windows/Linux 路径分支有单测，真机 Chrome 及企业策略兼容性仍待验收。仅检测常见程序安装位置，不自动搜索任意自定义安装路径。

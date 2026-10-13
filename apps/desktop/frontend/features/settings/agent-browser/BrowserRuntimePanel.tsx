@@ -66,11 +66,18 @@ export function BrowserRuntimePanel(): React.JSX.Element {
   const installed = runtime?.state === 'installed'
   return (
     <section className="browser-settings-card" aria-label="浏览器组件">
-      <h4>浏览器组件</h4>
+      <h4>受管 Chromium（可选）</h4>
       <p className="hint">
         按需下载 Chromium，只有使用 Agent
         浏览网页才需要。普通内嵌浏览器无需下载。组件下载后保存在本机，关闭工具开关不会删除组件。
       </p>
+      {runtime && (
+        <p className="hint">
+          {runtime.systemChromeAvailable
+            ? '已检测到本机 Chrome，自动模式下无需下载。'
+            : '未在常见安装位置检测到本机 Chrome，可点击下载受管 Chromium。'}
+        </p>
+      )}
       <p role="status" aria-live="polite">
         {!runtime
           ? '正在检查组件状态…'

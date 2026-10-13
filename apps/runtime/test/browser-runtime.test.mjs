@@ -139,15 +139,19 @@ test('runtime management commands are explicit and do not enable browser tools',
 test('missing component produces actionable error before spawning a browser worker', async (t) => {
   const dir = await mkdtemp(join(tmpdir(), 'missing-browser-'))
   t.after(() => rm(dir, { recursive: true, force: true }))
-  const browser = new BrowserAgentService({
-    dataDir: dir,
-    browserSettings: {
-      get: () => ({
-        agentBrowserEnabled: true,
-        agentBrowserDisplay: 'headless',
-      }),
+  const browser = new BrowserAgentService(
+    {
+      dataDir: dir,
+      browserSettings: {
+        get: () => ({
+          agentBrowserEnabled: true,
+          agentBrowserDisplay: 'headless',
+        }),
+      },
     },
-  })
+    undefined,
+    new BrowserRuntimeService(dir, undefined, undefined, () => null),
+  )
   await assert.rejects(
     browser.call(
       'session',

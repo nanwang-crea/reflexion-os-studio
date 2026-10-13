@@ -12,6 +12,7 @@ export const browserSettingsCommandHandlers: Record<string, CommandHandler> = {
     return {
       settings: store.browserSettings.upsert({
         ...settings,
+        agentBrowserSource: current.agentBrowserSource,
         agentBrowserEnabled: current.agentBrowserEnabled,
         agentBrowserDisplay: current.agentBrowserDisplay,
         agentBrowserApproval: current.agentBrowserApproval,

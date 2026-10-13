@@ -365,3 +365,48 @@ test(
     }
   },
 )
+
+for (const display of ['headless', 'headed']) {
+  test(`installed system Chrome runs ${display} with an isolated context and the same network boundary`, async (t) => {
+    const { detectSystemChrome } =
+      await import('../dist/browser/agent/runtime/system-chrome.js')
+    const executablePath = detectSystemChrome()
+    if (
+      !executablePath ||
+      (display === 'headed' && process.platform !== 'darwin')
+    ) {
+      t.skip('System Chrome or headed platform acceptance unavailable')
+      return
+    }
+    const server = createServer((_request, response) => {
+      response.setHeader('content-type', 'text/html')
+      response.end(
+        '<title>System Chrome fixture</title><h1>Isolated system Chrome</h1>',
+      )
+    })
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const backend = new PlaywrightBackend(
+      (approved) => createBrowserProxy(approved, async () => '127.0.0.1'),
+      async () => '93.184.216.34',
+      display,
+      { channel: 'chrome', executablePath, fallbackManaged: false },
+    )
+    try {
+      const metadata = await backend.navigate(
+        `http://fixture.test:${server.address().port}/`,
+      )
+      assert.match(
+        (await backend.read(metadata.page)).snapshot,
+        /Isolated system Chrome/,
+      )
+      assert.equal((await backend.context.cookies()).length, 0)
+      await assert.rejects(
+        backend.navigate('http://localhost/'),
+        /browser_url_denied/,
+      )
+    } finally {
+      await backend.close()
+      await new Promise((resolve) => server.close(resolve))
+    }
+  })
+}

@@ -2,6 +2,7 @@ import { BrowserRuntimePanel } from './BrowserRuntimePanel'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   DEFAULT_AGENT_BROWSER_SETTINGS,
+  AgentBrowserSourceSchema,
   AgentBrowserDisplaySchema,
   AgentBrowserApprovalSchema,
   type AgentBrowserSettings,
@@ -66,6 +67,28 @@ export function AgentBrowserSettingsPanel(): React.JSX.Element {
       )}
       <fieldset className="browser-settings-card" disabled={!loaded || saving}>
         <legend>浏览器运行</legend>
+        <label className="browser-settings-field">
+          <span>浏览器来源</span>
+          <Select
+            aria-label="Agent 浏览器来源"
+            value={settings.source}
+            onValueChange={(value) =>
+              void save({
+                ...settings,
+                source: AgentBrowserSourceSchema.parse(value),
+              })
+            }
+          >
+            <option value="auto">自动选择（优先本机 Chrome）</option>
+            <option value="system-chrome">仅本机 Chrome</option>
+            <option value="managed">仅受管 Chromium</option>
+          </Select>
+        </label>
+        <p className="hint">
+          复用 Chrome
+          程序，仍使用独立临时会话，不读取日常浏览器登录态。自动模式下本机
+          Chrome 启动失败时，仅在受管版本已安装的情况下回退。
+        </p>
         <label className="browser-settings-checkbox">
           <input
             type="checkbox"
@@ -122,7 +145,8 @@ export function AgentBrowserSettingsPanel(): React.JSX.Element {
           打开的网页。浏览器在获准导航时启动，在任务结束或取消时关闭。
         </p>
         <p className="hint">
-          切换显示或批准模式会关闭当前 Agent 浏览器，下一次导航使用新配置。
+          切换来源、显示或批准模式会关闭当前 Agent
+          浏览器，下一次导航使用新配置。
         </p>
         <p className="hint">使用临时隔离会话，不加载用户浏览器资料。</p>
         {saving && (

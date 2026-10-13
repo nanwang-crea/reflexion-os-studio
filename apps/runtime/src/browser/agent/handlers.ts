@@ -21,6 +21,7 @@ export const agentBrowserSettingsCommandHandlers: Record<
     const stored = store.browserSettings.get()
     return {
       settings: {
+        source: stored.agentBrowserSource,
         enabled: stored.agentBrowserEnabled,
         display: stored.agentBrowserDisplay,
         approval: stored.agentBrowserApproval,
@@ -32,12 +33,14 @@ export const agentBrowserSettingsCommandHandlers: Record<
     const current = store.browserSettings.get()
     if (
       !next.enabled ||
+      current.agentBrowserSource !== next.source ||
       current.agentBrowserDisplay !== next.display ||
       current.agentBrowserApproval !== next.approval
     )
       browser?.revoke()
     store.browserSettings.upsert({
       ...current,
+      agentBrowserSource: next.source,
       agentBrowserEnabled: next.enabled,
       agentBrowserDisplay: next.display,
       agentBrowserApproval: next.approval,

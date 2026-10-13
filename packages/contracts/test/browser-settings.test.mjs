@@ -97,6 +97,7 @@ test('Agent browser display defaults to headless and only accepts supported mode
     enabled: false,
     display: 'headless',
     approval: 'follow-session',
+    source: 'auto',
   })
   assert.equal(
     BrowserSettingsSchema.parse({ mode: 'embedded', defaultRoute: 'system' })
@@ -113,4 +114,26 @@ test('Agent browser display defaults to headless and only accepts supported mode
       .success,
     false,
   )
+})
+
+test('Agent browser source rejects arbitrary executable paths and settings results match handlers', async () => {
+  const { AgentBrowserSettingsSchema, CommandSchemaRegistry } =
+    await import('../dist/index.js')
+  assert.equal(
+    AgentBrowserSettingsSchema.safeParse({ source: '/tmp/custom-browser' })
+      .success,
+    false,
+  )
+  for (const source of ['auto', 'system-chrome', 'managed'])
+    assert.equal(AgentBrowserSettingsSchema.parse({ source }).source, source)
+  const settings = AgentBrowserSettingsSchema.parse({})
+  for (const command of [
+    'agent_browser_settings.get',
+    'agent_browser_settings.update',
+  ]) {
+    assert.equal(
+      CommandSchemaRegistry[command].result.safeParse({ settings }).success,
+      true,
+    )
+  }
 })

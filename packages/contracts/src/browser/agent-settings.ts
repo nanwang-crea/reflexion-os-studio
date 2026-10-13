@@ -8,7 +8,21 @@ export const AgentBrowserApprovalSchema = z.enum([
   'allow-read-only',
 ])
 export type AgentBrowserApproval = z.infer<typeof AgentBrowserApprovalSchema>
+export const AgentBrowserSourceSchema = z.enum([
+  'auto',
+  'system-chrome',
+  'managed',
+])
+export type AgentBrowserSource = z.infer<typeof AgentBrowserSourceSchema>
+export const AgentBrowserLaunchSchema = z.strictObject({
+  channel: z.enum(['chrome', 'chromium']),
+  executablePath: z.string().min(1).optional(),
+  fallbackManaged: z.boolean().default(false),
+})
+export type AgentBrowserLaunch = z.infer<typeof AgentBrowserLaunchSchema>
+
 export const AgentBrowserSettingsSchema = z.strictObject({
+  source: AgentBrowserSourceSchema.default('auto'),
   enabled: z.boolean().default(false),
   display: AgentBrowserDisplaySchema.default('headless'),
   approval: AgentBrowserApprovalSchema.default('follow-session'),
@@ -19,6 +33,7 @@ export const DEFAULT_AGENT_BROWSER_SETTINGS = AgentBrowserSettingsSchema.parse(
 )
 
 export const AgentBrowserRuntimeSchema = z.strictObject({
+  systemChromeAvailable: z.boolean(),
   state: z.enum(['not-installed', 'downloading', 'installed', 'failed']),
   progress: z.number().min(0).max(100).nullable(),
   phase: z.enum(['idle', 'download', 'verify', 'ready', 'failed']),

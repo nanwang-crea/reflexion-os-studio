@@ -21,7 +21,9 @@ export class BrowserAgentService {
   constructor(
     private readonly store: Store,
     private readonly createClient = (display: AgentBrowserDisplay) => {
-      const browsers = this.runtime.requireInstalled()
+      const { launch, browsers } = this.runtime.resolveLaunch(
+        this.store.browserSettings.get().agentBrowserSource ?? 'auto',
+      )
       const paths = browserWorkerPaths()
       return new McpClient({
         command: process.execPath,
@@ -29,13 +31,15 @@ export class BrowserAgentService {
           '--disable-warning=ExperimentalWarning',
           paths.worker,
           `--display=${display}`,
+          `--launch=${JSON.stringify(launch)}`,
         ],
-        env: { PLAYWRIGHT_BROWSERS_PATH: browsers },
+        env: browsers ? { PLAYWRIGHT_BROWSERS_PATH: browsers } : {},
         managed: true,
       })
     },
+    runtime?: BrowserRuntimeService,
   ) {
-    this.runtime = new BrowserRuntimeService(store.dataDir)
+    this.runtime = runtime ?? new BrowserRuntimeService(store.dataDir)
   }
   get enabled(): boolean {
     return this.store.browserSettings.get().agentBrowserEnabled

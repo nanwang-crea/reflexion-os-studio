@@ -73,8 +73,10 @@ export function browserTools(ctx: ToolContext): ToolDefinition[] {
           return {
             content:
               code === 'browser_runtime_not_installed'
-                ? '浏览器组件未安装。请用户在“设置 → Agent 浏览器”点击下载浏览器组件；Agent 不会自动下载。'
-                : `浏览器操作被拒绝或失败（${code}）。页面版本失效时重新导航；浏览器不可用时检查浏览器组件与系统依赖。`,
+                ? '当前来源没有可用浏览器。请用户在“设置 → Agent 浏览器”选择本机 Chrome 或下载受管 Chromium；Agent 不会自动下载。'
+                : code === 'browser_system_chrome_unavailable'
+                  ? '本机 Chrome 未检测到或启动不兼容。请用户在“设置 → Agent 浏览器”选择自动模式或下载并选择受管 Chromium。'
+                  : `浏览器操作被拒绝或失败（${code}）。页面版本失效时重新导航；浏览器不可用时检查浏览器组件与系统依赖。`,
             code,
             isError: true,
           }

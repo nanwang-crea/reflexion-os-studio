@@ -171,7 +171,12 @@ test('independent Agent settings preserve user browser preferences, persist disp
     )
     assert.deepEqual(
       agentHandlers['agent_browser_settings.get']({}, context).settings,
-      { enabled: true, display: 'headed', approval: 'follow-session' },
+      {
+        enabled: true,
+        display: 'headed',
+        approval: 'follow-session',
+        source: 'auto',
+      },
     )
     agentHandlers['agent_browser_settings.update'](
       { settings: { enabled: true, display: 'headed' } },
@@ -198,4 +203,29 @@ test('independent Agent settings preserve user browser preferences, persist disp
   } finally {
     reopened.close()
   }
+})
+
+test('source updates revoke workers, persist and survive stale ordinary-browser updates', async () => {
+  const { agentBrowserSettingsCommandHandlers: agentHandlers } =
+    await import('../dist/browser/agent/handlers.js')
+  const { browserSettingsCommandHandlers: userHandlers } =
+    await import('../dist/browser-settings/handlers.js')
+  const store = new Store(
+    mkdtempSync(join(tmpdir(), 'browser-source-settings-')),
+  )
+  const old = store.browserSettings.get()
+  let revoked = 0
+  const context = { store, browser: { revoke: () => revoked++ } }
+  agentHandlers['agent_browser_settings.update'](
+    { settings: { enabled: true, source: 'managed' } },
+    context,
+  )
+  assert.equal(revoked, 1)
+  userHandlers['browser_settings.update']({ settings: old }, context)
+  assert.equal(store.browserSettings.get().agentBrowserSource, 'managed')
+  const dir = store.dataDir
+  store.close()
+  const reopened = new Store(dir)
+  assert.equal(reopened.browserSettings.get().agentBrowserSource, 'managed')
+  reopened.close()
 })

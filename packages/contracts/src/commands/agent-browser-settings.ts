@@ -22,7 +22,6 @@ export const agentBrowserSettingsCommands = {
     params: z.strictObject({ requestId: RequestIdSchema }),
     result: z.strictObject({
       settings: AgentBrowserSettingsSchema,
-      AgentBrowserRuntimeSchema,
     }),
   },
   'agent_browser_settings.update': {
@@ -32,7 +31,6 @@ export const agentBrowserSettingsCommands = {
     }),
     result: z.strictObject({
       settings: AgentBrowserSettingsSchema,
-      AgentBrowserRuntimeSchema,
     }),
   },
 }

@@ -5,6 +5,7 @@ import { normalizeBrowserUrl } from './browser/url.js'
 
 /** Low-sensitivity preferences only; website data stays in the native adapter. */
 export const BrowserSettingsSchema = z.strictObject({
+  agentBrowserSource: AgentBrowserSettingsSchema.shape.source,
   agentBrowserEnabled: AgentBrowserSettingsSchema.shape.enabled,
   agentBrowserDisplay: AgentBrowserSettingsSchema.shape.display,
   agentBrowserApproval: AgentBrowserSettingsSchema.shape.approval,

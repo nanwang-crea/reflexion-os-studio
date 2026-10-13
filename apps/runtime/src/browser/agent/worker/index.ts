@@ -5,6 +5,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js'
 import {
+  AgentBrowserLaunchSchema,
   AgentBrowserNavigateSchema,
   AgentBrowserDisplaySchema,
   AgentBrowserNavigateJsonSchema,
@@ -18,13 +19,21 @@ const display = AgentBrowserDisplaySchema.parse(
     .find((arg) => arg.startsWith('--display='))
     ?.slice('--display='.length) ?? 'headless',
 )
-const backend = new PlaywrightBackend(undefined, undefined, display)
+const launch = AgentBrowserLaunchSchema.parse(
+  JSON.parse(
+    process.argv
+      .find((arg) => arg.startsWith('--launch='))
+      ?.slice('--launch='.length) ?? '{"channel":"chromium"}',
+  ),
+)
+const backend = new PlaywrightBackend(undefined, undefined, display, launch)
 const server = new Server(
   { name: 'reflexion-playwright', version: '1' },
   { capabilities: { tools: {} } },
 )
 let tail = Promise.resolve()
 const errors = new Set([
+  'browser_system_chrome_unavailable',
   'browser_url_denied',
   'browser_network_denied',
   'browser_sensitive_content',

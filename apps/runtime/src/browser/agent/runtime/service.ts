@@ -1,3 +1,4 @@
+import { detectSystemChrome } from './system-chrome.js'
 import {
   accessSync,
   constants,
@@ -11,6 +12,8 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import {
   AgentBrowserInstallationSchema,
   type AgentBrowserRuntime,
+  type AgentBrowserSource,
+  type AgentBrowserLaunch,
 } from '@reflexion-os-studio/contracts'
 import { browserRuntimePaths } from './paths.js'
 import { runBrowserInstaller } from './process.js'
@@ -24,6 +27,7 @@ export class BrowserRuntimeService {
     dataDir: string,
     private readonly run = runBrowserInstaller,
     paths?: ReturnType<typeof browserRuntimePaths>,
+    private readonly detectChrome = detectSystemChrome,
   ) {
     try {
       this.paths = paths ?? browserRuntimePaths(dataDir)
@@ -31,6 +35,7 @@ export class BrowserRuntimeService {
       this.paths = null
     }
     this.current = {
+      systemChromeAvailable: this.detectChrome() !== null,
       state: 'not-installed',
       phase: 'idle',
       progress: null,
@@ -55,12 +60,37 @@ export class BrowserRuntimeService {
           phase: 'idle',
         }
     }
-    return { ...this.current }
+    return {
+      ...this.current,
+      systemChromeAvailable: this.detectChrome() !== null,
+    }
   }
   requireInstalled(): string {
     if (this.status.state !== 'installed' || !this.paths)
       throw new Error('browser_runtime_not_installed')
     return this.paths.browsers
+  }
+  resolveLaunch(source: AgentBrowserSource): {
+    launch: AgentBrowserLaunch
+    browsers?: string
+  } {
+    const chrome = source !== 'managed' ? this.detectChrome() : null
+    const managed = this.isInstalled()
+    if (chrome)
+      return {
+        launch: {
+          channel: 'chrome',
+          executablePath: chrome,
+          fallbackManaged: source === 'auto' && managed,
+        },
+        ...(managed ? { browsers: this.paths!.browsers } : {}),
+      }
+    if (source === 'system-chrome')
+      throw new Error('browser_system_chrome_unavailable')
+    return {
+      launch: { channel: 'chromium', fallbackManaged: false },
+      browsers: this.requireInstalled(),
+    }
   }
   install(): AgentBrowserRuntime {
     if (this.task || this.status.state === 'installed') return this.status

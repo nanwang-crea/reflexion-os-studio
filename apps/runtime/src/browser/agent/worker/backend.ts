@@ -1,9 +1,10 @@
+import { launchAgentBrowser } from './launch.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { createConnection } from '@playwright/mcp'
-import { chromium, type Browser, type BrowserContext } from 'playwright'
+import { type Browser, type BrowserContext } from 'playwright'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import {
@@ -12,6 +13,7 @@ import {
   type AgentBrowserDocument,
   type AgentBrowserPage,
   type AgentBrowserDisplay,
+  type AgentBrowserLaunch,
 } from '@reflexion-os-studio/contracts'
 import { createBrowserProxy } from '../security/proxy.js'
 import { allowedRequest, publicAddress } from '../security/network.js'
@@ -34,6 +36,10 @@ export class PlaywrightBackend {
     private readonly proxyFactory = createBrowserProxy,
     private readonly resolveAddress = publicAddress,
     private readonly display: AgentBrowserDisplay = 'headless',
+    private readonly launch: AgentBrowserLaunch = {
+      channel: 'chromium',
+      fallbackManaged: false,
+    },
   ) {}
 
   async navigate(
@@ -51,23 +57,26 @@ export class PlaywrightBackend {
       if (generation !== this.generation) throw new Error('browser_closed')
       this.proxy = await this.proxyFactory(origin)
       if (generation !== this.generation) throw new Error('browser_closed')
-      this.browser = await chromium.launch({
-        channel: 'chromium',
-        headless: this.display === 'headless',
-        chromiumSandbox: true,
-        proxy: { server: this.proxy.server, bypass: '<-loopback>' },
-        args: [
-          ...(process.platform === 'linux' &&
-          this.display === 'headed' &&
-          process.env.WAYLAND_DISPLAY &&
-          !process.env.DISPLAY
-            ? ['--ozone-platform=wayland']
-            : []),
-          '--disable-background-networking',
-          '--disable-quic',
-          '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
-        ],
-      })
+      this.browser = await launchAgentBrowser(
+        this.launch,
+        {
+          headless: this.display === 'headless',
+          chromiumSandbox: true,
+          proxy: { server: this.proxy.server, bypass: '<-loopback>' },
+          args: [
+            ...(process.platform === 'linux' &&
+            this.display === 'headed' &&
+            process.env.WAYLAND_DISPLAY &&
+            !process.env.DISPLAY
+              ? ['--ozone-platform=wayland']
+              : []),
+            '--disable-background-networking',
+            '--disable-quic',
+            '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
+          ],
+        },
+        () => generation === this.generation,
+      )
       if (generation !== this.generation) throw new Error('browser_closed')
       this.context = await this.browser.newContext({
         acceptDownloads: false,

@@ -24,7 +24,7 @@ test('settings install flow shows progress, supports cancellation and stops idle
     await build({
       absWorkingDir: desktop,
       stdin: {
-        contents: `import React from 'react'; import { createRoot } from 'react-dom/client'; import { BrowserRuntimePanel } from './frontend/features/settings/agent-browser/BrowserRuntimePanel'; const root = createRoot(document.getElementById('root')); root.render(React.createElement(BrowserRuntimePanel)); window.unmount = () => root.unmount();`,
+        contents: `import React from 'react'; import { createRoot } from 'react-dom/client'; import { AgentBrowserSettingsPanel } from './frontend/features/settings/agent-browser/AgentBrowserSettingsPanel'; const root = createRoot(document.getElementById('root')); root.render(React.createElement(AgentBrowserSettingsPanel)); window.unmount = () => root.unmount();`,
         resolveDir: desktop,
         loader: 'tsx',
       },
@@ -40,8 +40,11 @@ test('settings install flow shows progress, supports cancellation and stops idle
               { filter: /api[/\\]agent-browser-settings\.ts$/ },
               () => ({
                 contents: `
-            let state = { state: 'not-installed', phase: 'idle', progress: null, version: 'fixture', error: null };
-            window.requests = { status: 0, install: 0, cancel: 0 };
+            let state = { state: 'not-installed', phase: 'idle', progress: null, version: 'fixture', error: null, systemChromeAvailable: true };
+            window.requests = { status: 0, install: 0, cancel: 0, sources: [] };
+            let settings = { enabled: false, source: 'auto', display: 'headless', approval: 'follow-session' };
+            export async function getAgentBrowserSettings() { return { ...settings }; }
+            export async function updateAgentBrowserSettings(next) { settings = next; window.requests.sources.push(next.source); return { ...settings }; }
             export async function getAgentBrowserRuntime() { window.requests.status++; return { ...state }; }
             export async function installAgentBrowserRuntime() { window.requests.install++; state = { ...state, state: 'downloading', phase: 'download', progress: 25 }; return { ...state }; }
             export async function cancelAgentBrowserRuntime() { window.requests.cancel++; state = { ...state, state: 'failed', phase: 'failed', error: 'download-cancelled' }; return { ...state }; }
@@ -77,7 +80,19 @@ test('settings install flow shows progress, supports cancellation and stops idle
     await page
       .getByRole('button', { name: '下载浏览器组件', exact: true })
       .waitFor()
+    await page
+      .getByText('已检测到本机 Chrome，自动模式下无需下载。', { exact: true })
+      .waitFor()
     assert.equal(await page.evaluate(() => window.requests.install), 0)
+    await page
+      .getByRole('combobox', { name: 'Agent 浏览器来源', exact: true })
+      .click()
+    await page
+      .getByRole('option', { name: '仅本机 Chrome', exact: true })
+      .click()
+    assert.deepEqual(await page.evaluate(() => window.requests.sources), [
+      'system-chrome',
+    ])
     await page
       .getByRole('button', { name: '下载浏览器组件', exact: true })
       .click()
