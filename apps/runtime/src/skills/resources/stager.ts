@@ -4,6 +4,7 @@ import {
   rmSync,
   readFileSync,
   realpathSync,
+  lstatSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative, isAbsolute } from 'node:path'
@@ -33,6 +34,8 @@ export class SkillResourceStager {
     let snapshot = this.snapshots.get(key)
     if (!snapshot) {
       if (this.snapshots.size >= 32) throw new Error('Skill 临时资源预算已用完')
+      if (lstatSync(plugin.installPath).isSymbolicLink())
+        throw new Error('Skill 包不能是符号链接')
       const source = realpathSync(plugin.installPath)
       const within = relative(realpathSync(managedRoot), source)
       if (!within || within.startsWith('..') || isAbsolute(within))

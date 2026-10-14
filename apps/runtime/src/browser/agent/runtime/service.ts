@@ -106,9 +106,16 @@ export class BrowserRuntimeService {
       progress: null,
       error: null,
     }
-    this.task = this.download(this.controller.signal).finally(() => {
+    this.task = this.download(this.controller.signal).then((error) => {
       this.task = null
       this.controller = null
+      this.current = {
+        ...this.current,
+        state: error ? 'failed' : 'installed',
+        phase: error ? 'failed' : 'ready',
+        progress: null,
+        error,
+      }
     })
     return this.status
   }
@@ -126,9 +133,12 @@ export class BrowserRuntimeService {
       isBrowserInstallation(this.paths.browsers, this.paths.version)
     )
   }
-  private async download(signal: AbortSignal): Promise<void> {
+  private async download(
+    signal: AbortSignal,
+  ): Promise<'download-cancelled' | 'download-failed' | null> {
     const paths = this.paths!
     let staging: string | null = null
+    let error: 'download-cancelled' | 'download-failed' | null = null
     try {
       await mkdir(paths.root, { recursive: true })
       // Only our installer writes here. Remove abandoned partial downloads after restart.
@@ -184,24 +194,12 @@ export class BrowserRuntimeService {
         (directory) => isBrowserInstallation(directory, paths.version),
       )
       staging = null
-      this.current = {
-        ...this.current,
-        state: 'installed',
-        phase: 'ready',
-        progress: null,
-        error: null,
-      }
     } catch {
-      this.current = {
-        ...this.current,
-        state: 'failed',
-        phase: 'failed',
-        progress: null,
-        error: signal.aborted ? 'download-cancelled' : 'download-failed',
-      }
+      error = signal.aborted ? 'download-cancelled' : 'download-failed'
     } finally {
       if (staging)
         await rm(staging, { recursive: true, force: true }).catch(() => {})
     }
+    return error
   }
 }

@@ -155,10 +155,8 @@ export class PluginPackageInstaller {
       target = join(installRoot, manifest.id)
       mkdirSync(join(target, '..'), { recursive: true })
       options.onProgress?.('committing', 90)
-      if (
-        updating &&
-        this.store.plugins.get(updating.id)?.version !== updating.version
-      )
+      const latest = updating ? this.store.plugins.get(updating.id) : null
+      if (updating && latest?.version !== updating.version)
         throw new Error('Skill 版本已变化，请重试更新')
       if (existsSync(target)) {
         if (updating === null)
@@ -179,18 +177,27 @@ export class PluginPackageInstaller {
         sourceRef: resolved.sourceRef,
         scope,
         projectId,
-        status: updating?.enabled === false ? 'disabled' : 'enabled',
+        status: latest?.enabled === false ? 'disabled' : 'enabled',
         installPath: target,
-        enabled: updating?.enabled ?? true,
+        enabled: latest?.enabled ?? true,
         manifest,
         error: null,
       })
-      if (backup !== null) cleanupTemporary(backup)
+      if (backup !== null) {
+        try {
+          cleanupTemporary(backup)
+        } catch {
+          process.stderr.write(
+            '[runtime] Skill backup retained for startup cleanup\n',
+          )
+        }
+      }
       return plugin
     } catch (error) {
-      if (target !== null && existsSync(target) && backup !== null) {
-        cleanupTemporary(target)
+      if (target !== null && backup !== null && existsSync(backup)) {
+        if (existsSync(target)) cleanupTemporary(target)
         renameSync(backup, target)
+        backup = null
       } else if (
         committed &&
         target !== null &&
@@ -203,7 +210,7 @@ export class PluginPackageInstaller {
     } finally {
       cleanupTemporary(sourceTemporary)
       if (stage !== null) cleanupTemporary(stage)
-      if (backup !== null && existsSync(backup)) cleanupTemporary(backup)
+      // A failed rollback must retain the only recoverable copy for startup recovery.
     }
   }
 

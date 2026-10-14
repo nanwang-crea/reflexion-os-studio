@@ -10,7 +10,12 @@ export function recoverPluginTransactions(
   store: Store,
 ): void {
   for (const entry of readdirSync(pluginsRoot, { withFileTypes: true })) {
-    if (!entry.name.startsWith('.')) continue
+    if (
+      !isDisposable(entry.name) &&
+      !entry.name.startsWith('.backup-') &&
+      !entry.name.startsWith('.remove-')
+    )
+      continue
     const path = join(pluginsRoot, entry.name)
     if (entry.isSymbolicLink() || !entry.isDirectory()) {
       cleanupTemporary(path)
@@ -59,7 +64,7 @@ function recoverRemoval(path: string, root: string, store: Store): void {
 }
 
 function isDisposable(name: string): boolean {
-  return ['.stage-', '.source-', '.preview-'].some((prefix) =>
+  return ['.stage-', '.source-', '.preview-', '.author-'].some((prefix) =>
     name.startsWith(prefix),
   )
 }

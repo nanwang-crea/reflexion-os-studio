@@ -77,7 +77,6 @@ export function migrateSkillLocations(
       })
     }
   }
-  let failed = false
   for (const candidate of candidates) {
     if (!candidate.source || builtinIds.has(candidate.id)) continue
     try {
@@ -88,7 +87,11 @@ export function migrateSkillLocations(
       if (candidate.source !== target && !existsSync(target))
         copyPackage(candidate.source, target)
       const current = store.plugins.get(candidate.id)
-      if (current && inspectPackage(target).id === candidate.id) {
+      if (
+        current &&
+        current.projectId === candidate.projectId &&
+        inspectPackage(target).id === candidate.id
+      ) {
         store.plugins.upsert({
           ...current,
           installPath: target,
@@ -99,11 +102,12 @@ export function migrateSkillLocations(
         })
       }
     } catch {
-      failed = true
       process.stderr.write(
         `[runtime] legacy Skill ${candidate.id} could not be migrated\n`,
       )
     }
   }
-  if (!failed) writeFileSync(marker, '1\n', 'utf8')
+  // Existing records retry failed migrations. Never rediscover retained originals
+  // after a different package fails, otherwise uninstalled skills reappear.
+  writeFileSync(marker, '1\n', 'utf8')
 }

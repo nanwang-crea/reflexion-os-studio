@@ -59,7 +59,9 @@ export class SkillPluginService {
       this.pluginsRoot,
       builtinIds,
     )
-    recoverPluginTransactions(this.pluginsRoot, this.store)
+    for (const { root } of this.discoveryRoots()) {
+      if (existsSync(root)) recoverPluginTransactions(root, this.store)
+    }
     this.installer = new PluginPackageInstaller(
       this.store,
       this.pluginsRoot,
@@ -119,9 +121,11 @@ export class SkillPluginService {
   ) {
     if (!this.registry.get(skillId, projectId))
       throw new Error('Skill 不可用或不属于当前项目')
-    const plugin =
-      this.store.plugins.get(skillId) ??
-      this.list().find((item) => item.id === skillId)
+    const plugin = this.builtinManifests.has(skillId)
+      ? this.list().find(
+          (item) => item.id === skillId && item.source === 'builtin',
+        )
+      : this.store.plugins.get(skillId)
     if (!plugin) throw new Error('该内置 Skill 没有外部资源包')
     return this.resources.prepare(
       plugin,
@@ -206,30 +210,18 @@ export class SkillPluginService {
 
   rescan(): PluginRecord[] {
     const seen = new Set<string>()
-    const roots = [{ projectId: null as string | null, root: this.pluginsRoot }]
-    for (const project of this.store.projects.list()) {
-      try {
-        roots.push({
-          projectId: project.id,
-          root: skillRoot(this.store, this.pluginsRoot, project.id),
-        })
-      } catch {
-        continue
-      }
-    }
-    for (const { root, projectId } of roots) {
+    for (const { root, projectId } of this.discoveryRoots()) {
       if (!existsSync(root)) continue
-      recoverPluginTransactions(root, this.store)
       for (const entry of readdirSync(root, {
         withFileTypes: true,
       })) {
         if (entry.name === 'projects') continue
         if (!entry.isDirectory() || !ID_PATTERN.test(entry.name)) continue
         const installPath = join(root, entry.name)
-        seen.add(entry.name)
         const existing = this.store.plugins.get(entry.name)
         if (existing && existing.projectId !== projectId) continue
         if (this.builtinManifests.has(entry.name)) continue
+        seen.add(entry.name)
         try {
           const loaded = loadSkillPackage(installPath)
           if (loaded.manifest.id !== entry.name) {
@@ -283,6 +275,21 @@ export class SkillPluginService {
     }
     this.reloadRegistry()
     return this.list()
+  }
+
+  private discoveryRoots() {
+    const roots = [{ projectId: null as string | null, root: this.pluginsRoot }]
+    for (const project of this.store.projects.list()) {
+      try {
+        roots.push({
+          projectId: project.id,
+          root: skillRoot(this.store, this.pluginsRoot, project.id),
+        })
+      } catch {
+        continue
+      }
+    }
+    return roots
   }
 
   private reloadRegistry(): void {

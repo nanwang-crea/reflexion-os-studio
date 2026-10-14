@@ -4,6 +4,7 @@ import {
   writeFileSync,
   rmSync,
   realpathSync,
+  lstatSync,
 } from 'node:fs'
 import { join, relative, isAbsolute } from 'node:path'
 import type {
@@ -29,6 +30,8 @@ export async function saveAuthoredSkill(
   try {
     let directory = temporary
     if (current?.installPath) {
+      if (lstatSync(current.installPath).isSymbolicLink())
+        throw new Error('Skill 包不能是符号链接')
       const source = realpathSync(current.installPath)
       const within = relative(realpathSync(root), source)
       if (!within || within.startsWith('..') || isAbsolute(within))

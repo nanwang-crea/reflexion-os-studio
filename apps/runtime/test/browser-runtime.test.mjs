@@ -359,3 +359,30 @@ test('a failed rollback retains the previous installation backup for recovery', 
   assert.ok(backup)
   assert.deepEqual(await readdir(join(root, backup, 'previous')), ['old'])
 })
+
+test('a retry triggered immediately when failure is published starts a new download', async (t) => {
+  let failedOnce = false
+  const { service } = await fixture(t, async (...args) => {
+    if (!failedOnce) {
+      failedOnce = true
+      throw new Error('first download fails')
+    }
+    return downloaded(...args)
+  })
+  let current = service.current
+  let retried = false
+  Object.defineProperty(service, 'current', {
+    get: () => current,
+    set: (value) => {
+      current = value
+      if (value.state === 'failed' && !retried) {
+        retried = true
+        assert.equal(service.install().state, 'downloading')
+      }
+    },
+  })
+  service.install()
+  assert.equal((await finished(service)).state, 'installed')
+  assert.ok(retried)
+  await service.shutdown()
+})

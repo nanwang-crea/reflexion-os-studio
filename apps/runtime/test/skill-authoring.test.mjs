@@ -128,6 +128,9 @@ test('scan discovers project packages without a database record; removal keeps o
 
 test('legacy installs migrate once, remain recoverable and do not resurrect after uninstall', async (t) => {
   const f = fixture(t)
+  mkdirSync(join(f.data, 'plugins', 'broken-legacy-helper'), {
+    recursive: true,
+  })
   const source = join(f.data, 'plugins', 'legacy-helper')
   mkdirSync(source, { recursive: true })
   writeFileSync(
@@ -239,3 +242,156 @@ test(
     )
   },
 )
+
+test('rescanning leaves active transactions and unrelated hidden files intact; restart cleans only transactions', async (t) => {
+  const f = fixture(t)
+  const root = join(f.data, 'skills')
+  const stage = join(root, '.source-active')
+  mkdirSync(stage)
+  writeFileSync(join(stage, 'in-progress.txt'), 'cloning')
+  writeFileSync(join(root, '.gitignore'), '*.local\n')
+  f.service.rescan()
+  assert.equal(readFileSync(join(stage, 'in-progress.txt'), 'utf8'), 'cloning')
+  const restarted = new SkillPluginService(f.store, f.data, () => {})
+  t.after(() => restarted.dispose())
+  assert.equal(existsSync(stage), false)
+  assert.equal(readFileSync(join(root, '.gitignore'), 'utf8'), '*.local\n')
+})
+
+test('failed replacement after moving the installed package restores its backup', async (t) => {
+  const f = fixture(t)
+  const previous = await f.service.save(input())
+  const source = join(f.root, 'replacement')
+  mkdirSync(source)
+  writeFileSync(
+    join(source, 'plugin.json'),
+    JSON.stringify({ ...previous.manifest, version: '1.0.1' }),
+  )
+  writeFileSync(join(source, 'SKILL.md'), 'Replacement instructions')
+  const { PluginPackageInstaller } =
+    await import('../dist/plugins/installer.js')
+  const { readdirSync } = await import('node:fs')
+  const root = join(f.data, 'skills')
+  const installer = new PluginPackageInstaller(f.store, root, new Set())
+  await assert.rejects(
+    installer.updateFromSource(
+      previous.id,
+      { source: 'local', path: source },
+      {
+        onProgress(phase) {
+          if (phase !== 'committing') return
+          for (const name of readdirSync(root)) {
+            if (name.startsWith('.stage-'))
+              rmSync(join(root, name), { recursive: true, force: true })
+          }
+        },
+      },
+    ),
+    /ENOENT/,
+  )
+  assert.ok(existsSync(join(previous.installPath, 'scripts', 'report.mjs')))
+  assert.equal(
+    JSON.parse(readFileSync(join(previous.installPath, 'plugin.json'), 'utf8'))
+      .version,
+    '1.0.0',
+  )
+  assert.equal(f.store.plugins.get(previous.id).version, '1.0.0')
+})
+
+test('a same-id package in another scope cannot keep a missing installed package enabled', async (t) => {
+  const f = fixture(t)
+  const installed = await f.service.save(input(f.project.id))
+  const globalPath = join(f.data, 'skills', installed.id)
+  mkdirSync(globalPath)
+  writeFileSync(
+    join(globalPath, 'SKILL.md'),
+    `---\nname: ${installed.id}\ndescription: A conflicting global package.\n---\n\nOther instructions.\n`,
+  )
+  rmSync(installed.installPath, { recursive: true })
+  f.service.rescan()
+  assert.equal(f.store.plugins.get(installed.id).status, 'invalid')
+  assert.equal(f.store.plugins.get(installed.id).enabled, false)
+})
+
+test(
+  'preparing and updating reject a replaced package symlink inside the managed root',
+  { skip: process.platform === 'win32' },
+  async (t) => {
+    const f = fixture(t)
+    const installed = await f.service.save(input())
+    const redirected = join(f.data, 'skills', 'redirected-helper')
+    const { renameSync } = await import('node:fs')
+    renameSync(installed.installPath, redirected)
+    symlinkSync(redirected, installed.installPath)
+    assert.throws(
+      () => f.service.prepare(installed.id, null, 'linked'),
+      /符号链接/,
+    )
+    await assert.rejects(
+      f.service.save({
+        ...input(),
+        mode: 'update',
+        expectedVersion: installed.version,
+      }),
+      /符号链接/,
+    )
+    assert.equal(
+      JSON.parse(readFileSync(join(redirected, 'plugin.json'), 'utf8')).version,
+      '1.0.0',
+    )
+  },
+)
+
+test('update preserves a toggle made during installation and does not roll back after backup cleanup fails', async (t) => {
+  const f = fixture(t)
+  const previous = await f.service.save(input())
+  const source = join(f.root, 'replacement')
+  mkdirSync(source)
+  writeFileSync(
+    join(source, 'plugin.json'),
+    JSON.stringify({ ...previous.manifest, version: '1.0.1' }),
+  )
+  writeFileSync(join(source, 'SKILL.md'), 'Replacement instructions')
+  const { PluginPackageInstaller } =
+    await import('../dist/plugins/installer.js')
+  const fs = (await import('node:fs')).default
+  const { syncBuiltinESMExports } = await import('node:module')
+  const originalRemove = fs.rmSync
+  t.mock.method(fs, 'rmSync', (path, ...args) => {
+    if (String(path).includes('.backup-'))
+      throw Object.assign(new Error('backup is busy'), { code: 'EBUSY' })
+    return originalRemove(path, ...args)
+  })
+  syncBuiltinESMExports()
+  let updated
+  try {
+    const installer = new PluginPackageInstaller(
+      f.store,
+      join(f.data, 'skills'),
+      new Set(),
+    )
+    updated = await installer.updateFromSource(
+      previous.id,
+      { source: 'local', path: source },
+      {
+        onProgress(phase) {
+          if (phase === 'staging') f.service.toggle(previous.id, false)
+        },
+      },
+    )
+  } finally {
+    t.mock.restoreAll()
+    syncBuiltinESMExports()
+  }
+  assert.equal(updated.enabled, false)
+  assert.equal(f.store.plugins.get(previous.id).version, '1.0.1')
+  assert.equal(
+    JSON.parse(readFileSync(join(previous.installPath, 'plugin.json'), 'utf8'))
+      .version,
+    '1.0.1',
+  )
+  const restarted = new SkillPluginService(f.store, f.data, () => {})
+  t.after(() => restarted.dispose())
+  assert.equal(f.store.plugins.get(previous.id).version, '1.0.1')
+  assert.equal(f.store.plugins.get(previous.id).enabled, false)
+})
