@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { PlanReview } from './PlanReview'
+import './user-question.css'
 import type { ResourceLink } from '@reflexion-os-studio/runtime-client'
 import type { UserQuestionAnswer } from '@reflexion-os-studio/runtime-client'
 import type { PendingInteraction } from '../../../hooks/interactions/usePendingInteractions'
@@ -12,6 +13,8 @@ export function UserQuestionCard(props: {
     answers: UserQuestionAnswer[],
   ) => Promise<boolean>
 }): React.JSX.Element {
+  const bodyId = useId()
+  const [collapsed, setCollapsed] = useState(false)
   const [selected, setSelected] = useState<Record<string, string[]>>({})
   const [custom, setCustom] = useState<Record<string, string>>({})
   const [keepPlan, setKeepPlan] = useState(false)
@@ -50,83 +53,108 @@ export function UserQuestionCard(props: {
         props.interaction.kind === 'plan_approval' ? '计划审批' : 'Agent 提问'
       }
     >
-      {props.interaction.agent !== undefined &&
-        props.interaction.agent.depth > 0 && (
-          <div className="agent-source interaction-agent-source">
-            {props.interaction.agent.displayName} · 子 Agent · 第{' '}
-            {props.interaction.agent.depth} 层
-          </div>
-        )}
-      {props.interaction.questions.map((question) => (
-        <fieldset key={question.id}>
-          <legend>
-            <span>{question.header}</span>
-            {question.question}
-          </legend>
-          {question.plan && (
-            <PlanReview
-              snapshot={question.plan}
-              onResourceClick={props.onResourceClick}
-            />
+      <header className="user-question-heading">
+        <strong>
+          {props.interaction.kind === 'plan_approval'
+            ? '计划审批'
+            : 'Agent 提问'}
+        </strong>
+        <button
+          type="button"
+          className="ghost"
+          aria-expanded={!collapsed}
+          aria-controls={bodyId}
+          onClick={() => setCollapsed((current) => !current)}
+        >
+          {collapsed ? '展开问题' : '收起问题'}
+        </button>
+      </header>
+      <div
+        id={bodyId}
+        className="user-question-body"
+        hidden={collapsed}
+        role="region"
+        aria-label="待回答问题"
+        tabIndex={0}
+      >
+        {props.interaction.agent !== undefined &&
+          props.interaction.agent.depth > 0 && (
+            <div className="agent-source interaction-agent-source">
+              {props.interaction.agent.displayName} · 子 Agent · 第{' '}
+              {props.interaction.agent.depth} 层
+            </div>
           )}
-          <div className="user-question-options">
-            {question.options.map((option) => {
-              const values = selected[question.id] ?? []
-              const checked = values.includes(option.id)
-              return (
-                <label key={option.id} className={checked ? 'selected' : ''}>
-                  <input
-                    type={question.multiSelect ? 'checkbox' : 'radio'}
-                    name={question.id}
-                    checked={checked}
-                    onChange={() =>
-                      setSelected((current) => ({
-                        ...current,
-                        [question.id]: question.multiSelect
-                          ? checked
-                            ? values.filter((id) => id !== option.id)
-                            : [...values, option.id]
-                          : [option.id],
-                      }))
-                    }
-                  />
-                  <span>
-                    <strong>{option.label}</strong>
-                    <small>{option.description}</small>
-                  </span>
-                </label>
-              )
-            })}
-          </div>
-          {question.plan && (
-            <label className="plan-retain-option">
-              <input
-                type="checkbox"
-                checked={keepPlan}
-                onChange={(event) => setKeepPlan(event.target.checked)}
+        {props.interaction.questions.map((question) => (
+          <fieldset key={question.id}>
+            <legend>
+              <span>{question.header}</span>
+              {question.question}
+            </legend>
+            {question.plan && (
+              <PlanReview
+                snapshot={question.plan}
+                onResourceClick={props.onResourceClick}
               />
-              完成后保留计划文件
-            </label>
-          )}
-          <textarea
-            rows={2}
-            maxLength={1000}
-            placeholder={
-              props.interaction.kind === 'plan_approval'
-                ? '修改意见（可选）'
-                : '其他答案（可选）'
-            }
-            value={custom[question.id] ?? ''}
-            onChange={(event) =>
-              setCustom((current) => ({
-                ...current,
-                [question.id]: event.target.value,
-              }))
-            }
-          />
-        </fieldset>
-      ))}
-      <div className="user-question-actions">
+            )}
+            <div className="user-question-options">
+              {question.options.map((option) => {
+                const values = selected[question.id] ?? []
+                const checked = values.includes(option.id)
+                return (
+                  <label key={option.id} className={checked ? 'selected' : ''}>
+                    <input
+                      type={question.multiSelect ? 'checkbox' : 'radio'}
+                      name={question.id}
+                      checked={checked}
+                      onChange={() =>
+                        setSelected((current) => ({
+                          ...current,
+                          [question.id]: question.multiSelect
+                            ? checked
+                              ? values.filter((id) => id !== option.id)
+                              : [...values, option.id]
+                            : [option.id],
+                        }))
+                      }
+                    />
+                    <span>
+                      <strong>{option.label}</strong>
+                      <small>{option.description}</small>
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+            {question.plan && (
+              <label className="plan-retain-option">
+                <input
+                  type="checkbox"
+                  checked={keepPlan}
+                  onChange={(event) => setKeepPlan(event.target.checked)}
+                />
+                完成后保留计划文件
+              </label>
+            )}
+            <textarea
+              rows={2}
+              maxLength={1000}
+              placeholder={
+                props.interaction.kind === 'plan_approval'
+                  ? '修改意见（可选）'
+                  : '其他答案（可选）'
+              }
+              value={custom[question.id] ?? ''}
+              onChange={(event) =>
+                setCustom((current) => ({
+                  ...current,
+                  [question.id]: event.target.value,
+                }))
+              }
+            />
+          </fieldset>
+        ))}
+      </div>
+      <div className="user-question-actions" hidden={collapsed}>
         <button
           type="button"
           className="ghost"

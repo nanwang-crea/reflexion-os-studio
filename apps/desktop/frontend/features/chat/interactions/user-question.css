@@ -1,0 +1,101 @@
+.interaction-queue {
+  display: grid;
+  gap: 6px;
+  max-width: var(--chat-col);
+  margin: 0 auto 8px;
+}
+
+.interaction-agent-source {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.user-question-card {
+  display: flex;
+  flex-direction: column;
+  max-height: min(420px, 45vh);
+  min-height: 0;
+  box-sizing: border-box;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+}
+
+.user-question-card fieldset {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.user-question-card legend {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.user-question-card legend span,
+.user-question-options small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.user-question-options {
+  display: grid;
+  gap: 6px;
+}
+
+.user-question-options label {
+  display: flex;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.user-question-options label.selected {
+  border-color: var(--accent);
+}
+
+.user-question-options label span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.user-question-card textarea {
+  resize: vertical;
+}
+
+.user-question-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.user-question-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.user-question-body {
+  display: grid;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  padding-right: 4px;
+}
+.user-question-body[hidden],
+.user-question-actions[hidden] {
+  display: none;
+}

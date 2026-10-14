@@ -69,6 +69,8 @@ test('roles configure real model/scope fields; collaboration shows canonical tre
         contents: `
 import React from 'react';import {createRoot} from 'react-dom/client';
 import './frontend/styles/style.css';
+import './frontend/features/chat/chat.css';
+import {InteractionQueue} from './frontend/features/chat/interactions/InteractionQueue';
 import {AgentRolesView} from './frontend/features/agents/AgentRolesView';
 import {CollaborationPanel} from './frontend/features/chat/collaboration/CollaborationPanel';
 import {useSkillCatalog} from './frontend/hooks/useAppSurfaces';
@@ -78,6 +80,7 @@ window.showRoles=()=>root.render(<AgentRolesView profiles={profiles} initialProj
 window.collaborationCommits=0;
 window.showCollaboration=()=>root.render(<React.Profiler id="collaboration" onRender={()=>window.collaborationCommits++}><CollaborationPanel onCollapse={()=>{}} chat={{sessionData:{session:{id:'session',projectId:'project'},messages:[{id:'user',runId:'root-run'}],runs:[{id:window.currentRootRun??'root-run',parentRunId:null,supersededByRunId:null,model:'parent-model',providerId:'synthetic',status:'completed',planId:'plan'}],plans:[{id:'plan',goal:'Deliver feature',steps:[{id:'step',title:'Implement and verify',status:'completed'}]}]},pendingApprovals:[],pendingInteractions:[]}}/></React.Profiler>);
 window.showCatalog=()=>{function Catalog(){const [project,setProject]=React.useState('project');window.catalogProject=setProject;const skills=useSkillCatalog(true,project);return <div>{skills.map(skill=><p key={skill.id}>{skill.id}</p>)}</div>};root.render(<Catalog/>)};
+window.showQuestions=()=>root.render(<div className="chat-view" style={{height:'100vh'}}><div className="chat-scroll"><p>实际对话正文</p></div><div className="composer-wrap"><InteractionQueue interactions={[{interactionId:'questions',kind:'user_question',questions:Array.from({length:3},(_,i)=>({id:'q'+i,header:'问题'+i,question:'请选择写作协作方式',multiSelect:false,options:Array.from({length:3},(_,j)=>({id:'o'+j,label:'选择'+i+'-'+j,description:'用于写作协作的方法说明。'.repeat(10)}))}))}]} onSubmit={async(id,answers)=>{window.questionAnswers=answers;return false}}/><div style={{height:80}}>输入框</div></div></div>);
 window.clearUI=()=>root.render(null);window.showRoles();
 `,
       },
@@ -345,6 +348,58 @@ window.clearUI=()=>root.render(null);window.showRoles();
     assert.equal(await page.evaluate(() => window.listenerCount()), 1)
     await page.evaluate(() => window.clearUI())
     await page.waitForFunction(() => window.listenerCount() === 0)
+    await page.evaluate(() => window.showQuestions())
+    for (const height of [850, 600, 450]) {
+      await page.setViewportSize({ width: 600, height })
+      const bounds = await page.evaluate(() => {
+        const body = document.querySelector('.user-question-body')
+        const chat = document
+          .querySelector('.chat-scroll')
+          .getBoundingClientRect()
+        const card = document
+          .querySelector('.user-question-card')
+          .getBoundingClientRect()
+        const actions = document
+          .querySelector('.user-question-actions')
+          .getBoundingClientRect()
+        return {
+          scrollable: body.scrollHeight > body.clientHeight,
+          chatHeight: chat.height,
+          chatBottom: chat.bottom,
+          cardTop: card.top,
+          cardHeight: card.height,
+          actionsBottom: actions.bottom,
+        }
+      })
+      assert.ok(bounds.scrollable)
+      assert.ok(bounds.chatHeight > 70)
+      assert.ok(bounds.cardHeight <= height * 0.45 + 1)
+      assert.ok(bounds.chatBottom <= bounds.cardTop)
+      assert.ok(bounds.actionsBottom < height)
+    }
+    await page.locator('.user-question-body').hover()
+    await page.mouse.wheel(0, 350)
+    await page.waitForFunction(
+      () => document.querySelector('.user-question-body').scrollTop > 0,
+    )
+    await page.getByText('选择2-2', { exact: true }).click()
+    assert.ok(
+      (await page
+        .locator('.user-question-body')
+        .evaluate((el) => el.scrollTop)) > 0,
+    )
+    await page.getByRole('button', { name: '收起问题', exact: true }).click()
+    assert.equal(await page.locator('.user-question-body').isVisible(), false)
+    await page.getByText('实际对话正文', { exact: true }).waitFor()
+    await page.getByRole('button', { name: '展开问题', exact: true }).click()
+    assert.equal(await page.getByRole('radio').last().isChecked(), true)
+    await page.getByRole('button', { name: '提交回答', exact: true }).click()
+    await page.waitForFunction(() => window.questionAnswers?.length === 1)
+    assert.equal(
+      (await page.evaluate(() => window.questionAnswers[0])).questionId,
+      'q2',
+    )
+    await page.screenshot({ path: '/tmp/reflexion-question-scroll.png' })
     assert.deepEqual(errors, [])
   } finally {
     await browser?.close()
