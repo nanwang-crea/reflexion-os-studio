@@ -23,9 +23,7 @@ export async function invokeAdmittedTool(
     return input.registry.call(request, signal, grant, rowId)
   }
   const result =
-    input.mutationCoordinator &&
-    (isMutatingTool(request.name) ||
-      (input.workflowRunId !== undefined && request.name.includes('/')))
+    input.mutationCoordinator && isMutatingTool(request.name)
       ? await input.mutationCoordinator.run(invoke)
       : await invoke()
   state.toolCallRowIds.delete(rowId)
@@ -40,9 +38,8 @@ export async function invokeAdmittedTool(
     finalizeToolCall(store, state, emitter, rowId, 'failed', errorCode, output)
   } else {
     finalizeToolCall(store, state, emitter, rowId, 'completed', null, output)
-    const receipt = store.mutationReceipts.record({
+    store.mutationReceipts.record({
       rootRunId: input.rootRunId,
-      workflowRunId: input.workflowRunId,
       runId: run.id,
       delegationId: run.delegationId,
       agentInstanceId: run.agentId,
@@ -50,11 +47,6 @@ export async function invokeAdmittedTool(
       toolName: request.name,
       output,
     })
-    if (receipt && input.workflowRunId) {
-      const attempt = store.workflowAttempts.byAgentRun(run.id)
-      if (attempt?.status === 'running')
-        store.workflowAttempts.update({ ...attempt, effectStatus: 'recorded' })
-    }
   }
   return modelResult
 }

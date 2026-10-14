@@ -15,7 +15,7 @@ ReflexionOS 的下一代桌面 Agent 与可视化工作流平台。它不是现�
 - **Multi-Agent**：Primary 通过 `task` 动态创建受控子 Agent；子 Run 隔离上下文、继承权限交集，可在预算内继续委派；根级 mutation coordinator 串行化兄弟写入，revision 冲突显式失败并记录变更归属；
 - **UI**：项目/会话侧栏、聊天区（含右侧可开合的工作区面板）、落地页、技能页、指令页、Provider 设置页、委派运行卡与 Artifact/Changed Files 展示。
 
-尚未实现（见 `docs/ROADMAP.md`）：只读内嵌 Browser 与 Browser Tool、Provider/Tool 动态插件、更完整的资产检索、Workflow Engine、多模态、激活码许可；Phase 3 的更完整跨层恢复与高级变更治理仍待后续。
+尚未实现（见 `docs/ROADMAP.md`）：只读内嵌 Browser 与 Browser Tool、Provider/Tool 动态插件、更完整的资产检索、对话驱动的多 Agent 协作增强、多模态、激活码许可；Phase 3 的更完整跨层恢复与高级变更治理仍待后续。
 
 ## 常用命令
 
@@ -50,3 +50,5 @@ pnpm test         # 全量验证（单测、cargo 与冒烟）
 先契约后实现，先边界后迁移；UI 不直接调用模型或系统工具；长任务必须支持事件流、取消、重试和恢复；所有外部能力声明权限。
 
 计划模式的审阅文件、审批快照与自动清理规则见 [计划模式设计](docs/PLAN-MODE.md)。
+
+角色配置和协作方式见 [Agent 协作设计](docs/AGENT-COLLABORATION-2026-10-14.md)。旧 Workflow 实现保留在 `codex/archive-workflow-2026-10-14`。

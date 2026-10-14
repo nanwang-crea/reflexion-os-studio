@@ -28,6 +28,17 @@ export function TopBarTools(props: TopBarProps): React.JSX.Element {
           sideOffset={8}
           collisionPadding={8}
         >
+          {props.onToggleCollaboration && (
+            <DropdownMenu.CheckboxItem
+              className="topbar-tools-item"
+              checked={props.collaborationOpen}
+              onCheckedChange={props.onToggleCollaboration}
+            >
+              <FolderIcon />
+              <span>任务与 Agent 协作</span>
+              <DropdownMenu.ItemIndicator>✓</DropdownMenu.ItemIndicator>
+            </DropdownMenu.CheckboxItem>
+          )}
           <DropdownMenu.CheckboxItem
             className="topbar-tools-item"
             checked={props.browserOpen}

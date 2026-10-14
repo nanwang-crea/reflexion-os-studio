@@ -3,6 +3,7 @@ import { IsoDateTimeSchema } from './shared.js'
 import { UsageSchema } from './chat/runs.js'
 import { PermissionPresetSchema } from './tools/permissions.js'
 import { ResourceLinkSchema } from '../resource-links.js'
+import { ReasoningEffortSchema } from './integrations/reasoning.js'
 import { ChangedFileSchema } from '../tool-output.js'
 
 export const DelegationStatusSchema = z.enum([
@@ -40,7 +41,21 @@ export const AgentTemplateSourceSchema = z.enum(['builtin', 'user', 'project'])
 export type AgentTemplateSource = z.infer<typeof AgentTemplateSourceSchema>
 
 /** Optional reusable guidance. It may only narrow a child's inherited boundary. */
+export const AgentModelBindingSchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('inherit') }),
+  z.object({
+    mode: z.literal('fixed'),
+    providerId: z.string().min(1),
+    model: z.string().min(1).max(200),
+    reasoningEffort: ReasoningEffortSchema.nullable().optional(),
+  }),
+])
+export type AgentModelBinding = z.infer<typeof AgentModelBindingSchema>
+
 export const AgentTemplateSchema = AgentDefinitionSchema.extend({
+  projectId: z.string().min(1).nullable().default(null),
+  domains: z.array(z.string().min(1).max(40)).max(12).default([]),
+  modelBinding: AgentModelBindingSchema.default({ mode: 'inherit' }),
   source: AgentTemplateSourceSchema,
   builtin: z.boolean(),
 })
@@ -60,6 +75,11 @@ export const AgentInstanceSchema = z.object({
   name: z.string().min(1),
   role: z.string(),
   templateId: z.string().min(1).nullable(),
+  projectId: z.string().min(1).nullable().optional(),
+  workspaceRoot: z.string().nullable().optional(),
+  providerId: z.string().min(1).nullable().optional(),
+  model: z.string().min(1).optional(),
+  reasoningEffort: ReasoningEffortSchema.nullable().optional(),
   instructions: z.string().min(1),
   permissionPreset: PermissionPresetSchema,
   permissionDomainId: z.string().min(1),
@@ -123,6 +143,7 @@ export const DelegationExecutionSchema = z.union([
     permissionPreset: PermissionPresetSchema,
     allowedTools: z.array(z.string().min(1)),
     instance: AgentInstanceSchema,
+    reasoningEffort: ReasoningEffortSchema.nullable().optional(),
     timeoutSec: z.number().int().positive().nullable(),
     tokenBudget: z.number().int().positive().nullable(),
     treeRunBudget: z.number().int().positive().nullable(),

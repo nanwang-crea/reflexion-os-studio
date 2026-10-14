@@ -67,3 +67,12 @@ export function uninstallPlugin(id: string): Promise<{ removed: boolean }> {
 export function rescanPlugins(): Promise<{ plugins: PluginRecord[] }> {
   return request('plugin.rescan')
 }
+
+export function saveSkill(
+  input: Omit<
+    import('@reflexion-os-studio/runtime-client').SkillSaveParams,
+    'requestId'
+  >,
+): Promise<{ plugin: PluginRecord }> {
+  return request('skill.save', input)
+}

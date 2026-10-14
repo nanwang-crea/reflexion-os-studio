@@ -1,5 +1,7 @@
 # Workflow W0 review 与 W1–W3 实施记录
 
+> 历史文档：2026-10-14 已退役独立 Workflow 编排。实现保留于 `codex/archive-workflow-2026-10-14`，当前方向见 [Agent 协作](AGENT-COLLABORATION-2026-10-14.md)。
+
 日期：2026-10-13；分支：`feature/workflow`。本记录评审当前本地变更，不涉及远程 PR。
 
 ## W0 发现与修正

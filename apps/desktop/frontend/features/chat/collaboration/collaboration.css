@@ -1,0 +1,167 @@
+.collaboration-panel {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  overflow: hidden;
+}
+.collaboration-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.collaboration-heading small {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.collaboration-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 12px 16px;
+}
+.collaboration-toolbar label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+  min-width: 130px;
+  font-size: 12px;
+}
+.collaboration-legend {
+  display: flex;
+  gap: 14px;
+  padding: 0 16px 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.collaboration-graph {
+  flex: 1;
+  min-height: 220px;
+}
+.collaboration-node {
+  width: 240px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  padding: 14px;
+  font-size: 12px;
+}
+.collaboration-node header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.collaboration-node header strong {
+  overflow-wrap: anywhere;
+}
+.collaboration-node header span {
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.collaboration-node p {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.6;
+}
+.collaboration-node small {
+  overflow-wrap: anywhere;
+  display: block;
+  color: var(--text-muted);
+  font-size: 10px;
+  margin-top: 6px;
+}
+.collaboration-running,
+.collaboration-in_progress {
+  border-color: var(--accent);
+}
+.collaboration-failed {
+  border-color: var(--warning-text);
+}
+.collaboration-agents {
+  max-height: 200px;
+  overflow: auto;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+.collaboration-agents article {
+  margin-bottom: 10px;
+}
+.collaboration-agents small {
+  display: block;
+  margin: 5px 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.collaboration-agents p,
+.collaboration-empty p {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.collaboration-empty {
+  padding: 30px;
+}
+.collaboration-attention {
+  margin: 0;
+  padding: 10px 16px;
+  color: var(--warning-text);
+  font-size: 12px;
+}
+.collaboration-skill-dialog {
+  width: min(680px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  padding: 24px;
+  color: var(--text);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.collaboration-skill-dialog::backdrop {
+  background: #0008;
+}
+.collaboration-skill-dialog fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.collaboration-skill-dialog label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+  font-size: 12px;
+}
+.collaboration-skill-dialog input,
+.collaboration-skill-dialog textarea {
+  padding: 9px;
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  color: var(--text);
+  border-radius: 6px;
+  font: inherit;
+  width: 100%;
+}
+.collaboration-skill-dialog footer {
+  display: flex;
+  gap: 10px;
+}
+.collaboration-skill-dialog p {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-muted);
+}

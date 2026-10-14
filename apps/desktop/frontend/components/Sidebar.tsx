@@ -1,3 +1,4 @@
+import type { ViewName } from '../hooks/session/useSessionNavigation'
 import { useMemo, useState } from 'react'
 import type { Project, Session } from '@reflexion-os-studio/runtime-client'
 import { SessionRow } from './SessionRow'
@@ -14,8 +15,7 @@ import {
   TrashIcon,
 } from '../ui/icons'
 
-export type AppView =
-  'chat' | 'settings' | 'skills' | 'automations' | 'instructions'
+export type AppView = ViewName
 
 /** 底部导航可打开的页面（chat 由会话行/新建入口进入，不进底部导航）。 */
 type OtherView = Exclude<AppView, 'chat'>
@@ -183,10 +183,10 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
           onClick={() => props.onSelectView('skills')}
         />
         <NavItem
-          label="自动化"
+          label="Agent"
           icon={<BoxIcon size={15} />}
-          active={props.view === 'automations'}
-          onClick={() => props.onSelectView('automations')}
+          active={props.view === 'agents'}
+          onClick={() => props.onSelectView('agents')}
         />
         <NavItem
           label="指令"

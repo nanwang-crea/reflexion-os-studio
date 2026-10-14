@@ -1,5 +1,7 @@
 # Workflow 两种创建模式与运行前校验
 
+> 历史文档：2026-10-14 已退役独立 Workflow 编排。实现保留于 `codex/archive-workflow-2026-10-14`，当前方向见 [Agent 协作](AGENT-COLLABORATION-2026-10-14.md)。
+
 日期：2026-10-14；分支：`feature/workflow`；布局基线：`4d02893`。
 
 ## 用户路径

@@ -1,4 +1,4 @@
-import { workflowCommandHandlers } from './workflow/handlers.js'
+import { SkillSaveParamsSchema } from '@reflexion-os-studio/contracts'
 import { CommandSchemaRegistry } from '@reflexion-os-studio/contracts'
 import { CoreMutationMethodSchema } from '@reflexion-os-studio/contracts'
 import { operationsFor } from './operations/index.js'
@@ -301,6 +301,9 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
   'danger.status': (p, { danger }) => ({
     lease: danger.leaseFor(requireString(p, 'sessionId')),
   }),
+  'skill.save': async (p, { plugins }) => ({
+    plugin: await plugins.save(SkillSaveParamsSchema.parse(p)),
+  }),
   'skill.list': (p, { plugins }) => ({
     skills: plugins.registry.list(
       typeof p.projectId === 'string' ? p.projectId : null,
@@ -380,7 +383,6 @@ export const commandHandlers: Record<string, CommandHandler> = {
       String(p.targetRequestId),
     ),
   }),
-  ...workflowCommandHandlers,
   ...chatCommandHandlers,
   ...instructionsCommandHandlers,
   ...workspaceCommandHandlers,

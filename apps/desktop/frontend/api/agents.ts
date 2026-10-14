@@ -52,23 +52,22 @@ export function setAgentEnabled(
   })
 }
 
-export async function listAgentTemplates(): Promise<AgentTemplate[]> {
+export async function listAgentTemplates(
+  projectId?: string | null,
+): Promise<AgentTemplate[]> {
   const result = await request<{ templates: AgentTemplate[] }>(
     'agent_template.list',
-    {},
+    { projectId },
   )
   return result.templates
 }
 
-export function saveAgentTemplate(input: {
-  id?: string
-  name: string
-  description: string
-  systemPrompt: string
-  enabled: boolean
-  canDelegate: boolean
-  allowedTools: string[]
-}): Promise<{ template: AgentTemplate }> {
+export function saveAgentTemplate(
+  input: Omit<
+    import('@reflexion-os-studio/runtime-client').AgentTemplateSaveParams,
+    'requestId'
+  >,
+): Promise<{ template: AgentTemplate }> {
   return request<{ template: AgentTemplate }>('agent_template.save', input)
 }
 

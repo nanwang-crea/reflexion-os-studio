@@ -1,3 +1,4 @@
+import { resolveRoleModel } from './role-model.js'
 import type {
   DelegationResult,
   PermissionPreset,
@@ -16,6 +17,7 @@ import { createAgentInstance, INHERITABLE_CHILD_TOOLS } from './instance.js'
 
 export interface ChildRunDependencies {
   store: Store
+  resolveProvider?: typeof import('../provider-resolver.js').resolveProvider
   notifier: EventNotifier
   launcher: RunLauncher
   profile: ProviderProfile
@@ -79,20 +81,41 @@ export function createChildRunStarter(
     const template = spawn.templateId
       ? deps.store.agents.get(spawn.templateId)
       : null
-    if (spawn.templateId && (!template || !template.enabled)) {
+    if (
+      spawn.templateId &&
+      (!template ||
+        !template.enabled ||
+        (template.projectId != null &&
+          template.projectId !== parentSession.projectId))
+    ) {
       throw new Error(`agent not found or disabled: ${spawn.templateId}`)
     }
-    const lease = budget.acquire()
-    const instance = createAgentInstance({
-      spawn,
+    const roleModel = resolveRoleModel(
+      deps.store,
       template,
-      inheritedPreset: parentPreset,
-      inheritedTools,
-      permissionDomainId,
-      canDelegateByDepth:
-        settings.enableChildRuns &&
-        childDepth < Math.min(settings.maxDepth ?? 4, 4),
-    })
+      deps,
+      deps.resolveProvider,
+    )
+    const lease = budget.acquire()
+    const instance = {
+      ...createAgentInstance({
+        spawn,
+        template,
+        inheritedPreset: parentPreset,
+        inheritedTools,
+        permissionDomainId,
+        canDelegateByDepth:
+          settings.enableChildRuns &&
+          childDepth < Math.min(settings.maxDepth ?? 4, 4),
+      }),
+      projectId: parentSession.projectId,
+      workspaceRoot: parentSession.projectId
+        ? (deps.store.projects.get(parentSession.projectId)?.folderPath ?? null)
+        : null,
+      providerId: roleModel.profile.id,
+      model: roleModel.model,
+      reasoningEffort: roleModel.profile.reasoningEffort,
+    }
     const { permissionPreset, canDelegate } = instance
     const allowedTools = new Set(instance.allowedTools)
     const execution = {
@@ -100,11 +123,12 @@ export function createChildRunStarter(
       rootRunId: budget.rootRunId,
       permissionDomainId,
       depth: childDepth,
-      providerId: deps.profile.id,
-      model: deps.model,
+      providerId: roleModel.profile.id,
+      model: roleModel.model,
       permissionPreset,
       allowedTools: [...allowedTools],
       instance,
+      reasoningEffort: roleModel.profile.reasoningEffort,
       timeoutSec: settings.maxChildTimeoutSec,
       tokenBudget: settings.maxChildTotalTokens,
       treeRunBudget: settings.maxChildRuns,
@@ -130,8 +154,8 @@ export function createChildRunStarter(
         })
         const run = deps.store.runs.create({
           sessionId: session.id,
-          providerId: deps.profile.id,
-          model: deps.model,
+          providerId: roleModel.profile.id,
+          model: roleModel.model,
           parentRunId: parentRun.id,
           delegationId: delegation.id,
           agentId: instance.id,
@@ -182,10 +206,10 @@ export function createChildRunStarter(
         deps.launcher.launch({
           run,
           session,
-          profile: deps.profile,
-          apiKey: deps.apiKey,
-          model: deps.model,
-          sampling: deps.sampling,
+          profile: roleModel.profile,
+          apiKey: roleModel.apiKey,
+          model: roleModel.model,
+          sampling: roleModel.sampling,
           permissionPreset,
           permissionDomainId,
           rootRunId: budget.rootRunId,
@@ -199,6 +223,7 @@ export function createChildRunStarter(
             ? createChildRunStarter(
                 {
                   ...childDeps,
+                  ...roleModel,
                   permissionPreset,
                   permissionDomainId,
                   inheritedTools: allowedTools,

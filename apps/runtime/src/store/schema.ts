@@ -331,4 +331,4 @@ CREATE INDEX IF NOT EXISTS idx_run_events_run ON run_events(run_id, created_at);
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 46
+export const LATEST_SCHEMA_VERSION = 48

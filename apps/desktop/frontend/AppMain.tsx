@@ -11,9 +11,12 @@ import { TopBar } from './components/TopBar'
 import { ChatView } from './features/chat/ChatView'
 import { LandingView } from './features/landing/LandingView'
 import { SkillsView } from './features/skills/SkillsView'
-const AutomationsView = lazy(async () => ({
-  default: (await import('./features/automations/AutomationsView'))
-    .AutomationsView,
+const AgentRolesView = lazy(async () => ({
+  default: (await import('./features/agents/AgentRolesView')).AgentRolesView,
+}))
+const CollaborationPanel = lazy(async () => ({
+  default: (await import('./features/chat/collaboration/CollaborationPanel'))
+    .CollaborationPanel,
 }))
 import { InstructionsView } from './features/instructions/InstructionsView'
 import { SettingsView } from './features/settings/SettingsView'
@@ -62,33 +65,32 @@ export interface AppMainProps {
 
 /**
  * 主内容区：TopBar（标题按视图推导）+ 六视图分支（chat/landing/settings/
- * skills/automations/instructions）+ chat 视图的右侧工作区面板。各分组 props
+ * skills/agents/instructions）+ chat 视图的右侧工作区面板。各分组 props
  * 用 ComponentProps 从视图组件派生，编译期约束、无平行类型。
  */
 export function AppMain(props: AppMainProps): React.JSX.Element {
   const { view, activeSessionId, notice, workspace, terminal } = props
   const surfaceRef = useRef<HTMLDivElement>(null)
-  const [workflowOpened, setWorkflowOpened] = useState(false)
-  useEffect(() => {
-    if (view === 'automations') setWorkflowOpened(true)
-  }, [view])
+  const [collaborationOpen, setCollaborationOpen] = useState(false)
   const [browserWidth, setBrowserWidth] = useState<number | null>(null)
   const { open: browserOpen, expanded: browserExpanded } =
     useBrowserPanelState()
   useEffect(() => {
     setBrowserPanelOpen(false)
+    setCollaborationOpen(false)
   }, [workspace.panel.activeTabId, view])
   useEffect(() => {
     setBrowserPanelExpanded(false)
   }, [activeSessionId])
-  const surfaceOpen = browserOpen || (view === 'chat' && workspace.open)
+  const surfaceOpen =
+    browserOpen || (view === 'chat' && (workspace.open || collaborationOpen))
   const contextTitle =
     view === 'settings'
       ? '设置'
       : view === 'skills'
         ? '技能'
-        : view === 'automations'
-          ? '自动化'
+        : view === 'agents'
+          ? 'Agent 角色'
           : view === 'instructions'
             ? '指令'
             : activeSessionId
@@ -108,12 +110,26 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
       >
         <TopBar
           {...props.topBar}
+          collaborationOpen={collaborationOpen}
+          onToggleCollaboration={
+            view === 'chat'
+              ? () => {
+                  setCollaborationOpen((open) => !open)
+                  workspace.setOpen(false)
+                  setBrowserPanelOpen(false)
+                }
+              : undefined
+          }
           contextTitle={contextTitle}
           browserOpen={browserOpen}
-          onToggleBrowser={() => setBrowserPanelOpen(!browserOpen)}
+          onToggleBrowser={() => {
+            setCollaborationOpen(false)
+            setBrowserPanelOpen(!browserOpen)
+          }}
           showWorkspaceToggle={view === 'chat'}
-          workspaceOpen={workspace.open && !browserOpen}
+          workspaceOpen={workspace.open && !browserOpen && !collaborationOpen}
           onToggleWorkspace={() => {
+            setCollaborationOpen(false)
             if (browserOpen) {
               setBrowserPanelOpen(false)
               workspace.setOpen(true)
@@ -137,25 +153,19 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
         )}
         <div className="content-area">
           <div className="content-main">
-            {workflowOpened && (
-              <div hidden={view !== 'automations'} style={{ height: '100%' }}>
-                <Suspense fallback={<p>正在加载工作流…</p>}>
-                  <AutomationsView
-                    visible={view === 'automations'}
-                    initialProjectId={terminal.activeProjectId}
-                    confirm={terminal.confirm}
-                    approvals={props.chat.pendingApprovals}
-                    onChoose={props.chat.onResolveApproval}
-                    onResource={props.chat.onResourceClick}
-                  />
-                </Suspense>
-              </div>
-            )}
             {view === 'settings' ? (
               <SettingsView {...props.settings} />
             ) : view === 'skills' ? (
               <SkillsView onUseSkill={props.onUseSkill} />
-            ) : view === 'automations' ? null : view === 'instructions' ? (
+            ) : view === 'agents' ? (
+              <Suspense fallback={<p>正在加载角色…</p>}>
+                <AgentRolesView
+                  profiles={props.settings.profiles}
+                  initialProjectId={terminal.activeProjectId}
+                  confirm={terminal.confirm}
+                />
+              </Suspense>
+            ) : view === 'instructions' ? (
               <InstructionsView {...props.instructions} />
             ) : activeSessionId !== null ? (
               <ChatView {...props.chat} />
@@ -209,8 +219,9 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
           >
             <button
               type="button"
-              aria-pressed={!browserOpen}
+              aria-pressed={!browserOpen && !collaborationOpen}
               onClick={() => {
+                setCollaborationOpen(false)
                 setBrowserPanelOpen(false)
                 workspace.setOpen(true)
               }}
@@ -220,10 +231,25 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
             <button
               type="button"
               aria-pressed={browserOpen}
-              onClick={() => setBrowserPanelOpen(true)}
+              onClick={() => {
+                setCollaborationOpen(false)
+                setBrowserPanelOpen(true)
+              }}
             >
               浏览器
             </button>
+            {view === 'chat' && (
+              <button
+                type="button"
+                aria-pressed={collaborationOpen}
+                onClick={() => {
+                  setCollaborationOpen(true)
+                  setBrowserPanelOpen(false)
+                }}
+              >
+                协作
+              </button>
+            )}
             <button
               type="button"
               className="right-surface-collapse"
@@ -231,6 +257,7 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
               onClick={() => {
                 setBrowserPanelOpen(false)
                 workspace.setOpen(false)
+                setCollaborationOpen(false)
               }}
             >
               收起
@@ -239,11 +266,26 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
           <div
             className="workspace-surface"
             style={{
-              display: view === 'chat' && !browserOpen ? 'contents' : 'none',
+              display:
+                view === 'chat' && !browserOpen && !collaborationOpen
+                  ? 'contents'
+                  : 'none',
             }}
           >
             <FileViewerPanel {...workspace.panel} width={workspace.width} />
           </div>
+          {view === 'chat' && collaborationOpen && (
+            <Suspense fallback={<p>正在加载协作…</p>}>
+              <CollaborationPanel
+                key={activeSessionId ?? 'new'}
+                chat={props.chat}
+                onCollapse={() => {
+                  setCollaborationOpen(false)
+                  workspace.setOpen(false)
+                }}
+              />
+            </Suspense>
+          )}
           <div
             className="browser-panel-host"
             style={{ display: browserOpen ? 'flex' : 'none' }}
@@ -253,6 +295,8 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
               expanded={browserExpanded}
               onToggleExpanded={() => setBrowserPanelExpanded(!browserExpanded)}
               onWorkspace={() => {
+                setCollaborationOpen(false)
+                setCollaborationOpen(false)
                 setBrowserPanelOpen(false)
                 workspace.setOpen(true)
               }}
@@ -263,6 +307,7 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
               onCollapse={() => {
                 setBrowserPanelOpen(false)
                 workspace.setOpen(false)
+                setCollaborationOpen(false)
               }}
             />
           </div>

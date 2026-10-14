@@ -6,7 +6,6 @@ import {
   validateCommandParams,
 } from '@reflexion-os-studio/runtime-client'
 import { getAgentSettings, updateAgentSettings } from '../../api/settings'
-import { AgentDefinitionsPanel } from './AgentDefinitionsPanel'
 import {
   AGENT_RUNTIME_FIELDS,
   AGENT_RUNTIME_FIELD_BY_KEY,
@@ -122,7 +121,6 @@ export function AgentRuntimePanel(): React.JSX.Element {
   return (
     <div className="agent-runtime">
       <div className="agent-runtime-body">
-        <AgentDefinitionsPanel />
         <section className="runtime-group">
           <h4 className="runtime-group-title">委派总开关</h4>
           <label className="agent-definition-row">

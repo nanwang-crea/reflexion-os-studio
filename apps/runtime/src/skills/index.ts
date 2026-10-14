@@ -1,3 +1,4 @@
+import { AGENT_COLLABORATION_SKILL } from './builtin/agent-collaboration.js'
 import { SkillRegistry } from './registry.js'
 import { CODE_REVIEW_SKILL } from './builtin/code-review.js'
 import { VERIFY_FIX_SKILL } from './builtin/verify-fix.js'
@@ -15,6 +16,7 @@ export {
 export function createSkillRegistry(): SkillRegistry {
   const registry = new SkillRegistry()
   for (const skill of [
+    AGENT_COLLABORATION_SKILL,
     CODE_REVIEW_SKILL,
     VERIFY_FIX_SKILL,
     WEB_RESEARCH_SKILL,

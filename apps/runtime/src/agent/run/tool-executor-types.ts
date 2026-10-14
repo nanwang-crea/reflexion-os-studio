@@ -20,7 +20,6 @@ export interface ToolExecutorInput {
   system?: SystemRuntimeClient | null
   sandboxProvider: string | null
   permissionDomainId: string
-  workflowRunId?: string
   beforeToolInvoke?: (toolName: string) => void
   rootRunId: string
   mutationCoordinator?: RootMutationCoordinator

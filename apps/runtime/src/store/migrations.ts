@@ -1,3 +1,4 @@
+import { migrateAgentTemplates } from './migrations/agent-templates.js'
 import { WORKFLOW_AUTHORING_SCHEMA } from './migrations/workflow-authoring.js'
 import { migrateMcpEnvSecrets } from './migrations/mcp-env.js'
 import {
@@ -436,6 +437,7 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
         db.exec('ALTER TABLE mutation_receipts ADD COLUMN workflow_run_id TEXT')
     }
     if (version < 46) db.exec(WORKFLOW_AUTHORING_SCHEMA)
+    if (version < 48) migrateAgentTemplates(db)
     db.exec('COMMIT')
     // 迁移全部执行完毕才推进版本号；否则下次启动会重复进入迁移分支。
     version = LATEST_SCHEMA_VERSION

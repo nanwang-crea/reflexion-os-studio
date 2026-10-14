@@ -1,8 +1,3 @@
-import { WorkflowGenerationService } from './workflow/generation/service.js'
-import { generationModelExecutor } from './workflow/generation/executor.js'
-import { WorkflowService } from './workflow/service.js'
-import { AgentWorkflowExecutor } from './workflow/execution/agent-executor.js'
-import { validateWorkflowResources } from './workflow/execution/resources.js'
 import { BrowserAgentService } from './browser/agent/service.js'
 import { OperationRegistry, registerOperations } from './operations/index.js'
 import { cleanupPlanDocuments } from './agent/tools/plan-documents.js'
@@ -172,29 +167,7 @@ const terminalService = new TerminalService({
   notify,
 })
 terminalServiceBox.current = terminalService
-const workflow = new WorkflowService({
-  store,
-  executor: new AgentWorkflowExecutor(store, agent, notify),
-  availableTools: (projectId) => agent.workflow.tools(projectId),
-  validateResources: (projectId, values, signal) =>
-    validateWorkflowResources(
-      { store, system: systemRuntime, assets: assetService },
-      projectId,
-      values,
-      signal,
-    ),
-  notify,
-  clearPermissionDomain: (id) => agent.approvals.clearSession(id),
-})
-const workflowGeneration = new WorkflowGenerationService(
-  store,
-  generationModelExecutor(store, agent, notify),
-  (projectId) => agent.workflow.tools(projectId),
-  notify,
-)
 const commandContext = {
-  workflowGeneration,
-  workflow,
   browser,
   store,
   agent,
@@ -259,8 +232,8 @@ async function handleRequestAsync(request: JsonRpcRequest): Promise<void> {
     // 先收终端（对每个 shell 发协议 close），再协议关停 Rust 子进程，最后退自身；
     // 宿主侧另有进程树兜底收割。顺序保持：terminal → system → mcp dispose → exit。
     sendResponse(request.id, { ok: true }, () => {
-      void Promise.all([workflow.dispose(), workflowGeneration.dispose()])
-        .then(() => terminalService.shutdown())
+      void terminalService
+        .shutdown()
         .catch((error: unknown) => {
           process.stderr.write(
             `[runtime] terminal shutdown error: ${String(error)}\n`,

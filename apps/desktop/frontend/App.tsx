@@ -293,7 +293,11 @@ export default function App() {
     : '启动中…'
   const runtimeReady = bootstrap?.runtimeReady ?? false
   const skills = useSkillCatalog(runtimeReady, activeProjectId)
-  const agentTemplates = useAgentTemplateCatalog(runtimeReady, view)
+  const agentTemplates = useAgentTemplateCatalog(
+    runtimeReady,
+    view,
+    activeProjectId,
+  )
   const activeProject =
     projects.find((project) => project.id === activeProjectId) ?? null
 

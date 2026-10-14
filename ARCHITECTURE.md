@@ -2,7 +2,7 @@
 
 ## 1. 目标与非目标
 
-ReflexionOS Studio 是桌面端 Agent Runtime 与可插拔图执行平台。它同时支持对话 Agent 和节点式 Workflow：前者是动态决策图，后者是预定义 DAG。
+ReflexionOS Studio 是对话驱动的桌面 Agent 平台。Primary 按目标自主规划、调用工具、动态委派并验证成果；角色模板预设职责与模型，协作 Skills 保存可复用的方法。独立 Workflow 编排已退役，历史实现保留在 codex/archive-workflow-2026-10-14。
 
 第一阶段目标：可恢复的本地 Runtime、统一事件流、插件契约和安全工具边界。第一阶段非目标：复制 ComfyUI 全部节点、实现云端协作、一次性迁移所有旧功能。
 
@@ -10,7 +10,7 @@ ReflexionOS Studio 是桌面端 Agent Runtime 与可插拔图执行平台。它�
 
 | 层             | 技术                           | 职责                                                 |
 | -------------- | ------------------------------ | ---------------------------------------------------- |
-| UI             | React + TypeScript             | 对话、Plan、Tool Trace、Workspace 和 Workflow 画布   |
+| UI             | React + TypeScript             | 对话、Plan、Tool Trace、Workspace 和 Agent 协作视图  |
 | Desktop Host   | Tauri 2（第一阶段）            | 窗口、IPC、两个 sidecar 的 spawn/supervise、插件安装 |
 | Agent Runtime  | Node.js + TypeScript           | Agent、Context、模型、工具编排、事件、恢复           |
 | System Runtime | Rust（Phase 1）                | 文件、Shell、工具子进程和不可绕过的 enforcement      |
@@ -66,9 +66,9 @@ Prompt → Text-to-Image → Review → Image-to-Video → Export
 1. **Provider Plugin**：Chat、Image、Video、Embedding 等模型能力。
 2. **Tool Plugin**：文件、Shell、Git、Browser、MCP 等系统/外部能力。
 3. **Skill/MCP Plugin**：可复用提示、工具集合和外部协议适配。
-4. **Workflow Node Plugin**：面向画布的产品化节点，调用 Provider 或 Tool，但不与 Provider 混为一谈。
+4. **协作 Skills 与角色模板**：声明式协作方法和可选角色指导；模型配置由用户决定，执行权限仍由 Runtime 强制。
 
-每个插件使用 manifest 声明版本、能力、配置 schema 和权限。ComfyUI 等系统先作为外部 Provider/Workflow Backend 接入。
+每个插件使用 manifest 声明版本、能力、配置 schema 和权限。外部生成系统按 Provider/Tool 边界接入。
 
 ## 6. 事件与状态
 
@@ -84,7 +84,7 @@ Prompt → Text-to-Image → Review → Image-to-Video → Export
 
 Runtime 的 SQLite 实现统一收敛在 `apps/runtime/src/store/`：根层负责连接、schema、迁移与共享设施，领域实现按 `chat/`、`agents/`、`integrations/`、`workspace/` 分组。业务层通过 `store/index.ts` 门面访问，避免 SQL 与具体 Store 路径扩散到 handler/agent。
 
-- Definition：Agent、Workflow、Node、Provider、Plugin 配置。
+- Definition：Agent 角色模板、Provider、Plugin 配置。
 - Runtime：Session、Run、Node Run、Tool Call、Approval、Checkpoint。
 - Event：不可变事件日志。
 - WorkspaceFile：Workspace 中真实存在的文件实体，使用受保护的 workspace-relative path。
@@ -103,7 +103,7 @@ Runtime 的 SQLite 实现统一收敛在 `apps/runtime/src/store/`：根层负�
 
 ## 10. 分阶段建设
 
-新项目按产品能力逐阶段实现，而不是一次性铺开所有抽象。Phase 1A 以 TypeScript Runtime + Rust System Runtime 交付可用 Chat Core；Phase 1B 再增加不阻塞 Chat 的 Workspace Surfaces。后续依次建设 Agent Platform、Multi-Agent Orchestration、Workflow Engine、Multimodal Workflow 和 Desktop Hardening。完整范围见 `docs/ROADMAP.md`。
+新项目按产品能力逐阶段实现，而不是一次性铺开所有抽象。Phase 1A 以 TypeScript Runtime + Rust System Runtime 交付可用 Chat Core；Phase 1B 再增加不阻塞 Chat 的 Workspace Surfaces。后续依次建设 Agent Platform、Multi-Agent 协作与 Skills、多模态 Agent 和 Desktop Hardening。完整范围见 `docs/ROADMAP.md`。
 
 Provider/Secrets、流式取消恢复、测试和分发边界分别见 `docs/PROVIDER-AND-SECRETS.md`、`docs/RELIABILITY-AND-RECOVERY.md` 和 `docs/TESTING-AND-DISTRIBUTION.md`。账号登录与商业许可（激活码）不在 MVP 范围，其阶段安排、验证位置和契约预留见 `docs/AUTH-AND-LICENSING.md`。
 
@@ -158,3 +158,5 @@ B4 采用内置受管官方 Playwright MCP：每 Run 独立 stdio worker 与临�
 
 本机验收及剩余门槛见 [验收报告](docs/BROWSER-ACCEPTANCE-2026-10-13.md)；
 硬件媒体、旧 macOS 和三平台矩阵不能用代码测试代替。
+
+当前角色模型、作用范围与协作 Surface 设计见 [对话驱动的 Agent 协作](docs/AGENT-COLLABORATION-2026-10-14.md)。

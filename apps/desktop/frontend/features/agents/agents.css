@@ -1,0 +1,140 @@
+.agent-roles-view {
+  height: 100%;
+  overflow: auto;
+  padding: 24px;
+}
+.agent-roles-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+.agent-roles-heading h1 {
+  margin: 0;
+  font-size: 22px;
+}
+.agent-roles-heading p {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.agent-role-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.agent-role-filters label {
+  min-width: 180px;
+}
+.agent-role-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(320px, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.agent-role-layout:not(:has(.agent-role-editor)) {
+  grid-template-columns: 1fr;
+}
+.agent-role-list {
+  display: grid;
+  gap: 12px;
+}
+.agent-role-card {
+  padding: 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+}
+.agent-role-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.agent-role-card header span,
+.agent-role-card small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.agent-role-card p {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.agent-role-card small {
+  display: block;
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+.agent-role-card footer,
+.agent-role-editor footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.agent-roles-view label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+.agent-roles-view .agent-checkbox {
+  flex-direction: row;
+  align-items: center;
+  margin-left: auto;
+}
+.agent-role-editor {
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-sidebar);
+}
+.agent-role-editor h2 {
+  margin: 0 0 16px;
+  font-size: 16px;
+}
+.agent-role-editor fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.agent-role-editor label {
+  margin-bottom: 14px;
+}
+.agent-role-editor input:not([type='checkbox']),
+.agent-role-editor textarea {
+  width: 100%;
+  background: var(--bg-inset);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 9px;
+  font: inherit;
+}
+.agent-role-editor textarea {
+  resize: vertical;
+}
+.agent-role-editor small {
+  display: block;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+@media (max-width: 900px) {
+  .agent-role-layout {
+    grid-template-columns: 1fr;
+  }
+  .agent-roles-heading {
+    align-items: flex-start;
+  }
+}
+@media (max-width: 600px) {
+  .agent-roles-view {
+    padding: 12px;
+  }
+  .agent-roles-heading {
+    flex-wrap: wrap;
+  }
+}

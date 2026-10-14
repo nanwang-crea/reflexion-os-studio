@@ -1,5 +1,7 @@
 # Workflow MVP：语言模型 Agent 协作图
 
+> 历史文档：2026-10-14 已退役独立 Workflow 编排。实现保留于 `codex/archive-workflow-2026-10-14`，当前方向见 [Agent 协作](AGENT-COLLABORATION-2026-10-14.md)。
+
 > 状态：MVP 设计与实施记录，更新于 2026-10-14。W0–W5 语言模型 MVP 已实现；macOS 合成 Provider GUI 已验收，Windows/Linux 真机与真实模型质量仍待验证。
 > Phase 4 首版优先语言模型；图片、视频生成保留扩展边界，实际交付仍属后续阶段。
 

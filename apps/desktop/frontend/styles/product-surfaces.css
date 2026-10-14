@@ -65,7 +65,6 @@ a:focus-visible {
 }
 
 .skills-view,
-.automations-view,
 .instructions-view {
   width: 100%;
   max-width: var(--page-width);
@@ -76,13 +75,11 @@ a:focus-visible {
 }
 
 .skills-view .panel-head,
-.automations-view .panel-head,
 .instructions-view header {
   padding-bottom: 12px;
 }
 
 .skills-view h1,
-.automations-view h1,
 .instructions-view header h2 {
   font-size: 28px;
   font-weight: 600;
@@ -141,7 +138,6 @@ a:focus-visible {
 
 @media (max-width: 760px) {
   .skills-view,
-  .automations-view,
   .instructions-view {
     padding: 20px 16px 32px;
   }

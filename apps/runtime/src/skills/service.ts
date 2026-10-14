@@ -1,3 +1,6 @@
+import { saveAuthoredSkill } from './authoring/save.js'
+import type { SkillSaveParams } from '@reflexion-os-studio/contracts'
+import { AGENT_COLLABORATION_SKILL } from './builtin/agent-collaboration.js'
 import { existsSync, mkdirSync, readdirSync, renameSync } from 'node:fs'
 import { basename, join, relative, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -81,6 +84,18 @@ export class SkillPluginService {
       updatedAt: now,
     }))
     return [...builtins, ...this.store.plugins.list()]
+  }
+
+  async save(input: SkillSaveParams): Promise<PluginRecord> {
+    const plugin = await saveAuthoredSkill(
+      this.store,
+      this.pluginsRoot,
+      this.installer,
+      input,
+    )
+    this.reloadRegistry()
+    this.emit(plugin)
+    return plugin
   }
 
   preview(source: PluginInstallSource): PluginTask {
@@ -321,6 +336,7 @@ import { WEB_RESEARCH_SKILL } from './builtin/web-research.js'
 import { WORKSPACE_REPORT_SKILL } from './builtin/workspace-report.js'
 
 const BUILTIN_SKILLS = [
+  AGENT_COLLABORATION_SKILL,
   CODE_REVIEW_SKILL,
   VERIFY_FIX_SKILL,
   WEB_RESEARCH_SKILL,

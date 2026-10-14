@@ -12,6 +12,8 @@ export const STATUS_LABELS: Record<string, string> = {
 }
 
 export interface TopBarProps {
+  collaborationOpen?: boolean
+  onToggleCollaboration?: () => void
   browserOpen: boolean
   onToggleBrowser: () => void
   sidebarOpen: boolean

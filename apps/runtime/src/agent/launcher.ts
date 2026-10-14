@@ -64,7 +64,6 @@ export interface LaunchOptions {
   rootRunId?: string
   mutationCoordinator?: RootMutationCoordinator
   defaultChildTemplateId?: string
-  workflowRunId?: string
   runSettings?: import('@reflexion-os-studio/contracts').AgentSettings
   onBeforeModel?: () => void
   onToolBatch?: (toolNames: string[]) => void
@@ -202,9 +201,7 @@ export class RunLauncher {
       approvalOverride:
         input.approvalOverride ??
         this.deps.approvals.approvalOverrideFor(sessionId),
-      dangerActive: () =>
-        input.workflowRunId === undefined &&
-        this.deps.danger.isActive(sessionId),
+      dangerActive: () => this.deps.danger.isActive(sessionId),
       executionMode: () =>
         this.deps.store.sessions.get(sessionId)?.executionMode ?? 'execute',
     })
@@ -218,7 +215,9 @@ export class RunLauncher {
             composeSystemPrompt(
               this.deps.skills,
               input.skill,
-              input.childRunStarter ? this.deps.store.agents.list() : undefined,
+              input.childRunStarter
+                ? this.deps.store.agents.list(input.session.projectId)
+                : undefined,
               input.session.projectId,
             )
           return input.isolatedContext
@@ -245,7 +244,6 @@ export class RunLauncher {
         emitter,
         firstAssistantMessage: assistantMessage,
         settings,
-        workflowRunId: input.workflowRunId,
         onBeforeModel: input.onBeforeModel,
         onToolBatch: input.onToolBatch,
         beforeToolInvoke: input.beforeToolInvoke,

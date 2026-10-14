@@ -32,3 +32,12 @@ export * from './browser/agent.js'
 export * from './browser/agent-settings.js'
 
 export * from './workflow/index.js'
+
+export {
+  SkillSaveParamsSchema,
+  type SkillSaveParams,
+} from './commands/skill.js'
+
+export type { AgentTemplateSaveParams } from './commands/agent-template.js'
+
+export { agentTemplateCommands } from './commands/agent-template.js'

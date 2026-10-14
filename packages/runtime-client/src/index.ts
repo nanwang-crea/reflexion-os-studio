@@ -148,4 +148,8 @@ export * from './browser-surface.js'
 export * from './browser-settings.js'
 export * from './browser-session.js'
 
-export * from './workflow.js'
+export type {
+  AgentModelBinding,
+  AgentTemplateSaveParams,
+  SkillSaveParams,
+} from '@reflexion-os-studio/contracts'

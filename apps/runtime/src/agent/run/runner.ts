@@ -49,7 +49,6 @@ export interface RunStreamInput {
   onCancel?: () => void
   /** 子 Run 单次累计输出 token 预算；超出以 child_token_budget 稳定错误码中止。 */
   childTokenBudget?: number
-  workflowRunId?: string
   onBeforeModel?: () => void
   onToolBatch?: (toolNames: string[]) => void
   beforeToolInvoke?: (toolName: string) => void
@@ -144,7 +143,6 @@ export class RunRunner {
           system: input.system,
           permissionDomainId: input.permissionDomainId,
           rootRunId: input.rootRunId,
-          workflowRunId: input.workflowRunId,
           beforeToolInvoke: input.beforeToolInvoke,
           mutationCoordinator: input.mutationCoordinator,
         },

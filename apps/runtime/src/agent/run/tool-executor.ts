@@ -202,16 +202,8 @@ export async function executeToolCall(
     sessionId: input.permissionDomainId,
     workspaceRoot: input.workspaceRoot,
   }
-  const requireEachApproval =
-    input.workflowRunId !== undefined &&
-    input.gate.approvalOverride === 'ask-everything'
   let sessionRuleHit = false
-  if (
-    decision === 'ask' &&
-    !dangerActive &&
-    !unsandboxed &&
-    !requireEachApproval
-  ) {
+  if (decision === 'ask' && !dangerActive && !unsandboxed) {
     if (shellInput && built.subject.kind === 'shell-command') {
       sessionRuleHit =
         input.approvals.matchShellPrefixRule(scope, {
@@ -340,7 +332,6 @@ export async function executeToolCall(
       // Danger lease 自动放行网络，grant 仍显式记录 sandboxNetwork=true。
       sandboxNetwork = true
     } else if (
-      !requireEachApproval &&
       shellInput &&
       input.approvals.matchShellPrefixRule(scope, {
         interpreter: shellInput.interpreter,
@@ -374,7 +365,7 @@ export async function executeToolCall(
       sandboxNetwork = true
       // 网络卡若选择"本会话允许该前缀联网"，规则已覆盖命令审批本身：
       // 复查命中则免掉主卡（会话网络授权语义 = 前缀 + 网络 + 维度全等）。
-      if (shellInput && !sessionRuleHit && !requireEachApproval) {
+      if (shellInput && !sessionRuleHit) {
         sessionRuleHit =
           input.approvals.matchShellPrefixRule(scope, {
             interpreter: shellInput.interpreter,

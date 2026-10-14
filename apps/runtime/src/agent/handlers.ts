@@ -1,3 +1,6 @@
+import { containsSecretLike } from './instructions/secretGuard.js'
+import { resolveModelRuntimeConfig } from './provider-resolver.js'
+import { agentTemplateCommands } from '@reflexion-os-studio/contracts'
 import { requireString, type CommandHandler } from '../command-utils.js'
 import { CommandError } from './index.js'
 
@@ -23,26 +26,46 @@ export const agentCommandHandlers: Record<string, CommandHandler> = {
     if (!agent) throw new CommandError('not_found', 'Agent 不存在')
     return { agent }
   },
-  'agent_template.list': (_p, { store }) => ({
-    templates: store.agents.list(),
+  'agent_template.list': (p, { store }) => ({
+    templates: store.agents.list(
+      agentTemplateCommands['agent_template.list'].params.parse(p).projectId,
+    ),
   }),
   'agent_template.save': (p, { store }) => {
     try {
-      return {
-        template: store.agents.saveUser({
-          id: typeof p.id === 'string' ? p.id : undefined,
-          name: requireString(p, 'name'),
-          description: typeof p.description === 'string' ? p.description : '',
-          systemPrompt: requireString(p, 'systemPrompt'),
-          enabled: p.enabled === true,
-          canDelegate: p.canDelegate === true,
-          allowedTools: Array.isArray(p.allowedTools)
-            ? p.allowedTools.filter(
-                (tool): tool is string => typeof tool === 'string',
-              )
-            : [],
-        }),
+      const input = agentTemplateCommands['agent_template.save'].params.parse(p)
+      if (
+        containsSecretLike(input.systemPrompt) ||
+        containsSecretLike(input.description)
+      )
+        throw new Error('角色指令疑似包含机密，拒绝保存')
+      if (input.projectId && !store.projects.get(input.projectId))
+        throw new Error('项目不存在')
+      if (input.modelBinding?.mode === 'fixed') {
+        const profile = store.providers.get(input.modelBinding.providerId)
+        if (
+          !profile?.enabled ||
+          !profile.capabilities.includes('chat') ||
+          !profile.models.includes(input.modelBinding.model)
+        )
+          throw new Error('角色指定的模型不可用，请检查 Provider 配置')
+        const config = store.providerModels.get(
+          profile.id,
+          input.modelBinding.model,
+        )
+        if (
+          input.modelBinding.reasoningEffort != null &&
+          (!config?.reasoningEffortSupported ||
+            profile.apiFormat === 'anthropic')
+        )
+          throw new Error('角色指定的思考等级不受当前模型支持')
+        resolveModelRuntimeConfig(
+          profile,
+          config,
+          input.modelBinding.reasoningEffort,
+        )
       }
+      return { template: store.agents.saveUser(input) }
     } catch (error) {
       throw new CommandError(
         'invalid_request',

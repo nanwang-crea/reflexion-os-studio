@@ -90,11 +90,11 @@ jobs:
       - name: Verify Windows CRT dependency checker
         run: node --test scripts/test/windows-crt.test.mjs
 
-      - name: Verify Workflow execution and portable resource boundaries
-        run: pnpm --filter @reflexion-os-studio/runtime test:workflow
+      - name: Verify multi-agent collaboration
+        run: pnpm --filter @reflexion-os-studio/runtime exec node --import ./test/set-test-data-dir.mjs --test test/agent-roles.test.mjs
 
-      - name: Verify Workflow editor state regressions
-        run: pnpm --filter @reflexion-os-studio/desktop exec node --test test/workflow-editor.test.mjs
+      - name: Verify Agent roles and collaboration UI
+        run: pnpm --filter @reflexion-os-studio/desktop exec node --test test/agent-collaboration.test.mjs
 
       - name: Build desktop installers
         run: pnpm build:desktop

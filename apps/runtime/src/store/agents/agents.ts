@@ -1,6 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite'
 import {
   AgentPolicySchema,
+  AgentTemplateSchema,
+  type AgentTemplateSaveParams,
   type AgentDefinition,
   type AgentTemplate,
 } from '@reflexion-os-studio/contracts'
@@ -10,11 +12,17 @@ import { nowIso, type Row } from '../shared.js'
 export class AgentStore {
   constructor(private readonly db: DatabaseSync) {}
 
-  list(): AgentTemplate[] {
+  list(projectId?: string | null): AgentTemplate[] {
     return this.db
       .prepare('SELECT * FROM agents ORDER BY name, id')
       .all()
       .map((row) => this.toAgent(row as Row))
+      .filter(
+        (template) =>
+          projectId === undefined ||
+          template.projectId === null ||
+          template.projectId === projectId,
+      )
   }
 
   get(id: string): AgentTemplate | null {
@@ -59,32 +67,37 @@ export class AgentStore {
     return this.get(input.id)!
   }
 
-  saveUser(input: {
-    id?: string
-    name: string
-    description: string
-    systemPrompt: string
-    enabled: boolean
-    allowedTools: string[]
-    canDelegate: boolean
-  }): AgentTemplate {
+  saveUser(input: Omit<AgentTemplateSaveParams, 'requestId'>): AgentTemplate {
     const id = input.id ?? `template-${randomUUID()}`
     const current = this.get(id)
     if (current?.builtin) throw new Error('built-in template is immutable')
     const now = nowIso()
     const policy = {
       version: 1 as const,
-      permissionCeiling: 'workspace-full' as const,
+      permissionCeiling:
+        input.permissionCeiling ??
+        current?.policy.permissionCeiling ??
+        'workspace-full',
       allowedTools: [...new Set(input.allowedTools)],
       canDelegate: input.canDelegate,
     }
+    const projectId =
+      input.projectId === undefined
+        ? (current?.projectId ?? null)
+        : input.projectId
+    const configuration = {
+      domains: input.domains ?? current?.domains ?? [],
+      modelBinding: input.modelBinding ??
+        current?.modelBinding ?? { mode: 'inherit' },
+    }
     this.db
       .prepare(
-        `INSERT INTO agents (id, name, description, system_prompt, policy_json, source, builtin, enabled, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 'user', 0, ?, ?, ?)
+        `INSERT INTO agents (id, name, description, system_prompt, policy_json, source, builtin, enabled, created_at, updated_at, project_id, configuration_json)
+       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET name=excluded.name, description=excluded.description,
        system_prompt=excluded.system_prompt, policy_json=excluded.policy_json,
-       enabled=excluded.enabled, updated_at=excluded.updated_at`,
+       enabled=excluded.enabled, updated_at=excluded.updated_at, source=excluded.source,
+       project_id=excluded.project_id, configuration_json=excluded.configuration_json`,
       )
       .run(
         id,
@@ -92,9 +105,12 @@ export class AgentStore {
         input.description,
         input.systemPrompt,
         JSON.stringify(policy),
+        projectId === null ? 'user' : 'project',
         input.enabled ? 1 : 0,
         current?.createdAt ?? now,
         now,
+        projectId,
+        JSON.stringify(configuration),
       )
     return this.get(id)!
   }
@@ -108,6 +124,10 @@ export class AgentStore {
 
   private toAgent(row: Row): AgentTemplate {
     return {
+      ...AgentTemplateSchema.pick({ domains: true, modelBinding: true }).parse(
+        JSON.parse(String(row.configuration_json ?? '{}')),
+      ),
+      projectId: row.project_id == null ? null : String(row.project_id),
       id: String(row.id),
       name: String(row.name),
       description: String(row.description),

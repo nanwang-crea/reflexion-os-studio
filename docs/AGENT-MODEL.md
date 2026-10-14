@@ -9,6 +9,8 @@ Primary Agent
                        └── task（Policy 允许且深度 < 4）
 ```
 
-Runtime 每次委派都创建唯一 Agent 实例。`worker`、`researcher`、`reviewer` 是可选内置模板，不是预创建的运行角色；用户模板与内置模板使用同一读取模型。Primary 可选择模板，也可无模板动态给出名称、职责和指令。子 Agent 继承父 Run 本次实际选择的 Provider、模型、采样参数、权限档位与工具交集，但不继承父上下文、长期记忆、Danger 或一次性批准；仅在 `maxDepth` 内继续获得 `task`。动态实例快照、`agentId`、`parentRunId` 与 `delegationId` 均持久化，Delegation 保存父子身份、生命周期与版本化执行边界。
+Runtime 每次委派都创建唯一 Agent 实例。`worker`、`researcher`、`reviewer` 是可选内置模板，不是预创建的运行角色；用户模板与内置模板使用同一读取模型。Primary 可选择模板，也可无模板动态给出名称、职责和指令。子 Agent 默认继承父 Run 本次实际选择的 Provider、模型与采样参数；用户角色模板可固定 Provider/模型/思考等级，失效时明确失败不回退。权限档位与工具仍取父域交集，但不继承父上下文、长期记忆、Danger 或一次性批准；仅在 `maxDepth` 内继续获得 `task`。动态实例快照、`agentId`、`parentRunId` 与 `delegationId` 均持久化，Delegation 保存父子身份、生命周期与版本化执行边界。
 
 Agent Policy 当前覆盖权限上限、工具允许集与委派能力，并持久化到执行快照。Skills/Memory Policy 与可写权限仍属后续阶段；任何定义都不能扩大固定只读边界。
+
+领域分类、项目作用范围、模型预设和协作 Surface 见 [Agent 协作设计](AGENT-COLLABORATION-2026-10-14.md)。

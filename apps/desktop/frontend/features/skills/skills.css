@@ -1,7 +1,6 @@
-/* ---------- 技能 / 自动化面板 ---------- */
+/* ---------- 技能面板 ---------- */
 
-.skills-view,
-.automations-view {
+.skills-view {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -14,15 +13,13 @@
   gap: 28px;
 }
 
-.skills-view .panel-head,
-.automations-view .panel-head {
+.skills-view .panel-head {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.skills-view h1,
-.automations-view h1 {
+.skills-view h1 {
   margin: 0;
   font-size: 22px;
   font-weight: 600;
