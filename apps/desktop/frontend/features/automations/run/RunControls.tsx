@@ -56,25 +56,28 @@ export function RunControls({
             )}
         </Select>
       </label>
-      <label>
-        权限档位
-        <Select
-          value={preset}
-          onValueChange={(value) => setPreset(value as PermissionPreset)}
-        >
-          <option value="workspace-read">工作区只读</option>
-          <option value="workspace-write">工作区读写</option>
-          <option value="workspace-full">工作区完整权限</option>
-        </Select>
-      </label>
-      <label>
-        <input
-          type="checkbox"
-          checked={ask}
-          onChange={(event) => setAsk(event.target.checked)}
-        />
-        每次工具调用都询问
-      </label>
+      <details>
+        <summary>权限与审批</summary>
+        <label>
+          权限档位
+          <Select
+            value={preset}
+            onValueChange={(value) => setPreset(value as PermissionPreset)}
+          >
+            <option value="workspace-read">工作区只读</option>
+            <option value="workspace-write">工作区读写</option>
+            <option value="workspace-full">工作区完整权限</option>
+          </Select>
+        </label>
+        <label className="workflow-checkbox">
+          <input
+            type="checkbox"
+            checked={ask}
+            onChange={(event) => setAsk(event.target.checked)}
+          />
+          每次工具调用都询问
+        </label>
+      </details>
       <details>
         <summary>输入端口契约</summary>
         <pre>{JSON.stringify(definition.inputs, null, 2)}</pre>

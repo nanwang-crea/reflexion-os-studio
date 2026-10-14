@@ -26,9 +26,13 @@ test('Workflow components retain failed edits, limit port changes, refresh handl
       stdin: {
         contents: `
 import React from 'react'; import { createRoot } from 'react-dom/client';
+import './frontend/styles/style.css';
 import './frontend/features/automations/workflow.css';
 import { JsonField } from './frontend/features/automations/editor/JsonField';
 import { NodeInspector } from './frontend/features/automations/editor/NodeInspector';
+import { DefinitionEditor } from './frontend/features/automations/editor/DefinitionEditor';
+import { GenerationPanel } from './frontend/features/automations/generation/GenerationPanel';
+import { RunControls } from './frontend/features/automations/run/RunControls';
 import { WorkflowCanvas } from './frontend/features/automations/editor/WorkflowCanvas';
 import { workflowFixture } from '../../packages/contracts/test/fixtures/workflow.mjs';
 const root = createRoot(document.getElementById('root'));
@@ -49,6 +53,20 @@ window.showCanvas = () => {
   window.originalId = id; window.selected = null; window.canvasChanges = [];
   const render = () => root.render(React.createElement(WorkflowCanvas, { definition, readOnly: true, onSelect: id => window.selected = id, onError: value => { throw new Error(value) }, onChange: value => window.canvasChanges.push(value) }));
   window.renamePort = () => { definition = structuredClone(definition); definition.nodes[0].outputs[0].key = 'renamed'; definition.edges[0].from.portKey = 'renamed'; render(); }; render();
+};
+window.showWorkspace = () => {
+  function Workspace() {
+    const [definition, change] = React.useState(() => workflowFixture());
+    const [panel, setPanel] = React.useState(null);
+    const [showRun, setShowRun] = React.useState(false);
+    const editor = { definition, change, versions: [], drafts: [], draft: null, base: null, busy: false, dirty: true, generation: null, error: null, validation: null, select: async () => {}, saveDraft: async () => {}, save: async () => {}, validate: async () => {}, action: async work => work(), refresh: async () => {}, setError: value => { throw new Error(value) } };
+    const generationPanel = React.createElement(GenerationPanel, { value: null, disabled: false, canApply: false, onGenerate: () => {}, onCancel: () => {}, onApply: () => {}, onEdit: () => {} });
+    const runPanel = React.createElement(RunControls, { providers: [], definition, disabled: true, modelKey: '', onModel: () => {}, onStart: () => {} });
+    return React.createElement('div', { className: 'automations-view' },
+      React.createElement('header', { className: 'workflow-page-head' }, React.createElement('div', null, React.createElement('h1', null, '工作流'), React.createElement('p', null, '连接角色，让想法成为可执行的协作流程。'))),
+      React.createElement('div', { className: 'workflow-project-surface' }, React.createElement('div', { className: 'workflow-workspace' }, React.createElement(DefinitionEditor, { editor, saved: null, providers: [], templates: [], detail: null, showRun, onShowRun: setShowRun, panel, onPanel: setPanel, confirm: async () => true, generationPanel, runPanel }))));
+  }
+  root.render(React.createElement(Workspace));
 };
 window.showJSON();
 `,
@@ -78,7 +96,7 @@ window.showJSON();
           ? script
           : request.url === '/app.css'
             ? css
-            : '<meta charset="utf-8"><link rel="stylesheet" href="/app.css"><main id="root"></main><script src="/app.js"></script>',
+            : '<meta charset="utf-8"><link rel="stylesheet" href="/app.css"><main id="root" style="height:100vh"></main><script src="/app.js"></script>',
       )
     })
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
@@ -116,6 +134,10 @@ window.showJSON();
     })
 
     await page.evaluate(() => window.showInspector())
+    await page
+      .locator('summary')
+      .filter({ hasText: /^输入输出端口$/ })
+      .click()
     const ports = page.getByRole('textbox', { name: '输入输出端口' })
     await ports.waitFor()
     const portData = await page.evaluate(() => ({
@@ -176,6 +198,106 @@ window.showJSON();
         .count(),
       1,
     )
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.evaluate(() => window.showWorkspace())
+    await page.locator('.workflow-stage').waitFor()
+    const more = page.getByRole('button', { name: '更多操作', exact: true })
+    await more.focus()
+    await page.keyboard.press('ArrowDown')
+    await page.getByRole('menuitem', { name: '校验', exact: true }).waitFor()
+    await page.keyboard.press('Escape')
+    assert.equal(
+      await more.evaluate((element) => element === document.activeElement),
+      true,
+    )
+    const nodeButton = page.locator('.react-flow__node').first()
+    await nodeButton.click()
+    await page
+      .getByRole('textbox', { name: '节点任务', exact: true })
+      .fill('保留这段编辑内容')
+    await page.getByRole('button', { name: 'AI 生成', exact: true }).click()
+    const description = page.getByRole('textbox', { name: '描述', exact: true })
+    await description.fill('生成一个完整的产品开发流程')
+    await page.getByRole('button', { name: '流程', exact: true }).click()
+    await page
+      .getByRole('textbox', { name: '工作流名称', exact: true })
+      .fill('产品开发 Builder')
+    await page
+      .locator('summary')
+      .filter({ hasText: /^高级配置/ })
+      .click()
+    const definitionJSON = page.getByRole('textbox', {
+      name: '完整定义 JSON',
+      exact: true,
+    })
+    await definitionJSON.fill('尚未应用的 JSON 编辑')
+    await page.getByRole('button', { name: '节点', exact: true }).click()
+    assert.equal(
+      await page
+        .getByRole('textbox', { name: '节点任务', exact: true })
+        .inputValue(),
+      '保留这段编辑内容',
+    )
+    await page.getByRole('button', { name: 'AI 生成', exact: true }).click()
+    assert.equal(await description.inputValue(), '生成一个完整的产品开发流程')
+    await page.getByRole('button', { name: '流程', exact: true }).click()
+    assert.equal(await definitionJSON.inputValue(), '尚未应用的 JSON 编辑')
+    for (const viewport of [
+      { width: 1440, height: 900 },
+      { width: 950, height: 700 },
+      { width: 600, height: 650 },
+    ]) {
+      await page.setViewportSize(viewport)
+      const bounds = await page.evaluate(() => {
+        const page = document.querySelector('.automations-view')
+        const stage = document
+          .querySelector('.workflow-stage')
+          .getBoundingClientRect()
+        const panel = document
+          .querySelector('.workflow-side-panel')
+          .getBoundingClientRect()
+        return {
+          scroll: page.scrollHeight,
+          client: page.clientHeight,
+          bodyWidth: document.body.scrollWidth,
+          stageBottom: stage.bottom,
+          panelRight: panel.right,
+          width: innerWidth,
+          height: innerHeight,
+        }
+      })
+      assert.ok(bounds.scroll <= bounds.client + 1, JSON.stringify(bounds))
+      assert.ok(bounds.bodyWidth <= bounds.width, JSON.stringify(bounds))
+      assert.ok(bounds.stageBottom <= bounds.height, JSON.stringify(bounds))
+      assert.ok(bounds.panelRight <= bounds.width, JSON.stringify(bounds))
+    }
+    await page.keyboard.press('Escape')
+    assert.equal(await page.locator('.workflow-side-panel').isVisible(), false)
+    assert.equal(
+      await page
+        .getByRole('button', { name: '流程', exact: true })
+        .evaluate((element) => element === document.activeElement),
+      true,
+    )
+    await page.getByRole('button', { name: '运行', exact: true }).click()
+    await page
+      .getByRole('textbox', { name: '运行输入 JSON', exact: true })
+      .fill('{"text":{"type":"text","value":"任务"}}')
+    await page.getByRole('button', { name: 'AI 生成', exact: true }).click()
+    await page.getByRole('button', { name: '运行', exact: true }).click()
+    assert.match(
+      await page
+        .getByRole('textbox', { name: '运行输入 JSON', exact: true })
+        .inputValue(),
+      /任务/,
+    )
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page
+      .getByRole('button', { name: '收起配置面板', exact: true })
+      .click()
+    await page.screenshot({ path: '/tmp/reflexion-workflow-layout-wide.png' })
+    await page.locator('.react-flow__node').first().click()
+    await page.screenshot({ path: '/tmp/reflexion-workflow-layout-node.png' })
     assert.deepEqual(errors, [])
   } finally {
     await browser?.close()

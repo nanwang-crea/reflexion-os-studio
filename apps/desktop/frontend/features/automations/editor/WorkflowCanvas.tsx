@@ -18,6 +18,7 @@ import type {
 import { canvasNodeId, connectPorts, removeNodes } from './definition'
 import { CanvasFit } from './CanvasFit'
 import '@xyflow/react/dist/style.css'
+import './canvas.css'
 
 type RoleNode = Node<{ node: WorkflowNode; status: string }, 'role'>
 function RoleCard({ id, data }: NodeProps<RoleNode>) {

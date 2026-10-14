@@ -1,3 +1,4 @@
+import { AttemptList } from './AttemptList'
 import { NodeHistory } from './NodeHistory'
 import { WorkflowValuesView } from './WorkflowValuesView'
 import { useState } from 'react'
@@ -185,71 +186,17 @@ export function RunPanel({
                 </article>
               )
             })}
-          {detail.attempts.map((attempt) => (
-            <article key={attempt.id}>
-              <h4>
-                {
-                  detail.run.snapshot.definition.nodes.find(
-                    (node) => node.id === attempt.nodeId,
-                  )?.name
-                }{' '}
-                · #{attempt.attemptNo} · {attempt.status}
-              </h4>
-              {attempt.errorCode && <p>{attempt.errorCode}</p>}
-              {attempt.sessionId && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    void action(async () =>
-                      setHistory(await getSessionData(attempt.sessionId!)),
-                    )
-                  }
-                >
-                  查看节点轨迹
-                </button>
-              )}
-              {['failed', 'interrupted'].includes(detail.run.status) &&
-                ['failed', 'interrupted', 'cancelled'].includes(
-                  attempt.status,
-                ) && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void action(async () =>
-                        onUpdate(
-                          (
-                            await api.retryWorkflowNode({
-                              projectId: detail.run.projectId,
-                              runId: detail.run.id,
-                              nodeId: attempt.nodeId,
-                              stateVersion: detail.run.stateVersion,
-                              acknowledgedAttemptIds: acknowledged,
-                            })
-                          ).detail,
-                        ),
-                      )
-                    }
-                  >
-                    重试此节点
-                  </button>
-                )}
-              <details>
-                <summary>输入 / 成果</summary>
-                <pre>
-                  {JSON.stringify(
-                    {
-                      inputHash: attempt.inputHash,
-                      outputs: detail.outputs.find(
-                        (output) => output.attemptId === attempt.id,
-                      )?.values,
-                    },
-                    null,
-                    2,
-                  )}
-                </pre>
-              </details>
-            </article>
-          ))}
+          <AttemptList
+            detail={detail}
+            acknowledged={acknowledged}
+            action={action}
+            onUpdate={onUpdate}
+            onHistory={(sessionId) =>
+              void action(async () =>
+                setHistory(await getSessionData(sessionId)),
+              )
+            }
+          />
           {detail.result && (
             <details open>
               <summary>最终成果</summary>

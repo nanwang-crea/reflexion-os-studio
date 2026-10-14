@@ -1,20 +1,22 @@
-import { useState } from 'react'
 import {
-  WorkflowDefinitionSchema,
-  type ProviderProfile,
-  type AgentTemplate,
-  type WorkflowVersion,
-  type WorkflowRunDetail,
+  useState,
+  useRef,
+  useId,
+  type ReactNode,
+  type ComponentProps,
+} from 'react'
+import type {
+  ProviderProfile,
+  AgentTemplate,
+  WorkflowRunDetail,
 } from '@reflexion-os-studio/contracts'
-import type { ConfirmDialogState } from '../../../components/ConfirmDialog'
-import { Select } from '../../../components/forms/Select'
-import { archiveWorkflow } from '../../../api/workflow'
-import type { useWorkflowEditor } from '../useWorkflowEditor'
+import { DefinitionToolbar } from './DefinitionToolbar'
 import { WorkflowCanvas } from './WorkflowCanvas'
 import { createNode } from './definition'
 import { NodeInspector } from './NodeInspector'
-import { JsonField } from './JsonField'
+import { FlowSettings } from './FlowSettings'
 
+export type WorkflowPanel = 'node' | 'flow' | 'generate' | 'run' | null
 export function DefinitionEditor({
   editor,
   saved,
@@ -24,20 +26,35 @@ export function DefinitionEditor({
   showRun,
   onShowRun,
   confirm,
-}: {
-  editor: ReturnType<typeof useWorkflowEditor>
-  saved: WorkflowVersion | null | undefined
+  panel,
+  onPanel,
+  generationPanel,
+  runPanel,
+  pendingActions = 0,
+}: Omit<ComponentProps<typeof DefinitionToolbar>, 'select'> & {
   providers: ProviderProfile[]
   templates: AgentTemplate[]
   detail: WorkflowRunDetail | null
   showRun: boolean
   onShowRun: (value: boolean) => void
-  confirm: (state: ConfirmDialogState) => Promise<boolean>
+  panel: WorkflowPanel
+  onPanel: (value: WorkflowPanel) => void
+  generationPanel: ReactNode
+  runPanel: ReactNode
+  pendingActions?: number
 }): React.JSX.Element {
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
+  const panelId = useId()
+  const navigation = useRef<HTMLElement>(null)
   const definition =
     showRun && detail ? detail.run.snapshot.definition : editor.definition
   const node = definition.nodes.find((node) => node.id === selectedNode)
+  const closePanel = () => {
+    navigation.current
+      ?.querySelector<HTMLButtonElement>('[aria-pressed="true"]')
+      ?.focus()
+    onPanel(null)
+  }
   const select = (value: Parameters<typeof editor.select>[0]) => {
     setSelectedNode(null)
     onShowRun(false)
@@ -45,245 +62,224 @@ export function DefinitionEditor({
   }
   return (
     <>
-      <div className="workflow-toolbar">
-        <label>
-          已保存版本
-          <Select
-            value={
-              editor.draft?.definitionId ?? editor.base?.definitionId ?? ''
-            }
-            disabled={editor.busy}
-            onValueChange={(id) =>
-              select(
-                editor.versions.find(
-                  (version) => version.definitionId === id,
-                ) ?? null,
-              )
-            }
-          >
-            <option value="">新流程</option>
-            {editor.versions.map((version) => (
-              <option key={version.definitionId} value={version.definitionId}>
-                {version.definition.name} · v{version.revision}
-              </option>
-            ))}
-          </Select>
-        </label>
-        <label>
-          草稿
-          <Select
-            value={editor.draft?.id ?? ''}
-            disabled={editor.busy}
-            onValueChange={(id) =>
-              select(editor.drafts.find((draft) => draft.id === id) ?? null)
-            }
-          >
-            <option value="">请选择</option>
-            {editor.drafts.map((draft) => (
-              <option key={draft.id} value={draft.id}>
-                {draft.definition.name} · 草稿 {draft.revision}
-              </option>
-            ))}
-          </Select>
-        </label>
-        <button
-          type="button"
-          disabled={editor.busy}
-          onClick={() => select(null)}
-        >
-          新建
-        </button>
-        <button
-          type="button"
-          disabled={editor.busy}
-          onClick={() => void editor.saveDraft()}
-        >
-          保存草稿
-        </button>
-        <button
-          type="button"
-          disabled={editor.busy}
-          onClick={() => void editor.validate()}
-        >
-          校验
-        </button>
-        <button
-          type="button"
-          disabled={editor.busy}
-          onClick={() => void editor.save()}
-        >
-          保存版本
-        </button>
-        {saved && (
+      <DefinitionToolbar
+        editor={editor}
+        saved={saved}
+        select={select}
+        confirm={confirm}
+      />
+      <div className="workflow-stage-toolbar">
+        <div className="workflow-canvas-actions">
           <button
             type="button"
-            disabled={editor.busy}
-            onClick={() =>
-              void editor.action(async () => {
-                if (
-                  await confirm({
-                    title: '归档工作流',
-                    message: `归档 ${saved.definition.name}？运行记录仍可查看。`,
-                    confirmLabel: '归档',
-                  })
-                ) {
-                  const result = await archiveWorkflow({
-                    projectId: saved.projectId,
-                    definitionId: saved.definitionId,
-                    baseRevision: saved.revision,
-                  })
-                  if (!result.archived)
-                    throw new Error('版本已变化，请刷新后操作')
-                  await editor.refresh()
-                  await editor.select(null)
-                }
-              })
-            }
+            aria-pressed={!showRun}
+            onClick={() => onShowRun(false)}
           >
-            归档
+            编辑草稿
           </button>
-        )}
-        <button
-          type="button"
-          disabled={editor.busy}
-          onClick={() => void editor.action(editor.refresh)}
-        >
-          刷新定义
-        </button>
-        <span>
-          {editor.dirty
-            ? '有未保存编辑'
-            : `草稿 ${editor.draft?.revision ?? '—'}`}
-        </span>
-      </div>
-      {editor.error && (
-        <p className="workflow-error" role="alert">
-          {editor.error}
-        </p>
-      )}
-      {editor.validation && (
-        <div aria-live="polite">
-          {editor.validation.valid
-            ? '校验通过'
-            : editor.validation.issues.map((issue, index) => (
-                <p key={index}>
-                  {issue.path}：{issue.message}
-                </p>
-              ))}
+          <button
+            type="button"
+            disabled={!detail}
+            aria-pressed={showRun}
+            onClick={() => onShowRun(true)}
+          >
+            运行快照
+          </button>
+          {!showRun &&
+            ['agent', 'confirmation'].map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                disabled={editor.busy || editor.definition.nodes.length >= 64}
+                onClick={() => {
+                  const node = createNode(kind as 'agent' | 'confirmation')
+                  editor.change({
+                    ...editor.definition,
+                    nodes: [...editor.definition.nodes, node],
+                    layout: [
+                      ...editor.definition.layout,
+                      {
+                        nodeId: node.id,
+                        x: editor.definition.nodes.length * 40,
+                        y: 220,
+                      },
+                    ],
+                  })
+                  setSelectedNode(node.id)
+                  onPanel('node')
+                }}
+              >
+                ＋ {kind === 'agent' ? '角色' : '人工确认'}
+              </button>
+            ))}
         </div>
-      )}
-      <div className="workflow-toolbar">
-        <button
-          type="button"
-          aria-pressed={!showRun}
-          onClick={() => onShowRun(false)}
+        <nav
+          ref={navigation}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape' && !event.defaultPrevented && panel) {
+              event.preventDefault()
+              closePanel()
+            }
+          }}
+          aria-label="工作流面板"
+          className="workflow-panel-tabs"
         >
-          编辑草稿
-        </button>
-        <button
-          type="button"
-          disabled={!detail}
-          aria-pressed={showRun}
-          onClick={() => onShowRun(true)}
-        >
-          查看运行快照
-        </button>
-        {!showRun &&
-          ['agent', 'confirmation'].map((kind) => (
+          {(
+            [
+              ['node', '节点'],
+              ['flow', '流程'],
+              ['generate', 'AI 生成'],
+              ['run', '运行'],
+            ] as const
+          ).map(([id, label]) => (
             <button
-              key={kind}
+              key={id}
               type="button"
-              disabled={editor.busy || editor.definition.nodes.length >= 64}
-              onClick={() => {
-                const node = createNode(kind as 'agent' | 'confirmation')
-                editor.change({
-                  ...editor.definition,
-                  nodes: [...editor.definition.nodes, node],
-                  layout: [
-                    ...editor.definition.layout,
-                    {
-                      nodeId: node.id,
-                      x: editor.definition.nodes.length * 40,
-                      y: 220,
-                    },
-                  ],
-                })
-                setSelectedNode(node.id)
-              }}
+              aria-pressed={panel === id}
+              aria-controls={`${panelId}-${id}`}
+              onClick={() => onPanel(panel === id ? null : id)}
             >
-              添加{kind === 'agent' ? '角色' : '确认'}
+              {label}
+              {id === 'run' && pendingActions > 0 && (
+                <span
+                  className="workflow-pending"
+                  role="img"
+                  aria-label={`${pendingActions} 项待处理确认`}
+                />
+              )}
             </button>
           ))}
+        </nav>
       </div>
-      <div className="workflow-editor">
-        <WorkflowCanvas
-          definition={definition}
-          detail={showRun ? detail : null}
-          readOnly={showRun || editor.busy}
-          onChange={editor.change}
-          onSelect={setSelectedNode}
-          onError={editor.setError}
-        />
-        {node && !showRun && (
-          <fieldset disabled={editor.busy}>
-            <NodeInspector
-              key={node.id}
-              node={node}
-              templates={templates}
-              providers={providers}
-              onChange={(node) =>
-                editor.change({
-                  ...editor.definition,
-                  nodes: editor.definition.nodes.map((existing) =>
-                    existing.id === node.id ? node : existing,
-                  ),
-                })
-              }
-            />
-          </fieldset>
-        )}
+      <div className="workflow-stage">
+        <div className="workflow-canvas-area">
+          <div className="workflow-canvas-caption">
+            <span>{definition.name}</span>
+            <span>
+              {definition.nodes.length} 个节点 · {definition.edges.length}{' '}
+              条连线{showRun ? ' · 只读快照' : ''}
+            </span>
+          </div>
+          <WorkflowCanvas
+            definition={definition}
+            detail={showRun ? detail : null}
+            readOnly={showRun || editor.busy}
+            onChange={editor.change}
+            onSelect={(id) => {
+              setSelectedNode(id)
+              onPanel('node')
+            }}
+            onError={editor.setError}
+          />
+          {!definition.nodes.length && (
+            <div className="workflow-canvas-hint">
+              <strong>从一个角色开始</strong>
+              <p>添加角色并连接端口，或用 AI 生成协作流程。</p>
+              <button type="button" onClick={() => onPanel('generate')}>
+                描述你的工作流 →
+              </button>
+            </div>
+          )}
+          {(editor.error || editor.validation) && (
+            <div className="workflow-notice">
+              {editor.error && (
+                <p className="workflow-error" role="alert">
+                  {editor.error}
+                </p>
+              )}
+              {editor.validation && (
+                <details open={!editor.validation.valid}>
+                  <summary>
+                    {editor.validation.valid
+                      ? '✓ 校验通过'
+                      : `校验发现 ${editor.validation.issues.length} 个问题`}
+                  </summary>
+                  {editor.validation.issues.map((issue, index) => (
+                    <p key={index}>
+                      {issue.path}：{issue.message}
+                    </p>
+                  ))}
+                </details>
+              )}
+            </div>
+          )}
+        </div>
+        <aside
+          className="workflow-side-panel"
+          hidden={!panel}
+          aria-label="工作流配置面板"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape' && !event.defaultPrevented) {
+              event.preventDefault()
+              closePanel()
+            }
+          }}
+        >
+          <header className="workflow-side-head">
+            <strong>
+              {panel === 'node'
+                ? '节点编辑'
+                : panel === 'flow'
+                  ? '流程配置'
+                  : panel === 'generate'
+                    ? 'AI 生成'
+                    : '运行中心'}
+            </strong>
+            <button
+              type="button"
+              aria-label="收起配置面板"
+              onClick={closePanel}
+            >
+              ×
+            </button>
+          </header>
+          <div className="workflow-side-body">
+            <div id={`${panelId}-node`} hidden={panel !== 'node'}>
+              {node ? (
+                <fieldset disabled={editor.busy || showRun}>
+                  <NodeInspector
+                    key={node.id}
+                    node={node}
+                    templates={templates}
+                    providers={providers}
+                    onChange={(node) =>
+                      editor.change({
+                        ...editor.definition,
+                        nodes: editor.definition.nodes.map((existing) =>
+                          existing.id === node.id ? node : existing,
+                        ),
+                      })
+                    }
+                  />
+                </fieldset>
+              ) : (
+                <div className="workflow-panel-empty">
+                  <strong>选择一个节点</strong>
+                  <p>点击画布中的角色，编辑 Prompt、任务和连接端口。</p>
+                </div>
+              )}
+              {showRun && node && (
+                <p className="workflow-muted">当前为运行快照，配置只读。</p>
+              )}
+            </div>
+            <div id={`${panelId}-flow`} hidden={panel !== 'flow'}>
+              <fieldset disabled={editor.busy || showRun}>
+                <FlowSettings
+                  value={definition}
+                  documentKey={`${editor.draft?.id ?? editor.base?.definitionId ?? 'new'}:${editor.generation?.status ?? ''}`}
+                  onChange={editor.change}
+                />
+              </fieldset>
+            </div>
+            <div id={`${panelId}-generate`} hidden={panel !== 'generate'}>
+              {generationPanel}
+            </div>
+            <div id={`${panelId}-run`} hidden={panel !== 'run'}>
+              {runPanel}
+            </div>
+          </div>
+        </aside>
       </div>
-      {!showRun && (
-        <fieldset disabled={editor.busy}>
-          <label>
-            工作流名称
-            <input
-              value={editor.definition.name}
-              onChange={(event) =>
-                editor.change({
-                  ...editor.definition,
-                  name: event.target.value,
-                })
-              }
-            />
-          </label>
-          <label>
-            说明
-            <textarea
-              value={editor.definition.description}
-              onChange={(event) =>
-                editor.change({
-                  ...editor.definition,
-                  description: event.target.value,
-                })
-              }
-            />
-          </label>
-          <details>
-            <summary>
-              高级配置：流程端口、绑定、最终成果、预算与完整定义
-            </summary>
-            <JsonField
-              key={`${editor.draft?.id ?? editor.base?.definitionId ?? 'new'}:${editor.generation?.status ?? ''}`}
-              label="完整定义 JSON"
-              value={editor.definition}
-              onApply={(value) =>
-                editor.change(WorkflowDefinitionSchema.parse(value))
-              }
-            />
-          </details>
-        </fieldset>
-      )}
     </>
   )
 }

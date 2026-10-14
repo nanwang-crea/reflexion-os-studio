@@ -1,0 +1,93 @@
+.workflow-canvas {
+  min-height: 360px;
+  height: 52vh;
+  overflow: hidden;
+  --xy-background-color: var(--bg-inset);
+  --xy-edge-stroke: var(--text-muted);
+  --xy-node-color: inherit;
+  --xy-node-background-color: var(--bg-elevated);
+}
+.workflow-canvas-area > .workflow-canvas {
+  min-height: 0;
+  height: 100%;
+}
+.workflow-side-body .workflow-canvas {
+  min-height: 220px;
+  height: 240px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+.workflow-role-card {
+  width: 235px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  min-height: 110px;
+  box-shadow: var(--shadow-sm);
+}
+.react-flow__node.selected .workflow-role-card {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.workflow-role-card header {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  gap: 6px;
+}
+.workflow-role-card strong {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.workflow-role-card small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.workflow-port-columns {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 12px 12px;
+  gap: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+.workflow-port {
+  position: relative;
+  height: 25px;
+  font-size: 11px;
+}
+.workflow-port-columns > div {
+  flex: 1;
+  min-width: 0;
+}
+.workflow-port-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+.workflow-canvas {
+  --xy-controls-button-background-color: var(--bg-elevated);
+  --xy-controls-button-background-color-hover: var(--bg-hover);
+  --xy-controls-button-color: var(--text);
+  --xy-controls-button-color-hover: var(--text);
+  --xy-controls-button-border-color: var(--border-subtle);
+}
+.workflow-canvas .react-flow__controls {
+  display: flex;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+.workflow-workspace .react-flow__controls-button {
+  padding: 6px;
+  width: 30px;
+  height: 30px;
+  border-radius: 0;
+  border-bottom: 0;
+  border-right: 1px solid var(--border-subtle);
+}
+.workflow-workspace .react-flow__controls-button:last-child {
+  border-right: 0;
+}

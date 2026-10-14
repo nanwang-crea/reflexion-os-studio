@@ -138,27 +138,33 @@ export function NodeInspector({
                 )}
             </Select>
           </label>
-          <JsonField
-            key={`${node.id}:policy:${node.role.templateId}`}
-            label="权限与工具上限"
-            value={node.role.policy}
-            onApply={(value) =>
-              onChange(
-                WorkflowNodeSchema.parse({
-                  ...node,
-                  role: { ...node.role, policy: value },
-                }),
-              )
-            }
-          />
-          <JsonField
-            key={`${node.id}:budget`}
-            label="节点预算"
-            value={node.budget}
-            onApply={(value) =>
-              onChange(WorkflowNodeSchema.parse({ ...node, budget: value }))
-            }
-          />
+          <details>
+            <summary>权限与工具</summary>
+            <JsonField
+              key={`${node.id}:policy:${node.role.templateId}`}
+              label="权限与工具上限"
+              value={node.role.policy}
+              onApply={(value) =>
+                onChange(
+                  WorkflowNodeSchema.parse({
+                    ...node,
+                    role: { ...node.role, policy: value },
+                  }),
+                )
+              }
+            />
+          </details>
+          <details>
+            <summary>执行预算</summary>
+            <JsonField
+              key={`${node.id}:budget`}
+              label="节点预算"
+              value={node.budget}
+              onApply={(value) =>
+                onChange(WorkflowNodeSchema.parse({ ...node, budget: value }))
+              }
+            />
+          </details>
         </>
       ) : (
         <label>
@@ -172,20 +178,23 @@ export function NodeInspector({
           />
         </label>
       )}
-      <JsonField
-        key={`${node.id}:ports`}
-        label="输入输出端口"
-        value={{ inputs: node.inputs, outputs: node.outputs }}
-        onApply={(value) => {
-          const ports = PortsSchema.parse(value)
-          onChange(
-            WorkflowNodeSchema.parse({
-              ...node,
-              ...ports,
-            }),
-          )
-        }}
-      />
+      <details>
+        <summary>输入输出端口</summary>
+        <JsonField
+          key={`${node.id}:ports`}
+          label="输入输出端口"
+          value={{ inputs: node.inputs, outputs: node.outputs }}
+          onApply={(value) => {
+            const ports = PortsSchema.parse(value)
+            onChange(
+              WorkflowNodeSchema.parse({
+                ...node,
+                ...ports,
+              }),
+            )
+          }}
+        />
+      </details>
     </section>
   )
 }

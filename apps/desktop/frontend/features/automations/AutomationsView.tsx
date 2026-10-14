@@ -48,31 +48,37 @@ export function AutomationsView({
   }, [projectId])
   return (
     <div className="automations-view">
-      <header className="panel-head">
-        <h1>工作流</h1>
-        <p className="panel-sub">
-          编排角色 Agent，审阅草稿后保存和运行。定时任务尚未开放。
-        </p>
+      <header className="workflow-page-head">
+        <div>
+          <h1>工作流</h1>
+          <p className="panel-sub">
+            连接角色，让想法成为可执行的协作流程。定时任务尚未开放。
+          </p>
+        </div>
+        <label className="workflow-project-picker">
+          项目
+          <Select
+            value={projectId ?? ''}
+            onValueChange={(id) => setProjectId(id || null)}
+          >
+            <option value="">请选择项目</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </Select>
+        </label>
       </header>
       {error && <p role="alert">{error}</p>}
-      <label>
-        项目
-        <Select
-          value={projectId ?? ''}
-          onValueChange={(id) => setProjectId(id || null)}
-        >
-          <option value="">请选择项目</option>
-          {projects.map((project) => (
-            <option key={project.id} value={project.id}>
-              {project.name}
-            </option>
-          ))}
-        </Select>
-      </label>
       {projects
         .filter((project) => visited.has(project.id))
         .map((project) => (
-          <div key={project.id} hidden={project.id !== projectId}>
+          <div
+            className="workflow-project-surface"
+            key={project.id}
+            hidden={project.id !== projectId}
+          >
             <WorkflowWorkspace
               projectId={project.id}
               visible={visible && project.id === projectId}
