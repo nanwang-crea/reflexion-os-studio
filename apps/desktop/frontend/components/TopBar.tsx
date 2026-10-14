@@ -25,7 +25,7 @@ export interface TopBarProps {
   showTerminalToggle: boolean
   terminalOpen: boolean
   onToggleTerminal: () => void
-  /** 运行时状态；system-ready 时不显示角标。 */
+  /** 运行时状态；正常就绪时不显示角标。 */
   runtimeState: string
   statusLabel: string
 }
@@ -46,11 +46,12 @@ export function TopBar(props: TopBarProps): React.JSX.Element {
       <span className="topbar-title">{props.contextTitle}</span>
       <span className="spacer" />
       <TopBarTools {...props} />
-      {props.runtimeState !== 'system-ready' && (
-        <span className={`badge badge-${props.runtimeState}`}>
-          {props.statusLabel}
-        </span>
-      )}
+      {props.runtimeState !== 'runtime-ready' &&
+        props.runtimeState !== 'system-ready' && (
+          <span className={`badge badge-${props.runtimeState}`}>
+            {props.statusLabel}
+          </span>
+        )}
     </header>
   )
 }
