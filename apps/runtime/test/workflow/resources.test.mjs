@@ -59,6 +59,62 @@ test('resource identity is checked and credential paths are refused before any r
   )
 })
 
+test('portable resource paths reject Windows aliases before any system read', async (t) => {
+  const h = harness(t)
+  const requests = []
+  const deps = {
+    store: h.store,
+    assets: {},
+    system: {
+      available: true,
+      async request(_method, params) {
+        requests.push(params.path)
+        return { revision: fingerprint }
+      },
+    },
+  }
+  for (const path of [
+    'docs/secrets.json:preview',
+    'docs/credentials.json.',
+    'docs/.ssh /note.txt',
+    'NUL.txt',
+    'aux/readme.txt',
+    'COM1',
+    'LPT².log',
+    'CONOUT$',
+    'docs/a\u0000.txt',
+    'docs/a?.txt',
+    '\\\\server\\share\\note.txt',
+    '\\\\?\\C:\\note.txt',
+    'C:note.txt',
+  ]) {
+    await assert.rejects(
+      validateWorkflowResources(deps, h.project.id, value(h.project.id, path)),
+      undefined,
+      path,
+    )
+  }
+  assert.deepEqual(requests, [])
+  for (const path of [
+    'docs\\设计.txt',
+    'docs/设计.txt',
+    'docs/COM10.txt',
+    './docs/设计.txt',
+  ]) {
+    await validateWorkflowResources(
+      deps,
+      h.project.id,
+      value(h.project.id, path),
+    )
+  }
+  assert.deepEqual(requests, [
+    'docs/设计.txt',
+    'docs/设计.txt',
+    'docs/COM10.txt',
+    './docs/设计.txt',
+  ])
+})
+
 test('Asset ownership and metadata hash are checked before touching content', async (t) => {
   const h = harness(t)
   const assetId = 'fixture-resource'

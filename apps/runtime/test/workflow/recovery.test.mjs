@@ -308,3 +308,35 @@ test('expired confirmation fails the flow and cannot authorize downstream work',
   assert.equal(result.confirmations[0].status, 'expired')
   assert.equal(result.outputs.length, 1)
 })
+
+test('confirmation expiry is rechecked after asynchronous resource validation', async (t) => {
+  const h = harness(t, undefined, confirmationFlow())
+  const detail = await waiting(h, (await h.service.start(h.start)).run.id)
+  const item = detail.confirmations[0]
+  const oldNow = Date.now
+  let now = Date.parse(item.expiresAt) - 1
+  Date.now = () => now
+  h.deps.validateResources = async () => {
+    await Promise.resolve()
+    now = Date.parse(item.expiresAt) + 1
+  }
+  try {
+    await assert.rejects(
+      h.service.respond({
+        projectId: h.project.id,
+        runId: detail.run.id,
+        confirmationId: item.id,
+        token: item.token,
+        inputHash: item.inputHash,
+        approved: true,
+      }),
+      /confirmation_expired/,
+    )
+  } finally {
+    Date.now = oldNow
+  }
+  const result = await done(h, detail.run.id)
+  assert.equal(result.run.status, 'failed')
+  assert.equal(result.confirmations[0].status, 'expired')
+  assert.equal(result.outputs.length, 1)
+})

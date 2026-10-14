@@ -37,7 +37,8 @@ export async function respondToWorkflowConfirmation(
     workflowHash(item.inputs) !== item.inputHash
   )
     throw new Error('workflow_confirmation_invalid')
-  if (Date.parse(item.expiresAt) <= Date.now()) {
+  const assertNotExpired = () => {
+    if (Date.parse(item.expiresAt) > Date.now()) return
     store.workflowConfirmations.resolve(item.id, 'expired')
     service.scheduler.fail(
       input.runId,
@@ -47,6 +48,7 @@ export async function respondToWorkflowConfirmation(
     service.scheduler.drive(input.projectId, input.runId, context)
     throw new Error('workflow_confirmation_expired')
   }
+  assertNotExpired()
   await service.deps.validateResources(
     input.projectId,
     item.inputs,
@@ -65,6 +67,7 @@ export async function respondToWorkflowConfirmation(
     store.workflowConfirmations.get(item.id)?.status !== 'pending'
   )
     throw new Error('workflow_confirmation_invalid')
+  assertNotExpired()
   store.transaction(() => {
     store.workflowConfirmations.resolve(
       item.id,

@@ -4,6 +4,7 @@ import type {
   WorkflowRunSummary,
 } from '@reflexion-os-studio/contracts'
 import * as api from '../../../api/workflow'
+import { mergeWorkflowRuns } from './history'
 
 export function useWorkflowRuns(
   projectId: string,
@@ -13,17 +14,12 @@ export function useWorkflowRuns(
   const [detail, setDetail] = useState<WorkflowRunDetail | null>(null)
   const selected = useRef<string | null>(null)
   const alive = useRef(true)
+  const refreshEpoch = useRef(0)
   const refresh = useCallback(async () => {
+    const epoch = ++refreshEpoch.current
     const result = await api.listWorkflowRuns({ projectId })
-    if (alive.current)
-      setRuns((old) =>
-        result.runs.map((run) => {
-          const current = old.find((item) => item.id === run.id)
-          return current && current.stateVersion > run.stateVersion
-            ? current
-            : run
-        }),
-      )
+    if (alive.current && epoch === refreshEpoch.current)
+      setRuns((old) => mergeWorkflowRuns(old, result.runs, 'latest'))
   }, [projectId])
   useEffect(() => {
     alive.current = true
@@ -62,12 +58,7 @@ export function useWorkflowRuns(
       offset: runs.length,
     })
     if (alive.current)
-      setRuns((old) => [
-        ...old,
-        ...result.runs.filter(
-          (run) => !old.some((existing) => existing.id === run.id),
-        ),
-      ])
+      setRuns((old) => mergeWorkflowRuns(old, result.runs, 'older'))
   }, [projectId, runs.length])
   return { runs, detail, refresh, update, select, event, older }
 }

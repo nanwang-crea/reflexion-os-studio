@@ -51,7 +51,18 @@ export async function validateWorkflowResources(
       if (
         !root ||
         resource.projectId !== projectId ||
-        /^[A-Za-z]:/.test(path) ||
+        // Portable resource identities exclude Windows streams, device aliases,
+        // and names normalized by Win32 before the filesystem boundary sees them.
+        /[<>:"|?*\x00-\x1f\x7f]/.test(path) ||
+        path
+          .split('/')
+          .some(
+            (part) =>
+              (part !== '.' && /[. ]$/.test(part)) ||
+              /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³]|conin\$|conout\$)(?:\.|$)/i.test(
+                part,
+              ),
+          ) ||
         touchesSensitive(resolve(root, path))
       )
         throw new Error('workflow_resource_denied')

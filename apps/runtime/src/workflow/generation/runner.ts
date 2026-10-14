@@ -36,7 +36,8 @@ export async function runGeneration(
   try {
     for (let attempt = 0; attempt < 3; attempt++) {
       const value = get(initial.projectId, initial.id)
-      if (signal.aborted || value.status !== 'running') return
+      if (signal.aborted) throw new Error('generation_cancelled')
+      if (value.status !== 'running') return
       const remaining = MAX_TOKENS - value.tokensUsed
       if (remaining < 1000) throw new Error('generation_token_budget')
       const content = await deps.execute({
@@ -62,7 +63,8 @@ export async function runGeneration(
         },
       })
       const current = get(value.projectId, value.id)
-      if (signal.aborted || current.status !== 'running') return
+      if (signal.aborted) throw new Error('generation_cancelled')
+      if (current.status !== 'running') return
       if (current.tokensUsed > MAX_TOKENS)
         throw new Error('generation_token_budget')
       let errorCode = 'generation_schema_invalid'

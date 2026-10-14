@@ -59,6 +59,65 @@ const settled = (h, id) =>
     return value.status !== 'running' && value
   })
 
+test('a late successful model response after abort still settles generation', async (t) => {
+  let release
+  const h = await fixture(
+    t,
+    () =>
+      new Promise((resolve) => {
+        release = resolve
+      }),
+  )
+  const value = h.service.start(h.input)
+  await until(() => release)
+  const cancellation = h.service.cancel(h.project.id, value.id)
+  release(JSON.stringify(h.version.definition))
+  const result = await cancellation
+  assert.equal(result.status, 'cancelled')
+  assert.equal(result.candidate, null)
+  assert.ok(
+    h.events.some(
+      (event) =>
+        event.type === 'workflow.generation.updated' &&
+        event.status === 'cancelled',
+    ),
+  )
+  await h.service.dispose()
+})
+
+test('a late model response after the generation deadline persists a failed terminal state', async (t) => {
+  let release
+  const h = await fixture(
+    t,
+    () =>
+      new Promise((resolve) => {
+        release = resolve
+      }),
+  )
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  try {
+    const value = h.service.start(h.input)
+    await Promise.resolve()
+    assert.ok(release)
+    t.mock.timers.tick(120000)
+    release(JSON.stringify(h.version.definition))
+    const result = await h.service.cancel(h.project.id, value.id)
+    assert.equal(result.status, 'failed')
+    assert.equal(result.errorCode, 'generation_time_budget')
+    assert.equal(result.candidate, null)
+    assert.ok(
+      h.events.some(
+        (event) =>
+          event.type === 'workflow.generation.updated' &&
+          event.status === 'failed',
+      ),
+    )
+  } finally {
+    t.mock.timers.reset()
+    await h.service.dispose()
+  }
+})
+
 test('generation, apply, save and execution are separate; provenance is server-owned and sticky', async (t) => {
   const h = await fixture(t)
   const first = h.service.start(h.input)

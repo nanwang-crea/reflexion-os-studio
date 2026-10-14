@@ -15,14 +15,40 @@ after(() => rmSync(directory, { recursive: true, force: true }))
 const outfile = join(directory, 'editor.mjs')
 await build({
   absWorkingDir: fileURLToPath(new URL('..', import.meta.url)),
-  entryPoints: ['frontend/features/automations/editor/definition.ts'],
+  stdin: {
+    contents: `
+      export * from './frontend/features/automations/editor/definition.ts'
+      export * from './frontend/features/automations/run/history.ts'
+    `,
+    resolveDir: fileURLToPath(new URL('..', import.meta.url)),
+  },
   bundle: true,
   format: 'esm',
   outfile,
 })
-const { createNode, newDefinition, connectPorts, removeNodes } = await import(
-  pathToFileURL(outfile).href
-)
+const {
+  createNode,
+  newDefinition,
+  connectPorts,
+  removeNodes,
+  mergeWorkflowRuns,
+} = await import(pathToFileURL(outfile).href)
+
+test('run refresh retains older pages, deduplicates overlap and ignores stale states', () => {
+  const run = (id, stateVersion) => ({ id, stateVersion })
+  const loaded = [run('new', 4), run('old', 3)]
+  const refreshed = mergeWorkflowRuns(
+    loaded,
+    [run('newest', 1), run('new', 2)],
+    'latest',
+  )
+  assert.deepEqual(refreshed, [run('newest', 1), run('new', 4), run('old', 3)])
+  assert.deepEqual(
+    mergeWorkflowRuns(refreshed, [run('old', 4), run('oldest', 1)], 'older'),
+    [run('newest', 1), run('new', 4), run('old', 4), run('oldest', 1)],
+  )
+  assert.deepEqual(loaded, [run('new', 4), run('old', 3)])
+})
 
 test('new role and confirmation nodes use distinct IDs, no delegation and matching ports', () => {
   const one = createNode('agent'),
