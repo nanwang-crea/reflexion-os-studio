@@ -1,7 +1,9 @@
+import { materializeBuiltinSkills } from './builtin/packages.js'
 import { saveAuthoredSkill } from './authoring/save.js'
+import { SkillResourceStager } from './resources/stager.js'
 import type { SkillSaveParams } from '@reflexion-os-studio/contracts'
 import { BUILTIN_SKILLS } from './builtin/index.js'
-import { existsSync, mkdirSync, readdirSync, renameSync } from 'node:fs'
+import { existsSync, readdirSync, renameSync } from 'node:fs'
 import { basename, join, relative, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import {
@@ -19,7 +21,7 @@ import {
 } from '../plugins/package.js'
 import { cleanupTemporary } from '../plugins/sources.js'
 import { PluginPackageInstaller } from '../plugins/installer.js'
-import { migrateLegacySkills } from '../plugins/legacy-migration.js'
+import { skillRoot, migrateSkillLocations } from './locations.js'
 import { recoverPluginTransactions } from '../plugins/recovery.js'
 import { PluginTaskManager } from '../plugins/tasks.js'
 import { SkillRegistry } from './registry.js'
@@ -28,6 +30,8 @@ const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/
 
 /** Owns discovery and lifecycle for declarative skill plugins. */
 export class SkillPluginService {
+  private readonly resources = new SkillResourceStager()
+  private readonly builtinPaths: Map<string, string>
   readonly registry: SkillRegistry
   readonly pluginsRoot: string
   private readonly emitters = new Map<string, ResourceEventEmitter>()
@@ -45,15 +49,22 @@ export class SkillPluginService {
       const manifest = packageManifestForBuiltin(definition)
       this.builtinManifests.set(manifest.id, manifest)
     }
-    this.pluginsRoot = join(dataDir, 'plugins')
-    mkdirSync(this.pluginsRoot, { recursive: true })
+    this.pluginsRoot = join(dataDir, 'skills')
+    skillRoot(this.store, this.pluginsRoot, null, true)
+    this.builtinPaths = materializeBuiltinSkills(this.pluginsRoot)
     const builtinIds = new Set(this.builtinManifests.keys())
-    migrateLegacySkills(join(dataDir, 'skills'), this.pluginsRoot, builtinIds)
+    migrateSkillLocations(
+      this.store,
+      join(dataDir, 'plugins'),
+      this.pluginsRoot,
+      builtinIds,
+    )
     recoverPluginTransactions(this.pluginsRoot, this.store)
     this.installer = new PluginPackageInstaller(
       this.store,
       this.pluginsRoot,
       builtinIds,
+      (projectId) => skillRoot(this.store, this.pluginsRoot, projectId, true),
     )
     this.tasks = new PluginTaskManager(this.installer, this.notify, (id) => {
       this.reloadRegistry()
@@ -76,7 +87,7 @@ export class SkillPluginService {
       scope: 'global' as const,
       projectId: null,
       status: 'enabled' as const,
-      installPath: null,
+      installPath: this.builtinPaths.get(manifest.id) ?? null,
       enabled: true,
       manifest,
       error: null,
@@ -87,15 +98,43 @@ export class SkillPluginService {
   }
 
   async save(input: SkillSaveParams): Promise<PluginRecord> {
+    if (this.builtinManifests.has(input.id))
+      throw new Error('内置 Skill 不能覆盖')
     const plugin = await saveAuthoredSkill(
       this.store,
-      this.pluginsRoot,
+      skillRoot(this.store, this.pluginsRoot, input.projectId, true),
       this.installer,
       input,
     )
     this.reloadRegistry()
     this.emit(plugin)
     return plugin
+  }
+
+  prepare(
+    skillId: string,
+    projectId: string | null,
+    runId: string,
+    resource?: string,
+  ) {
+    if (!this.registry.get(skillId, projectId))
+      throw new Error('Skill 不可用或不属于当前项目')
+    const plugin =
+      this.store.plugins.get(skillId) ??
+      this.list().find((item) => item.id === skillId)
+    if (!plugin) throw new Error('该内置 Skill 没有外部资源包')
+    return this.resources.prepare(
+      plugin,
+      skillRoot(this.store, this.pluginsRoot, plugin.projectId),
+      runId,
+      resource,
+    )
+  }
+  releaseRun(runId: string): void {
+    this.resources.releaseRun(runId)
+  }
+  dispose(): void {
+    this.resources.dispose()
   }
 
   preview(source: PluginInstallSource): PluginTask {
@@ -119,7 +158,8 @@ export class SkillPluginService {
   }
 
   projectDeleted(projectId: string): void {
-    cleanupTemporary(join(this.pluginsRoot, 'projects', projectId))
+    // Project packages belong to the user's workspace and survive project removal.
+    void projectId
     this.reloadRegistry()
   }
 
@@ -140,7 +180,10 @@ export class SkillPluginService {
     const current = this.store.plugins.get(id)
     if (!current) return false
     const target = this.assertManagedInstallPath(current)
-    const quarantine = this.temporaryPath(`remove-${id}`)
+    const quarantine = join(
+      skillRoot(this.store, this.pluginsRoot, current.projectId),
+      `.remove-${id}-${randomUUID()}`,
+    )
     let moved = false
     try {
       if (target !== null && existsSync(target)) {
@@ -163,86 +206,70 @@ export class SkillPluginService {
 
   rescan(): PluginRecord[] {
     const seen = new Set<string>()
-    for (const entry of readdirSync(this.pluginsRoot, {
-      withFileTypes: true,
-    })) {
-      if (entry.name === 'projects') continue
-      if (!entry.isDirectory() || !ID_PATTERN.test(entry.name)) continue
-      const installPath = join(this.pluginsRoot, entry.name)
-      seen.add(entry.name)
-      const existing = this.store.plugins.get(entry.name)
-      if (this.builtinManifests.has(entry.name)) continue
+    const roots = [{ projectId: null as string | null, root: this.pluginsRoot }]
+    for (const project of this.store.projects.list()) {
       try {
-        const loaded = loadSkillPackage(installPath)
-        if (loaded.manifest.id !== entry.name) {
-          throw new Error('manifest id must match its directory name')
-        }
-        this.store.plugins.upsert({
-          id: loaded.manifest.id,
-          kind: loaded.manifest.type,
-          version: loaded.manifest.version,
-          name: loaded.manifest.name,
-          description: loaded.manifest.description,
-          source: existing?.source ?? 'local',
-          sourceRef: existing?.sourceRef ?? installPath,
-          scope: existing?.scope ?? 'global',
-          projectId: existing?.projectId ?? null,
-          status: existing?.enabled === false ? 'disabled' : 'enabled',
-          installPath,
-          enabled: existing?.enabled ?? true,
-          manifest: loaded.manifest,
-          error: null,
+        roots.push({
+          projectId: project.id,
+          root: skillRoot(this.store, this.pluginsRoot, project.id),
         })
-      } catch (error) {
-        const manifest = existing?.manifest ?? invalidManifest(entry.name)
-        this.store.plugins.upsert({
-          id: entry.name,
-          kind: manifest.type,
-          version: manifest.version,
-          name: manifest.name,
-          description: manifest.description,
-          source: existing?.source ?? 'local',
-          sourceRef: existing?.sourceRef ?? installPath,
-          scope: existing?.scope ?? 'global',
-          projectId: existing?.projectId ?? null,
-          status: 'invalid',
-          installPath,
-          enabled: false,
-          manifest,
-          error: error instanceof Error ? error.message : String(error),
-        })
-      }
-    }
-    for (const plugin of this.store.plugins.list()) {
-      if (
-        plugin.scope !== 'project' ||
-        plugin.installPath === null ||
-        !existsSync(plugin.installPath)
-      ) {
+      } catch {
         continue
       }
-      seen.add(plugin.id)
-      try {
-        const loaded = loadSkillPackage(plugin.installPath)
-        if (loaded.manifest.id !== plugin.id) {
-          throw new Error('manifest id must match its directory name')
+    }
+    for (const { root, projectId } of roots) {
+      if (!existsSync(root)) continue
+      recoverPluginTransactions(root, this.store)
+      for (const entry of readdirSync(root, {
+        withFileTypes: true,
+      })) {
+        if (entry.name === 'projects') continue
+        if (!entry.isDirectory() || !ID_PATTERN.test(entry.name)) continue
+        const installPath = join(root, entry.name)
+        seen.add(entry.name)
+        const existing = this.store.plugins.get(entry.name)
+        if (existing && existing.projectId !== projectId) continue
+        if (this.builtinManifests.has(entry.name)) continue
+        try {
+          const loaded = loadSkillPackage(installPath)
+          if (loaded.manifest.id !== entry.name) {
+            throw new Error('manifest id must match its directory name')
+          }
+          this.store.plugins.upsert({
+            id: loaded.manifest.id,
+            kind: loaded.manifest.type,
+            version: loaded.manifest.version,
+            name: loaded.manifest.name,
+            description: loaded.manifest.description,
+            source: existing?.source ?? 'local',
+            sourceRef: existing?.sourceRef ?? installPath,
+            scope: projectId === null ? 'global' : 'project',
+            projectId: projectId,
+            status: existing?.enabled === false ? 'disabled' : 'enabled',
+            installPath,
+            enabled: existing?.enabled ?? true,
+            manifest: loaded.manifest,
+            error: null,
+          })
+        } catch (error) {
+          const manifest = existing?.manifest ?? invalidManifest(entry.name)
+          this.store.plugins.upsert({
+            id: entry.name,
+            kind: manifest.type,
+            version: manifest.version,
+            name: manifest.name,
+            description: manifest.description,
+            source: existing?.source ?? 'local',
+            sourceRef: existing?.sourceRef ?? installPath,
+            scope: projectId === null ? 'global' : 'project',
+            projectId: projectId,
+            status: 'invalid',
+            installPath,
+            enabled: false,
+            manifest,
+            error: error instanceof Error ? error.message : String(error),
+          })
         }
-        this.store.plugins.upsert({
-          ...plugin,
-          version: loaded.manifest.version,
-          name: loaded.manifest.name,
-          description: loaded.manifest.description,
-          status: plugin.enabled ? 'enabled' : 'disabled',
-          manifest: loaded.manifest,
-          error: null,
-        })
-      } catch (error) {
-        this.store.plugins.upsert({
-          ...plugin,
-          status: 'invalid',
-          enabled: false,
-          error: error instanceof Error ? error.message : String(error),
-        })
       }
     }
     for (const plugin of this.store.plugins.list()) {
@@ -279,20 +306,15 @@ export class SkillPluginService {
   private assertManagedInstallPath(plugin: PluginRecord): string | null {
     if (plugin.installPath === null) return null
     const target = resolve(plugin.installPath)
-    const root = resolve(this.pluginsRoot)
+    const root = resolve(
+      skillRoot(this.store, this.pluginsRoot, plugin.projectId),
+    )
     const relativeTarget = relative(root, target)
-    const expected =
-      plugin.scope === 'project' && plugin.projectId !== null
-        ? join('projects', plugin.projectId, plugin.id)
-        : plugin.id
+    const expected = plugin.id
     if (relativeTarget !== expected || basename(target) !== plugin.id) {
       throw new Error(`refusing to remove unmanaged plugin path: ${target}`)
     }
     return target
-  }
-
-  private temporaryPath(label: string): string {
-    return join(this.pluginsRoot, `.${label}-${randomUUID()}`)
   }
 
   private emit(plugin: PluginRecord | null, id = plugin?.id ?? ''): void {

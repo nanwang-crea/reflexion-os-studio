@@ -11,6 +11,19 @@ export const SkillSaveParamsSchema = z.object({
   description: z.string().min(1).max(1024),
   instructions: z.string().min(1).max(20000),
   projectId: z.string().min(1).nullable(),
+  mode: z.enum(['create', 'update']).optional(),
+  expectedVersion: z.string().min(1).optional(),
+  resources: z
+    .array(
+      z
+        .object({
+          path: z.string().min(1).max(240),
+          content: z.string().max(100000),
+        })
+        .strict(),
+    )
+    .max(32)
+    .optional(),
 })
 export type SkillSaveParams = z.infer<typeof SkillSaveParamsSchema>
 

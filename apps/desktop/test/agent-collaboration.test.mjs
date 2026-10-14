@@ -406,7 +406,7 @@ window.clearUI=()=>root.render(null);window.showRoles();
     await page.evaluate(() => window.showTeamApproval())
     await page.getByRole('button', { name: '查看详情', exact: true }).click()
     const preview = page.getByRole('region', {
-      name: '待保存的团队配置',
+      name: '待保存的配置',
       exact: true,
     })
     // section has an accessible name and therefore exposes region semantics.

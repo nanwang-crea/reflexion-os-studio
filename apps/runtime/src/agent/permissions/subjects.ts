@@ -206,7 +206,8 @@ export function buildApprovalSubject(
         digest: shellDigest(shell),
       }
     }
-    case 'agent_team.create': {
+    case 'agent_team.create':
+    case 'skill.save': {
       return {
         subject: { kind: 'operation', operation: toolName },
         digest: canonicalDigest(toolName, [JSON.stringify(args)]),

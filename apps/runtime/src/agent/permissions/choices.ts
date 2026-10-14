@@ -148,6 +148,7 @@ export function buildApprovalChoices(input: {
   } else if (
     input.subject.kind === 'operation' &&
     input.subject.operation !== 'agent_team.create' &&
+    input.subject.operation !== 'skill.save' &&
     !input.escalation &&
     // file.move 等内置操作走一次性审批语义，不给 operation 级会话授权。
     !isToolOperation(input.toolName)

@@ -152,6 +152,7 @@ const agent = new ChatAgent(
   mcpManager,
   skillPlugins.registry,
   browser,
+  skillPlugins,
 )
 agentBox.current = agent
 const workspaceIndexer = new WorkspaceIndexer(store, notify)
@@ -243,6 +244,7 @@ async function handleRequestAsync(request: JsonRpcRequest): Promise<void> {
           void systemRuntime.shutdown().finally(async () => {
             await browser.shutdown()
             agent.dispose()
+            skillPlugins.dispose()
             workspaceWatch.clear()
             mcpManager.dispose()
             process.exit(0)

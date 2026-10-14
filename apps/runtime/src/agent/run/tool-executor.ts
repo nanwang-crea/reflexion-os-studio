@@ -40,6 +40,7 @@ import {
 import { invokeAdmittedTool } from './tool-invocation.js'
 import { agentContextForRun } from './agent-context.js'
 import { teamApprovalReview } from '../tools/team/review.js'
+import { skillSaveReview } from '../tools/skill-authoring.js'
 
 export type { ToolExecutorInput } from './tool-executor-types.js'
 import type { ToolExecutorInput } from './tool-executor-types.js'
@@ -273,6 +274,8 @@ export async function executeToolCall(
   if (request.name === 'agent_team.create') {
     context.review = teamApprovalReview(args)
   }
+  if (request.name === 'skill.save')
+    context.review = skillSaveReview({ store, projectId }, args)
 
   const requestApprovalWith = (
     toolCallId: string,

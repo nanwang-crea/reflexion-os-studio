@@ -69,6 +69,7 @@ export class ChatAgent {
     private readonly mcp: McpManager | null = null,
     private readonly skills: SkillRegistry = createSkillRegistry(),
     browser: BrowserAgentService | null = null,
+    skillTools?: import('../skills/tool-services.js').SkillToolServices,
   ) {
     this.resubmissions = new RunResubmissionService(
       store,
@@ -96,6 +97,7 @@ export class ChatAgent {
         danger: this.danger,
         skills: this.skills,
         browser,
+        skillTools,
       },
       {
         onRunSettled: (sessionId) => this.pumpQueue(sessionId),

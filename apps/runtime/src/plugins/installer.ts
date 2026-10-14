@@ -28,6 +28,7 @@ export class PluginPackageInstaller {
     private readonly store: Store,
     private readonly pluginsRoot: string,
     private readonly builtinIds: ReadonlySet<string>,
+    private readonly scopedRoot?: (projectId: string | null) => string,
   ) {}
 
   async preview(
@@ -81,6 +82,19 @@ export class PluginPackageInstaller {
     return this.installOrUpdate(source, current, options)
   }
 
+  updateFromSource(
+    id: string,
+    source: PluginInstallSource,
+    options: PluginLifecycleOptions,
+  ): Promise<PluginRecord> {
+    const current = this.store.plugins.get(id)
+    if (!current || current.source === 'builtin')
+      throw new Error('Skill 不可更新')
+    source.installScope = current.scope
+    source.installProjectId = current.projectId ?? undefined
+    return this.installOrUpdate(source, current, options)
+  }
+
   private async installOrUpdate(
     source: PluginInstallSource,
     updating: PluginRecord | null,
@@ -90,6 +104,7 @@ export class PluginPackageInstaller {
     let stage: string | null = null
     let backup: string | null = null
     let target: string | null = null
+    let committed = false
     try {
       options.onProgress?.('resolving', 5)
       const resolved = await resolveInstallSource(
@@ -121,7 +136,13 @@ export class PluginPackageInstaller {
       this.assertInstallAllowed(preview, updating, standardSkill)
 
       options.onProgress?.('staging', 75)
-      stage = this.temporaryPath(`stage-${preview.id}`)
+      const installRoot =
+        this.scopedRoot?.(projectId) ??
+        (projectId === null
+          ? this.pluginsRoot
+          : join(this.pluginsRoot, 'projects', projectId))
+      mkdirSync(installRoot, { recursive: true })
+      stage = this.temporaryPath(`stage-${preview.id}`, installRoot)
       copyPackage(resolved.directory, stage)
       if (standardSkill) {
         writeFileSync(
@@ -131,20 +152,23 @@ export class PluginPackageInstaller {
       }
       throwIfAborted(options.signal)
       const manifest = inspectPackage(stage)
-      target =
-        projectId === null
-          ? join(this.pluginsRoot, manifest.id)
-          : join(this.pluginsRoot, 'projects', projectId, manifest.id)
+      target = join(installRoot, manifest.id)
       mkdirSync(join(target, '..'), { recursive: true })
       options.onProgress?.('committing', 90)
+      if (
+        updating &&
+        this.store.plugins.get(updating.id)?.version !== updating.version
+      )
+        throw new Error('Skill 版本已变化，请重试更新')
       if (existsSync(target)) {
         if (updating === null)
           throw new Error(`target already exists: ${manifest.id}`)
-        backup = this.temporaryPath(`backup-${manifest.id}`)
+        backup = this.temporaryPath(`backup-${manifest.id}`, installRoot)
         renameSync(target, backup)
       }
       renameSync(stage, target)
       stage = null
+      committed = true
       const plugin = this.store.plugins.upsert({
         id: manifest.id,
         kind: manifest.type,
@@ -167,7 +191,12 @@ export class PluginPackageInstaller {
       if (target !== null && existsSync(target) && backup !== null) {
         cleanupTemporary(target)
         renameSync(backup, target)
-      } else if (target !== null && existsSync(target) && updating === null) {
+      } else if (
+        committed &&
+        target !== null &&
+        existsSync(target) &&
+        updating === null
+      ) {
         cleanupTemporary(target)
       }
       throw error
@@ -204,7 +233,7 @@ export class PluginPackageInstaller {
     }
   }
 
-  private temporaryPath(label: string): string {
-    return join(this.pluginsRoot, `.${label}-${randomUUID()}`)
+  private temporaryPath(label: string, root = this.pluginsRoot): string {
+    return join(root, `.${label}-${randomUUID()}`)
   }
 }

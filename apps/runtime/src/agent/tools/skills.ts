@@ -47,6 +47,8 @@ export function createSkillUseTool(
           ...(manifest.whenToUse ? [`触发时机：${manifest.whenToUse}`] : []),
           '',
           skill.instructions,
+          '',
+          '包内 scripts/references/assets 路径相对技能目录。需要资源时调用 skill.prepare 获取临时快照目录与文件清单；按需脚本通过 shell.execute 执行，沿用当前工具权限与沙箱，不在加载时执行。',
         ].join('\n'),
         isError: false,
       }

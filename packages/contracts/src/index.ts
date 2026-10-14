@@ -1,5 +1,6 @@
 export * from './images.js'
 export * from './agent-teams.js'
+export * from './skill-authoring.js'
 export * from './jsonrpc.js'
 export * from './handshake.js'
 export * from './errors.js'

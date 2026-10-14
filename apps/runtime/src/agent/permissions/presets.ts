@@ -65,6 +65,7 @@ export function isToolOperation(toolName: string): toolName is ToolOperation {
 
 /** 非操作类的内置纯计算工具：无需审批（ask-everything 也不覆盖——无副作用）。 */
 const AUTOMATIC_OTHER_TOOLS = new Set([
+  'skill.prepare',
   'agent_team.inspect',
   'get_current_time',
   'web.fetch',
@@ -151,6 +152,7 @@ export interface PermissionGateOptions {
 }
 
 const PLAN_MODE_ALLOWED_TOOLS = new Set([
+  'skill.prepare',
   'agent_team.inspect',
   'browser.navigate',
   'browser.read',

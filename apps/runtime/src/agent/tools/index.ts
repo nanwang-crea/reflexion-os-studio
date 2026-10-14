@@ -26,6 +26,10 @@ import {
 import { createShellExecuteTool } from './shell.js'
 import { createShellOutputReadTool, ShellOutputStore } from './shell-output.js'
 import { createSkillUseTool } from './skills.js'
+import {
+  createSkillPrepareTool,
+  createSkillSaveTool,
+} from './skill-authoring.js'
 import { createMemoryRememberTool } from './instructions.js'
 import type { ToolContext } from './shared.js'
 import { createCurrentTimeTool } from './time.js'
@@ -99,7 +103,10 @@ export function createToolRegistry(ctx: ToolContext): ToolRegistry {
         tool.name === 'shell.output.read' &&
         ctx.allowedTools.has('shell.execute')
       ) &&
-      !(tool.name === 'file.write_stream' && ctx.allowedTools.has('file.write'))
+      !(
+        tool.name === 'file.write_stream' && ctx.allowedTools.has('file.write')
+      ) &&
+      !(tool.name === 'skill.prepare' && ctx.allowedTools.has('skill.use'))
     ) {
       continue
     }
@@ -160,7 +167,9 @@ function alwaysAvailableTools(ctx: ToolContext): ToolDefinition[] {
   ]
   if (ctx.store.runs?.get(ctx.runId)?.parentRunId === null) {
     tools.push(createTeamInspectTool(ctx), createTeamCreateTool(ctx))
+    if (ctx.skillTools) tools.push(createSkillSaveTool(ctx))
   }
+  if (ctx.skillTools) tools.push(createSkillPrepareTool(ctx))
   // 只有注入 childRunStarter 的 Run 才具备委派能力；深度上限由装配层截断。
   if (ctx.childRunStarter) {
     tools.push(createTaskTool(ctx))

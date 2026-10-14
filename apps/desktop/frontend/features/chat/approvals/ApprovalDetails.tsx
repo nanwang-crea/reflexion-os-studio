@@ -110,7 +110,7 @@ export function ApprovalDetails({
           {display.context?.review && (
             <section
               className="approval-config-review"
-              aria-label="待保存的团队配置"
+              aria-label="待保存的配置"
             >
               <strong>本次将保存的配置</strong>
               <pre tabIndex={0}>{display.context.review}</pre>

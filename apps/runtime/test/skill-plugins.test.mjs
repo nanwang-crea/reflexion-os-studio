@@ -417,7 +417,7 @@ setInterval(() => {}, 1000)
       const cancelled = await waitForTask(service, started)
       assert.equal(cancelled.status, 'cancelled')
       assert.ok(cancelled.progress >= 5)
-      assert.equal(existsSync(join(root, 'plugins', 'slow-skill')), false)
+      assert.equal(existsSync(join(root, 'skills', 'slow-skill')), false)
     } finally {
       process.env.PATH = previousPath
       store.close()
@@ -432,13 +432,13 @@ test('startup recovery restores backup and removes abandoned stages', async () =
   const plugin = (
     await completed(service, service.install({ source: 'local', path: source }))
   ).plugin
-  const backup = join(root, 'plugins', '.backup-recovery-test-interrupted')
+  const backup = join(root, 'skills', '.backup-recovery-test-interrupted')
   renameSync(plugin.installPath, backup)
   writePackage(plugin.installPath, 'recovery-test', {
     version: '2.0.0',
     instructions: 'uncommitted replacement',
   })
-  writePackage(join(root, 'plugins', '.stage-orphan'), 'orphan-test')
+  writePackage(join(root, 'skills', '.stage-orphan'), 'orphan-test')
   store.close()
 
   const restartedStore = new Store(root)
@@ -448,7 +448,7 @@ test('startup recovery restores backup and removes abandoned stages', async () =
     'original',
   )
   assert.equal(
-    readdirSync(join(root, 'plugins')).some((name) => name.startsWith('.')),
+    readdirSync(join(root, 'skills')).some((name) => name.startsWith('.')),
     false,
   )
   assert.equal(restartedStore.plugins.get('recovery-test').version, '1.0.0')
@@ -484,7 +484,7 @@ test('failed database commit restores the previous package directory', async () 
 
 test('invalid package is isolated without hiding builtins', async () => {
   const { root, store, service } = await setup()
-  const invalid = join(root, 'plugins', 'broken-skill')
+  const invalid = join(root, 'skills', 'broken-skill')
   writePackage(invalid, 'broken-skill')
   writeFileSync(join(invalid, 'plugin.json'), '{broken')
   service.rescan()

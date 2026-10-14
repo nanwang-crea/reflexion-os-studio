@@ -28,9 +28,11 @@ Skill 生命周期：`discover → validate → install → enable → load → 
 
 ## Phase 2 Plugin Foundation
 
-- 全局 `<dataDir>/plugins/<id>/` 启动发现与手动重扫；标准 `SKILL.md` frontmatter 是可移植元数据源，`plugin.json` 可选扩展并在安装时内部规范化；仅加载声明式 Markdown，不执行第三方代码；
-- `plugins` 表（schema v26）持久化完整 manifest、版本、来源、启停、错误与安装路径；旧 `<dataDir>/skills` 包启动时复制并转换；
+- 全局 `<dataDir>/skills/<id>/` 与项目 `<workspace>/.reflexion-os-studio/skills/<id>/` 启动发现与手动重扫；标准 `SKILL.md` frontmatter 是可移植元数据源，`plugin.json` 可选扩展并在安装时内部规范化；加载 Markdown 说明；脚本按需经现有 shell.execute 沙箱与权限执行，不在安装/加载时运行，也不在 Runtime 主进程 import/eval；
+- `plugins` 表（schema v26）持久化完整 manifest、版本、来源、启停、错误与安装路径；旧 `<dataDir>/plugins` 安装启动迁移到新位置，保留原包且不覆盖目标；
 - `plugin.preview/install/update` 支持本地文件/目录、当前项目相对目录和无凭据 HTTPS Git 源；安装先校验再复制，更新以 stage/backup/rename 原子替换并在失败时回滚；
 - 外部技能启用后与内置技能共用斜杠激活、`skill.use` 和 system prompt 清单；停用/无效后从三条链路同时隔离；
 - 外部技能支持 global/project 作用域；project Skill 绑定项目，只对该项目会话的清单、`$skill`/`/skill` 和 `skill.use` 可见；
 - 技能页支持拖拽、本地选择、Git URL、权限预览确认、更新、启停、卸载与重扫。
+
+内置 `$skill-creator` 通过 `skill.save` 保存/更新完整包，审批展示正文及文本资源；`skill.prepare` 提供按 Run 隔离的临时快照、清单、按需文本与实际 Node 路径。资源不是 Asset Store 资产。详细限制和验证见 [Skill 创建与脚本资源](SKILL-CREATOR.md)。

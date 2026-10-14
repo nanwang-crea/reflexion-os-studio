@@ -14,6 +14,7 @@ import type { InteractionGateway } from '../interactions/index.js'
 import type { BrowserAgentService } from '../../browser/agent/service.js'
 
 export interface ToolContext {
+  skillTools?: import('../../skills/tool-services.js').SkillToolServices
   browser?: BrowserAgentService | null
   store: Store
   sessionId: string

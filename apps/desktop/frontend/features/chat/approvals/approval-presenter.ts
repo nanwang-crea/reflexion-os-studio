@@ -50,6 +50,7 @@ const OPERATION_LABELS: Record<string, string> = {
   'browser.close': '关闭 Agent 浏览器',
   sandbox_network: '命令联网',
   'agent_team.create': '保存团队角色',
+  'skill.save': '保存技能',
 }
 
 const RISK_TITLES: Record<ApprovalRisk, string> = {

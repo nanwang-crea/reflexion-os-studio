@@ -1,12 +1,20 @@
-import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
+import {
+  mkdirSync,
+  mkdtempSync,
+  writeFileSync,
+  rmSync,
+  realpathSync,
+} from 'node:fs'
+import { join, relative, isAbsolute } from 'node:path'
 import type {
   PluginRecord,
   SkillSaveParams,
 } from '@reflexion-os-studio/contracts'
 import type { Store } from '../../store/index.js'
 import type { PluginPackageInstaller } from '../../plugins/installer.js'
-import { containsSecretLike } from '../../agent/instructions/secretGuard.js'
+import { validateAuthoredSkill, validateResourcePath } from './validation.js'
+import { copyPackage } from '../../plugins/sources.js'
+import { inspectPackage } from '../../plugins/package.js'
 
 /** User-reviewed declarative content goes through the existing package validator/installer. */
 export async function saveAuthoredSkill(
@@ -15,38 +23,45 @@ export async function saveAuthoredSkill(
   installer: PluginPackageInstaller,
   input: SkillSaveParams,
 ): Promise<PluginRecord> {
-  if (input.projectId && !store.projects.get(input.projectId))
-    throw new Error('项目不存在')
-  if (store.plugins.get(input.id))
-    throw new Error('Skill 标识已存在，请使用新的标识')
-  for (const template of store.agents.list()) {
-    if (!template.projectId || template.projectId === input.projectId) continue
-    const escapedId = template.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const reference = new RegExp(
-      `(?<![A-Za-z0-9_-])${escapedId}(?![A-Za-z0-9_-])`,
-    )
-    if (reference.test(input.instructions))
-      throw new Error('Skill 引用了项目角色，请保存到该角色所属项目')
-  }
-  // Only canonical generated role IDs are exempted, as complete tokens; never strip substrings from possible credentials.
-  const checkedInstructions = input.instructions.replace(
-    /(?<![A-Za-z0-9_-])template-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![A-Za-z0-9_-])/gi,
-    (id) => {
-      const template = store.agents.get(id)
-      if (!template) return id
-      return '[已验证的角色模板引用]'
-    },
-  )
-  if (
-    containsSecretLike(checkedInstructions) ||
-    containsSecretLike(input.description)
-  )
-    throw new Error('Skill 内容疑似包含机密，拒绝保存')
+  const current = validateAuthoredSkill(store, input)
   mkdirSync(root, { recursive: true })
   const temporary = mkdtempSync(join(root, '.author-'))
   try {
+    let directory = temporary
+    if (current?.installPath) {
+      const source = realpathSync(current.installPath)
+      const within = relative(realpathSync(root), source)
+      if (!within || within.startsWith('..') || isAbsolute(within))
+        throw new Error('Skill 路径不在受管目录')
+      inspectPackage(source)
+      directory = join(temporary, 'package')
+      copyPackage(source, directory)
+      const match = /^(\d+)\.(\d+)\.(\d+)(?:[-+]|$)/.exec(current.version)
+      if (!match || !Number.isSafeInteger(Number(match[3]) + 1))
+        throw new Error('Skill 版本不能递增')
+      writeFileSync(
+        join(directory, 'plugin.json'),
+        JSON.stringify(
+          {
+            ...current.manifest,
+            description: input.description,
+            version: `${match[1]}.${match[2]}.${Number(match[3]) + 1}`,
+          },
+          null,
+          2,
+        ),
+        'utf8',
+      )
+    }
+    for (const resource of input.resources ?? []) {
+      if (resource.path === current?.manifest.entry)
+        throw new Error('资源路径不能覆盖 Skill 入口')
+      const target = join(directory, ...validateResourcePath(resource.path))
+      mkdirSync(join(target, '..'), { recursive: true })
+      writeFileSync(target, resource.content, 'utf8')
+    }
     writeFileSync(
-      join(temporary, 'SKILL.md'),
+      join(directory, current?.manifest.entry ?? 'SKILL.md'),
       [
         '---',
         `name: ${input.id}`,
@@ -58,15 +73,17 @@ export async function saveAuthoredSkill(
       ].join('\n'),
       'utf8',
     )
-    const plugin = await installer.install(
-      {
-        source: 'local',
-        path: temporary,
-        installScope: input.projectId ? 'project' : 'global',
-        installProjectId: input.projectId ?? undefined,
-      },
-      {},
-    )
+    const source = {
+      source: 'local' as const,
+      path: directory,
+      installScope: input.projectId
+        ? ('project' as const)
+        : ('global' as const),
+      installProjectId: input.projectId ?? undefined,
+    }
+    const plugin = current
+      ? await installer.updateFromSource(input.id, source, {})
+      : await installer.install(source, {})
     // Keep the local source usable for the existing update lifecycle after temporary cleanup.
     return store.plugins.upsert({ ...plugin, sourceRef: plugin.installPath })
   } finally {

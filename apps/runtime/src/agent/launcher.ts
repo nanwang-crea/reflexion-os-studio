@@ -77,6 +77,7 @@ export interface LaunchOptions {
 
 /** launch 依赖：跨 Run 共享的服务集合（由 ChatAgent 注入）。 */
 export interface LaunchDeps {
+  skillTools?: ToolContext['skillTools']
   browser?: ToolContext['browser']
   store: Store
   system: SystemRuntimeClient | null
@@ -188,6 +189,7 @@ export class RunLauncher {
       workspaceRoot,
       projectId: session.projectId,
       skills: this.deps.skills,
+      skillTools: this.deps.skillTools,
       mcp: this.deps.mcp,
       browser: this.deps.browser,
       childRunStarter: input.childRunStarter,
@@ -263,6 +265,11 @@ export class RunLauncher {
         this.runDepth.delete(run.id)
         this.runPermissionPresets.delete(run.id)
         // Run 结束(完成/失败/取消):自动出队发送排队中的下一条。
+        try {
+          this.deps.skillTools?.releaseRun(run.id)
+        } catch {
+          process.stderr.write('[runtime] Skill resource cleanup failed\n')
+        }
         this.hooks.onRunSettled(run.sessionId)
       })
   }
