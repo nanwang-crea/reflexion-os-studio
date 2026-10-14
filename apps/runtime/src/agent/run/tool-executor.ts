@@ -39,6 +39,7 @@ import {
 } from './tool-execution-context.js'
 import { invokeAdmittedTool } from './tool-invocation.js'
 import { agentContextForRun } from './agent-context.js'
+import { teamApprovalReview } from '../tools/team/review.js'
 
 export type { ToolExecutorInput } from './tool-executor-types.js'
 import type { ToolExecutorInput } from './tool-executor-types.js'
@@ -230,10 +231,9 @@ export async function executeToolCall(
       )
     }
   }
-  let askNeeded =
-    decision === 'ask' &&
-    !sessionRuleHit &&
-    (!dangerActive || unsandboxed || built.subject.kind === 'browser-page')
+  // PermissionGate already applies Danger only to eligible file/Shell operations.
+  // An explicit ask decision (MCP, team authoring, browser, unsandboxed) stays ask.
+  let askNeeded = decision === 'ask' && !sessionRuleHit
 
   const row = ensureRow(askNeeded ? 'awaiting_approval' : 'running')
   if (precreatedId === undefined) {
@@ -270,6 +270,9 @@ export async function executeToolCall(
         : undefined,
     agent: agentContextForRun(store, run, input.rootRunId),
   })
+  if (request.name === 'agent_team.create') {
+    context.review = teamApprovalReview(args)
+  }
 
   const requestApprovalWith = (
     toolCallId: string,

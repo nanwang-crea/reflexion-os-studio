@@ -105,6 +105,7 @@ export const ApprovalContextSchema = z.object({
   network: z.boolean(),
   escalation: z.boolean(),
   justification: z.string().nullable(),
+  review: z.string().optional(),
   agent: AgentContextSchema.optional(),
 })
 export type ApprovalContextView = z.infer<typeof ApprovalContextSchema>

@@ -206,6 +206,12 @@ export function buildApprovalSubject(
         digest: shellDigest(shell),
       }
     }
+    case 'agent_team.create': {
+      return {
+        subject: { kind: 'operation', operation: toolName },
+        digest: canonicalDigest(toolName, [JSON.stringify(args)]),
+      }
+    }
     default: {
       // MCP / 其它动态工具：保持 operation 级审批，本期不扩展资源语义。
       return {

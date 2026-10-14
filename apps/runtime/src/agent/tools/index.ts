@@ -34,6 +34,8 @@ import { createWebFetchTool } from './web.js'
 import { createMcpTool } from './mcp.js'
 import { createLegacyUpdatePlanTool, createManagePlanTool } from './plans.js'
 import { createTaskTool } from './task.js'
+import { createTeamInspectTool } from './team/inspect.js'
+import { createTeamCreateTool } from './team/create.js'
 import { FileReadState } from './read-state.js'
 import { createAskUserTool } from './ask-user.js'
 import { createEnterPlanModeTool, createExitPlanModeTool } from './plan-mode.js'
@@ -156,6 +158,9 @@ function alwaysAvailableTools(ctx: ToolContext): ToolDefinition[] {
     createManagePlanTool(ctx),
     createLegacyUpdatePlanTool(ctx),
   ]
+  if (ctx.store.runs?.get(ctx.runId)?.parentRunId === null) {
+    tools.push(createTeamInspectTool(ctx), createTeamCreateTool(ctx))
+  }
   // 只有注入 childRunStarter 的 Run 才具备委派能力；深度上限由装配层截断。
   if (ctx.childRunStarter) {
     tools.push(createTaskTool(ctx))

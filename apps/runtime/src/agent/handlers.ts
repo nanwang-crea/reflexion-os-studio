@@ -1,5 +1,4 @@
-import { containsSecretLike } from './instructions/secretGuard.js'
-import { resolveModelRuntimeConfig } from './provider-resolver.js'
+import { validateRoleTemplate } from './templates/validation.js'
 import { agentTemplateCommands } from '@reflexion-os-studio/contracts'
 import { requireString, type CommandHandler } from '../command-utils.js'
 import { CommandError } from './index.js'
@@ -34,37 +33,7 @@ export const agentCommandHandlers: Record<string, CommandHandler> = {
   'agent_template.save': (p, { store }) => {
     try {
       const input = agentTemplateCommands['agent_template.save'].params.parse(p)
-      if (
-        containsSecretLike(input.systemPrompt) ||
-        containsSecretLike(input.description)
-      )
-        throw new Error('角色指令疑似包含机密，拒绝保存')
-      if (input.projectId && !store.projects.get(input.projectId))
-        throw new Error('项目不存在')
-      if (input.modelBinding?.mode === 'fixed') {
-        const profile = store.providers.get(input.modelBinding.providerId)
-        if (
-          !profile?.enabled ||
-          !profile.capabilities.includes('chat') ||
-          !profile.models.includes(input.modelBinding.model)
-        )
-          throw new Error('角色指定的模型不可用，请检查 Provider 配置')
-        const config = store.providerModels.get(
-          profile.id,
-          input.modelBinding.model,
-        )
-        if (
-          input.modelBinding.reasoningEffort != null &&
-          (!config?.reasoningEffortSupported ||
-            profile.apiFormat === 'anthropic')
-        )
-          throw new Error('角色指定的思考等级不受当前模型支持')
-        resolveModelRuntimeConfig(
-          profile,
-          config,
-          input.modelBinding.reasoningEffort,
-        )
-      }
+      validateRoleTemplate(store, input)
       return { template: store.agents.saveUser(input) }
     } catch (error) {
       throw new CommandError(

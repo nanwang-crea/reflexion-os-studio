@@ -30,7 +30,10 @@ export function ApprovalDetails({
     return () => document.removeEventListener('keydown', onKeyDown, true)
   }, [expanded])
   return (
-    <div className="approval-body" ref={bodyRef}>
+    <div
+      className={`approval-body${display.context?.review ? ' has-review' : ''}`}
+      ref={bodyRef}
+    >
       {display.subject !== null && (
         <div
           className={`approval-subject kind-${display.subject.kind}`}
@@ -103,14 +106,25 @@ export function ApprovalDetails({
         {expanded ? '收起详情' : '查看详情'}
       </button>
       {expanded && (
-        <dl className="approval-detail-list">
-          {display.details.map((item) => (
-            <div key={item.label} className="approval-detail-item">
-              <dt>{item.label}</dt>
-              <dd>{item.value}</dd>
-            </div>
-          ))}
-        </dl>
+        <>
+          {display.context?.review && (
+            <section
+              className="approval-config-review"
+              aria-label="待保存的团队配置"
+            >
+              <strong>本次将保存的配置</strong>
+              <pre tabIndex={0}>{display.context.review}</pre>
+            </section>
+          )}
+          <dl className="approval-detail-list">
+            {display.details.map((item) => (
+              <div key={item.label} className="approval-detail-item">
+                <dt>{item.label}</dt>
+                <dd>{item.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </>
       )}
     </div>
   )

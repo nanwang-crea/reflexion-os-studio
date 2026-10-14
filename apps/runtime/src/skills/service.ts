@@ -1,6 +1,6 @@
 import { saveAuthoredSkill } from './authoring/save.js'
 import type { SkillSaveParams } from '@reflexion-os-studio/contracts'
-import { AGENT_COLLABORATION_SKILL } from './builtin/agent-collaboration.js'
+import { BUILTIN_SKILLS } from './builtin/index.js'
 import { existsSync, mkdirSync, readdirSync, renameSync } from 'node:fs'
 import { basename, join, relative, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -329,16 +329,3 @@ function createBuiltinRegistry(): SkillRegistry {
   for (const skill of BUILTIN_SKILLS) registry.register(skill)
   return registry
 }
-
-import { CODE_REVIEW_SKILL } from './builtin/code-review.js'
-import { VERIFY_FIX_SKILL } from './builtin/verify-fix.js'
-import { WEB_RESEARCH_SKILL } from './builtin/web-research.js'
-import { WORKSPACE_REPORT_SKILL } from './builtin/workspace-report.js'
-
-const BUILTIN_SKILLS = [
-  AGENT_COLLABORATION_SKILL,
-  CODE_REVIEW_SKILL,
-  VERIFY_FIX_SKILL,
-  WEB_RESEARCH_SKILL,
-  WORKSPACE_REPORT_SKILL,
-]

@@ -71,6 +71,8 @@ import React from 'react';import {createRoot} from 'react-dom/client';
 import './frontend/styles/style.css';
 import './frontend/features/chat/chat.css';
 import {InteractionQueue} from './frontend/features/chat/interactions/InteractionQueue';
+import {ApprovalCard} from './frontend/features/chat/approvals/ApprovalCard';
+import './frontend/features/chat/approvals/approvals.css';
 import {AgentRolesView} from './frontend/features/agents/AgentRolesView';
 import {CollaborationPanel} from './frontend/features/chat/collaboration/CollaborationPanel';
 import {useSkillCatalog} from './frontend/hooks/useAppSurfaces';
@@ -81,6 +83,7 @@ window.collaborationCommits=0;
 window.showCollaboration=()=>root.render(<React.Profiler id="collaboration" onRender={()=>window.collaborationCommits++}><CollaborationPanel onCollapse={()=>{}} chat={{sessionData:{session:{id:'session',projectId:'project'},messages:[{id:'user',runId:'root-run'}],runs:[{id:window.currentRootRun??'root-run',parentRunId:null,supersededByRunId:null,model:'parent-model',providerId:'synthetic',status:'completed',planId:'plan'}],plans:[{id:'plan',goal:'Deliver feature',steps:[{id:'step',title:'Implement and verify',status:'completed'}]}]},pendingApprovals:[],pendingInteractions:[]}}/></React.Profiler>);
 window.showCatalog=()=>{function Catalog(){const [project,setProject]=React.useState('project');window.catalogProject=setProject;const skills=useSkillCatalog(true,project);return <div>{skills.map(skill=><p key={skill.id}>{skill.id}</p>)}</div>};root.render(<Catalog/>)};
 window.showQuestions=()=>root.render(<div className="chat-view" style={{height:'100vh'}}><div className="chat-scroll"><p>实际对话正文</p></div><div className="composer-wrap"><InteractionQueue interactions={[{interactionId:'questions',kind:'user_question',questions:Array.from({length:3},(_,i)=>({id:'q'+i,header:'问题'+i,question:'请选择写作协作方式',multiSelect:false,options:Array.from({length:3},(_,j)=>({id:'o'+j,label:'选择'+i+'-'+j,description:'用于写作协作的方法说明。'.repeat(10)}))}))}]} onSubmit={async(id,answers)=>{window.questionAnswers=answers;return false}}/><div style={{height:80}}>输入框</div></div></div>);
+window.showTeamApproval=()=>root.render(<ApprovalCard focusable={false} onChoose={()=>{}} approval={{toolCallId:'team',runId:'root-run',operation:'agent_team.create',summary:'创建写作团队',subject:{kind:'operation',operation:'agent_team.create'},choices:[{id:'allow-once',decision:'approved',presentation:'primary',label:'允许一次'},{id:'deny',decision:'denied',presentation:'secondary',label:'拒绝'}],context:{permissionPreset:'workspace-read',sandbox:'workspace-write',workspaceScope:'inside',displayCwd:'…/project',network:false,escalation:false,sandboxProvider:null,review:JSON.stringify({scope:'project',roles:Array.from({length:8},(_,i)=>({name:'Role '+i,modelBinding:{mode:'inherit'},instructions:'明确职责、输入输出、交接和验收标准。'.repeat(40)}))},null,2)}}}/>);
 window.clearUI=()=>root.render(null);window.showRoles();
 `,
       },
@@ -400,6 +403,31 @@ window.clearUI=()=>root.render(null);window.showRoles();
       'q2',
     )
     await page.screenshot({ path: '/tmp/reflexion-question-scroll.png' })
+    await page.evaluate(() => window.showTeamApproval())
+    await page.getByRole('button', { name: '查看详情', exact: true }).click()
+    const preview = page.getByRole('region', {
+      name: '待保存的团队配置',
+      exact: true,
+    })
+    // section has an accessible name and therefore exposes region semantics.
+    await preview.waitFor()
+    assert.ok((await preview.innerText()).includes('Role 7'))
+    assert.ok(
+      await preview
+        .locator('pre')
+        .evaluate((el) => el.scrollHeight > el.clientHeight),
+    )
+    assert.ok((await preview.locator('pre').boundingBox()).height <= 241)
+    const reviewBody = await page
+      .locator('.approval-body.has-review')
+      .boundingBox()
+    assert.ok(reviewBody.height <= 450 * 0.35 + 1)
+    const allowButton = await page
+      .getByRole('button', { name: '允许一次', exact: true })
+      .boundingBox()
+    assert.ok(allowButton.y + allowButton.height < 450)
+    await page.getByRole('button', { name: '收起详情', exact: true }).click()
+    assert.equal(await preview.count(), 0)
     assert.deepEqual(errors, [])
   } finally {
     await browser?.close()

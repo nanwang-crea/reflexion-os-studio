@@ -15,7 +15,8 @@ export function availableAgentsPromptSection(
       template.modelBinding?.mode === 'fixed'
         ? `${template.modelBinding.providerId}/${template.modelBinding.model}`
         : '继承当前模型'
-    return `- ${agent.id}: ${agent.name} — ${agent.description}；领域：${template.domains?.join('、') || '通用'}；模型：${model}`
+    const policy = agent.policy
+    return `- ${agent.id}: ${agent.name} — ${agent.description}；领域：${template.domains?.join('、') || '通用'}；模型：${model}；权限上限：${policy.permissionCeiling}；工具：${policy.allowedTools.join('、')}；继续委派：${policy.canDelegate ? '允许' : '不允许'}`
   })
   return `\n\n[可用子 Agent]（可选模板）\n模板不是固定角色。调用 task 时可选择 templateId，也可不选模板并动态给出 name、role、instructions。\n${lines.join('\n')}`
 }
