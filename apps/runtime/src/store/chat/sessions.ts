@@ -9,6 +9,8 @@ const USER_VISIBLE_SESSION = `NOT EXISTS (
     AND child_run.parent_run_id IS NOT NULL
 ) AND NOT EXISTS (
   SELECT 1 FROM workflow_node_attempts a WHERE a.session_id = sessions.id
+) AND NOT EXISTS (
+  SELECT 1 FROM workflow_generations g WHERE g.session_id = sessions.id
 )`
 
 /** 会话领域：项目内会话与独立会话；内部子 Agent 会话不进入用户列表。 */

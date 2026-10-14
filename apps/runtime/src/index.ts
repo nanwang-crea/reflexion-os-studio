@@ -1,3 +1,5 @@
+import { WorkflowGenerationService } from './workflow/generation/service.js'
+import { generationModelExecutor } from './workflow/generation/executor.js'
 import { WorkflowService } from './workflow/service.js'
 import { AgentWorkflowExecutor } from './workflow/execution/agent-executor.js'
 import { validateWorkflowResources } from './workflow/execution/resources.js'
@@ -184,7 +186,14 @@ const workflow = new WorkflowService({
   notify,
   clearPermissionDomain: (id) => agent.approvals.clearSession(id),
 })
+const workflowGeneration = new WorkflowGenerationService(
+  store,
+  generationModelExecutor(store, agent, notify),
+  (projectId) => agent.workflow.tools(projectId),
+  notify,
+)
 const commandContext = {
+  workflowGeneration,
   workflow,
   browser,
   store,
@@ -250,8 +259,7 @@ async function handleRequestAsync(request: JsonRpcRequest): Promise<void> {
     // 先收终端（对每个 shell 发协议 close），再协议关停 Rust 子进程，最后退自身；
     // 宿主侧另有进程树兜底收割。顺序保持：terminal → system → mcp dispose → exit。
     sendResponse(request.id, { ok: true }, () => {
-      void workflow
-        .dispose()
+      void Promise.all([workflow.dispose(), workflowGeneration.dispose()])
         .then(() => terminalService.shutdown())
         .catch((error: unknown) => {
           process.stderr.write(

@@ -1,6 +1,6 @@
 # Workflow MVP：语言模型 Agent 协作图
 
-> 状态：MVP 设计与实施记录，2026-10-13。W0–W3 后端已落地；W4 画布与 W5 自然语言生成尚未完成。
+> 状态：MVP 设计与实施记录，更新于 2026-10-14。W0–W5 语言模型 MVP 已实现；macOS 合成 Provider GUI 已验收，Windows/Linux 真机与真实模型质量仍待验证。
 > Phase 4 首版优先语言模型；图片、视频生成保留扩展边界，实际交付仍属后续阶段。
 
 ## 1. 产品定位与边界
@@ -105,13 +105,14 @@ chat 的 Provider 在执行前阻止启动。模型级结构化输出支持不�
 不自动启动 Agent、不批准工具、不修改已保存版本或活动运行。
 
 生成复用既有 Provider 与受预算/取消约束的普通模型 Run，禁用执行工具和 task，
-仅输出定义。优先使用可用的结构化输出，否则严格解析 JSON；最多两次有界修复，
+仅输出定义。首版统一严格解析 JSON，不假定 Provider 支持原生结构化输出；最多两次有界修复，
 每次计入同一生成预算。修复不能执行候选节点。最终无效时保留错误与候选草稿，
-显示 validation_failed，不保存为可运行版本。
+显示 generation_validation_failed，不保存为可运行版本；结构有效的候选可手动编辑并重新校验。
 
 候选定义与手工定义使用同一 zod schema、图校验和引用校验；模型只能引用本次
-提供的可用模板、Provider 和工具标识，不能发明可用能力。新增角色可以无模板，
-直接生成 Prompt。系统分配持久 ID、来源与审计字段，不信任模型自报审批状态。
+提供的可用工具标识，不能发明可用能力。自动生成角色使用内嵌 Prompt、默认模型与
+workspace-read 上限，不生成未提供的模板/模型选择；用户审阅后可通过节点配置或候选编辑
+选择已有模板、Provider 与权限策略。系统分配持久 ID、来源与审计字段，不信任模型自报审批状态。
 权限建议只作声明，默认 workspace-read；可写建议明确呈现并由用户配置，运行期
 仍取权限交集。模型不得生成 grant、Danger 或绕过工具审批。
 
@@ -120,8 +121,9 @@ chat 的 Provider 在执行前阻止启动。模型级结构化输出支持不�
 不会自动应用；生成中断不自动重发模型请求。用户再次生成是新的受预算请求。
 
 新增 workflow_generations 保存来源、生成 Run、基线 revision、候选、校验错误与
-状态；它是审计/草稿数据，不承担执行恢复。敏感内容先过滤，描述与 Prompt 不进
-事件或日志正文。生成来源永久记录；布局由编辑器确定性生成，不依赖模型坐标。
+状态；它是审计/草稿数据，不承担执行恢复。已知凭据形态在描述和候选写入前过滤，
+workflow.generation.updated 只带状态/版本元数据。普通内部 Run 仍沿用消息/流式事件与轨迹；
+业务日志不写描述或 Prompt 正文。生成来源永久记录；布局由编辑器确定性生成，不依赖模型坐标。
 
 ## 4. 端口、成果和连线
 
@@ -275,15 +277,17 @@ node:path/PathBuf。macOS、Windows、Linux 采用同一运行协议与 UI；不
 
 ## 11. 命令、事件与实现批次
 
-拟新增命令：workflow.list/get/save/archive/validate、workflow.run.start/get/list、
+已实现命令：workflow.list/get/save/archive/validate、workflow.run.start/get/list、
 workflow.run.cancel/resume/retry_node、workflow.confirm.respond；
 生成命令为 workflow.generate/get_generation/cancel_generation/apply_generation，
-参数明确 mode、draftId/baseRevision、描述与生成模型。apply 仅修改草稿，不启动运行。
+以及 workflow.draft.list/save、workflow.generations.list、workflow.edit_generation。
+参数明确 mode、draftId/baseRevision、描述与生成模型。apply/edit 比较候选 stateVersion，
+apply 仅修改草稿，不启动运行；save 将定义版本和草稿关联在同一事务内提交。
 全部先在 contracts 用 zod 定义，再接 runtime-client、Runtime handler 与 Rust 白名单。
 requestId 去重，start 重复请求返回同一运行；恢复/重试使用状态版本比较，防止并发点击。
 
-事件：workflow.run.updated、workflow.node.updated、workflow.output.published、
-workflow.confirmation.created/resolved。沿用事件信封与关联 ID；payload 只带 ID、
+事件实际收敛为 workflow.run.updated，以 stateVersion 驱动节点/成果/确认详情查询。
+沿用事件信封与关联 ID；payload 只带 ID、
 状态和有界摘要，不传大段 Prompt、输入输出或凭据。生成另有
 workflow.generation.updated 事件；前端通过 typed API 获取详情。
 
@@ -372,3 +376,31 @@ Danger 不生效；业务确认不等于工具授权。内部 Session 仅用于�
 
 W4/W5 未实现，Automations 继续占位；此交付不宣称正式画布或自然语言入口可用。
 测试与平台验收证据见 review 记录，真实模型效果和三平台 GUI 仍待对应验收。
+
+## 15. W4–W5 实施与验收（2026-10-14）
+
+Automations 页已接入实际 Workflow 入口，定时任务仍明确未开放。React Flow 支持
+拖动、连线、节点删除、缩放、角色模板/Prompt/任务/模型配置；流程端口、绑定、
+最终成果及预算通过高级 JSON 编辑。JSON 未应用编辑与当前配置冲突时拒绝覆盖。
+运行页显示固定版本快照、节点状态、工具审批、人工验收、预算、成果、资源打开、
+节点轨迹与显式恢复/重试；内部节点会话继续不进入普通聊天列表。
+
+草稿和生成审计新增 schema v46。草稿独立 CAS revision，保存版本与草稿关联单事务；
+生成绑定草稿基线，候选编辑与应用使用单调 stateVersion。运行不读取可变草稿。
+生成使用隔离的普通 Run，空工具表且工具请求直接拒绝；初次请求和最多两次修正
+共用 32000 token、120 秒预算，最多两个生成任务并行。模型采样配置在同次生成中冻结。
+工具/token 费用仍按 Provider usage 或保守估算计量，不承诺供应商费用硬上限。
+
+macOS 使用独立临时项目、本机合成 SSE Provider 和当前开发二进制完成：写作两节点
+生成/应用/保存/运行；Builder 六节点并行汇合/人工验收/成功；在写作图新增润色者，
+未保存版本前运行禁用，保存 v2 后三节点成功；节点轨迹查询。测试不使用真实密钥、
+浏览器登录态或用户项目内容，不证明真实模型的规划或代码质量。
+
+空闲四轮 top 采样，Runtime 均 0.0%，Host 0.0–0.1%，Renderer 0.0–0.7%，无持续空转。
+ps RSS：Host 82.67 MiB、Runtime 45.52 MiB、Renderer 137.19 MiB。与 W0–W3 的同方法
+CPU 0.0% 基线比较，当前接近空闲；数据/缓存/系统压力不同，RSS 不作为优化结论。
+原始记录在临时目录 `/var/folders/0z/dpnv__6j40s_0cm9bkp5xzpw0000gn/T/reflexion-workflow-gui-cCm1ik`。
+验收后测试应用、Node Runtime、Renderer、Rust sidecar 与合成 Provider 已退出。
+
+审查、修复和最终验证见 [W4–W5 Review](WORKFLOW-REVIEW-2026-10-14.md)。未完成项：
+Windows/Linux 真机、完整高 DPI/窄窗口矩阵、真实模型质量与长稳；不自动进入多媒体或调度阶段。

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { BrowserSurfacePanel } from './features/browser/BrowserSurfacePanel'
 import {
   useBrowserPanelState,
@@ -11,7 +11,10 @@ import { TopBar } from './components/TopBar'
 import { ChatView } from './features/chat/ChatView'
 import { LandingView } from './features/landing/LandingView'
 import { SkillsView } from './features/skills/SkillsView'
-import { AutomationsView } from './features/automations/AutomationsView'
+const AutomationsView = lazy(async () => ({
+  default: (await import('./features/automations/AutomationsView'))
+    .AutomationsView,
+}))
 import { InstructionsView } from './features/instructions/InstructionsView'
 import { SettingsView } from './features/settings/SettingsView'
 import { FileViewerPanel } from './features/workspace/files/FileViewerPanel'
@@ -65,6 +68,10 @@ export interface AppMainProps {
 export function AppMain(props: AppMainProps): React.JSX.Element {
   const { view, activeSessionId, notice, workspace, terminal } = props
   const surfaceRef = useRef<HTMLDivElement>(null)
+  const [workflowOpened, setWorkflowOpened] = useState(false)
+  useEffect(() => {
+    if (view === 'automations') setWorkflowOpened(true)
+  }, [view])
   const [browserWidth, setBrowserWidth] = useState<number | null>(null)
   const { open: browserOpen, expanded: browserExpanded } =
     useBrowserPanelState()
@@ -130,13 +137,25 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
         )}
         <div className="content-area">
           <div className="content-main">
+            {workflowOpened && (
+              <div hidden={view !== 'automations'} style={{ height: '100%' }}>
+                <Suspense fallback={<p>正在加载工作流…</p>}>
+                  <AutomationsView
+                    visible={view === 'automations'}
+                    initialProjectId={terminal.activeProjectId}
+                    confirm={terminal.confirm}
+                    approvals={props.chat.pendingApprovals}
+                    onChoose={props.chat.onResolveApproval}
+                    onResource={props.chat.onResourceClick}
+                  />
+                </Suspense>
+              </div>
+            )}
             {view === 'settings' ? (
               <SettingsView {...props.settings} />
             ) : view === 'skills' ? (
               <SkillsView onUseSkill={props.onUseSkill} />
-            ) : view === 'automations' ? (
-              <AutomationsView />
-            ) : view === 'instructions' ? (
+            ) : view === 'automations' ? null : view === 'instructions' ? (
               <InstructionsView {...props.instructions} />
             ) : activeSessionId !== null ? (
               <ChatView {...props.chat} />

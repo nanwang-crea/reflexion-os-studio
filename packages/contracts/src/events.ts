@@ -1,4 +1,5 @@
 import { WorkflowRunStatusSchema } from './workflow/execution.js'
+import { WorkflowGenerationStatusSchema } from './workflow/authoring.js'
 import { z } from 'zod'
 import { OperationSnapshotSchema } from './operations.js'
 import {
@@ -87,6 +88,15 @@ const TerminalEnvelopeSchema = RuntimeEventEnvelopeSchema.extend({
 })
 
 export const RuntimeEventSchema = z.discriminatedUnion('type', [
+  RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('workflow.generation.updated'),
+    stateVersion: z.number().int().nonnegative(),
+    scope: z.literal('workflow'),
+    projectId: z.string().min(1),
+    generationId: z.string().min(1),
+    status: WorkflowGenerationStatusSchema,
+    updatedAt: z.iso.datetime(),
+  }),
   RuntimeEventEnvelopeSchema.extend({
     type: z.literal('workflow.run.updated'),
     scope: z.literal('workflow'),

@@ -1,3 +1,4 @@
+import { WORKFLOW_AUTHORING_SCHEMA } from './migrations/workflow-authoring.js'
 import {
   WORKFLOW_SCHEMA,
   WORKFLOW_EXECUTION_SCHEMA,
@@ -7,6 +8,7 @@ import { BROWSER_DATA_SCHEMA } from './migrations/browser-data.js'
 // 存储结构定义：schema DDL 与当前版本号（版本迁移逻辑见 migrations.ts）。
 
 export const SCHEMA = `
+${WORKFLOW_AUTHORING_SCHEMA}
 ${WORKFLOW_SCHEMA}
 ${WORKFLOW_EXECUTION_SCHEMA}
 ${WORKFLOW_RESULT_SCHEMA}
@@ -329,4 +331,4 @@ CREATE INDEX IF NOT EXISTS idx_run_events_run ON run_events(run_id, created_at);
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 45
+export const LATEST_SCHEMA_VERSION = 46

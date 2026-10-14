@@ -26,8 +26,8 @@ React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
   - **Terminal Surface（集成终端，Phase 2 · macOS 已验证）**：底部多标签用户终端（portable-pty 纵向切片、xterm v6、attach/ack/窗口背压/公平调度、故障矩阵与 10 分钟长稳 macOS 实测；Windows/Linux 待真机）；发布入口开关：`VITE_TERMINAL_DISABLED=1`（构建期）或 localStorage `terminal.forceDisabled='1'`（运行期逃生舱）禁用新建终端入口，已打开的终端不受影响；
   - **存储**：`node:sqlite`（WAL、外键、启动把未完成 Run/Message 恢复为 interrupted、终态单事务、workspace_index 快照表、assets 表）。
 - **Browser（2026-10-13）**：macOS 用户 Surface 收尾保持；验收边界见 `docs/BROWSER-ACCEPTANCE-2026-10-13.md`。B4 静态抓取/只读快照已按用户决定移除，改为内置受管官方 Playwright MCP，首批导航/读取/关闭已实现，已接入逐次审批、身份绑定、敏感过滤和注入防御；Windows/Linux 待验收。
-- **尚未实现、不得提前实现**：Phase 1B 剩余（Browser Surface 跨平台及剩余真机验收）、Phase 2 剩余（Provider/Tool 插件、Browser 工具后续（登录及交互）、检索式记忆——按演进承诺直引 mem0，不得自研提取/召回管线）、Phase 4 Workflow、Phase 5 多模态、Phase 6 硬化与激活码许可。
-- 现有页面与占位边界：聊天区、落地页、技能页、指令页（AGENTS.md/MEMORY.md 四类文件管理）、设置页（Provider）均为独立页面；工作区（索引状态+文件树+查看器）是对话区的**右侧可开合面板**（顶栏文件夹按钮切换，局部状态记忆），不是独立页；Automations 页是 Phase 4 占位（文案如实标注"尚未开放"），不要在占位页假装能力存在。
+- **尚未实现、不得提前实现**：Phase 1B 剩余（Browser Surface 跨平台及剩余真机验收）、Phase 2 剩余（Provider/Tool 插件、Browser 工具后续（登录及交互）、检索式记忆——按演进承诺直引 mem0，不得自研提取/召回管线）、Phase 4 剩余跨平台/真实模型验收、Phase 5 多模态、Phase 6 硬化与激活码许可。
+- 现有页面与占位边界：聊天区、落地页、技能页、指令页（AGENTS.md/MEMORY.md 四类文件管理）、设置页（Provider）均为独立页面；工作区（索引状态+文件树+查看器）是对话区的**右侧可开合面板**（顶栏文件夹按钮切换，局部状态记忆），不是独立页；Automations 页已接 Phase 4 Workflow 语言模型 MVP（W0–W5：定义/草稿、React Flow、运行/恢复、自然语言候选生成/编辑/应用）；定时任务仍未开放。macOS 合成 Provider GUI 已验收，Windows/Linux、真实模型质量与长稳仍待验收，不将这些待验收项标为已完成。
 
 ## 2. 目录结构与职责
 

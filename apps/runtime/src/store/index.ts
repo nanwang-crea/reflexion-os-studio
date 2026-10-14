@@ -1,3 +1,5 @@
+import { WorkflowDraftStore } from './workflows/authoring/drafts.js'
+import { WorkflowGenerationStore } from './workflows/authoring/generations.js'
 import { recoverWorkflows } from './workflows/execution/recovery.js'
 import { WorkflowConfirmationStore } from './workflows/execution/confirmations.js'
 import { WorkflowOutputStore } from './workflows/execution/outputs.js'
@@ -71,6 +73,8 @@ export class Store {
   readonly workflowAttempts: WorkflowAttemptStore
   readonly workflowOutputs: WorkflowOutputStore
   readonly workflowConfirmations: WorkflowConfirmationStore
+  readonly workflowDrafts: WorkflowDraftStore
+  readonly workflowGenerations: WorkflowGenerationStore
   readonly workflows: WorkflowDefinitionStore
 
   constructor(readonly dataDir: string) {
@@ -108,6 +112,8 @@ export class Store {
     this.mutationReceipts = new MutationReceiptStore(this.db)
     this.runEvents = new RunEventStore(this.db)
     this.contextCheckpoints = new ContextCheckpointStore(this.db)
+    this.workflowDrafts = new WorkflowDraftStore(this.db)
+    this.workflowGenerations = new WorkflowGenerationStore(this.db)
     this.workflowRuns = new WorkflowRunStore(this.db)
     this.workflowAttempts = new WorkflowAttemptStore(this.db)
     this.workflowOutputs = new WorkflowOutputStore(this.db)
@@ -157,6 +163,7 @@ export class Store {
     this.toolCalls.recoverUnfinished()
     this.workspaceIndex.recoverInterrupted()
     recoverWorkflows(this)
+    this.workflowGenerations.recover()
   }
 
   close(): void {

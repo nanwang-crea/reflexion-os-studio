@@ -12,6 +12,7 @@ export type EventNotifier = (event: RuntimeEvent) => void
 export type EventIdentity =
   | { scope: 'runtime' }
   | { scope: 'workflow'; projectId: string; workflowRunId: string }
+  | { scope: 'workflow'; projectId: string; generationId: string }
   | { scope: 'run'; runId: string }
   | { scope: 'session'; sessionId: string }
   | { scope: 'project'; projectId: string }
@@ -87,6 +88,7 @@ export class EmitterRegistry {
       identity.scope,
       (id.runId as string) ?? '',
       (id.workflowRunId as string) ?? '',
+      (id.generationId as string) ?? '',
       (id.sessionId as string) ?? '',
       (id.projectId as string) ?? '',
       (id.terminalId as string) ?? '',

@@ -36,7 +36,10 @@ export function dangerCapability(
 }
 
 export function requireSession(store: Store, sessionId: string): Session {
-  if (store.workflowAttempts?.bySession(sessionId))
+  if (
+    store.workflowAttempts?.bySession(sessionId) ||
+    store.workflowGenerations?.bySession(sessionId)
+  )
     throw new CommandError(
       'invalid_state',
       'Workflow 节点会话只能经 Workflow 控制命令运行',

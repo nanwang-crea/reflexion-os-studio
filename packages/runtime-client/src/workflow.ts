@@ -15,6 +15,26 @@ export function createWorkflowClient(transport: RuntimeTransport) {
   ): Promise<WorkflowCommandResult<M>> =>
     transport.request(method, params as Record<string, unknown>)
   return {
+    editGeneration: (
+      params: WorkflowCommandParams<'workflow.edit_generation'>,
+    ) => request('workflow.edit_generation', params),
+    listGenerations: (
+      params: WorkflowCommandParams<'workflow.generations.list'>,
+    ) => request('workflow.generations.list', params),
+    listDrafts: (params: WorkflowCommandParams<'workflow.draft.list'>) =>
+      request('workflow.draft.list', params),
+    saveDraft: (params: WorkflowCommandParams<'workflow.draft.save'>) =>
+      request('workflow.draft.save', params),
+    generate: (params: WorkflowCommandParams<'workflow.generate'>) =>
+      request('workflow.generate', params),
+    getGeneration: (params: WorkflowCommandParams<'workflow.get_generation'>) =>
+      request('workflow.get_generation', params),
+    cancelGeneration: (
+      params: WorkflowCommandParams<'workflow.cancel_generation'>,
+    ) => request('workflow.cancel_generation', params),
+    applyGeneration: (
+      params: WorkflowCommandParams<'workflow.apply_generation'>,
+    ) => request('workflow.apply_generation', params),
     validate: (params: WorkflowCommandParams<'workflow.validate'>) =>
       request('workflow.validate', params),
     list: (params: WorkflowCommandParams<'workflow.list'>) =>

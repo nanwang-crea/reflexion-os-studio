@@ -4,9 +4,11 @@ import { CommandError } from '../agent/errors.js'
 import { validateWorkflow } from './graph/validate.js'
 import { saveWorkflowDefinition } from './definitions/service.js'
 import { workflowHash } from './execution/resources.js'
+import { workflowAuthoringHandlers } from './definitions/authoring-handlers.js'
 
 /** Parse at this boundary too, since tests and internal dispatch can bypass transport parsing. */
 const handlers: Record<string, CommandHandler> = {
+  ...workflowAuthoringHandlers,
   'workflow.validate': (p) =>
     validateWorkflow(
       workflowCommands['workflow.validate'].params.parse(p).definition,
@@ -28,19 +30,45 @@ const handlers: Record<string, CommandHandler> = {
   },
   'workflow.save': (p, { store }) => {
     const input = workflowCommands['workflow.save'].params.parse(p)
+    const draft = input.draftId
+      ? store.workflowDrafts.get(input.projectId, input.draftId)
+      : null
+    const previous = input.definitionId
+      ? store.workflows.get(
+          input.projectId,
+          input.definitionId,
+          input.baseRevision,
+        )
+      : null
+    const origin =
+      draft?.generationId || previous?.origin === 'nl-generated'
+        ? 'nl-generated'
+        : 'manual'
     const replay = store.workflowRuns.requestResult(
       input.requestId,
       'workflow.save',
-      workflowHash({ ...input, id: input.definitionId, origin: 'manual' }),
+      workflowHash({ ...input, id: input.definitionId, origin }),
     )
     if (replay) return replay as Record<string, unknown>
-    return {
-      version: saveWorkflowDefinition(store, {
-        ...input,
-        id: input.definitionId,
-        origin: 'manual',
-      }),
-    }
+    if (
+      input.draftId &&
+      (!draft ||
+        draft.definitionId !== (input.definitionId ?? null) ||
+        draft.baseVersion !== input.baseRevision ||
+        workflowHash(draft.definition) !== workflowHash(input.definition))
+    )
+      throw new Error('workflow_draft_conflict')
+    const version = saveWorkflowDefinition(store, {
+      ...input,
+      id: input.definitionId,
+      origin,
+    })
+    return input.draftId
+      ? {
+          version,
+          draft: store.workflowDrafts.get(input.projectId, input.draftId)!,
+        }
+      : { version }
   },
   'workflow.archive': (p, { store }) => {
     const input = workflowCommands['workflow.archive'].params.parse(p)

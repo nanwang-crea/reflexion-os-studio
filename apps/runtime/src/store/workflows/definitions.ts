@@ -5,6 +5,7 @@ import {
   WorkflowVersionSchema,
   type WorkflowDefinition,
   type WorkflowVersion,
+  type WorkflowDraft,
 } from '@reflexion-os-studio/contracts'
 import { nowIso, type Row } from '../shared.js'
 
@@ -30,6 +31,7 @@ export class WorkflowDefinitionStore {
     baseRevision: number
     definition: WorkflowDefinition
     origin: WorkflowVersion['origin']
+    onSaved?: (version: WorkflowVersion) => WorkflowDraft
   }): WorkflowVersion {
     const definition = WorkflowDefinitionSchema.parse(input.definition)
     if (!Number.isSafeInteger(input.baseRevision) || input.baseRevision < 0)
@@ -86,6 +88,7 @@ export class WorkflowDefinitionStore {
         VALUES (?, ?, ?, ?, ?)`,
         )
         .run(id, revision, JSON.stringify(definition), input.origin, now)
+      const draft = input.onSaved?.(version)
       if (input.requestId)
         this.db
           .prepare(
@@ -96,7 +99,7 @@ export class WorkflowDefinitionStore {
             input.projectId,
             input.requestId,
             input.requestHash!,
-            JSON.stringify({ version }),
+            JSON.stringify({ version, draft }),
           )
       return version
     })

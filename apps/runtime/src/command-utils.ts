@@ -17,6 +17,7 @@ import type { InteractionGateway } from './agent/interactions/index.js'
 export type CommandResult = Record<string, unknown>
 
 export interface CommandContext {
+  workflowGeneration?: import('./workflow/generation/service.js').WorkflowGenerationService
   workflow?: import('./workflow/service.js').WorkflowService
   browser?: import('./browser/agent/service.js').BrowserAgentService
   store: Store

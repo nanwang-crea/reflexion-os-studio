@@ -144,7 +144,10 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
   },
   'session.delete': async (p, { store, agent, assets, approvals, danger }) => {
     const sessionId = requireString(p, 'sessionId')
-    if (store.workflowAttempts?.bySession(sessionId))
+    if (
+      store.workflowAttempts?.bySession(sessionId) ||
+      store.workflowGenerations?.bySession(sessionId)
+    )
       throw new CommandError('invalid_state', 'Workflow 节点轨迹不能单独删除')
     // 有进行中的 Run 时拒绝删除，避免流式写入悬空会话。
     if (store.runs.activeForSession(sessionId)) {
@@ -168,7 +171,10 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
     { store, agent, assets, terminal, approvals, danger, plugins },
   ) => {
     const projectId = requireString(p, 'projectId')
-    if (store.workflowRuns?.hasActiveProject(projectId))
+    if (
+      store.workflowRuns?.hasActiveProject(projectId) ||
+      store.workflowGenerations?.hasActiveProject(projectId)
+    )
       throw new CommandError(
         'invalid_state',
         '请先取消项目中的 Workflow 再删除项目',
@@ -186,7 +192,10 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
       }
     }
     const removed = store.transaction(() => {
-      if (store.workflowRuns?.hasActiveProject(projectId))
+      if (
+        store.workflowRuns?.hasActiveProject(projectId) ||
+        store.workflowGenerations?.hasActiveProject(projectId)
+      )
         throw new CommandError(
           'invalid_state',
           '请先取消项目中的 Workflow 再删除项目',

@@ -47,13 +47,13 @@ Browser B2–B3 macOS 收尾与验收记录保留；B4 静态导航/只读快照
 - **仍待完成**：跨层树的完整续跑 checkpoint、更丰富的变更归属/冲突解决体验，以及更完整的撤销/preimage 治理；外部 delegation 生命周期写命令仍保持拒绝。
 
 > 设计延伸：「自然语言生成结构化节点（每个节点作为一个 Agent）」的契约、生成管线、存储
-> 与分步安排见 `docs/NL-TO-STRUCTURE.md`（草案，待评审）；其 S1–S3 随本阶段落地。
+> 的早期草案见 `docs/NL-TO-STRUCTURE.md`；正式语言模型实现归 Phase 4 的 W5，按 `docs/WORKFLOW-ENGINE.md` 的当前契约落地。
 
 > 委派创建/终态写入仍只允许 Runtime 内部 `task` 链路，外部 `delegation.create/update/attach_child_run` 保持 unsupported；UI 仅可调用受控 `delegation.cancel`。`enableChildRuns=false` 是全局逃生开关。
 
-## Phase 4：Workflow Engine（W0–W3 后端已落地，产品入口未开放）
+## Phase 4：Workflow Engine（W0–W5 语言模型 MVP 已实现）
 
-W0–W3 已落地严格契约/JSON Schema、图与成果校验、定义版本存储、模板/模型快照、串行/并行调度、独立 Agent Run、共享预算与写协调、人工确认、取消、checkpoint 和显式恢复/重试，以及 typed API/事件/Host 白名单。W4 画布与 W5 自然语言生成尚未实现，Automations 继续占位。首版方向：以语言模型 Agent 协作图为核心，角色 Prompt 模板、版本化定义、显式成果端口、DAG 校验、串行/并行汇合、人工确认、取消与保守恢复，以及 React Flow 编辑与运行 UI。工具由 Agent 内部调用，首版不提供独立工具节点、节点内部委派、循环或定时触发。图片/视频沿用 Provider 能力预留，实际生成仍在后续阶段。范围、执行边界和 W0–W5 分批验收见 [Workflow MVP 设计](WORKFLOW-ENGINE.md)。自然语言生成角色节点和完整协作图属于本阶段首版必交付项，生成后校验、人工审阅并独立保存运行；`NL-TO-STRUCTURE.md` 为早期草案，需先按当前模板、权限与存储模型修订。
+W0–W3 已落地严格契约/JSON Schema、图与成果校验、定义版本存储、模板/模型快照、串行/并行调度、独立 Agent Run、共享预算与写协调、人工确认、取消、checkpoint 和显式恢复/重试，以及 typed API/事件/Host 白名单。W4 React Flow 画布、独立草稿、运行/恢复 UI 与 W5 自然语言单节点/完整图生成、候选编辑/应用已接入 Automations。macOS 合成 Provider GUI 两条样例与新增润色节点通过；跨平台真机、真实模型质量和长稳仍待验收。首版方向：以语言模型 Agent 协作图为核心，角色 Prompt 模板、版本化定义、显式成果端口、DAG 校验、串行/并行汇合、人工确认、取消与保守恢复，以及 React Flow 编辑与运行 UI。工具由 Agent 内部调用，首版不提供独立工具节点、节点内部委派、循环或定时触发。图片/视频沿用 Provider 能力预留，实际生成仍在后续阶段。范围、执行边界和 W0–W5 分批验收见 [Workflow MVP 设计](WORKFLOW-ENGINE.md)。自然语言生成角色节点和完整协作图属于本阶段首版必交付项，生成后校验、人工审阅并独立保存运行；`NL-TO-STRUCTURE.md` 为早期草案，需先按当前模板、权限与存储模型修订。
 
 ## Phase 5：Multimodal Workflow（图片 Chat 子集已接入，Workflow 未开始）
 

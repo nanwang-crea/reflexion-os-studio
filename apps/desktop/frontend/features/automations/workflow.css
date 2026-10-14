@@ -1,0 +1,153 @@
+.automations-view {
+  padding: 24px;
+  overflow: auto;
+  height: 100%;
+  box-sizing: border-box;
+}
+.workflow-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+.workflow-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.workflow-workspace label,
+.automations-view > label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+}
+.workflow-workspace input,
+.workflow-workspace textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  box-sizing: border-box;
+  width: 100%;
+}
+.workflow-workspace input[type='checkbox'] {
+  width: auto;
+}
+.workflow-workspace textarea {
+  resize: vertical;
+}
+.workflow-workspace button {
+  padding: 7px 12px;
+  margin-right: 4px;
+}
+.workflow-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+  gap: 12px;
+}
+.workflow-editor:not(:has(fieldset)) {
+  grid-template-columns: minmax(0, 1fr);
+}
+.workflow-canvas {
+  min-height: 420px;
+  height: 52vh;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  --xy-background-color: var(--bg-elevated);
+  --xy-edge-stroke: #aaa;
+  --xy-node-color: inherit;
+  --xy-node-background-color: var(--bg-elevated);
+}
+.workflow-role-card {
+  width: 235px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-height: 110px;
+}
+.workflow-role-card header {
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  gap: 6px;
+}
+.workflow-port-columns {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 10px 12px;
+  gap: 8px;
+}
+.workflow-port {
+  position: relative;
+  height: 25px;
+  font-size: 11px;
+}
+.workflow-port-columns > div {
+  flex: 1;
+  min-width: 0;
+}
+.workflow-port-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workflow-role-card strong {
+  overflow-wrap: anywhere;
+}
+.workflow-workspace fieldset {
+  min-width: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+.workflow-inspector {
+  max-height: 52vh;
+  overflow: auto;
+  padding: 0 8px;
+}
+.workflow-bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+}
+.workflow-workspace pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  max-height: 360px;
+  overflow: auto;
+}
+.workflow-workspace article,
+.workflow-generation,
+.workflow-run-controls {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 12px 0;
+}
+.workflow-run-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow: auto;
+}
+.workflow-error {
+  color: var(--warning-text);
+}
+@media (max-width: 1050px) {
+  .workflow-editor,
+  .workflow-bottom {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .workflow-inspector {
+    max-height: none;
+  }
+}

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { RequestIdSchema } from './params.js'
+import { workflowAuthoringCommands } from './workflow-authoring.js'
 import {
   WorkflowDefinitionSchema,
   WorkflowVersionSchema,
@@ -8,6 +9,7 @@ import {
   WorkflowValuesSchema,
   WorkflowModelBindingSchema,
   WorkflowValidationResultSchema,
+  WorkflowDraftSchema,
 } from '../workflow/index.js'
 import {
   PermissionPresetSchema,
@@ -25,6 +27,7 @@ const resume = {
 }
 const detail = z.strictObject({ detail: WorkflowRunDetailSchema })
 export const workflowCommands = {
+  ...workflowAuthoringCommands,
   'workflow.validate': {
     params: z.strictObject({ definition: WorkflowDefinitionSchema }),
     result: WorkflowValidationResultSchema,
@@ -48,8 +51,12 @@ export const workflowCommands = {
       definitionId: z.string().min(1).optional(),
       baseRevision: z.number().int().nonnegative(),
       definition: WorkflowDefinitionSchema,
+      draftId: z.string().min(1).optional(),
     }),
-    result: z.strictObject({ version: WorkflowVersionSchema }),
+    result: z.strictObject({
+      version: WorkflowVersionSchema,
+      draft: WorkflowDraftSchema.optional(),
+    }),
   },
   'workflow.archive': {
     params: z.strictObject({

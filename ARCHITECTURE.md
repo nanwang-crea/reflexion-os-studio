@@ -8,14 +8,14 @@ ReflexionOS Studio 是桌面端 Agent Runtime 与可插拔图执行平台。它�
 
 ## 2. 技术选型
 
-| 层             | 技术                           | 职责                                                   |
-| -------------- | ------------------------------ | ------------------------------------------------------ |
-| UI             | React + TypeScript             | 对话、Plan、Tool Trace、Workspace 和后续 Workflow 画布 |
-| Desktop Host   | Tauri 2（第一阶段）            | 窗口、IPC、两个 sidecar 的 spawn/supervise、插件安装   |
-| Agent Runtime  | Node.js + TypeScript           | Agent、Context、模型、工具编排、事件、恢复             |
-| System Runtime | Rust（Phase 1）                | 文件、Shell、工具子进程和不可绕过的 enforcement        |
-| Storage        | SQLite                         | canonical 业务状态、审计事件和资产/Workspace 索引      |
-| Contracts      | TypeScript types + JSON Schema | 跨进程、插件和持久化协议                               |
+| 层             | 技术                           | 职责                                                 |
+| -------------- | ------------------------------ | ---------------------------------------------------- |
+| UI             | React + TypeScript             | 对话、Plan、Tool Trace、Workspace 和 Workflow 画布   |
+| Desktop Host   | Tauri 2（第一阶段）            | 窗口、IPC、两个 sidecar 的 spawn/supervise、插件安装 |
+| Agent Runtime  | Node.js + TypeScript           | Agent、Context、模型、工具编排、事件、恢复           |
+| System Runtime | Rust（Phase 1）                | 文件、Shell、工具子进程和不可绕过的 enforcement      |
+| Storage        | SQLite                         | canonical 业务状态、审计事件和资产/Workspace 索引    |
+| Contracts      | TypeScript types + JSON Schema | 跨进程、插件和持久化协议                             |
 
 Python 不进入新 Runtime 的核心路径，仅作为迁移期旧系统。
 

@@ -19,6 +19,7 @@ export function saveWorkflowDefinition(
     baseRevision: number
     definition: WorkflowDefinition
     origin: WorkflowVersion['origin']
+    draftId?: string
   },
 ): WorkflowVersion {
   if (!store.projects.get(input.projectId))
@@ -34,9 +35,26 @@ export function saveWorkflowDefinition(
     throw new Error(
       `Invalid workflow: ${validation.issues.map((issue) => issue.code).join(', ')}`,
     )
+  const draft = input.draftId
+    ? store.workflowDrafts.get(input.projectId, input.draftId)
+    : null
   return store.workflows.save({
     ...input,
     definition,
     requestHash: workflowHash(input),
+    onSaved: draft
+      ? (version) => {
+          const updated = {
+            ...draft,
+            revision: draft.revision + 1,
+            definition: version.definition,
+            definitionId: version.definitionId,
+            baseVersion: version.revision,
+            updatedAt: version.createdAt,
+          }
+          store.workflowDrafts.write(updated, draft.revision)
+          return updated
+        }
+      : undefined,
   })
 }

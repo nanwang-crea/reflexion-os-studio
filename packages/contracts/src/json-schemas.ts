@@ -1,3 +1,4 @@
+import { WorkflowNodeProposalSchema } from './workflow/authoring.js'
 import {
   WorkflowDefinitionSchema,
   WorkflowVersionSchema,
@@ -79,6 +80,7 @@ function toJSONSchema(name: string, schema: z.ZodType): [string, unknown] {
 export const jsonSchemas: Readonly<Record<string, unknown>> = Object.freeze(
   Object.fromEntries([
     toJSONSchema('JsonRpcMessage', JsonRpcMessageSchema),
+    toJSONSchema('WorkflowNodeProposal', WorkflowNodeProposalSchema),
     toJSONSchema('WorkflowDefinition', WorkflowDefinitionSchema),
     toJSONSchema('WorkflowVersion', WorkflowVersionSchema),
     toJSONSchema('WorkflowExecutionSnapshot', WorkflowExecutionSnapshotSchema),
