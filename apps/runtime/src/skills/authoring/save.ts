@@ -19,14 +19,21 @@ export async function saveAuthoredSkill(
     throw new Error('项目不存在')
   if (store.plugins.get(input.id))
     throw new Error('Skill 标识已存在，请使用新的标识')
+  for (const template of store.agents.list()) {
+    if (!template.projectId || template.projectId === input.projectId) continue
+    const escapedId = template.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const reference = new RegExp(
+      `(?<![A-Za-z0-9_-])${escapedId}(?![A-Za-z0-9_-])`,
+    )
+    if (reference.test(input.instructions))
+      throw new Error('Skill 引用了项目角色，请保存到该角色所属项目')
+  }
   // Only canonical generated role IDs are exempted, as complete tokens; never strip substrings from possible credentials.
   const checkedInstructions = input.instructions.replace(
     /(?<![A-Za-z0-9_-])template-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![A-Za-z0-9_-])/gi,
     (id) => {
       const template = store.agents.get(id)
       if (!template) return id
-      if (template.projectId && template.projectId !== input.projectId)
-        throw new Error('Skill 引用了项目角色，请保存到该角色所属项目')
       return '[已验证的角色模板引用]'
     },
   )

@@ -76,7 +76,7 @@ const root=createRoot(document.getElementById('root'));
 const profiles=[{id:'synthetic',name:'Synthetic',enabled:true,capabilities:['chat'],models:['review-model'],apiFormat:'openai-chat'}];
 window.showRoles=()=>root.render(<AgentRolesView profiles={profiles} initialProjectId="project" confirm={async()=>true}/>);
 window.collaborationCommits=0;
-window.showCollaboration=()=>root.render(<React.Profiler id="collaboration" onRender={()=>window.collaborationCommits++}><CollaborationPanel onCollapse={()=>{}} chat={{sessionData:{session:{id:'session',projectId:'project'},messages:[{id:'user',runId:'root-run'}],runs:[{id:'root-run',parentRunId:null,supersededByRunId:null,model:'parent-model',providerId:'synthetic',status:'completed',planId:'plan'}],plans:[{id:'plan',goal:'Deliver feature',steps:[{id:'step',title:'Implement and verify',status:'completed'}]}]},pendingApprovals:[],pendingInteractions:[]}}/></React.Profiler>);
+window.showCollaboration=()=>root.render(<React.Profiler id="collaboration" onRender={()=>window.collaborationCommits++}><CollaborationPanel onCollapse={()=>{}} chat={{sessionData:{session:{id:'session',projectId:'project'},messages:[{id:'user',runId:'root-run'}],runs:[{id:window.currentRootRun??'root-run',parentRunId:null,supersededByRunId:null,model:'parent-model',providerId:'synthetic',status:'completed',planId:'plan'}],plans:[{id:'plan',goal:'Deliver feature',steps:[{id:'step',title:'Implement and verify',status:'completed'}]}]},pendingApprovals:[],pendingInteractions:[]}}/></React.Profiler>);
 window.showCatalog=()=>{function Catalog(){const [project,setProject]=React.useState('project');window.catalogProject=setProject;const skills=useSkillCatalog(true,project);return <div>{skills.map(skill=><p key={skill.id}>{skill.id}</p>)}</div>};root.render(<Catalog/>)};
 window.clearUI=()=>root.render(null);window.showRoles();
 `,
@@ -209,6 +209,41 @@ window.clearUI=()=>root.render(null);window.showRoles();
       .waitFor()
     assert.equal(await page.locator('.react-flow__edge').count(), 2)
     await page
+      .getByRole('button', { name: 'Review Agent · 已完成', exact: true })
+      .click()
+    const trace = page.getByRole('dialog', {
+      name: '子 Agent 执行轨迹',
+      exact: true,
+    })
+    await trace.getByRole('button', { name: /Nested Reviewer/ }).click()
+    await trace.getByText('子会话尚未创建。', { exact: true }).waitFor()
+    assert.equal(
+      await trace
+        .getByText('Synthetic review result', {
+          exact: true,
+        })
+        .count(),
+      0,
+    )
+    await page.evaluate(() => {
+      window.tree[0] = { ...window.tree[0] }
+      window.emitAgentEvent({
+        type: 'delegation.updated',
+        delegation: window.tree[0],
+      })
+    })
+    await page.waitForTimeout(150)
+    assert.match(
+      await trace.locator('button.selected').innerText(),
+      /Nested Reviewer/,
+    )
+    await page
+      .getByRole('button', {
+        name: '关闭子 Agent 执行轨迹',
+        exact: true,
+      })
+      .click()
+    await page
       .getByRole('button', { name: '停止此 Agent', exact: true })
       .click()
     await page
@@ -273,6 +308,25 @@ window.clearUI=()=>root.render(null);window.showRoles();
       'idle collaboration must not continuously commit React updates',
     )
     assert.equal(await page.evaluate(() => window.listenerCount()), 1)
+    await page
+      .getByRole('button', {
+        name: 'Review Agent · 已完成',
+        exact: true,
+      })
+      .click()
+    await page
+      .getByRole('dialog', {
+        name: '子 Agent 执行轨迹',
+        exact: true,
+      })
+      .waitFor()
+    await page.evaluate(() => {
+      window.currentRootRun = 'next-root-run'
+      window.showCollaboration()
+    })
+    await page.waitForFunction(
+      () => !document.querySelector('.child-trace-body'),
+    )
     await page.evaluate(() => window.clearUI())
     await page.waitForFunction(() => window.listenerCount() === 0)
     await page.evaluate(() => window.showCatalog())

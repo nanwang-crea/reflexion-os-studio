@@ -55,7 +55,9 @@ export function CollaborationPanel({
         interaction.agent?.rootRunId === run?.id,
     ).length
   const selectedItem =
-    items.find((item) => item.id === selected?.id) ?? selected
+    selected && (selected.rootRunId ?? selected.parentRunId) === run?.id
+      ? (items.find((item) => item.id === selected.id) ?? selected)
+      : null
   return (
     <section className="collaboration-panel" aria-label="Agent 协作">
       <header className="collaboration-heading">
@@ -152,6 +154,7 @@ export function CollaborationPanel({
       )}
       {selectedItem && (
         <ChildAgentTrace
+          key={selectedItem.id}
           delegation={selectedItem}
           onClose={() => setSelected(null)}
         />

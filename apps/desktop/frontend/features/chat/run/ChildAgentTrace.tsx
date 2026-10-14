@@ -44,11 +44,21 @@ export function ChildAgentTrace({
             ? '失败'
             : '已取消'
 
-  useEffect(() => setSelected(delegation), [delegation])
+  useEffect(
+    () =>
+      setSelected((current) =>
+        current.id === delegation.id ? delegation : current,
+      ),
+    [delegation],
+  )
 
   useEffect(() => {
     const sessionId = selected.childSessionId
-    if (sessionId === null) return
+    if (sessionId === null) {
+      setData(null)
+      setError(null)
+      return
+    }
     let disposed = false
     let requestId = 0
     setData((current) => (current?.session?.id === sessionId ? current : null))

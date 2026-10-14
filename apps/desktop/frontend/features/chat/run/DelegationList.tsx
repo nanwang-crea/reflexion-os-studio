@@ -138,7 +138,11 @@ export function DelegationList({
         </div>
       )}
       {trace && (
-        <ChildAgentTrace delegation={trace} onClose={() => setTraceId(null)} />
+        <ChildAgentTrace
+          key={trace.id}
+          delegation={trace}
+          onClose={() => setTraceId(null)}
+        />
       )}
     </div>
   )

@@ -298,6 +298,28 @@ test('reviewed collaboration Skills use the standard installer and survive resta
     () => service.save({ ...input, id: 'wrong-scope-skill', projectId: null }),
     /角色所属项目/,
   )
+  const customRole = f.store.agents.saveUser({
+    ...role,
+    id: 'custom-reviewer.v1',
+    projectId: f.project.id,
+  })
+  for (const projectId of [null, f.other.id]) {
+    await assert.rejects(
+      () =>
+        service.save({
+          ...input,
+          id: 'custom-role-wrong-scope',
+          projectId,
+          instructions: `Use template ${customRole.id}.`,
+        }),
+      /角色所属项目/,
+    )
+  }
+  await service.save({
+    ...input,
+    id: 'custom-role-same-scope',
+    instructions: `Use template ${customRole.id}.`,
+  })
   await assert.rejects(
     () =>
       service.save({
