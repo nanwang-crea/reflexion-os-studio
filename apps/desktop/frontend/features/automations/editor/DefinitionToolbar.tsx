@@ -10,6 +10,7 @@ export function DefinitionToolbar({
   saved,
   select,
   confirm,
+  onRun,
 }: {
   editor: ReturnType<typeof useWorkflowEditor>
   saved: WorkflowVersion | null | undefined
@@ -17,6 +18,7 @@ export function DefinitionToolbar({
     value: Parameters<ReturnType<typeof useWorkflowEditor>['select']>[0],
   ) => void
   confirm: (state: ConfirmDialogState) => Promise<boolean>
+  onRun: () => void
 }): React.JSX.Element {
   return (
     <div className="workflow-toolbar">
@@ -60,6 +62,9 @@ export function DefinitionToolbar({
       <button type="button" disabled={editor.busy} onClick={() => select(null)}>
         新建
       </button>
+      <button type="button" disabled={editor.busy} onClick={onRun}>
+        运行流程 ▶
+      </button>
       <button
         type="button"
         disabled={editor.busy}
@@ -88,13 +93,6 @@ export function DefinitionToolbar({
             sideOffset={6}
             collisionPadding={8}
           >
-            <DropdownMenu.Item
-              className="workflow-more-item"
-              disabled={editor.busy}
-              onSelect={() => void editor.validate()}
-            >
-              校验
-            </DropdownMenu.Item>
             {saved && (
               <DropdownMenu.Item
                 className="workflow-more-item"

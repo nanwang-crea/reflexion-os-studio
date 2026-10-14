@@ -8,6 +8,7 @@ import type {
 } from '@reflexion-os-studio/contracts'
 import type { ConfirmDialogState } from '../../components/ConfirmDialog'
 import * as api from '../../api/workflow'
+import { WorkflowDefinitionSchema } from '@reflexion-os-studio/contracts'
 import { newDefinition } from './editor/definition'
 
 export function useWorkflowEditor(
@@ -185,7 +186,7 @@ export function useWorkflowEditor(
     [action, persist, projectId],
   )
   const apply = useCallback(
-    async () =>
+    async (onApplied?: () => void) =>
       action(async () => {
         if (!generation || latest.current.dirty)
           throw new Error('当前草稿有新编辑，请保留候选并重新生成或人工合并')
@@ -199,19 +200,29 @@ export function useWorkflowEditor(
         setDefinition(result.draft.definition)
         setDirty(false)
         setGeneration({ ...generation, status: 'applied' })
+        onApplied?.()
         await refresh()
       }),
     [action, generation, projectId, refresh],
   )
-  const validate = useCallback(
-    () =>
-      action(async () => {
-        setValidation(
-          await api.validateWorkflow({ definition: latest.current.definition }),
-        )
-      }),
-    [action],
-  )
+  const validateForRun = useCallback(async () => {
+    const epoch = revision.current
+    const parsed = WorkflowDefinitionSchema.safeParse(latest.current.definition)
+    const result = parsed.success
+      ? await api.validateWorkflow({ definition: parsed.data })
+      : {
+          valid: false,
+          order: [],
+          issues: parsed.error.issues.map((issue) => ({
+            code: 'schema_invalid',
+            path: issue.path.join('.'),
+            message: issue.message,
+          })),
+        }
+    if (epoch !== revision.current) throw new Error('配置已变化，请重新运行')
+    setValidation(result)
+    return result.valid
+  }, [])
   const saveDraft = useCallback(
     () =>
       action(async () => {
@@ -256,7 +267,7 @@ export function useWorkflowEditor(
     refresh,
     setGeneration,
     setError,
-    validate,
+    validateForRun,
     saveDraft,
     cancelGeneration,
   }

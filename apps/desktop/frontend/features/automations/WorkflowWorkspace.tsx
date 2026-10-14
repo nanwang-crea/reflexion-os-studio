@@ -10,9 +10,9 @@ import * as api from '../../api/workflow'
 import { useWorkflowEditor } from './useWorkflowEditor'
 import { useWorkflowRuns } from './run/useWorkflowRuns'
 import { useWorkflowEvents } from './run/useWorkflowEvents'
-import { Select } from '../../components/forms/Select'
 import { DefinitionEditor, type WorkflowPanel } from './editor/DefinitionEditor'
-import { GenerationPanel } from './generation/GenerationPanel'
+import { WorkflowGenerationView } from './generation/WorkflowGenerationView'
+import type { WorkflowCreationMode } from './editor/CreationModes'
 import { RunPanel } from './run/RunPanel'
 import { RunControls } from './run/RunControls'
 
@@ -38,6 +38,8 @@ export function WorkflowWorkspace({
   const [templates, setTemplates] = useState<AgentTemplate[]>([])
   const [modelKey, setModelKey] = useState('')
   const [showRun, setShowRun] = useState(false)
+  const [creationMode, setCreationMode] =
+    useState<WorkflowCreationMode>('language')
   const [panel, setPanel] = useState<WorkflowPanel>(null)
   useEffect(() => {
     if (!visible) return
@@ -134,6 +136,8 @@ export function WorkflowWorkspace({
         confirm={confirm}
         panel={panel}
         onPanel={setPanel}
+        creationMode={creationMode}
+        onCreationMode={setCreationMode}
         pendingActions={
           runs.detail
             ? approvals.filter(
@@ -147,85 +151,41 @@ export function WorkflowWorkspace({
             : 0
         }
         generationPanel={
-          <>
-            <label>
-              默认语言模型
-              <Select value={modelKey} onValueChange={setModelKey}>
-                <option value="">请选择模型</option>
-                {providers
-                  .filter(
-                    (provider) =>
-                      provider.enabled &&
-                      provider.capabilities.includes('chat'),
-                  )
-                  .flatMap((provider) =>
-                    provider.models.map((model) => (
-                      <option
-                        key={JSON.stringify([provider.id, model])}
-                        value={JSON.stringify([provider.id, model])}
-                      >
-                        {provider.name} / {model}
-                      </option>
-                    )),
-                  )}
-              </Select>
-            </label>
-            <GenerationPanel
-              value={editor.generation}
-              disabled={editor.busy || !modelKey}
-              canApply={
-                !editor.dirty &&
-                !editor.busy &&
-                editor.draft?.revision === editor.generation?.baseRevision
-              }
-              onGenerate={(mode, description) => {
-                if (!modelKey) return
-                const [providerId, model] = JSON.parse(modelKey) as [
-                  string,
-                  string,
-                ]
-                void editor.generate(mode, description, providerId, model)
-              }}
-              onCancel={() => void editor.cancelGeneration()}
-              onApply={() => void editor.apply()}
-              onEdit={(definition) =>
-                editor.action(async () => {
-                  if (!editor.generation)
-                    throw new Error('候选已切换，请重新审阅')
-                  const result = await api.editWorkflowGeneration({
-                    projectId,
-                    generationId: editor.generation.id,
-                    stateVersion: editor.generation.stateVersion,
-                    definition,
-                  })
-                  setGeneration((old) =>
-                    old?.id === result.generation.id &&
-                    old.stateVersion > result.generation.stateVersion
-                      ? old
-                      : result.generation,
-                  )
-                }, true)
-              }
-            />
-          </>
+          <WorkflowGenerationView
+            editor={editor}
+            projectId={projectId}
+            providers={providers}
+            modelKey={modelKey}
+            onModel={setModelKey}
+            onOpenCanvas={() => {
+              setCreationMode('canvas')
+              setShowRun(false)
+              setPanel(null)
+            }}
+          />
         }
         runPanel={
           <>
             <RunControls
               providers={providers}
-              definition={saved?.definition ?? editor.definition}
-              disabled={
-                editor.busy ||
-                editor.dirty ||
-                !saved ||
-                JSON.stringify(editor.definition) !==
-                  JSON.stringify(saved.definition)
-              }
+              definition={editor.definition}
+              disabled={editor.busy}
               modelKey={modelKey}
               onModel={setModelKey}
               onStart={(input) =>
                 void editor.action(async () => {
-                  if (!saved) throw new Error('请先保存版本')
+                  if (!(await editor.validateForRun())) {
+                    setCreationMode('canvas')
+                    setShowRun(false)
+                    return
+                  }
+                  if (
+                    !saved ||
+                    editor.dirty ||
+                    JSON.stringify(editor.definition) !==
+                      JSON.stringify(saved.definition)
+                  )
+                    throw new Error('请先保存当前版本，再运行')
                   const result = await api.startWorkflow({
                     projectId,
                     definitionId: saved.definitionId,
@@ -233,6 +193,7 @@ export function WorkflowWorkspace({
                     ...input,
                   })
                   runs.update(result.detail)
+                  setCreationMode('canvas')
                   setShowRun(true)
                   setPanel('run')
                   await runs.refresh()
@@ -244,6 +205,7 @@ export function WorkflowWorkspace({
               detail={runs.detail}
               runs={runs.runs}
               onSelect={(id) => {
+                setCreationMode('canvas')
                 setShowRun(true)
                 setPanel('run')
                 void editor.action(() => runs.select(id))

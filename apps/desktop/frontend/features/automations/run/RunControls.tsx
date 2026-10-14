@@ -37,7 +37,7 @@ export function RunControls({
       <h3>运行已保存版本</h3>
       <label>
         默认语言模型
-        <Select value={modelKey} onValueChange={onModel}>
+        <Select value={modelKey} disabled={disabled} onValueChange={onModel}>
           <option value="">请选择</option>
           {providers
             .filter(
@@ -62,6 +62,7 @@ export function RunControls({
           权限档位
           <Select
             value={preset}
+            disabled={disabled}
             onValueChange={(value) => setPreset(value as PermissionPreset)}
           >
             <option value="workspace-read">工作区只读</option>
@@ -73,6 +74,7 @@ export function RunControls({
           <input
             type="checkbox"
             checked={ask}
+            disabled={disabled}
             onChange={(event) => setAsk(event.target.checked)}
           />
           每次工具调用都询问
@@ -87,6 +89,7 @@ export function RunControls({
         <textarea
           rows={5}
           value={inputs}
+          disabled={disabled}
           spellCheck={false}
           onChange={(event) => setInputs(event.target.value)}
           placeholder={'{"text":{"type":"text","value":"任务描述"}}'}
@@ -112,7 +115,7 @@ export function RunControls({
           }
         }}
       >
-        运行
+        开始运行
       </button>
     </section>
   )

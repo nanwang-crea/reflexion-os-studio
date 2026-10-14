@@ -7,6 +7,12 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
+import {
+  workflowApiMock,
+  providerApiMock,
+  agentApiMock,
+  transportMock,
+} from './workflow-ui/mock-api.mjs'
 import { browserWorkerPaths } from '../../runtime/dist/browser/agent/paths.js'
 
 const desktop = fileURLToPath(new URL('..', import.meta.url))
@@ -23,6 +29,21 @@ test('Workflow components retain failed edits, limit port changes, refresh handl
   try {
     await build({
       absWorkingDir: desktop,
+      plugins: [
+        {
+          name: 'synthetic-workflow-api',
+          setup(build) {
+            const modules = [
+              [/frontend[\\/]api[\\/]workflow\.ts$/, workflowApiMock],
+              [/frontend[\\/]api[\\/]providers\.ts$/, providerApiMock],
+              [/frontend[\\/]api[\\/]agents\.ts$/, agentApiMock],
+              [/frontend[\\/]lib[\\/]transport\.ts$/, transportMock],
+            ]
+            for (const [filter, contents] of modules)
+              build.onLoad({ filter }, () => ({ contents, loader: 'js' }))
+          },
+        },
+      ],
       stdin: {
         contents: `
 import React from 'react'; import { createRoot } from 'react-dom/client';
@@ -30,11 +51,13 @@ import './frontend/styles/style.css';
 import './frontend/features/automations/workflow.css';
 import { JsonField } from './frontend/features/automations/editor/JsonField';
 import { NodeInspector } from './frontend/features/automations/editor/NodeInspector';
+import { WorkflowWorkspace } from './frontend/features/automations/WorkflowWorkspace';
 import { DefinitionEditor } from './frontend/features/automations/editor/DefinitionEditor';
 import { GenerationPanel } from './frontend/features/automations/generation/GenerationPanel';
 import { RunControls } from './frontend/features/automations/run/RunControls';
 import { WorkflowCanvas } from './frontend/features/automations/editor/WorkflowCanvas';
 import { workflowFixture } from '../../packages/contracts/test/fixtures/workflow.mjs';
+window.workflowFixture = workflowFixture;
 const root = createRoot(document.getElementById('root'));
 window.showJSON = () => {
   let value = { text: 'base' }; window.applies = 0;
@@ -59,15 +82,17 @@ window.showWorkspace = () => {
     const [definition, change] = React.useState(() => workflowFixture());
     const [panel, setPanel] = React.useState(null);
     const [showRun, setShowRun] = React.useState(false);
+    const [creationMode, setCreationMode] = React.useState('canvas');
     const editor = { definition, change, versions: [], drafts: [], draft: null, base: null, busy: false, dirty: true, generation: null, error: null, validation: null, select: async () => {}, saveDraft: async () => {}, save: async () => {}, validate: async () => {}, action: async work => work(), refresh: async () => {}, setError: value => { throw new Error(value) } };
     const generationPanel = React.createElement(GenerationPanel, { value: null, disabled: false, canApply: false, onGenerate: () => {}, onCancel: () => {}, onApply: () => {}, onEdit: () => {} });
-    const runPanel = React.createElement(RunControls, { providers: [], definition, disabled: true, modelKey: '', onModel: () => {}, onStart: () => {} });
+    const runPanel = React.createElement(RunControls, { providers: [], definition, disabled: false, modelKey: '', onModel: () => {}, onStart: () => {} });
     return React.createElement('div', { className: 'automations-view' },
       React.createElement('header', { className: 'workflow-page-head' }, React.createElement('div', null, React.createElement('h1', null, '工作流'), React.createElement('p', null, '连接角色，让想法成为可执行的协作流程。'))),
-      React.createElement('div', { className: 'workflow-project-surface' }, React.createElement('div', { className: 'workflow-workspace' }, React.createElement(DefinitionEditor, { editor, saved: null, providers: [], templates: [], detail: null, showRun, onShowRun: setShowRun, panel, onPanel: setPanel, confirm: async () => true, generationPanel, runPanel }))));
+      React.createElement('div', { className: 'workflow-project-surface' }, React.createElement('div', { className: 'workflow-workspace' }, React.createElement(DefinitionEditor, { editor, saved: null, providers: [], templates: [], detail: null, showRun, onShowRun: setShowRun, creationMode, onCreationMode: setCreationMode, panel, onPanel: setPanel, confirm: async () => true, generationPanel, runPanel }))));
   }
   root.render(React.createElement(Workspace));
 };
+window.showRealWorkspace = () => root.render(React.createElement('div', { className: 'automations-view' }, React.createElement('header', { className: 'workflow-page-head' }, React.createElement('h1', null, '工作流')), React.createElement('div', { className: 'workflow-project-surface' }, React.createElement(WorkflowWorkspace, { projectId: 'project', confirm: async () => true, approvals: [], onChoose: async () => {} }))));
 window.showJSON();
 `,
         resolveDir: desktop,
@@ -204,8 +229,13 @@ window.showJSON();
     const more = page.getByRole('button', { name: '更多操作', exact: true })
     await more.focus()
     await page.keyboard.press('ArrowDown')
-    await page.getByRole('menuitem', { name: '校验', exact: true }).waitFor()
+    await page
+      .getByRole('menuitem', { name: '刷新定义', exact: true })
+      .waitFor()
     await page.keyboard.press('Escape')
+    await page.waitForFunction(
+      () => document.activeElement?.getAttribute('aria-label') === '更多操作',
+    )
     assert.equal(
       await more.evaluate((element) => element === document.activeElement),
       true,
@@ -215,9 +245,12 @@ window.showJSON();
     await page
       .getByRole('textbox', { name: '节点任务', exact: true })
       .fill('保留这段编辑内容')
-    await page.getByRole('button', { name: 'AI 生成', exact: true }).click()
+    await page
+      .getByRole('button', { name: '自然语言创建', exact: true })
+      .click()
     const description = page.getByRole('textbox', { name: '描述', exact: true })
     await description.fill('生成一个完整的产品开发流程')
+    await page.getByRole('button', { name: '画布编辑', exact: true }).click()
     await page.getByRole('button', { name: '流程', exact: true }).click()
     await page
       .getByRole('textbox', { name: '工作流名称', exact: true })
@@ -238,8 +271,11 @@ window.showJSON();
         .inputValue(),
       '保留这段编辑内容',
     )
-    await page.getByRole('button', { name: 'AI 生成', exact: true }).click()
+    await page
+      .getByRole('button', { name: '自然语言创建', exact: true })
+      .click()
     assert.equal(await description.inputValue(), '生成一个完整的产品开发流程')
+    await page.getByRole('button', { name: '画布编辑', exact: true }).click()
     await page.getByRole('button', { name: '流程', exact: true }).click()
     assert.equal(await definitionJSON.inputValue(), '尚未应用的 JSON 编辑')
     for (const viewport of [
@@ -283,7 +319,9 @@ window.showJSON();
     await page
       .getByRole('textbox', { name: '运行输入 JSON', exact: true })
       .fill('{"text":{"type":"text","value":"任务"}}')
-    await page.getByRole('button', { name: 'AI 生成', exact: true }).click()
+    await page
+      .getByRole('button', { name: '自然语言创建', exact: true })
+      .click()
     await page.getByRole('button', { name: '运行', exact: true }).click()
     assert.match(
       await page
@@ -295,9 +333,143 @@ window.showJSON();
     await page
       .getByRole('button', { name: '收起配置面板', exact: true })
       .click()
+    await page.getByRole('button', { name: '画布编辑', exact: true }).click()
     await page.screenshot({ path: '/tmp/reflexion-workflow-layout-wide.png' })
     await page.locator('.react-flow__node').first().click()
     await page.screenshot({ path: '/tmp/reflexion-workflow-layout-node.png' })
+    await page.evaluate(() => window.showRealWorkspace())
+    await page
+      .getByRole('heading', { name: '描述任务，生成协作流程', exact: true })
+      .waitFor()
+    assert.equal(
+      await page
+        .getByRole('button', { name: '自然语言创建', exact: true })
+        .getAttribute('aria-pressed'),
+      'true',
+    )
+    assert.equal(
+      await page.getByRole('button', { name: /^运行流程/ }).isVisible(),
+      true,
+    )
+    await page.getByRole('combobox', { name: /默认语言模型/ }).click()
+    await page
+      .getByRole('option', { name: 'Synthetic / text', exact: true })
+      .click()
+    await page
+      .getByRole('textbox', { name: '描述', exact: true })
+      .fill('作家和编辑协作生成文章')
+    await page.getByRole('button', { name: '生成工作流', exact: true }).click()
+    await page
+      .getByRole('button', { name: '应用并编辑画布 →', exact: true })
+      .waitFor()
+    assert.equal(
+      await page
+        .locator('.workflow-generation-preview .react-flow__node')
+        .count(),
+      2,
+    )
+    await page.screenshot({
+      path: '/tmp/reflexion-workflow-natural-language.png',
+    })
+    for (const width of [950, 600]) {
+      await page.setViewportSize({ width, height: 700 })
+      const overflow = await page.evaluate(() => {
+        const view = document.querySelector('.automations-view')
+        return (
+          document.body.scrollWidth > innerWidth ||
+          view.scrollHeight > view.clientHeight + 1
+        )
+      })
+      assert.equal(overflow, false)
+    }
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page
+      .getByRole('button', { name: '应用并编辑画布 →', exact: true })
+      .click()
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector('.workflow-creation-modes button:nth-child(2)')
+          ?.getAttribute('aria-pressed') === 'true',
+    )
+    await page
+      .locator('.workflow-canvas-area .react-flow__node')
+      .first()
+      .click()
+    await page
+      .getByRole('textbox', { name: '节点任务', exact: true })
+      .fill('人工调整后的节点任务')
+    await page.getByRole('button', { name: '保存版本', exact: true }).click()
+    await page.getByRole('button', { name: /^运行流程/ }).click()
+    await page
+      .getByRole('textbox', { name: '运行输入 JSON', exact: true })
+      .fill('{"text":{"type":"text","value":"文章主题"}}')
+    await page.evaluate(() => {
+      window.validationValid = false
+    })
+    await page.getByRole('button', { name: '开始运行', exact: true }).click()
+    await page.getByText('测试校验未通过', { exact: false }).waitFor()
+    assert.equal(
+      await page.evaluate(
+        () => window.workflowCalls.filter((call) => call === 'start').length,
+      ),
+      0,
+    )
+    await page.evaluate(() => {
+      window.validationValid = true
+    })
+    await page.getByRole('button', { name: '开始运行', exact: true }).click()
+    await page.waitForFunction(() => window.workflowCalls.includes('start'))
+    assert.deepEqual(await page.evaluate(() => window.workflowCalls), [
+      'generate:graph',
+      'validate',
+      'validate',
+      'start',
+    ])
+    await page
+      .locator('.workflow-canvas-area .react-flow__node')
+      .first()
+      .click()
+    assert.equal(
+      await page
+        .getByRole('textbox', { name: '节点任务', exact: true })
+        .inputValue(),
+      '人工调整后的节点任务',
+    )
+    assert.equal(
+      await page
+        .getByRole('textbox', { name: '节点任务', exact: true })
+        .isDisabled(),
+      true,
+    )
+    await page
+      .getByRole('button', { name: '自然语言创建', exact: true })
+      .click()
+    assert.equal(
+      await page
+        .getByRole('textbox', { name: '描述', exact: true })
+        .inputValue(),
+      '作家和编辑协作生成文章',
+    )
+    await page.getByRole('combobox', { name: /生成范围/ }).click()
+    await page
+      .getByRole('option', { name: '向当前草稿添加节点', exact: true })
+      .click()
+    await page
+      .getByRole('button', { name: '生成并追加节点', exact: true })
+      .click()
+    await page
+      .getByRole('button', { name: '应用并编辑画布 →', exact: true })
+      .waitFor()
+    assert.equal(
+      await page
+        .locator('.workflow-generation-preview .react-flow__node')
+        .count(),
+      3,
+    )
+    assert.ok(
+      await page.evaluate(() => window.workflowCalls.includes('generate:node')),
+    )
     assert.deepEqual(errors, [])
   } finally {
     await browser?.close()

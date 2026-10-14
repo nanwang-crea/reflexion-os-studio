@@ -1,0 +1,125 @@
+.workflow-language-area {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.workflow-generation-main {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 24px;
+  gap: 20px;
+}
+.workflow-generation-main > header {
+  flex-shrink: 0;
+}
+.workflow-generation-eyebrow {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.workflow-generation-main h2 {
+  font-size: 21px;
+  margin: 6px 0;
+}
+.workflow-generation-main header p {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+}
+.workflow-generation-content {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(260px, 0.75fr) minmax(0, 1fr);
+  gap: 24px;
+}
+.workflow-generation-compose {
+  overflow: auto;
+  min-height: 0;
+  padding-right: 8px;
+}
+.workflow-generation-submit {
+  background: var(--accent);
+  color: var(--bg);
+}
+.workflow-generation-preview {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  overflow: auto;
+}
+.workflow-generation-preview-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  font-size: 12px;
+}
+.workflow-generation-preview-head span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.workflow-generation-preview > .workflow-canvas {
+  flex: 1 0 180px;
+  min-height: 180px;
+  height: auto;
+}
+.workflow-generation-review {
+  padding: 0 16px 16px;
+}
+.workflow-generation-review p {
+  font-size: 11px;
+}
+.workflow-generation-review pre {
+  max-height: 200px;
+}
+.workflow-generation-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+}
+.workflow-generation-empty > span {
+  font-size: 30px;
+  color: var(--text-muted);
+  letter-spacing: 6px;
+}
+.workflow-generation-empty h3 {
+  font-size: 14px;
+  margin: 18px 0 6px;
+}
+.workflow-generation-empty p {
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 270px;
+}
+.workflow-creation-modes {
+  display: flex;
+  gap: 4px;
+  padding-right: 8px;
+  border-right: 1px solid var(--border-subtle);
+}
+@media (max-width: 760px) {
+  .workflow-generation-main {
+    padding: 16px;
+    gap: 12px;
+    overflow: auto;
+  }
+  .workflow-generation-content {
+    display: flex;
+    flex-direction: column;
+    flex: none;
+  }
+  .workflow-generation-compose {
+    overflow: visible;
+  }
+  .workflow-generation-preview {
+    min-height: 280px;
+  }
+}

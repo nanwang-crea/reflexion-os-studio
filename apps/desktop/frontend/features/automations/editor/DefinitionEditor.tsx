@@ -10,13 +10,15 @@ import type {
   AgentTemplate,
   WorkflowRunDetail,
 } from '@reflexion-os-studio/contracts'
+import { CreationModes, type WorkflowCreationMode } from './CreationModes'
 import { DefinitionToolbar } from './DefinitionToolbar'
 import { WorkflowCanvas } from './WorkflowCanvas'
 import { createNode } from './definition'
 import { NodeInspector } from './NodeInspector'
+import { WorkflowNotice } from './WorkflowNotice'
 import { FlowSettings } from './FlowSettings'
 
-export type WorkflowPanel = 'node' | 'flow' | 'generate' | 'run' | null
+export type WorkflowPanel = 'node' | 'flow' | 'run' | null
 export function DefinitionEditor({
   editor,
   saved,
@@ -31,7 +33,9 @@ export function DefinitionEditor({
   generationPanel,
   runPanel,
   pendingActions = 0,
-}: Omit<ComponentProps<typeof DefinitionToolbar>, 'select'> & {
+  creationMode,
+  onCreationMode,
+}: Omit<ComponentProps<typeof DefinitionToolbar>, 'select' | 'onRun'> & {
   providers: ProviderProfile[]
   templates: AgentTemplate[]
   detail: WorkflowRunDetail | null
@@ -42,6 +46,8 @@ export function DefinitionEditor({
   generationPanel: ReactNode
   runPanel: ReactNode
   pendingActions?: number
+  creationMode: WorkflowCreationMode
+  onCreationMode: (value: WorkflowCreationMode) => void
 }): React.JSX.Element {
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const panelId = useId()
@@ -58,6 +64,8 @@ export function DefinitionEditor({
   const select = (value: Parameters<typeof editor.select>[0]) => {
     setSelectedNode(null)
     onShowRun(false)
+    if (value) onCreationMode('canvas')
+    onPanel(null)
     void editor.select(value)
   }
   return (
@@ -67,12 +75,22 @@ export function DefinitionEditor({
         saved={saved}
         select={select}
         confirm={confirm}
+        onRun={() => onPanel('run')}
       />
       <div className="workflow-stage-toolbar">
         <div className="workflow-canvas-actions">
+          <CreationModes
+            value={creationMode}
+            onChange={(mode) => {
+              onCreationMode(mode)
+              onShowRun(false)
+              onPanel(null)
+            }}
+          />
           <button
             type="button"
             aria-pressed={!showRun}
+            hidden={creationMode !== 'canvas'}
             onClick={() => onShowRun(false)}
           >
             编辑草稿
@@ -81,11 +99,15 @@ export function DefinitionEditor({
             type="button"
             disabled={!detail}
             aria-pressed={showRun}
-            onClick={() => onShowRun(true)}
+            onClick={() => {
+              onShowRun(true)
+              onCreationMode('canvas')
+            }}
           >
             运行快照
           </button>
-          {!showRun &&
+          {creationMode === 'canvas' &&
+            !showRun &&
             ['agent', 'confirmation'].map((kind) => (
               <button
                 key={kind}
@@ -128,7 +150,6 @@ export function DefinitionEditor({
             [
               ['node', '节点'],
               ['flow', '流程'],
-              ['generate', 'AI 生成'],
               ['run', '运行'],
             ] as const
           ).map(([id, label]) => (
@@ -137,6 +158,7 @@ export function DefinitionEditor({
               type="button"
               aria-pressed={panel === id}
               aria-controls={`${panelId}-${id}`}
+              hidden={creationMode === 'language' && id !== 'run'}
               onClick={() => onPanel(panel === id ? null : id)}
             >
               {label}
@@ -152,7 +174,16 @@ export function DefinitionEditor({
         </nav>
       </div>
       <div className="workflow-stage">
-        <div className="workflow-canvas-area">
+        <div
+          className="workflow-language-area"
+          hidden={creationMode !== 'language' || showRun}
+        >
+          {generationPanel}
+        </div>
+        <div
+          className="workflow-canvas-area"
+          hidden={creationMode !== 'canvas' && !showRun}
+        >
           <div className="workflow-canvas-caption">
             <span>{definition.name}</span>
             <span>
@@ -175,32 +206,9 @@ export function DefinitionEditor({
             <div className="workflow-canvas-hint">
               <strong>从一个角色开始</strong>
               <p>添加角色并连接端口，或用 AI 生成协作流程。</p>
-              <button type="button" onClick={() => onPanel('generate')}>
+              <button type="button" onClick={() => onCreationMode('language')}>
                 描述你的工作流 →
               </button>
-            </div>
-          )}
-          {(editor.error || editor.validation) && (
-            <div className="workflow-notice">
-              {editor.error && (
-                <p className="workflow-error" role="alert">
-                  {editor.error}
-                </p>
-              )}
-              {editor.validation && (
-                <details open={!editor.validation.valid}>
-                  <summary>
-                    {editor.validation.valid
-                      ? '✓ 校验通过'
-                      : `校验发现 ${editor.validation.issues.length} 个问题`}
-                  </summary>
-                  {editor.validation.issues.map((issue, index) => (
-                    <p key={index}>
-                      {issue.path}：{issue.message}
-                    </p>
-                  ))}
-                </details>
-              )}
             </div>
           )}
         </div>
@@ -221,9 +229,7 @@ export function DefinitionEditor({
                 ? '节点编辑'
                 : panel === 'flow'
                   ? '流程配置'
-                  : panel === 'generate'
-                    ? 'AI 生成'
-                    : '运行中心'}
+                  : '运行中心'}
             </strong>
             <button
               type="button"
@@ -271,14 +277,12 @@ export function DefinitionEditor({
                 />
               </fieldset>
             </div>
-            <div id={`${panelId}-generate`} hidden={panel !== 'generate'}>
-              {generationPanel}
-            </div>
             <div id={`${panelId}-run`} hidden={panel !== 'run'}>
               {runPanel}
             </div>
           </div>
         </aside>
+        <WorkflowNotice error={editor.error} validation={editor.validation} />
       </div>
     </>
   )
