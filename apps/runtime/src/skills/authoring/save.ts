@@ -1,8 +1,8 @@
+import { cleanupTemporaryBestEffort } from '../../plugins/cleanup.js'
 import {
   mkdirSync,
   mkdtempSync,
   writeFileSync,
-  rmSync,
   realpathSync,
   lstatSync,
 } from 'node:fs'
@@ -90,6 +90,6 @@ export async function saveAuthoredSkill(
     // Keep the local source usable for the existing update lifecycle after temporary cleanup.
     return store.plugins.upsert({ ...plugin, sourceRef: plugin.installPath })
   } finally {
-    rmSync(temporary, { recursive: true, force: true })
+    cleanupTemporaryBestEffort(temporary)
   }
 }

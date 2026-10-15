@@ -1,3 +1,4 @@
+import { cleanupTemporaryBestEffort } from './cleanup.js'
 import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -59,7 +60,7 @@ export class PluginPackageInstaller {
       const manifest = inspectPackage(resolved.directory, options.onWarning)
       return { manifest, installed: this.store.plugins.get(manifest.id) }
     } finally {
-      cleanupTemporary(temporary)
+      cleanupTemporaryBestEffort(temporary)
     }
   }
 
@@ -152,9 +153,13 @@ export class PluginPackageInstaller {
       }
       throwIfAborted(options.signal)
       const manifest = inspectPackage(stage)
+      if (JSON.stringify(manifest) !== JSON.stringify(preview))
+        throw new Error('package manifest changed during staging')
+      this.assertInstallAllowed(manifest, updating, standardSkill)
       target = join(installRoot, manifest.id)
       mkdirSync(join(target, '..'), { recursive: true })
       options.onProgress?.('committing', 90)
+      throwIfAborted(options.signal)
       const latest = updating ? this.store.plugins.get(updating.id) : null
       if (updating && latest?.version !== updating.version)
         throw new Error('Skill 版本已变化，请重试更新')
@@ -183,33 +188,20 @@ export class PluginPackageInstaller {
         manifest,
         error: null,
       })
-      if (backup !== null) {
-        try {
-          cleanupTemporary(backup)
-        } catch {
-          process.stderr.write(
-            '[runtime] Skill backup retained for startup cleanup\n',
-          )
-        }
-      }
+      if (backup !== null) cleanupTemporaryBestEffort(backup)
       return plugin
     } catch (error) {
       if (target !== null && backup !== null && existsSync(backup)) {
         if (existsSync(target)) cleanupTemporary(target)
         renameSync(backup, target)
         backup = null
-      } else if (
-        committed &&
-        target !== null &&
-        existsSync(target) &&
-        updating === null
-      ) {
+      } else if (committed && target !== null && existsSync(target)) {
         cleanupTemporary(target)
       }
       throw error
     } finally {
-      cleanupTemporary(sourceTemporary)
-      if (stage !== null) cleanupTemporary(stage)
+      cleanupTemporaryBestEffort(sourceTemporary)
+      if (stage !== null) cleanupTemporaryBestEffort(stage)
       // A failed rollback must retain the only recoverable copy for startup recovery.
     }
   }
