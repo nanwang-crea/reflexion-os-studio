@@ -1,10 +1,10 @@
 # Plugin Foundation 与 Skill Plugin 外部化
 
-> 状态：**已落地**（2026-09-24）。当前只加载声明式 Skill；Provider/Tool 类型已冻结契约槽位，但在第三方代码隔离模型完成前不加载。
+> 状态：**已落地**（2026-09-24）。Skill 支持按需经 shell.execute 执行脚本；Provider/Tool 类型已冻结契约槽位，但在第三方代码隔离模型完成前不加载。
 
 ## 1. 包格式
 
-插件安装目录为 `<dataDir>/plugins/<id>/`：
+Skill 安装目录为 `<dataDir>/skills/<id>/` 或 `<workspace>/.reflexion-os-studio/skills/<id>/`：
 
 ```text
 <id>/
@@ -12,7 +12,7 @@
 ├── plugin.json       # 可选，ReflexionOS 扩展 manifest
 ├── assets/           # 可选静态资源
 ├── references/       # 可选参考资料
-└── scripts/          # 可选随包资源；当前绝不执行
+└── scripts/          # 可选脚本；按需经 shell.execute 执行
 ```
 
 `plugin.json` v1 示例：
@@ -42,6 +42,8 @@
 
 标准 `SKILL.md` 与 ZCode Skill 字段保持一致：`name` 与 `description` 必填，`when_to_use`、`license` 与 JSON `metadata` 可选；description 上限 1024 字符，正文按 100KB 上限加载。`when_to_use` 参与模型侧技能匹配，license 与 metadata 随内部规范化 manifest 保留；`metadata.version` 缺失时内部版本为 `1.0.0`。扩展 manifest 的版本必须为 SemVer，协议兼容范围支持精确版本、比较组合和 caret；Skill 入口固定为 `SKILL.md`，并声明 `skill.instructions` 和 `skill` 元数据。
 
+普通 Skill 安装、创建和更新均不自动生成 `plugin.json`；内部规范化 manifest 保存在安装记录中。标准包以 `SKILL.md` 为元数据真源，版本可写入 `metadata.version`。仅显式提供扩展 manifest 的包使用 `plugin.json`，并保留旧包兼容；扩展字段不代表 Provider/Tool 插件已开放。内置包的归属记录保存在 `<dataDir>/builtin-skills/`，不混入可移植技能包。
+
 权限是信息性声明，不产生授权。Skill 实际可调用的工具仍由单次 Run 的 ToolRegistry、PermissionGate、沙箱与审批决定。
 
 ## 2. 安装源与生命周期
@@ -58,7 +60,7 @@
 - `plugin.task.list` / `plugin.task.cancel`：查询本次 Runtime 生命周期内的任务，以及取消尚未结束的任务；`plugin.task.changed` 持续报告 phase、百分比、终态和错误。
 - `plugin.toggle` / `plugin.uninstall` / `plugin.rescan`：启停、卸载和磁盘对账。
 
-安装时必须选择作用域：`global` 安装到全局插件目录；`project` 绑定明确的 `projectId` 并安装到项目隔离子目录。Registry、system prompt、显式 `$skill`/`/skill` 解析和 `skill.use` 均按会话项目过滤，禁止把项目 Skill 泄漏到其他项目或独立会话。
+安装时必须选择作用域：`global` 安装到全局 Skill 目录；`project` 绑定明确的 `projectId` 并安装到项目 `.reflexion-os-studio/skills/` 目录。Registry、system prompt、显式 `$skill`/`/skill` 解析和 `skill.use` 均按会话项目过滤，禁止把项目 Skill 泄漏到其他项目或独立会话。
 
 更新顺序：
 
@@ -84,7 +86,7 @@ Runtime 启动时在正常插件扫描前恢复中断事务：遗留 stage/sourc
 - 只加载 `skill`，Provider/Tool 包返回“不支持加载”；
 - instructions 为空时拒绝。
 
-包内容始终是不可信数据。当前 Runtime 不执行 `scripts/`，不把 manifest 的 tools/permissions 转成授权，也不允许插件访问数据库内部实现。
+包内容始终是不可信数据。脚本只能通过现有 Shell 沙箱、权限与审批执行，不在安装或加载时执行，也不在 Runtime 主进程 import/eval；不把 manifest 的 tools/permissions 转成授权，也不允许插件访问数据库内部实现。
 
 ## 4. 存储与恢复
 
@@ -94,7 +96,7 @@ schema v26 的 `plugins.manifest_json` 保存完整已校验 manifest；版本�
 - 停用：保留记录但不进入 Registry；
 - 包损坏：标记 `invalid`，隔离但不阻塞启动；
 - 目录缺失：保留记录并标记 `invalid`；
-- 旧 `<dataDir>/skills/<id>/SKILL.md`：复制到新目录并生成一次 `plugin.json`，不删除旧目录。
+- `<dataDir>/plugins/<id>/` 包复制到对应 Skill 目录，不删除旧目录，不生成 `plugin.json`。
 
 内置技能不入库，但会生成同结构的 `PluginPackageManifest`，与外部 Skill 共用 Registry 与调用链。
 

@@ -1,5 +1,5 @@
 import { cleanupTemporaryBestEffort } from './cleanup.js'
-import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type {
@@ -145,12 +145,6 @@ export class PluginPackageInstaller {
       mkdirSync(installRoot, { recursive: true })
       stage = this.temporaryPath(`stage-${preview.id}`, installRoot)
       copyPackage(resolved.directory, stage)
-      if (standardSkill) {
-        writeFileSync(
-          join(stage, 'plugin.json'),
-          `${JSON.stringify(preview, null, 2)}\n`,
-        )
-      }
       throwIfAborted(options.signal)
       const manifest = inspectPackage(stage)
       if (JSON.stringify(manifest) !== JSON.stringify(preview))

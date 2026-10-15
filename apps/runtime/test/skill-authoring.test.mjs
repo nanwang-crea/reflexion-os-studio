@@ -1,3 +1,4 @@
+import { inspectPackage } from '../dist/plugins/package.js'
 import { fixture, input } from './fixtures/skill-packages.mjs'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
@@ -257,11 +258,7 @@ test('failed replacement after moving the installed package restores its backup'
     /ENOENT/,
   )
   assert.ok(existsSync(join(previous.installPath, 'scripts', 'report.mjs')))
-  assert.equal(
-    JSON.parse(readFileSync(join(previous.installPath, 'plugin.json'), 'utf8'))
-      .version,
-    '1.0.0',
-  )
+  assert.equal(inspectPackage(previous.installPath).version, '1.0.0')
   assert.equal(f.store.plugins.get(previous.id).version, '1.0.0')
 })
 
@@ -302,10 +299,7 @@ test(
       }),
       /符号链接/,
     )
-    assert.equal(
-      JSON.parse(readFileSync(join(redirected, 'plugin.json'), 'utf8')).version,
-      '1.0.0',
-    )
+    assert.equal(inspectPackage(redirected).version, '1.0.0')
   },
 )
 
@@ -352,11 +346,7 @@ test('update preserves a toggle made during installation and does not roll back 
   }
   assert.equal(updated.enabled, false)
   assert.equal(f.store.plugins.get(previous.id).version, '1.0.1')
-  assert.equal(
-    JSON.parse(readFileSync(join(previous.installPath, 'plugin.json'), 'utf8'))
-      .version,
-    '1.0.1',
-  )
+  assert.equal(inspectPackage(previous.installPath).version, '1.0.1')
   const restarted = new SkillPluginService(f.store, f.data, () => {})
   t.after(() => restarted.dispose())
   assert.equal(f.store.plugins.get(previous.id).version, '1.0.1')

@@ -1,3 +1,4 @@
+import { inspectPackage } from '../dist/plugins/package.js'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import fs from 'node:fs'
@@ -101,11 +102,7 @@ test('temporary cleanup preserves the original installation error', async (t) =>
     ),
   )
   assert.equal(f.store.plugins.get(plugin.id).version, '1.0.0')
-  assert.equal(
-    JSON.parse(fs.readFileSync(join(plugin.installPath, 'plugin.json'), 'utf8'))
-      .version,
-    '1.0.0',
-  )
+  assert.equal(inspectPackage(plugin.installPath).version, '1.0.0')
 })
 
 test('cancellation at the commit boundary does not publish the replacement', async (t) => {
@@ -128,11 +125,7 @@ test('cancellation at the commit boundary does not publish the replacement', asy
     /cancel|abort/i,
   )
   assert.equal(f.store.plugins.get(plugin.id).version, '1.0.0')
-  assert.equal(
-    JSON.parse(fs.readFileSync(join(plugin.installPath, 'plugin.json'), 'utf8'))
-      .version,
-    '1.0.0',
-  )
+  assert.equal(inspectPackage(plugin.installPath).version, '1.0.0')
 })
 
 test('interrupted legacy copying never publishes a partial package and can retry from its original record', async (t) => {

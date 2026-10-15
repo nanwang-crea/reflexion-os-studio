@@ -13,3 +13,5 @@ skill.save 是主 Agent 的持久化工具：当前项目或全局，保存前�
 全局包：`<数据目录>/skills/<id>/`（默认 `~/.reflexion-os-studio/skills/`）；项目包：`<项目>/.reflexion-os-studio/skills/<id>/`。每个 Skill 保存完整文件包，不经过 Asset Store。启动/重新扫描会发现项目目录中的标准包；旧 plugins 安装迁移时保留原目录，不覆盖现有目标。当前技能 ID 仍在应用中唯一，跨项目复用请选择全局范围。
 
 内置技能也会导出完整 SKILL.md 包到全局目录，供查看与 skill.prepare 读取；应用只刷新标记为自身管理的内置包，不覆盖同名用户目录。内置技能升级随应用版本提供；通过 skill.save 保存的新技能与更新仍走正式审批。
+
+普通 Skill 目录只需 SKILL.md 及可选资源；安装器不补写 plugin.json。skill.save 将标准包版本写入 SKILL.md 的 metadata.version，更新保留其他 frontmatter 字段。显式提供的旧扩展 manifest 继续兼容。内置包管理记录位于数据目录 builtin-skills/，旧内置包的受管标记会迁移到该内部目录。

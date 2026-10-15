@@ -6,7 +6,7 @@ import {
   type JsonValue,
   type PluginPackageManifest,
 } from '@reflexion-os-studio/contracts'
-import { parse } from 'yaml'
+import { parse, stringify } from 'yaml'
 
 const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
@@ -14,14 +14,7 @@ export function manifestFromStandardSkill(
   directory: string,
   onWarning?: (warning: string) => void,
 ): PluginPackageManifest {
-  const source = readFileSync(join(directory, 'SKILL.md'), 'utf8')
-  const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(source)
-  if (!match) throw new Error('SKILL.md requires YAML frontmatter')
-
-  const frontmatter = parse(match[1], { maxAliasCount: 20 }) as unknown
-  if (!isRecord(frontmatter)) {
-    throw new Error('SKILL.md frontmatter must be a YAML mapping')
-  }
+  const frontmatter = readSkillFrontmatter(directory)
   const name = requiredString(frontmatter, 'name')
   const description = requiredString(frontmatter, 'description')
   const whenToUse = optionalString(frontmatter, 'when_to_use')
@@ -112,4 +105,28 @@ function optionalString(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** Keep portable metadata in SKILL.md; installation records hold the normalized manifest. */
+export function readSkillFrontmatter(
+  directory: string,
+): Record<string, JsonValue> {
+  const source = readFileSync(join(directory, 'SKILL.md'), 'utf8')
+  const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(source)
+  if (!match) throw new Error('SKILL.md requires YAML frontmatter')
+
+  const frontmatter = JsonValueSchema.parse(
+    parse(match[1], { maxAliasCount: 20 }),
+  )
+  if (!isRecord(frontmatter)) {
+    throw new Error('SKILL.md frontmatter must be a YAML mapping')
+  }
+  return frontmatter
+}
+
+export function formatStandardSkill(
+  frontmatter: Record<string, JsonValue>,
+  instructions: string,
+): string {
+  return `---\n${stringify(frontmatter)}---\n\n${instructions.trim()}\n`
 }

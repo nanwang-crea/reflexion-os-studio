@@ -3,71 +3,45 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   readdirSync,
   renameSync,
-  writeFileSync,
+  unlinkSync,
 } from 'node:fs'
-import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
-import { PluginPackageManifestSchema } from '@reflexion-os-studio/contracts'
 import { cleanupTemporaryBestEffort } from '../../plugins/cleanup.js'
 import {
   inspectPackage,
   packageManifestForBuiltin,
 } from '../../plugins/package.js'
+import { atomicBuiltinWrite, BuiltinPackageStorage } from './storage.js'
+import { formatStandardSkill } from '../../plugins/standard-skill.js'
 import { BUILTIN_SKILLS } from './index.js'
-
-function isManaged(directory: string, id: string): boolean {
-  if (!lstatSync(directory).isDirectory()) return false
-  const path = join(directory, 'plugin.json')
-  if (!lstatSync(path).isFile()) return false
-  const manifest = PluginPackageManifestSchema.parse(
-    JSON.parse(readFileSync(path, 'utf8')),
-  )
-  return (
-    manifest.id === id &&
-    manifest.skill?.metadata?.reflexionManagedBuiltin === 'true'
-  )
-}
-
-function atomicWrite(directory: string, name: string, content: string): void {
-  const temporary = join(directory, `.builtin-write-${randomUUID()}`)
-  try {
-    writeFileSync(temporary, content, { encoding: 'utf8', flag: 'wx' })
-    renameSync(temporary, join(directory, name))
-  } finally {
-    cleanupTemporaryBestEffort(temporary)
-  }
-}
 
 /** Export shipped skills as ordinary packages without replacing user-owned directories. */
 export function materializeBuiltinSkills(root: string): Map<string, string> {
   const paths = new Map<string, string>()
+  const storage = new BuiltinPackageStorage(root)
   for (const definition of BUILTIN_SKILLS) {
     const directory = join(root, definition.manifest.id)
     let stage: string | undefined
     try {
       const existing = existsSync(directory)
-      if (existing && !isManaged(directory, definition.manifest.id)) continue
+      if (existing && !storage.owns(directory, definition.manifest.id)) continue
       const manifest = packageManifestForBuiltin(definition)
-      if (!manifest.skill) throw new Error('Skill manifest missing')
-      manifest.skill.metadata = {
-        ...manifest.skill.metadata,
-        reflexionManagedBuiltin: 'true',
-      }
-      const files = {
-        'SKILL.md': [
-          '---',
-          `name: ${definition.manifest.id}`,
-          `description: ${JSON.stringify(definition.manifest.description)}`,
-          '---',
-          '',
-          definition.instructions,
-          '',
-        ].join('\n'),
-        'plugin.json': `${JSON.stringify(manifest, null, 2)}\n`,
-      }
+      const content = formatStandardSkill(
+        {
+          name: manifest.id,
+          description: manifest.description,
+          ...(manifest.skill?.whenToUse
+            ? { when_to_use: manifest.skill.whenToUse }
+            : {}),
+          ...(manifest.skill?.license
+            ? { license: manifest.skill.license }
+            : {}),
+          metadata: { ...manifest.skill?.metadata, version: manifest.version },
+        },
+        definition.instructions,
+      )
       let target = directory
       if (existing) {
         for (const name of readdirSync(directory)) {
@@ -82,8 +56,11 @@ export function materializeBuiltinSkills(root: string): Map<string, string> {
         target = join(stage, 'package')
         mkdirSync(target)
       }
-      for (const [name, content] of Object.entries(files))
-        atomicWrite(target, name, content)
+      atomicBuiltinWrite(target, 'SKILL.md', content)
+      // Persist ownership before removing the old marker or publishing a new directory.
+      storage.remember(manifest)
+      if (existsSync(join(target, 'plugin.json')))
+        unlinkSync(join(target, 'plugin.json'))
       inspectPackage(target)
       if (!existing) renameSync(target, directory)
       paths.set(definition.manifest.id, directory)
