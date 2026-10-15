@@ -1,7 +1,6 @@
 import {
   mkdtempSync,
   readdirSync,
-  rmSync,
   readFileSync,
   realpathSync,
   lstatSync,
@@ -12,6 +11,7 @@ import type {
   PluginRecord,
   SkillPrepared,
 } from '@reflexion-os-studio/contracts'
+import { cleanupTemporaryBestEffort } from '../../plugins/cleanup.js'
 import { copyPackage } from '../../plugins/sources.js'
 import { inspectPackage } from '../../plugins/package.js'
 
@@ -21,6 +21,13 @@ export class SkillResourceStager {
     string,
     { temporary: string; prepared: SkillPrepared; text: Map<string, string> }
   >()
+
+  private readonly pendingCleanup = new Set<string>()
+
+  private cleanup(path: string): void {
+    if (cleanupTemporaryBestEffort(path)) this.pendingCleanup.delete(path)
+    else this.pendingCleanup.add(path)
+  }
 
   prepare(
     plugin: PluginRecord,
@@ -91,7 +98,7 @@ export class SkillResourceStager {
         }
         this.snapshots.set(key, snapshot)
       } catch (error) {
-        rmSync(temporary, { recursive: true, force: true })
+        this.cleanup(temporary)
         throw error
       }
     }
@@ -113,13 +120,14 @@ export class SkillResourceStager {
   releaseRun(runId: string): void {
     for (const [key, value] of this.snapshots) {
       if (JSON.parse(key)[0] !== runId) continue
-      rmSync(value.temporary, { recursive: true, force: true })
       this.snapshots.delete(key)
+      this.cleanup(value.temporary)
     }
   }
   dispose(): void {
-    for (const value of this.snapshots.values())
-      rmSync(value.temporary, { recursive: true, force: true })
+    const paths = new Set(this.pendingCleanup)
+    for (const value of this.snapshots.values()) paths.add(value.temporary)
     this.snapshots.clear()
+    for (const path of paths) this.cleanup(path)
   }
 }
