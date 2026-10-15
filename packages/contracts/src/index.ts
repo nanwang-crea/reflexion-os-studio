@@ -43,3 +43,5 @@ export {
 export type { AgentTemplateSaveParams } from './commands/agent-template.js'
 
 export { agentTemplateCommands } from './commands/agent-template.js'
+
+export * from './file-writing.js'

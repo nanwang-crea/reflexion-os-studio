@@ -87,10 +87,20 @@ export class ToolRegistry {
         )
         return `${path} ${message}`
       })
+      const schema = tool.parameters
+      const examples =
+        schema && typeof schema === 'object' && !Array.isArray(schema)
+          ? schema.examples
+          : undefined
+      const example = Array.isArray(examples) ? examples[0] : undefined
+      const hint =
+        example === undefined
+          ? ''
+          : `。请在工具调用的 arguments 中提交完整 JSON，不能只在正文描述参数；按真实文件和已读原文替换此结构示例：${truncate(JSON.stringify(example), 800)}。不要原样重试无效参数。`
       return {
         ok: false,
         result: {
-          content: `invalid tool arguments: ${issues.slice(0, 4).join('; ')}`,
+          content: `invalid tool arguments: ${issues.slice(0, 4).join('; ')}${hint}`,
           isError: true,
           code: 'invalid_request',
         },

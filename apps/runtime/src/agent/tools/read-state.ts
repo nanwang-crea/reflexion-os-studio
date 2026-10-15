@@ -1,7 +1,7 @@
 import type { ToolResult } from '@reflexion-os-studio/agent-core'
 import path from 'node:path'
 
-function normalizedPathKey(value: string): string {
+export function normalizedPathKey(value: string): string {
   const normalized = path.posix.normalize(value.replaceAll('\\', '/'))
   const relative = normalized.startsWith('./')
     ? normalized.slice(2)

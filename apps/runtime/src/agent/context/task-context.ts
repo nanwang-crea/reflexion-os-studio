@@ -1,5 +1,9 @@
 import type { ModelMessage } from '@reflexion-os-studio/agent-core'
 import type { Store } from '../../store/index.js'
+import {
+  restoreFileWrites,
+  fileWriteProgress,
+} from '../tools/file-writing/state.js'
 
 /** Canonical 任务状态每轮刷新；保持 user 权限，不把用户内容提升为 system。 */
 export function withTaskContext(
@@ -8,15 +12,36 @@ export function withTaskContext(
   messages: ModelMessage[],
 ): ModelMessage[] {
   const plan = store.plans.getActive(sessionId)
-  // 本 Run 完成计划后仍保留已有目标，避免临近收尾退回仅有“继续”。
-  if (
-    !plan &&
-    messages.some(
-      (message) =>
-        message.role === 'user' && message.control === 'task_context',
-    )
+  const session = store.sessions.get(sessionId)
+  const workspaceRoot = session?.projectId
+    ? store.projects.get(session.projectId)?.folderPath
+    : undefined
+  const activeFileWrites = workspaceRoot
+    ? [...restoreFileWrites(store, sessionId, workspaceRoot).values()]
+        .filter((state) => state.phase === 'active')
+        .map(fileWriteProgress)
+    : []
+  // 完成计划后保留原目标，但写入进度始终从 canonical 结果刷新。
+  const existing = messages.find(
+    (message) => message.role === 'user' && message.control === 'task_context',
   )
-    return messages
+  if (!plan && existing) {
+    try {
+      const saved = JSON.parse(
+        existing.content.slice(existing.content.indexOf('\n') + 1),
+      )
+      return messages.map((message) =>
+        message === existing
+          ? {
+              ...message,
+              content: `${existing.content.split('\n')[0]}\n${JSON.stringify({ ...saved, activeFileWrites })}`,
+            }
+          : message,
+      )
+    } catch {
+      // 旧的非结构化上下文按当前用户请求重建。
+    }
+  }
   const history = store.messages.listBySession(sessionId)
   let anchor = plan?.messageId
     ? history.findIndex((message) => message.id === plan.messageId)
@@ -30,6 +55,7 @@ export function withTaskContext(
     goal: plan?.goal ?? instructions.at(-1) ?? null,
     // 无活动计划时保留本次请求；有计划时保留原请求与后续用户约束。
     userInstructions: plan ? instructions : instructions.slice(-1),
+    activeFileWrites,
     plan: plan
       ? {
           id: plan.id,

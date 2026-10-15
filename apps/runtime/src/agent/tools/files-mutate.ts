@@ -1,15 +1,9 @@
-import { createHash } from 'node:crypto'
 import type { ToolDefinition } from '@reflexion-os-studio/agent-core'
 import type { SystemRuntimeClient } from '../../system.js'
-import {
-  callSystem,
-  optionalNumber,
-  optionalString,
-  requireString,
-  requireText,
-} from './shared.js'
+import { callSystem, requireString, requireText } from './shared.js'
 import { recordResultRevision, type FileReadState } from './read-state.js'
 export { createFileEditTool } from './files-edit.js'
+export { createFileWriteStreamTool } from './file-writing/tool.js'
 
 /**
  * 整文件写入的字符数预检：超过即折叠为自纠错误，引导模型改用 file.edit。
@@ -17,7 +11,6 @@ export { createFileEditTool } from './files-edit.js'
  * protocol_error 整个 Run 失败），预检把灾难性失败变成可恢复错误。
  */
 const MAX_WRITE_CONTENT_CHARS = 200_000
-const MAX_STREAM_CHUNK_BYTES = 512 * 1024
 
 /**
  * 写类文件工具：全部需要用户审批（grant 由审批网关注入，
@@ -47,7 +40,7 @@ export function createFileWriteTool(
       const content = requireText(args, 'content')
       if (content.length > MAX_WRITE_CONTENT_CHARS) {
         return Promise.resolve({
-          content: `content 长度 ${content.length} 超过整文件写入上限 ${MAX_WRITE_CONTENT_CHARS} 字符。请改用 file.edit 只替换变更片段，或拆分多次写入。`,
+          content: `content 长度 ${content.length} 超过整文件写入上限 ${MAX_WRITE_CONTENT_CHARS} 字符。请改用 file.edit 只替换变更片段，或用 file.write_stream 按块写入后 commit。`,
           isError: true,
           code: 'invalid_request',
         })
@@ -75,82 +68,6 @@ export function createFileWriteTool(
         }
         return result
       })
-    },
-  }
-}
-
-export function createFileWriteStreamTool(
-  system: SystemRuntimeClient,
-  workspaceRoot: string,
-  readState: FileReadState,
-): ToolDefinition {
-  return {
-    name: 'file.write_stream',
-    description:
-      '可恢复地分块写入大型 UTF-8 文件。按 begin → 多次 append → commit 调用；每次 append 必须使用上次返回的 nextOffset。commit 前目标文件保持不变，abort 可清理 staging。覆盖已有文件前必须先 file.read 获取 revision。',
-    parameters: {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        action: {
-          type: 'string',
-          enum: ['begin', 'append', 'commit', 'abort'],
-        },
-        path: { type: 'string', description: '工作区相对路径' },
-        uploadId: { type: 'string', minLength: 64, maxLength: 64 },
-        offset: { type: 'integer', minimum: 0 },
-        content: { type: 'string', description: '本次 UTF-8 文本分块' },
-        expectedSize: { type: 'integer', minimum: 0 },
-        expectedSha256: { type: 'string', minLength: 64, maxLength: 64 },
-      },
-      required: ['action', 'path'],
-    },
-    execute: ({ args, signal, grant }) => {
-      const action = requireString(args, 'action')
-      const path = requireString(args, 'path')
-      const params: Record<string, unknown> = {
-        workspaceRoot,
-        path,
-        action,
-        grant: grant ?? '',
-      }
-      if (action === 'begin') {
-        const entry = readState.entry(path)
-        if (entry !== undefined) params.revision = entry.revision
-      } else {
-        params.uploadId = requireString(args, 'uploadId')
-      }
-      if (action === 'append') {
-        const content = requireText(args, 'content')
-        const bytes = Buffer.from(content, 'utf8')
-        if (bytes.byteLength > MAX_STREAM_CHUNK_BYTES) {
-          return Promise.resolve({
-            content: `分块为 ${bytes.byteLength} bytes，超过 ${MAX_STREAM_CHUNK_BYTES} bytes 上限。`,
-            isError: true,
-            code: 'invalid_request',
-          })
-        }
-        const offset = optionalNumber(args, 'offset')
-        if (offset === undefined || !Number.isSafeInteger(offset) || offset < 0)
-          throw new Error('append requires a non-negative integer offset')
-        params.offset = offset
-        params.content = content
-        params.chunkSha256 = createHash('sha256').update(bytes).digest('hex')
-      } else if (action === 'commit') {
-        const expectedSize = optionalNumber(args, 'expectedSize')
-        if (expectedSize !== undefined) params.expectedSize = expectedSize
-        const expectedSha256 = optionalString(args, 'expectedSha256')
-        if (expectedSha256 !== undefined) params.expectedSha256 = expectedSha256
-      } else if (action !== 'begin' && action !== 'abort') {
-        throw new Error('invalid stream write action')
-      }
-      return callSystem(system, 'file.write_stream', params, signal).then(
-        (result) => {
-          if (!result.isError && action === 'commit')
-            recordResultRevision(readState, path, result)
-          return result
-        },
-      )
     },
   }
 }

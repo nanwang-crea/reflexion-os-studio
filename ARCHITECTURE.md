@@ -21,6 +21,27 @@ Python 不进入新 Runtime 的核心路径，仅作为迁移期旧系统。
 
 计划模式使用临时 Markdown 文档供审阅和编辑，审批绑定持久化正文快照；计划终态后按登记与内容摘要安全清理文件。详见 [计划模式设计](docs/PLAN-MODE.md)。
 
+### 长文件写入与恢复
+
+`file.write_stream` 的模型接口按文本块（`chunkIndex` / `title` / `content`）工作，
+Runtime 管理 Rust staging 的 uploadId、字节偏移与 SHA-256。成功工具结果的 canonical
+`ToolOutput.data` 保存版本化写入检查点；同一 Session、同一 workspace 内从历史恢复，
+子 Agent 使用各自 Session，不共享上传句柄。检查点不依赖模型历史摘要，每轮任务上下文
+投影活动写入的路径与下一块序号。重复 begin 返回现有进度；同序号同内容幂等，
+不同内容或乱序拒绝；commit 后目标才原子可见。每次调用仍执行现有路径审批、mutation
+coordinator 和 Rust revision 检查，恢复不恢复授权。macOS / Windows / Linux 复用同一
+TS 状态机与既有 Rust 平台原子替换实现。进程崩溃在 Rust begin 成功与结果落库之间时，
+可能留下未登记 staging；commit 成功但结果尚未落库时崩溃，也存在终态对账窗口，
+不能声称跨 SQLite 与文件系统事务的 exactly-once。恢复仅使用已登记的成功检查点，
+不通过扫描任意磁盘检查点接管其他 Session 的上传。模型接口适用于任意 UTF-8 文本，
+不解析章节或文件格式；title 仅是可选进度标签。单块 ≤512KiB，单文件 ≤512MiB、
+最多 4096 块；上下文只展示最近四块标签与下一序号，正文与句柄不回注。
+
+文件编辑工具的 Provider schema 在顶层显式列出字段，同时保留由 Zod 派生的
+批量/兼容分支校验；避免仅解析顶层 properties 的兼容服务把参数误认为空对象。
+参数错误返回完整 JSON 结构示例，提示模型在 arguments 中实际传参；重复无效调用
+仍由原有 Loop Guard 收敛，不通过提高重试上限绕过无进展保护。
+
 ## 3. 进程与依赖关系
 
 ```text

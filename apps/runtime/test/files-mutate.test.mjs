@@ -96,7 +96,7 @@ test('stale writes use a stable conflict result and instruct a fresh merge', asy
   assert.match(result.content, /禁止原样重试/)
 })
 
-test('file.write_stream injects revision and hashes each UTF-8 chunk', async () => {
+test('file.write_stream manages upload identity, offset and UTF-8 hashes', async () => {
   const calls = []
   const system = {
     request: async (method, params) => {
@@ -120,8 +120,7 @@ test('file.write_stream injects revision and hashes each UTF-8 chunk', async () 
     context({
       action: 'append',
       path: 'large.txt',
-      uploadId: 'b'.repeat(64),
-      offset: 0,
+      chunkIndex: 0,
       content: '你好',
     }),
   )
@@ -129,8 +128,6 @@ test('file.write_stream injects revision and hashes each UTF-8 chunk', async () 
     context({
       action: 'commit',
       path: 'large.txt',
-      uploadId: 'b'.repeat(64),
-      expectedSize: 6,
     }),
   )
   assert.deepEqual(
@@ -138,6 +135,9 @@ test('file.write_stream injects revision and hashes each UTF-8 chunk', async () 
     ['file.write_stream', 'file.write_stream', 'file.write_stream'],
   )
   assert.deepEqual(calls[0].params.revision, revision)
+  assert.equal(calls[1].params.uploadId, 'b'.repeat(64))
+  assert.equal(calls[1].params.offset, 0)
+  assert.equal(calls[2].params.expectedSize, 6)
   assert.equal(
     calls[1].params.chunkSha256,
     '670d9743542cae3ea7ebe36af56bd53648b0a1126162e78d81a32934a711302e',

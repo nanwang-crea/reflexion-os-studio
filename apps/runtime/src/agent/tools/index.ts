@@ -42,6 +42,8 @@ import { createTeamInspectTool } from './team/inspect.js'
 import { createTeamMutationTool } from './team/mutate.js'
 import { createTeamCreateTool } from './team/create.js'
 import { FileReadState } from './read-state.js'
+import { restoreFileWrites } from './file-writing/state.js'
+import type { FileWriteCheckpoint } from '@reflexion-os-studio/contracts'
 import { createAskUserTool } from './ask-user.js'
 import { createEnterPlanModeTool, createExitPlanModeTool } from './plan-mode.js'
 
@@ -93,6 +95,7 @@ export function createToolRegistry(ctx: ToolContext): ToolRegistry {
           ctx.workspaceRoot,
           readState,
           shellOutputStore,
+          restoreFileWrites(ctx.store, ctx.sessionId, ctx.workspaceRoot),
         )
       : []),
   ]
@@ -198,6 +201,7 @@ function workspaceTools(
   workspaceRoot: string,
   readState: FileReadState,
   shellOutputStore: ShellOutputStore,
+  fileWrites: Map<string, FileWriteCheckpoint>,
 ): ToolDefinition[] {
   return [
     createFileReadTool(system, workspaceRoot, readState),
@@ -205,7 +209,7 @@ function workspaceTools(
     createFileGlobTool(system, workspaceRoot),
     createFileGrepTool(system, workspaceRoot),
     createFileWriteTool(system, workspaceRoot, readState),
-    createFileWriteStreamTool(system, workspaceRoot, readState),
+    createFileWriteStreamTool(system, workspaceRoot, readState, fileWrites),
     createFileEditTool(system, workspaceRoot, readState),
     createFileDeleteTool(system, workspaceRoot, readState),
     createFileMoveTool(system, workspaceRoot, readState),

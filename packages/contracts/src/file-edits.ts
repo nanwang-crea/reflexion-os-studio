@@ -85,7 +85,24 @@ export const FileEditDiagnosticSchema = z.object({
 })
 export type FileEditOperation = z.infer<typeof FileEditOperationSchema>
 export type FileEditDiagnostic = z.infer<typeof FileEditDiagnosticSchema>
+const fileEditJsonSchema = z.toJSONSchema(FileEditInputSchema)
+// 部分兼容 Provider 只读取顶层 properties；字段仍从同一 Zod schema 派生。
 export const FileEditParameters = JsonValueSchema.parse({
-  ...z.toJSONSchema(FileEditInputSchema),
+  ...fileEditJsonSchema,
   type: 'object',
+  properties: Object.assign(
+    {},
+    ...FileEditInputSchema.options.map(
+      (option) => z.toJSONSchema(option).properties,
+    ),
+  ),
+  required: ['path'],
+  examples: [
+    FileEditInputSchema.parse({
+      path: 'path/to/file.md',
+      edits: [
+        { kind: 'replace', oldText: '原文片段', newText: '修正后的片段' },
+      ],
+    }),
+  ],
 })

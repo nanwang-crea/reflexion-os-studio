@@ -105,6 +105,7 @@ test('canonical task context restores plan goal and user corrections every turn'
   }
   const store = {
     plans: { getActive: () => plan },
+    sessions: { get: () => ({ projectId: null }) },
     messages: { listBySession: () => history },
   }
   const messages = [

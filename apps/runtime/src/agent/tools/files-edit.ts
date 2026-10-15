@@ -15,7 +15,7 @@ export function createFileEditTool(
   return {
     name: 'file.edit',
     description:
-      '原子编辑工作区内单个文本文件。同一函数或代码块的关联修改优先一次 replace_range 完整块替换；独立位置使用 edits 数组，可组合 replace、insert_before、insert_after、replace_range；全部操作基于同一原始快照校验，任一失败或重叠则完全不写入。replace_range 的 startLine/endLine 均为 1 起始且包含首尾，直接使用 file.read 的 L 行号，不要减 1；必须同时提供 expectedText，不能只凭行号修改。旧版 oldText/newText 参数仍兼容。匹配文本可直接复制 file.read 返回内容，运行时会安全去除 L<行号>: 前缀。需要用户审批。',
+      '原子编辑工作区内单个文本文件。同一函数或代码块的关联修改优先一次 replace_range 完整块替换；独立位置使用 edits 数组，可组合 replace、insert_before、insert_after、replace_range；全部操作基于同一原始快照校验，任一失败或重叠则完全不写入。replace_range 的 startLine/endLine 均为 1 起始且包含首尾，直接使用 file.read 的 L 行号，不要减 1；必须同时提供 expectedText，不能只凭行号修改。工具调用必须携带 path 和非空 edits 数组，不能仅在正文叙述修改。旧版 oldText/newText 参数仍兼容。匹配文本可直接复制 file.read 返回内容，运行时会安全去除 L<行号>: 前缀。需要用户审批。',
     parameters: FileEditParameters,
     execute: ({ args, signal, grant }) => {
       const parsed = FileEditInputSchema.safeParse(args)
