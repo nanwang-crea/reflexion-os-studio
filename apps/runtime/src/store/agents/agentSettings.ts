@@ -1,5 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite'
-import type { AgentSettings } from '@reflexion-os-studio/contracts'
+import {
+  AgentUnlimitedLimitSchema,
+  type AgentSettings,
+} from '@reflexion-os-studio/contracts'
 
 /** 全量默认(与内置常量一致):null 即"未配置"。 */
 export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
@@ -53,7 +56,13 @@ export class AgentSettingsStore {
   private parse(raw: string): AgentSettings {
     try {
       const parsed = JSON.parse(raw) as Partial<AgentSettings>
+      const unlimited = AgentUnlimitedLimitSchema.array()
+        .max(8)
+        .safeParse(parsed.unlimitedLimits)
       return {
+        ...(unlimited.success
+          ? { unlimitedLimits: [...new Set(unlimited.data)] }
+          : {}),
         maxTurns: typeof parsed.maxTurns === 'number' ? parsed.maxTurns : null,
         reflectionThreshold:
           typeof parsed.reflectionThreshold === 'number'
@@ -87,6 +96,7 @@ export class AgentSettingsStore {
             ? parsed.maxDepth
             : DEFAULT_AGENT_SETTINGS.maxDepth,
         maxChildRuns:
+          parsed.maxChildRuns === null ||
           typeof parsed.maxChildRuns === 'number'
             ? parsed.maxChildRuns
             : DEFAULT_AGENT_SETTINGS.maxChildRuns,
@@ -99,6 +109,7 @@ export class AgentSettingsStore {
             ? parsed.maxChildTimeoutSec
             : DEFAULT_AGENT_SETTINGS.maxChildTimeoutSec,
         maxChildTotalTokens:
+          parsed.maxChildTotalTokens === null ||
           typeof parsed.maxChildTotalTokens === 'number'
             ? parsed.maxChildTotalTokens
             : DEFAULT_AGENT_SETTINGS.maxChildTotalTokens,

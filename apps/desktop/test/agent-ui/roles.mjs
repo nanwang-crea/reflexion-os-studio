@@ -1,8 +1,30 @@
 import assert from 'node:assert/strict'
 
 export async function verifyRoleEditor(page) {
+  assert.equal(await page.locator('.agent-role-side-panel').count(), 0)
   await page.getByRole('button', { name: '新建角色', exact: true }).click()
   const editor = page.locator('.agent-role-editor')
+  const dock = await page.evaluate(() => {
+    const pane = document
+      .querySelector('.agent-role-side-panel')
+      .getBoundingClientRect()
+    const library = document
+      .querySelector('.agent-roles-library')
+      .getBoundingClientRect()
+    const view = document
+      .querySelector('.agent-roles-view')
+      .getBoundingClientRect()
+    return {
+      right: pane.right,
+      libraryRight: library.right,
+      left: pane.left,
+      viewRight: view.right,
+      modal: document.querySelector('dialog:modal') !== null,
+    }
+  })
+  assert.equal(dock.modal, false)
+  assert.ok(Math.abs(dock.right - dock.viewRight) <= 1)
+  assert.ok(dock.left >= dock.libraryRight - 1)
   await editor
     .getByRole('textbox', { name: '角色名称', exact: true })
     .fill('Feature reviewer')
@@ -107,6 +129,7 @@ export async function verifyRoleEditor(page) {
     .scrollIntoViewIfNeeded()
   await page.screenshot({ path: '/tmp/reflexion-role-permissions-desktop.png' })
   await page.setViewportSize({ width: 390, height: 844 })
+  assert.equal(await page.locator('.agent-roles-library').isVisible(), false)
   assert.equal(
     await page.evaluate(
       () => document.documentElement.scrollWidth > innerWidth,
@@ -138,6 +161,67 @@ export async function verifyRoleEditor(page) {
   assert.equal(saved.allowedTools.includes('shell.execute'), false)
   assert.equal(saved.canDelegate, true)
   await page.screenshot({ path: '/tmp/reflexion-agent-roles.png' })
+
+  const search = page.getByRole('searchbox', { name: '搜索角色' })
+  await search.fill('no matching role')
+  assert.equal(await page.locator('.agent-role-card').count(), 0)
+  await page.getByText('没有符合筛选条件的角色。', { exact: false }).waitFor()
+  await page.getByRole('button', { name: '清空筛选', exact: true }).click()
+  await search.fill('Feature reviewer')
+  assert.equal(await page.locator('.agent-role-card').count(), 1)
+  await page.getByRole('button', { name: '编辑', exact: true }).click()
+  await editor
+    .getByRole('textbox', { name: '角色名称', exact: true })
+    .fill('Unsaved')
+  await search.fill('')
+  await page.evaluate(() => {
+    window.blockRoleSwitch = true
+  })
+  await page
+    .locator('.agent-role-card')
+    .filter({ hasText: 'Review changes' })
+    .getByRole('button', { name: '编辑', exact: true })
+    .click()
+  assert.equal(
+    await editor
+      .getByRole('textbox', { name: '角色名称', exact: true })
+      .inputValue(),
+    'Unsaved',
+  )
+  await page.evaluate(() => {
+    window.blockRoleSwitch = false
+  })
+  await editor.getByRole('textbox', { name: '角色名称', exact: true }).focus()
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: '继续编辑', exact: true }).click()
+  assert.equal(
+    await editor
+      .getByRole('textbox', { name: '角色名称', exact: true })
+      .inputValue(),
+    'Unsaved',
+  )
+  await editor.getByRole('button', { name: '取消', exact: true }).click()
+  await page.getByRole('button', { name: '放弃修改', exact: true }).click()
+  await page.getByRole('button', { name: '清空筛选', exact: true }).click()
+
+  const filters = page.locator('.agent-role-filters')
+  await filters.getByRole('combobox', { name: '角色来源', exact: true }).click()
+  await page.getByRole('option', { name: '内置角色', exact: true }).click()
+  assert.equal(await page.locator('.agent-role-card').count(), 0)
+  await page.getByRole('button', { name: '清空筛选', exact: true }).click()
+  await filters.getByRole('combobox', { name: '启用状态', exact: true }).click()
+  await page.getByRole('option', { name: '已停用', exact: true }).click()
+  assert.equal(await page.locator('.agent-role-card').count(), 0)
+  await page.getByRole('button', { name: '清空筛选', exact: true }).click()
+  await page.setViewportSize({ width: 390, height: 844 })
+  assert.equal(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+    false,
+  )
+  await page.screenshot({ path: '/tmp/reflexion-agent-roles-mobile.png' })
+  await page.setViewportSize({ width: 1200, height: 850 })
 
   const scope = page
     .locator('.agent-role-filters')

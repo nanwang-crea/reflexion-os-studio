@@ -1,3 +1,4 @@
+import { childLimit, limitSettingsHint } from '../run/budgets.js'
 import type { AgentSettings } from '@reflexion-os-studio/contracts'
 import { ChildLimitError } from '../errors.js'
 
@@ -20,13 +21,11 @@ export class DelegationBudgetCoordinator {
   }
 
   acquire(): DelegationBudgetLease {
-    if (
-      this.settings.maxChildRuns !== null &&
-      this.created >= this.settings.maxChildRuns
-    ) {
+    const maxRuns = childLimit(this.settings, 'maxChildRuns')
+    if (maxRuns !== null && this.created >= maxRuns) {
       throw new ChildLimitError(
         'child_limit_runs',
-        `整棵委派树的子 Agent 数量超过上限 ${this.settings.maxChildRuns}`,
+        `整棵委派树的子 Agent 数量达到累计创建上限 ${maxRuns}。${limitSettingsHint('整棵委派树的子 Agent 总数', '子 Agent 委派')}`,
       )
     }
     if (
@@ -35,7 +34,7 @@ export class DelegationBudgetCoordinator {
     ) {
       throw new ChildLimitError(
         'child_limit_parallel',
-        `整棵委派树的并发子 Agent 数超过上限 ${this.settings.maxParallelChildren}`,
+        `整棵委派树的并发子 Agent 数达到上限 ${this.settings.maxParallelChildren}。请等待现有任务完成，或前往「设置 → Agent 运行时 → 子 Agent 委派」调整「并行子 Agent 数」（最多 8 个）。`,
       )
     }
     this.created += 1

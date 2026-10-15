@@ -1,5 +1,5 @@
 import { OperationHost } from './operations/OperationHost'
-import type { ComponentProps } from 'react'
+import type { ComponentProps, ReactNode } from 'react'
 import { AppMain } from '../AppMain'
 import { DangerConfirmationDialog } from '../features/chat/approvals/DangerConfirmationDialog'
 import { ConfirmDialog, type ConfirmDialogState } from './ConfirmDialog'
@@ -8,6 +8,7 @@ import { Sidebar } from './Sidebar'
 import { ToastHost } from './Toast'
 
 export interface AppShellProps {
+  children?: ReactNode
   sidebar: Omit<ComponentProps<typeof Sidebar>, 'width'>
   sidebarWidth: number
   setSidebarWidth: (updater: (width: number) => number) => void
@@ -53,6 +54,7 @@ export function AppShell(props: AppShellProps): React.JSX.Element {
       />
       <ToastHost />
       <OperationHost />
+      {props.children}
     </div>
   )
 }

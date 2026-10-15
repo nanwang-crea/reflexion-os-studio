@@ -1,3 +1,4 @@
+import { chatArchiveCommandHandlers } from './chat/archive/handlers.js'
 import { SkillSaveParamsSchema } from '@reflexion-os-studio/contracts'
 import { CommandSchemaRegistry } from '@reflexion-os-studio/contracts'
 import { CoreMutationMethodSchema } from '@reflexion-os-studio/contracts'
@@ -384,6 +385,7 @@ export const commandHandlers: Record<string, CommandHandler> = {
     ),
   }),
   ...chatCommandHandlers,
+  ...chatArchiveCommandHandlers,
   ...instructionsCommandHandlers,
   ...workspaceCommandHandlers,
   ...assetCommandHandlers,

@@ -1,3 +1,4 @@
+import { bulkUpdateTemplates } from './templates/bulk.js'
 import { validateRoleTemplate } from './templates/validation.js'
 import { agentTemplateCommands } from '@reflexion-os-studio/contracts'
 import { requireString, type CommandHandler } from '../command-utils.js'
@@ -42,6 +43,7 @@ export const agentCommandHandlers: Record<string, CommandHandler> = {
       )
     }
   },
+  'agent_template.bulk_update': (p, { store }) => bulkUpdateTemplates(p, store),
   'agent_template.remove': (p, { store }) => ({
     removed: store.agents.removeUser(requireString(p, 'templateId')),
   }),

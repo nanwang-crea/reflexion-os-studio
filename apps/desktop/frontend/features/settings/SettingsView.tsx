@@ -87,7 +87,8 @@ export function SettingsView(props: SettingsViewProps): React.JSX.Element {
                 <div className="settings-panel-head settings-page-heading">
                   <h3 className="settings-panel-title">Agent 运行时</h3>
                   <p className="hint">
-                    调整循环、反思和网络请求参数；留空时使用推荐默认值。
+                    管理运行预算、网络请求与子
+                    Agent；可选上限支持默认、自定义或不限制。
                   </p>
                 </div>
                 <AgentRuntimePanel />

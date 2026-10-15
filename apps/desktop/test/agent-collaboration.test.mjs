@@ -1,3 +1,6 @@
+import { verifyRuntimeLimits } from './agent-ui/runtime-limits.mjs'
+import { verifyRoleBulk } from './agent-ui/role-bulk.mjs'
+import { verifyRoleLayouts } from './agent-ui/role-layouts.mjs'
 import { verifyRoleEditor } from './agent-ui/roles.mjs'
 import { activityFixture, verifyRunLayouts } from './agent-ui/run-activity.mjs'
 import assert from 'node:assert/strict'
@@ -11,6 +14,7 @@ import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import {
   agentApi,
+  settingsApi,
   providersApi,
   projectsApi,
   skillsApi,
@@ -38,6 +42,7 @@ test('roles configure real model/scope fields; collaboration shows canonical tre
           setup(build) {
             for (const [name, contents] of Object.entries({
               agents: agentApi,
+              settings: settingsApi,
               providers: providersApi,
               projects: projectsApi,
               skills: skillsApi,
@@ -74,6 +79,11 @@ test('roles configure real model/scope fields; collaboration shows canonical tre
         contents: `
 import React from 'react';import {createRoot} from 'react-dom/client';
 import './frontend/styles/style.css';
+import './frontend/features/settings/settings.css';
+import {AgentRuntimePanel} from './frontend/features/settings/AgentRuntimePanel';
+import './frontend/styles/themes.css';
+import './frontend/styles/product-surfaces.css';
+import './frontend/features/browser/browser.css';
 import './frontend/features/chat/chat.css';
 import {InteractionQueue} from './frontend/features/chat/interactions/InteractionQueue';
 import {ApprovalCard} from './frontend/features/chat/approvals/ApprovalCard';
@@ -86,7 +96,9 @@ import {CollaborationPanel} from './frontend/features/chat/collaboration/Collabo
 import {useSkillCatalog} from './frontend/hooks/useAppSurfaces';
 const root=createRoot(document.getElementById('root'));
 const profiles=[{id:'synthetic',name:'Synthetic',enabled:true,capabilities:['chat'],models:['review-model'],apiFormat:'openai-chat'}];
-window.showRoles=()=>root.render(<AgentRolesView profiles={profiles} initialProjectId="project" confirm={async()=>true}/>);
+window.showRoles=()=>root.render(<AgentRolesView profiles={profiles} initialProjectId="project" confirm={async()=>!window.blockRoleSwitch}/>);
+window.showRoleLayout=()=>root.render(<div className="app-shell"><main className="main-pane"><div className="main-chat-column"><header className="topbar"><span className="topbar-title">Agent 角色</span></header><div className="content-area"><div className="content-main"><AgentRolesView profiles={profiles} initialProjectId="project" confirm={async()=>!window.blockRoleSwitch}/></div></div></div></main></div>);
+window.showRuntimeLimits=()=>root.render(<div className="settings-view"><div className="settings-content"><div className="settings-content-inner"><AgentRuntimePanel key={Math.random()}/></div></div></div>);
 window.collaborationCommits=0;
 window.showCollaboration=()=>root.render(<React.Profiler id="collaboration" onRender={()=>window.collaborationCommits++}><CollaborationPanel onCollapse={()=>{}} chat={{sessionData:{session:{id:'session',projectId:'project'},messages:[{id:'user',runId:'root-run'}],runs:[{id:window.currentRootRun??'root-run',parentRunId:null,supersededByRunId:null,model:'parent-model',providerId:'synthetic',status:'completed',planId:'plan'}],plans:[{id:'plan',goal:'Deliver feature',steps:[{id:'step',title:'Implement and verify',status:'completed'}]}]},pendingApprovals:[],pendingInteractions:[]}}/></React.Profiler>);
 window.showCatalog=()=>{function Catalog(){const [project,setProject]=React.useState('project');window.catalogProject=setProject;const skills=useSkillCatalog(true,project);return <div>{skills.map(skill=><p key={skill.id}>{skill.id}</p>)}</div>};root.render(<Catalog/>)};
@@ -134,6 +146,9 @@ window.clearUI=()=>root.render(null);window.showRoles();
     page.on('pageerror', (error) => errors.push(error.message))
     await page.goto(`http://127.0.0.1:${server.address().port}`)
     await verifyRoleEditor(page)
+    await verifyRoleLayouts(page)
+    await verifyRoleBulk(page)
+    await verifyRuntimeLimits(page)
     await page.evaluate(() => window.showCollaboration())
     await page
       .getByRole('button', { name: 'Review Agent · 已完成', exact: true })

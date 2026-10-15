@@ -4,6 +4,8 @@ import { z } from 'zod'
 export const CoreMutationMethodSchema = z.enum([
   'project.create',
   'session.create',
+  'session.archive.import',
+  'session.archive.export',
   'provider.configure',
   'message.send',
   'message.edit_resend',

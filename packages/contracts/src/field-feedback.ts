@@ -49,6 +49,7 @@ export const FIELD_LABELS: Readonly<Record<string, string>> = Object.freeze({
   settings: '运行参数',
   contextBudget: '上下文预算',
   contextTokenLimit: '上下文 Token 上限',
+  unlimitedLimits: '不限制的运行预算',
   maxTurns: '最大轮次',
   reflectionThreshold: '反思触发阈值',
   requestRetries: '请求重试次数',

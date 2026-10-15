@@ -1,8 +1,9 @@
-import { Children, isValidElement, type ReactNode } from 'react'
+import { Children, isValidElement, useState, type ReactNode } from 'react'
 import * as SelectPrimitive from '@radix-ui/react-select'
 import './controls.css'
 
 interface Props {
+  id?: string
   value: string
   onValueChange: (value: string) => void
   children: ReactNode
@@ -50,6 +51,7 @@ function renderOptions(children: ReactNode): ReactNode {
 }
 
 export function Select(props: Props) {
+  const [trigger, setTrigger] = useState<HTMLButtonElement | null>(null)
   return (
     <SelectPrimitive.Root
       value={`item:${props.value}`}
@@ -57,6 +59,8 @@ export function Select(props: Props) {
       disabled={props.disabled}
     >
       <SelectPrimitive.Trigger
+        ref={setTrigger}
+        id={props.id}
         className="ui-select"
         aria-label={props['aria-label']}
       >
@@ -65,7 +69,9 @@ export function Select(props: Props) {
           ⌄
         </SelectPrimitive.Icon>
       </SelectPrimitive.Trigger>
-      <SelectPrimitive.Portal>
+      <SelectPrimitive.Portal
+        container={trigger?.closest('dialog') ?? undefined}
+      >
         <SelectPrimitive.Content
           className="ui-select-menu"
           position="popper"

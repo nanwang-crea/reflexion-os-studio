@@ -432,6 +432,8 @@ export default function App() {
       reloadAllTextTabs={reloadAllTextTabs}
       loadOlderHistory={loadOlderHistory}
       refreshSessionData={refreshSessionData}
+      refreshProjects={refreshProjects}
+      refreshProjectSessions={refreshProjectSessions}
       refreshStandaloneSessions={refreshStandaloneSessions}
       refreshProfiles={refreshProfiles}
       enterProjectFiles={enterProjectFiles}

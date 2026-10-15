@@ -56,6 +56,10 @@ function keyFor(
   if (method === 'provider.configure')
     return `provider:${params.id ?? params.name}`
   if (method === 'project.create') return `project:${params.folderPath}`
+  if (method === 'session.archive.import')
+    return `archive-import:${params.projectId ?? params.folderPath ?? 'standalone'}`
+  if (method === 'session.archive.export')
+    return `archive-export:${params.sessionId}`
   if (method === 'session.create')
     return `session-create:${params.projectId ?? 'standalone'}`
   return `chat:${params.sessionId ?? params.runId}`

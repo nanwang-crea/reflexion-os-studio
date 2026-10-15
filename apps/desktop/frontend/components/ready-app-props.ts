@@ -107,6 +107,8 @@ export interface ReadyAppProps {
     before: import('@reflexion-os-studio/runtime-client').HistoryCursor,
   ) => Promise<void>
   refreshSessionData: (sessionId: string) => Promise<void>
+  refreshProjects: () => Promise<void>
+  refreshProjectSessions: (projectId: string) => Promise<void>
   refreshStandaloneSessions: () => Promise<void>
   refreshProfiles: () => Promise<void>
   enterProjectFiles: (projectId: string) => void

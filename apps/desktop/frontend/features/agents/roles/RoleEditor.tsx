@@ -61,7 +61,6 @@ export function RoleEditor({
           onSave()
       }}
     >
-      <h2>{value.id ? '编辑角色' : '新建角色'}</h2>
       <fieldset disabled={busy}>
         <label>
           角色名称

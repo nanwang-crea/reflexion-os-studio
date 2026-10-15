@@ -40,8 +40,14 @@ export {
   type SkillSaveParams,
 } from './commands/skill.js'
 
-export type { AgentTemplateSaveParams } from './commands/agent-template.js'
+export type {
+  AgentTemplateSaveParams,
+  AgentTemplateBulkUpdateParams,
+} from './commands/agent-template.js'
 
 export { agentTemplateCommands } from './commands/agent-template.js'
 
 export * from './file-writing.js'
+
+export * from './chat-archive.js'
+export type { ChatArchiveImportParams } from './commands/chat-archive.js'

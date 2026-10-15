@@ -22,6 +22,8 @@ const completionToasts = new Set<CoreMutationMethod>([
 const labels: Record<CoreMutationMethod, string> = {
   'project.create': '创建项目',
   'session.create': '创建会话',
+  'session.archive.import': '导入聊天记录',
+  'session.archive.export': '导出聊天记录',
   'provider.configure': '保存模型配置',
   'message.send': '发送消息',
   'message.edit_resend': '编辑重发',

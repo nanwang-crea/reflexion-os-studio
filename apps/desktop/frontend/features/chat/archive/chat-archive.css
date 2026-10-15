@@ -1,0 +1,32 @@
+.chat-import-dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+}
+.chat-import-dialog p,
+.chat-import-dialog small {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.chat-import-dialog fieldset {
+  border: 0;
+  margin: 16px 0;
+  padding: 0;
+  min-width: 0;
+}
+.chat-import-dialog label,
+.chat-archive-file-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+  font-size: 13px;
+}
+.chat-archive-path {
+  overflow-wrap: anywhere;
+}
+.chat-import-dialog .dialog-actions {
+  flex-wrap: wrap;
+  margin-top: 20px;
+}

@@ -1,9 +1,12 @@
+import { useChatArchiveActions } from '../features/chat/archive/useChatArchiveActions'
+import { ChatImportDialog } from '../features/chat/archive/ChatImportDialog'
 import { setSessionExecutionMode } from '../api/sessions'
 import { AppShell } from './AppShell'
 import type { ReadyAppProps } from './ready-app-props'
 
 /** 运行时就绪后的界面装配；状态仍由 App 持有。 */
 export function ReadyApp(props: ReadyAppProps): React.JSX.Element {
+  const archive = useChatArchiveActions(props)
   return (
     <AppShell
       sidebarWidth={props.sidebarWidth}
@@ -51,6 +54,11 @@ export function ReadyApp(props: ReadyAppProps): React.JSX.Element {
         notice: props.notice,
         onDismissNotice: () => props.setNotice(null),
         topBar: {
+          onImportChat: archive.openImport,
+          onExportChat: props.activeSessionId
+            ? () => void archive.exportChat()
+            : undefined,
+          archiveBusy: archive.busy,
           sidebarOpen: props.sidebarOpen,
           onToggleSidebar: () => props.setSidebarOpen((open) => !open),
           runtimeState: props.bootstrap.state,
@@ -198,6 +206,15 @@ export function ReadyApp(props: ReadyAppProps): React.JSX.Element {
         onCancel: props.handleCancel,
         onTertiary: props.handleTertiary,
       }}
-    />
+    >
+      {archive.importOpen && (
+        <ChatImportDialog
+          projects={props.projects}
+          projectId={props.activeProjectId}
+          onImport={archive.importChat}
+          onClose={archive.closeImport}
+        />
+      )}
+    </AppShell>
   )
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   AgentTemplate,
   Project,
@@ -6,25 +6,21 @@ import type {
 } from '@reflexion-os-studio/contracts'
 import type { ConfirmDialogState } from '../../components/ConfirmDialog'
 import {
+  bulkUpdateAgentTemplates,
   listAgentTemplates,
   saveAgentTemplate,
   removeAgentTemplate,
   setAgentEnabled,
 } from '../../api/agents'
 import { listProjects } from '../../api/projects'
-import { Select } from '../../components/forms/Select'
-import { RoleEditor, emptyRole, type RoleDraft } from './roles/RoleEditor'
+import { RoleCatalog } from './roles/RoleCatalog'
+import { RoleFilters } from './roles/RoleFilters'
+import { emptyRole, type RoleDraft } from './roles/RoleEditor'
+import { RoleEditorPanel } from './roles/RoleEditorPanel'
+import { RoleBulkPanel } from './roles/bulk/RoleBulkPanel'
 import './agents.css'
-
-function roleModelLabel(
-  template: AgentTemplate,
-  profiles: ProviderProfile[],
-): string {
-  const binding = template.modelBinding
-  return binding.mode === 'inherit'
-    ? '继承上级模型与思考等级'
-    : `${profiles.find((profile) => profile.id === binding.providerId)?.name ?? binding.providerId} / ${binding.model}`
-}
+import './roles/catalog.css'
+import './roles/side-panel.css'
 
 export function AgentRolesView({
   profiles,
@@ -39,8 +35,17 @@ export function AgentRolesView({
   const [projects, setProjects] = useState<Project[]>([])
   const [draft, setDraft] = useState<RoleDraft | null>(null)
   const [editorKey, setEditorKey] = useState(0)
-  const [scope, setScope] = useState(initialProjectId ?? '')
+  const [bulkTargets, setBulkTargets] = useState<AgentTemplate[] | null>(null)
+  const [catalogRevision, setCatalogRevision] = useState(0)
+  const [bulkDirty, setBulkDirty] = useState(false)
+  const originalDraft = useRef('')
+  const [scope, setScope] = useState(initialProjectId ?? '*')
   const [domain, setDomain] = useState('')
+  const [query, setQuery] = useState('')
+  const [status, setStatus] = useState('all')
+  const [source, setSource] = useState('all')
+  const [loading, setLoading] = useState(true)
+  const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const reload = useCallback(async () => {
@@ -52,7 +57,9 @@ export function AgentRolesView({
     setProjects(projects.projects)
   }, [])
   useEffect(() => {
-    void reload().catch((error) => setError(String(error)))
+    void reload()
+      .catch((error) => setError(String(error)))
+      .finally(() => setLoading(false))
   }, [reload])
   const action = async (work: () => Promise<void>) => {
     setBusy(true)
@@ -60,23 +67,35 @@ export function AgentRolesView({
     try {
       await work()
       await reload()
+      return true
     } catch (error) {
       setError(error instanceof Error ? error.message : String(error))
+      await reload().catch(() => undefined)
+      return false
     } finally {
       setBusy(false)
     }
   }
-  const edit = async (value: RoleDraft) => {
-    if (
-      draft &&
-      !(await confirm({
-        title: '切换角色',
-        message: '放弃当前尚未保存的角色编辑？',
+  const allowSwitch = async () => {
+    const dirty = draft
+      ? JSON.stringify(draft) !== originalDraft.current
+      : bulkDirty
+    return (
+      !dirty ||
+      (await confirm({
+        title: '切换配置',
+        message: '放弃当前尚未保存的配置？',
         confirmLabel: '放弃并切换',
       }))
     )
-      return
+  }
+  const edit = async (value: RoleDraft) => {
+    if (!(await allowSwitch())) return
+    setError(null)
     setEditorKey((key) => key + 1)
+    setBulkTargets(null)
+    setBulkDirty(false)
+    originalDraft.current = JSON.stringify(value)
     setDraft(value)
   }
   const visible = templates.filter(
@@ -84,179 +103,172 @@ export function AgentRolesView({
       (scope === '*' ||
         template.projectId === null ||
         template.projectId === scope) &&
-      (!domain || template.domains.includes(domain)),
+      (!domain || template.domains.includes(domain)) &&
+      (status === 'all' || template.enabled === (status === 'enabled')) &&
+      (source === 'all' || template.builtin === (source === 'builtin')) &&
+      `${template.name} ${template.description} ${template.domains.join(' ')}`
+        .toLocaleLowerCase()
+        .includes(query.trim().toLocaleLowerCase()),
   )
   const domains = [
     ...new Set(templates.flatMap((template) => template.domains)),
   ]
   return (
     <div className="agent-roles-view">
-      <header className="agent-roles-heading">
-        <div>
-          <h1>Agent 角色</h1>
-          <p>
-            预设职责、模型与工具。在主对话提出目标，Agent 按需选择角色协作。
-          </p>
-        </div>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() =>
-            void edit({
-              ...emptyRole,
-              projectId: scope === '*' ? initialProjectId : scope || null,
-            })
-          }
-        >
-          新建角色
-        </button>
-      </header>
-      <div className="agent-role-filters">
-        <label>
-          角色可用位置
-          <Select value={scope} onValueChange={setScope}>
-            <option value="">全局角色</option>
-            <option value="*">全部角色</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}（含全局角色）
-              </option>
-            ))}
-          </Select>
-        </label>
-        <label>
-          领域分类
-          <Select value={domain} onValueChange={setDomain}>
-            <option value="">全部分类</option>
-            {domains.map((domain) => (
-              <option key={domain} value={domain}>
-                {domain}
-              </option>
-            ))}
-          </Select>
-        </label>
-      </div>
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
-      <div className="agent-role-layout">
-        <div className="agent-role-list">
-          {visible.map((template) => (
-            <article className="agent-role-card" key={template.id}>
-              <header>
-                <strong>{template.name}</strong>
-                <span>
-                  {template.builtin
-                    ? '内置'
-                    : template.projectId
-                      ? '项目'
-                      : '全局'}
-                </span>
-              </header>
-              <p>{template.description}</p>
-              <small>
-                {template.domains.join(' · ') || '通用'} ·{' '}
-                {roleModelLabel(template, profiles)}
-              </small>
-              <small>
-                位置：
-                {template.projectId
-                  ? (projects.find(
-                      (project) => project.id === template.projectId,
-                    )?.name ?? '原项目不可用')
-                  : '全局'}{' '}
-                · {template.policy.allowedTools.length} 个工具 ·{' '}
-                {template.policy.canDelegate ? '允许继续委派' : '独立执行'}
-              </small>
-              <footer>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    void edit({
-                      id: template.builtin ? undefined : template.id,
-                      name: template.builtin
-                        ? `${template.name}（自定义）`
-                        : template.name,
-                      description: template.description,
-                      systemPrompt: template.systemPrompt,
-                      projectId: template.builtin
-                        ? scope === '*'
-                          ? initialProjectId
-                          : scope || null
-                        : template.projectId,
-                      domains: template.domains,
-                      modelBinding: template.modelBinding,
-                      enabled: template.enabled,
-                      permissionCeiling: template.policy.permissionCeiling,
-                      canDelegate: template.policy.canDelegate,
-                      allowedTools: template.policy.allowedTools,
-                    })
-                  }
-                >
-                  {template.builtin ? '复制并配置' : '编辑'}
-                </button>
-                {!template.builtin && (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() =>
-                      void action(async () => {
-                        if (
-                          await confirm({
-                            title: '删除角色',
-                            message: `删除“${template.name}”？已有执行记录会保留。`,
-                            danger: true,
-                            confirmLabel: '删除',
-                          })
-                        )
-                          await removeAgentTemplate(template.id)
-                      })
-                    }
-                  >
-                    删除
-                  </button>
-                )}
-                <label className="agent-checkbox">
-                  <input
-                    type="checkbox"
-                    aria-label={`启用 ${template.name}`}
-                    checked={template.enabled}
-                    disabled={busy}
-                    onChange={() =>
-                      void action(async () => {
-                        await setAgentEnabled(template.id, !template.enabled)
-                      })
-                    }
-                  />
-                  启用
-                </label>
-              </footer>
-            </article>
-          ))}
-          {!visible.length && <p>当前范围没有角色。可以新建或复制内置角色。</p>}
-        </div>
-        {draft && (
-          <RoleEditor
-            key={editorKey}
-            value={draft}
-            onChange={setDraft}
-            profiles={profiles}
-            projects={projects}
-            domains={domains}
-            busy={busy}
-            onSave={() =>
-              void action(async () => {
-                await saveAgentTemplate(draft)
-                setDraft(null)
+      <div className="agent-roles-library">
+        <header className="agent-roles-heading">
+          <div>
+            <h1>角色库</h1>
+            <p>配置职责与执行能力，供主对话按需调用。</p>
+          </div>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() =>
+              void edit({
+                ...emptyRole,
+                projectId: scope === '*' ? initialProjectId : scope || null,
               })
             }
-            onCancel={() => setDraft(null)}
-          />
+          >
+            新建角色
+          </button>
+        </header>
+        <RoleFilters
+          scope={scope}
+          setScope={setScope}
+          domain={domain}
+          setDomain={setDomain}
+          query={query}
+          setQuery={setQuery}
+          source={source}
+          setSource={setSource}
+          status={status}
+          setStatus={setStatus}
+          projects={projects}
+          domains={domains}
+        />
+        <p className="agent-role-summary" role="status">
+          {loading
+            ? '正在加载角色…'
+            : `显示 ${visible.length} / ${templates.length} 个角色`}
+          {scope !== '*' && scope !== '' && ' · 包含此项目角色与全局角色'}
+        </p>
+        {notice && <p role="status">{notice}</p>}
+        {error && !draft && !bulkTargets && (
+          <p role="alert" className="error">
+            {error}
+          </p>
         )}
+        <div className="agent-role-layout">
+          <RoleCatalog
+            key={JSON.stringify([
+              scope,
+              domain,
+              query,
+              status,
+              source,
+              catalogRevision,
+            ])}
+            items={visible}
+            onBulkEdit={(roles) => {
+              void (async () => {
+                if (!(await allowSwitch())) return
+                setBulkDirty(false)
+                setEditorKey((key) => key + 1)
+                setDraft(null)
+                setError(null)
+                setBulkTargets(roles)
+              })()
+            }}
+            itemProps={{
+              profiles,
+              projects,
+              busy,
+              scope,
+              initialProjectId,
+              onEdit: (value) => void edit(value),
+              onDelete: (template) =>
+                void action(async () => {
+                  if (
+                    await confirm({
+                      title: '删除角色',
+                      message: `删除“${template.name}”？已有执行记录会保留。`,
+                      danger: true,
+                      confirmLabel: '删除',
+                    })
+                  ) {
+                    await removeAgentTemplate(template.id)
+                    if (draft?.id === template.id) setDraft(null)
+                    if (bulkTargets?.some((role) => role.id === template.id)) {
+                      setBulkTargets(null)
+                      setBulkDirty(false)
+                    }
+                  }
+                }),
+              onToggle: (template) =>
+                void action(async () => {
+                  await setAgentEnabled(template.id, !template.enabled)
+                  setDraft((current) =>
+                    current?.id === template.id
+                      ? { ...current, enabled: !template.enabled }
+                      : current,
+                  )
+                }),
+            }}
+          />
+          {!loading && !visible.length && (
+            <p>
+              没有符合筛选条件的角色。请调整搜索或清空筛选，也可以新建角色。
+            </p>
+          )}
+        </div>
       </div>
+      {draft && (
+        <RoleEditorPanel
+          error={error}
+          key={editorKey}
+          value={draft}
+          onChange={setDraft}
+          profiles={profiles}
+          projects={projects}
+          domains={domains}
+          busy={busy}
+          onSave={() =>
+            void action(async () => {
+              await saveAgentTemplate(draft)
+              setDraft(null)
+              setNotice(`已保存“${draft.name}”。列表保留当前筛选条件。`)
+            })
+          }
+          onCancel={() => setDraft(null)}
+        />
+      )}
+      {bulkTargets && (
+        <RoleBulkPanel
+          key={`bulk-${editorKey}`}
+          roles={bulkTargets}
+          projects={projects}
+          busy={busy}
+          error={error}
+          onDirtyChange={setBulkDirty}
+          onClose={() => {
+            setBulkTargets(null)
+            setBulkDirty(false)
+          }}
+          onSave={(input) =>
+            action(async () => {
+              await bulkUpdateAgentTemplates(input)
+              setBulkTargets(null)
+              setBulkDirty(false)
+              setCatalogRevision((value) => value + 1)
+              setNotice(
+                `已批量更新 ${input.targets.length} 个角色。列表保留当前筛选条件。`,
+              )
+            })
+          }
+        />
+      )}
     </div>
   )
 }

@@ -1,3 +1,4 @@
+import { runLimit, limitSettingsHint } from './budgets.js'
 import { withTaskContext } from '../context/task-context.js'
 import { resolveOutputBudget } from '../../provider/output-budget.js'
 import type { SystemRuntimeClient } from '../../system.js'
@@ -66,15 +67,15 @@ export interface RunStreamInput {
 function describeStop(reason: AgentStopReason, maxTurns: number): string {
   switch (reason) {
     case 'max_turns':
-      return `任务在 ${maxTurns} 轮内未完成，已停止执行`
+      return `任务达到 ${maxTurns} 轮模型调用上限，已停止。${limitSettingsHint('最大轮次（模型调用上限）')}`
     case 'output_truncated':
-      return '模型生成达到输出上限，自动续写或推理恢复次数已用尽；已保留当前记录'
+      return '模型生成达到单次输出上限，自动续写或推理恢复次数已用尽；已保留当前记录。可前往「设置 → Agent 运行时 → 循环」调整自动续写轮次；单次输出参数在「设置 → 模型供应商 → 选择供应商 → 模型独立配置」调整，仍受模型自身上限限制。'
     case 'output_empty':
       return '模型达到输出上限，但未返回正文、可见思考或工具调用；已保留当前记录'
     case 'tool_output_truncated':
       return '工具参数截断且有限重试仍未恢复，截断轮的工具未执行'
     case 'context_limit':
-      return '模型上下文空间不足，已停止并保留当前结果'
+      return '模型上下文空间不足，已停止并保留当前结果。可前往「设置 → 模型供应商 → 选择供应商 → 模型独立配置」核对上下文窗口和预算，或新建会话后继续。'
     case 'content_filtered':
       return '模型拒绝回答或内容被安全策略拦截'
     case 'no_progress':
@@ -107,15 +108,19 @@ export class RunRunner {
 
   async execute(input: RunStreamInput): Promise<void> {
     const { run, controller, emitter, registry } = input
-    const maxTurns = input.settings.maxTurns ?? DEFAULT_MAX_TURNS
+    const maxTurns = runLimit(input.settings, 'maxTurns', DEFAULT_MAX_TURNS)
     const state = createRunExecutionState()
     const finalizer = new RunFinalizer(this.store)
     const guard = new LoopGuard()
     const budgets = {
-      maxRunTimeoutSec: input.settings.maxRunTimeoutSec ?? 7200,
-      maxRunTotalTokens: input.settings.maxRunTotalTokens ?? 200_000_000,
-      maxToolCalls: input.settings.maxToolCalls ?? 1000,
-      maxContinuationTurns: input.settings.maxContinuationTurns ?? 2,
+      maxRunTimeoutSec: runLimit(input.settings, 'maxRunTimeoutSec', 7200),
+      maxRunTotalTokens: runLimit(
+        input.settings,
+        'maxRunTotalTokens',
+        200_000_000,
+      ),
+      maxToolCalls: runLimit(input.settings, 'maxToolCalls', 1000),
+      maxContinuationTurns: runLimit(input.settings, 'maxContinuationTurns', 2),
     }
     const runStartedAt = Date.now()
     let finalFragments: string[] = []
@@ -176,16 +181,18 @@ export class RunRunner {
 
     try {
       // Run 总时限：到点中止（ChildLimitError 语义区分取消与预算失败）。
-      const timeoutHandle = setTimeout(
-        () =>
-          controller.abort(
-            new ChildLimitError(
-              'run_timeout',
-              `Run 总时长超过 ${budgets.maxRunTimeoutSec}s 上限`,
-            ),
-          ),
-        budgets.maxRunTimeoutSec * 1000,
-      )
+      const timeoutHandle = Number.isFinite(budgets.maxRunTimeoutSec)
+        ? setTimeout(
+            () =>
+              controller.abort(
+                new ChildLimitError(
+                  'run_timeout',
+                  `本次运行超过 ${budgets.maxRunTimeoutSec} 秒的总时长上限。${limitSettingsHint('Run 总时长上限（秒）')}`,
+                ),
+              ),
+            budgets.maxRunTimeoutSec * 1000,
+          )
+        : undefined
       try {
         const history = await input.buildHistory(controller.signal)
         const outcome = await runAgentLoop({
@@ -260,7 +267,7 @@ export class RunRunner {
               )
               throw new ChildLimitError(
                 'tool_call_budget',
-                `Run 工具调用次数超出预算：已用 ${toolCallsUsed} + 本批 ${requests.length} > 上限 ${budgets.maxToolCalls}`,
+                `工具调用达到上限：已用 ${toolCallsUsed} 次，本批 ${requests.length} 次，上限 ${budgets.maxToolCalls} 次。${limitSettingsHint('工具调用次数上限')}`,
               )
             }
             input.onToolBatch?.(requests.map((request) => request.name))

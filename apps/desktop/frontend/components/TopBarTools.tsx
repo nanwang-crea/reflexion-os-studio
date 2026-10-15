@@ -28,6 +28,24 @@ export function TopBarTools(props: TopBarProps): React.JSX.Element {
           sideOffset={8}
           collisionPadding={8}
         >
+          {props.onImportChat && (
+            <DropdownMenu.Item
+              className="topbar-tools-item"
+              disabled={props.archiveBusy}
+              onSelect={props.onImportChat}
+            >
+              导入聊天记录…
+            </DropdownMenu.Item>
+          )}
+          {props.onExportChat && (
+            <DropdownMenu.Item
+              className="topbar-tools-item"
+              disabled={props.archiveBusy}
+              onSelect={props.onExportChat}
+            >
+              导出当前聊天记录…
+            </DropdownMenu.Item>
+          )}
           {props.onToggleCollaboration && (
             <DropdownMenu.CheckboxItem
               className="topbar-tools-item"

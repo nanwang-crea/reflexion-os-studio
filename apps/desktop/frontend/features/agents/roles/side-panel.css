@@ -1,0 +1,91 @@
+.agent-roles-view {
+  display: flex;
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+  container: role-management / inline-size;
+}
+.agent-roles-library {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 20px;
+  container: role-library / inline-size;
+}
+.agent-role-side-panel {
+  flex: 0 0 clamp(360px, 42%, 520px);
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  background: var(--bg-sidebar);
+  color: var(--text);
+}
+.agent-role-panel-heading {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 14px;
+}
+.agent-role-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.agent-role-side-panel .agent-role-editor {
+  border: 0;
+  border-radius: 0;
+  padding: 16px;
+}
+.agent-role-side-panel .agent-role-editor footer {
+  position: sticky;
+  bottom: -16px;
+  padding: 12px 0;
+  background: var(--bg-sidebar);
+  border-top: 1px solid var(--border);
+}
+.agent-role-side-panel p {
+  overflow-wrap: anywhere;
+}
+@container role-library (max-width: 1000px) {
+  .agent-role-filters {
+    grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(0, 1fr));
+  }
+}
+@container role-library (max-width: 600px) {
+  .agent-role-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .agent-role-filters label:first-child {
+    grid-column: 1 / -1;
+  }
+}
+@container role-management (max-width: 800px) {
+  .agent-role-side-panel {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: 100%;
+    z-index: 20;
+    box-shadow: var(--shadow-lg);
+  }
+  .agent-roles-view:has(> .agent-role-side-panel) > .agent-roles-library {
+    visibility: hidden;
+  }
+}
+@media (max-width: 600px) {
+  .agent-roles-library {
+    padding: 12px;
+  }
+}
+
+.agent-role-panel-heading h2 {
+  margin: 0;
+  font-size: 15px;
+}

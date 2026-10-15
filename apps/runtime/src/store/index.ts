@@ -9,6 +9,7 @@ import { WorkflowDefinitionStore } from './workflows/definitions.js'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import { ChatArchiveStore } from './chat/archives.js'
 import { MessageStore } from './chat/messages.js'
 import { ProjectStore } from './chat/projects.js'
 import { RunStore } from './chat/runs.js'
@@ -47,6 +48,7 @@ export class Store {
   private readonly db: DatabaseSync
   readonly projects: ProjectStore
   readonly sessions: SessionStore
+  readonly chatArchives: ChatArchiveStore
   readonly messages: MessageStore
   readonly runs: RunStore
   readonly toolCalls: ToolCallStore
@@ -91,6 +93,7 @@ export class Store {
 
     this.projects = new ProjectStore(this.db)
     this.sessions = new SessionStore(this.db)
+    this.chatArchives = new ChatArchiveStore(this.db)
     this.messages = new MessageStore(this.db)
     this.runs = new RunStore(this.db)
     this.toolCalls = new ToolCallStore(this.db)

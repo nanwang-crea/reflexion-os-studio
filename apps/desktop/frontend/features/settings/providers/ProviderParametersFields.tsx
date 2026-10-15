@@ -77,6 +77,10 @@ export function ProviderParametersFields(props: {
           </span>
         </label>
       ))}
+      <p className="field-hint">
+        单次输出与上下文受模型和服务商硬上限约束，留空表示默认或继承，不代表无限制。累计运行
+        token 预算请前往「设置 → Agent 运行时 → 循环」调整。
+      </p>
       {props.apiFormat === 'anthropic' && (
         <p className="field-hint">最大输出留空时固定使用 4096 tokens。</p>
       )}

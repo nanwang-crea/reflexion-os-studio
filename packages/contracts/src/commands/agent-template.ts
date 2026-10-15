@@ -31,6 +31,37 @@ export const agentTemplateCommands = {
     }),
     result: z.object({ template: AgentTemplateSchema }),
   },
+  'agent_template.bulk_update': {
+    params: z
+      .object({
+        requestId: RequestIdSchema,
+        targets: z
+          .array(
+            z
+              .object({ id: z.string().min(1), updatedAt: z.string().min(1) })
+              .strict(),
+          )
+          .min(1)
+          .max(500)
+          .refine(
+            (items) =>
+              new Set(items.map((item) => item.id)).size === items.length,
+            '角色不能重复',
+          ),
+        patch: z
+          .object({
+            projectId: z.string().min(1).nullable().optional(),
+            permissionCeiling: PermissionPresetSchema.optional(),
+            allowedTools: z.array(z.string().min(1)).optional(),
+            canDelegate: z.boolean().optional(),
+            enabled: z.boolean().optional(),
+          })
+          .strict()
+          .refine((patch) => Object.keys(patch).length > 0, '请选择修改项'),
+      })
+      .strict(),
+    result: z.object({ templates: z.array(AgentTemplateSchema) }),
+  },
   'agent_template.remove': {
     params: z.object({
       requestId: RequestIdSchema,
@@ -42,4 +73,8 @@ export const agentTemplateCommands = {
 
 export type AgentTemplateSaveParams = z.input<
   (typeof agentTemplateCommands)['agent_template.save']['params']
+>
+
+export type AgentTemplateBulkUpdateParams = z.input<
+  (typeof agentTemplateCommands)['agent_template.bulk_update']['params']
 >

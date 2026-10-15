@@ -186,8 +186,22 @@ export const DelegationSchema = z.object({
 })
 export type Delegation = z.infer<typeof DelegationSchema>
 
-/** Agent 运行时全局设置：null 表示使用内置默认值。 */
+/** 可显式取消的应用级累计预算；并发、深度、网络重试等不在此列。 */
+export const AgentUnlimitedLimitSchema = z.enum([
+  'maxTurns',
+  'maxRunTimeoutSec',
+  'maxRunTotalTokens',
+  'maxToolCalls',
+  'maxContinuationTurns',
+  'maxChildRuns',
+  'maxChildTimeoutSec',
+  'maxChildTotalTokens',
+])
+export type AgentUnlimitedLimit = z.infer<typeof AgentUnlimitedLimitSchema>
+
+/** null 保持历史默认语义；unlimitedLimits 显式取消指定应用级上限。 */
 export const AgentSettingsSchema = z.object({
+  unlimitedLimits: z.array(AgentUnlimitedLimitSchema).max(8).optional(),
   // 单次 Run 的最大模型调用轮次；超限如实失败。
   maxTurns: z.number().int().positive().max(256).nullable(),
   // 工具失败累计次数达到该值注入反思消息；0=禁用反思。

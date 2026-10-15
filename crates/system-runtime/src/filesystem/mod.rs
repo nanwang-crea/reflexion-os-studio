@@ -9,3 +9,5 @@ pub(crate) mod search;
 pub(crate) mod sha256;
 pub(crate) mod upload;
 pub(crate) mod walk;
+
+pub mod chat_archives;

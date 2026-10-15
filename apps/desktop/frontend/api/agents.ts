@@ -82,3 +82,12 @@ export function cancelDelegation(
 ): Promise<{ accepted: boolean }> {
   return request<{ accepted: boolean }>('delegation.cancel', { delegationId })
 }
+
+export function bulkUpdateAgentTemplates(
+  input: Omit<
+    import('@reflexion-os-studio/contracts').AgentTemplateBulkUpdateParams,
+    'requestId'
+  >,
+): Promise<{ templates: AgentTemplate[] }> {
+  return request('agent_template.bulk_update', input)
+}

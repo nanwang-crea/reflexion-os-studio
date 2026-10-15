@@ -1,0 +1,61 @@
+.agent-role-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 350px), 1fr));
+  gap: 12px;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+}
+.agent-role-card,
+.agent-role-card:last-child {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 14px;
+  min-height: 170px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+.agent-role-card header input {
+  flex-shrink: 0;
+}
+.agent-role-card footer {
+  margin-top: auto;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+.agent-role-card .agent-checkbox {
+  margin-left: auto;
+}
+.role-catalog-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 10px 0 4px;
+  font-size: 12px;
+}
+.role-catalog-toolbar button {
+  font-size: 12px;
+  padding: 5px 8px;
+}
+.role-catalog-hint {
+  display: block;
+  color: var(--text-muted);
+  margin: 0 0 12px;
+}
+.role-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px 0;
+  font-size: 12px;
+}
+
+.agent-role-card.is-selected {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+}

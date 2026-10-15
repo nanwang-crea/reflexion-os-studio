@@ -1,3 +1,4 @@
+import { limitSettingsHint } from './budgets.js'
 import { createModelActivityReporter } from './model-activity.js'
 import { redactBrowserCalls } from './browser-admission.js'
 import { resolveOutputBudget } from '../../provider/output-budget.js'
@@ -346,7 +347,7 @@ export async function executeModelTurn(
     if (total > input.runTotalTokenBudget) {
       const limit = new ChildLimitError(
         'run_token_budget',
-        `Run 累计 token 超过预算 ${input.runTotalTokenBudget}`,
+        `本次运行累计输入与输出 token 超过 ${input.runTotalTokenBudget}。${limitSettingsHint('Run token 总预算')}`,
       )
       input.controller.abort(limit)
       throw new DOMException('run token budget exceeded', 'AbortError')
@@ -360,7 +361,7 @@ export async function executeModelTurn(
     if (completion > input.childTokenBudget) {
       const limit = new ChildLimitError(
         'child_token_budget',
-        `子 Run 输出 token 超过预算 ${input.childTokenBudget}`,
+        `子 Agent 累计输出 token 超过 ${input.childTokenBudget}。${limitSettingsHint('单个子 Agent 输出预算', '子 Agent 委派')}`,
       )
       input.controller.abort(limit)
       throw new DOMException('child token budget exceeded', 'AbortError')

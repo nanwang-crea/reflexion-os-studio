@@ -1,3 +1,4 @@
+import { childLimit, limitSettingsHint } from '../run/budgets.js'
 import { resolveRoleModel } from './role-model.js'
 import type {
   DelegationResult,
@@ -38,6 +39,8 @@ export function createChildRunStarter(
   parentSession: Session,
 ): NonNullable<ToolContext['childRunStarter']> {
   const settings = deps.store.agentSettings.get()
+  const childTimeout = childLimit(settings, 'maxChildTimeoutSec')
+  const childTokens = childLimit(settings, 'maxChildTotalTokens')
   const budget =
     deps.budget ??
     new DelegationBudgetCoordinator(
@@ -75,7 +78,7 @@ export function createChildRunStarter(
     ) {
       throw new ChildLimitError(
         'child_limit_depth',
-        `子 Agent 委派深度超过上限 ${Math.min(settings.maxDepth ?? 4, 4)}`,
+        `子 Agent 委派深度超过上限 ${Math.min(settings.maxDepth ?? 4, 4)}。可前往「设置 → Agent 运行时 → 子 Agent 委派」调整「最大委派深度」（硬上限 4 层）。`,
       )
     }
     const template = spawn.templateId
@@ -129,9 +132,9 @@ export function createChildRunStarter(
       allowedTools: [...allowedTools],
       instance,
       reasoningEffort: roleModel.profile.reasoningEffort,
-      timeoutSec: settings.maxChildTimeoutSec,
-      tokenBudget: settings.maxChildTotalTokens,
-      treeRunBudget: settings.maxChildRuns,
+      timeoutSec: childTimeout,
+      tokenBudget: childTokens,
+      treeRunBudget: childLimit(settings, 'maxChildRuns'),
       treeParallelBudget: settings.maxParallelChildren,
     }
     let setup
@@ -189,17 +192,17 @@ export function createChildRunStarter(
     signal.addEventListener('abort', abort, { once: true })
     if (signal.aborted) abort()
     const timer =
-      settings.maxChildTimeoutSec === null
+      childTimeout === null
         ? undefined
         : setTimeout(
             () =>
               controller.abort(
                 new ChildLimitError(
                   'child_timeout',
-                  `子 Run 超时(${settings.maxChildTimeoutSec}s)`,
+                  `子 Agent 运行超过 ${childTimeout} 秒。${limitSettingsHint('单个子 Agent 超时（秒）', '子 Agent 委派')}`,
                 ),
               ),
-            settings.maxChildTimeoutSec * 1000,
+            childTimeout * 1000,
           )
     try {
       return await new Promise<DelegationResult>((resolve, reject) => {
@@ -236,7 +239,7 @@ export function createChildRunStarter(
           allowedTools,
           isolatedContext: true,
           parentSignal: controller.signal,
-          childTokenBudget: settings.maxChildTotalTokens ?? undefined,
+          childTokenBudget: childTokens ?? undefined,
           onResult: (summary) => {
             const result = deps.store.delegations.buildStructuredResult(
               run.id,

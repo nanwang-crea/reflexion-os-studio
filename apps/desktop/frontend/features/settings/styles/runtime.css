@@ -117,3 +117,14 @@
     flex-wrap: wrap;
   }
 }
+
+.runtime-limit-overview {
+  display: grid;
+  gap: 10px;
+}
+.runtime-limit-overview p {
+  margin: 0;
+}
+.runtime-limit-overview > button {
+  justify-self: start;
+}

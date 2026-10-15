@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { operationCommands } from './operations.js'
 import { runtimeCommands } from './commands/runtime.js'
+import { chatArchiveCommands } from './commands/chat-archive.js'
 import { chatCommands } from './commands/chat.js'
 import { agentCommands } from './commands/agent.js'
 import { agentTemplateCommands } from './commands/agent-template.js'
@@ -26,6 +27,7 @@ export const CommandSchemaRegistry = {
   ...runtimeCommands,
   ...operationCommands,
   ...chatCommands,
+  ...chatArchiveCommands,
   ...agentCommands,
   ...agentTemplateCommands,
   ...delegationCommands,
