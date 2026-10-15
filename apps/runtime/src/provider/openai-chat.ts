@@ -1,3 +1,4 @@
+import { reportToolProgress } from './tool-progress.js'
 import { ProviderRequestTimeout } from './request-timeout.js'
 import { streamReaderCleanup } from './stream-reader.js'
 import { chatRequestBody } from './openai-chat/projection.js'
@@ -232,6 +233,12 @@ export async function streamOpenAIChat(
           existing.arguments += chunk.function.arguments
         }
         toolCallByIndex.set(index, existing)
+        if (providerToCanonical.has(existing.name))
+          reportToolProgress(options, {
+            ...existing,
+            id: existing.id || `index-${index}`,
+            name: providerToCanonical.get(existing.name)!,
+          })
       }
       rawFinishReason = parsed.choices?.[0]?.finish_reason
       const mapped = mapFinishReason(rawFinishReason)

@@ -1,3 +1,4 @@
+import { reportToolProgress } from './tool-progress.js'
 import { ProviderRequestTimeout } from './request-timeout.js'
 import { streamReaderCleanup } from './stream-reader.js'
 import { buildContinuationToolMapping } from './continuation.js'
@@ -203,7 +204,16 @@ export async function streamOpenAIResponses(
         return
       }
 
-      if (streamedCalls.handle(parsed)) return
+      if (streamedCalls.handle(parsed)) {
+        for (const call of streamedCalls.values()) {
+          if (providerToCanonical.has(call.name))
+            reportToolProgress(options, {
+              ...call,
+              name: providerToCanonical.get(call.name)!,
+            })
+        }
+        return
+      }
 
       if (
         eventType === 'response.completed' ||

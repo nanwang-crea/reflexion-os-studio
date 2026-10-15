@@ -41,6 +41,8 @@ interface AssistantMessageProps {
   runActivity?: RunActivity
   /** reasoning 已在 Run 过程时间线中展示时隐藏，最终消息只保留正文。 */
   hideReasoning?: boolean
+  /** A concrete Run status replaces the generic spinner and stale text caret. */
+  hideActivity?: boolean
   /** 该消息的流式正文增量缓存；undefined 表示不在本次流式窗口内。 */
   streamingText: string | undefined
   /** 该消息的流式思考增量缓存。 */
@@ -96,11 +98,13 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
   )
   const reasoningText = props.streamingReasoning ?? props.message.reasoning
   // 正文流式光标：只看该消息是否仍在流式增量（不参与阶段判断）。
-  const answerStreaming = props.runActive && props.streamingText !== undefined
+  const answerStreaming =
+    props.runActive && !props.hideActivity && props.streamingText !== undefined
   // Run 级阶段由事件驱动（runActivity），不再靠内容有无猜测阶段。
   // 连接 Provider 后首个增量到达前的空窗：用呼吸点告知“没有卡住”；
   // Provider 重试期间改由本组件的内联重试状态行表达，避免双状态指示。
   const waiting =
+    !props.hideActivity &&
     props.runActive &&
     props.runActivity?.retry === undefined &&
     contentText === '' &&

@@ -1,3 +1,4 @@
+import { RunActivityStatus } from './RunActivityStatus'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
   Delegation,
@@ -150,6 +151,13 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
           message={props.finalItem.message}
           toolCalls={props.finalItem.toolCalls}
           hideReasoning={true}
+          hideActivity={
+            props.runActivity?.phase === 'waiting' ||
+            props.runActivity?.phase === 'preparing_tool' ||
+            props.delegations.some(
+              (item) => item.status === 'pending' || item.status === 'running',
+            )
+          }
           runActive={props.runActive}
           runActivity={props.runActivity}
           streamingText={props.streaming[props.finalItem.message.id]}
@@ -164,6 +172,11 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
           onResourceClick={props.onResourceClick}
         />
       )}
+      <RunActivityStatus
+        active={props.runActive}
+        activity={props.runActivity}
+        delegations={props.delegations}
+      />
       <ChangedFiles
         files={changedFiles}
         projectId={props.projectId}

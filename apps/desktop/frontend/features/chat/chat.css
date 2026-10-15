@@ -1904,3 +1904,25 @@
   border-left: 1px solid var(--border);
   margin-left: 8px;
 }
+
+.run-activity-status {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.run-child-wait {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  text-align: left;
+  white-space: normal;
+}

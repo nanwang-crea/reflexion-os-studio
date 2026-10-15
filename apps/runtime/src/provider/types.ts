@@ -43,6 +43,8 @@ export interface StreamChatOptions {
   }) => void
   /** Agent 侧 canonical 工具声明；适配层投影为各 API 方言格式。 */
   tools?: ToolSpec[]
+  /** Progress only; incomplete arguments must never execute. */
+  onToolCallProgress?: (call: StreamedToolCall) => void
 }
 
 export interface StreamChatResult {

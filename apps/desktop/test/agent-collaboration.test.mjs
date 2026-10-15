@@ -1,4 +1,4 @@
-import { verifyDelegationLayout } from './agent-ui/delegation-layout.mjs'
+import { activityFixture, verifyRunLayouts } from './agent-ui/run-activity.mjs'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { build } from 'esbuild'
@@ -94,6 +94,7 @@ window.showTeamApproval=()=>root.render(<ApprovalCard focusable={false} onChoose
 window.showThinking=()=>{let text='一行思考内容。\\n'.repeat(300);function Thinking(){const [value,setValue]=React.useState(text);window.appendThinking=()=>setValue(v=>v+'新的思考。\\n');return <WorkSummary reasoningText={value} phase="thinking" toolCalls={[]} runActive={true} runDurationMs={null}/>};root.render(<Thinking/>)};
 window.showTrace=()=>{window.traceRunning=true;root.render(<ChildAgentTrace delegation={{...window.tree[0],task:'很长的任务说明。'.repeat(600)}} onClose={()=>root.render(null)}/>)};
 window.showDelegations=()=>root.render(<div style={{maxWidth:900,margin:'0 auto'}}><DelegationList runActive={false} items={['completed','failed','cancelled','running'].map((status,i)=>({...window.tree[0],id:'layout-'+i,status,agentInstance:{...window.tree[0].agentInstance,name:'大纲架构 · 时差以及很长的中文角色标题'},task:'【剧本杀大纲架构】把选题《时差》扩展为完整稿件。'.repeat(20),error:status==='failed'?'provider stream failed: TimeoutError: The operation was aborted due to timeout '+ 'long_unbroken_error_'.repeat(30):status==='cancelled'?'父 Run 已取消':null}))}/></div>);
+${activityFixture}
 window.clearUI=()=>root.render(null);window.showRoles();
 `,
       },
@@ -464,7 +465,7 @@ window.clearUI=()=>root.render(null);window.showRoles();
       'q2',
     )
     await page.screenshot({ path: '/tmp/reflexion-question-scroll.png' })
-    await verifyDelegationLayout(page)
+    await verifyRunLayouts(page)
     await page.evaluate(() => window.showTeamApproval())
     await page.getByRole('button', { name: '查看详情', exact: true }).click()
     const preview = page.getByRole('region', {

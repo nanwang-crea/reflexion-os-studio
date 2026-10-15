@@ -1,3 +1,4 @@
+import { reportToolProgress } from './tool-progress.js'
 import { ProviderRequestTimeout } from './request-timeout.js'
 import { streamReaderCleanup } from './stream-reader.js'
 import { buildContinuationToolMapping } from './continuation.js'
@@ -208,6 +209,16 @@ export async function streamAnthropic(
                 : '',
           })
         }
+        const call = toolCallById.get(currentToolId)
+        if (
+          block?.type === 'tool_use' &&
+          call &&
+          providerToCanonical.has(call.name)
+        )
+          reportToolProgress(options, {
+            ...call,
+            name: providerToCanonical.get(call.name)!,
+          })
         return
       }
 
@@ -238,6 +249,11 @@ export async function streamAnthropic(
           }
           existing.arguments += String(delta.partial_json ?? '')
           toolCallById.set(currentToolId, existing)
+          if (providerToCanonical.has(existing.name))
+            reportToolProgress(options, {
+              ...existing,
+              name: providerToCanonical.get(existing.name)!,
+            })
         }
         return
       }

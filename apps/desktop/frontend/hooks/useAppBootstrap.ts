@@ -228,6 +228,14 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           scheduleToolRefresh,
           scheduleDelegationRefresh,
         } = latest.current
+        if (event.type === 'run.model_activity') {
+          activity.setRunActivity(event.runId, {
+            phase: event.phase,
+            toolName: event.toolName,
+            taskName: event.taskName,
+          })
+          return
+        }
         if (event.type === 'message.reset') {
           cache.applyReset(event.messageId)
           return
@@ -253,7 +261,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           return
         }
         if (event.type === 'run.started') {
-          activity.setRunActivity(event.runId, { phase: 'thinking' })
+          activity.setRunActivity(event.runId, { phase: 'waiting' })
           sessionTracking.onRunStarted(event.runId, event.run.sessionId)
           // Runtime 侧自动出队（队列 pump / sendNow）产生的新消息不经前端
           // 发送路径，补一次刷新让消息列表即时跟上；仅限当前查看的会话，

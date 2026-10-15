@@ -237,6 +237,7 @@ export function ChildAgentTrace({
                   processItems={block.processItems}
                   finalItem={block.finalItem}
                   delegations={[]}
+                  runActivity={live.runActivities[block.runId]}
                   runActive={activeRunIds.has(block.runId)}
                   streaming={
                     activeRunIds.has(block.runId)

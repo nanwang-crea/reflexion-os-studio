@@ -36,3 +36,5 @@ Skill 生命周期：`discover → validate → install → enable → load → 
 - 技能页支持拖拽、本地选择、Git URL、权限预览确认、更新、启停、卸载与重扫。
 
 内置 `$skill-creator` 通过 `skill.save` 保存/更新完整包，审批展示正文及文本资源；`skill.prepare` 提供按 Run 隔离的临时快照、清单、按需文本与实际 Node 路径。资源不是 Asset Store 资产。详细限制和验证见 [Skill 创建与脚本资源](SKILL-CREATOR.md)。
+
+协作过程的可见状态来自真实执行事件：模型开始请求时显示等待响应；工具参数流到达时通过 run.model_activity 显示准备调用，完整参数可解析后才补充子任务名称。此阶段不创建 Delegation、不执行未完成 JSON、不传输参数正文。真实子任务运行时显示活动数量并可打开已有执行轨迹，结束/失败/取消后移除等待状态。参数进度按调用身份和显示信息去重，禁止逐 token 驱动界面刷新。

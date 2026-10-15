@@ -12,3 +12,5 @@ import './provider/native-runner.test.mjs'
 import './provider/native-protocol.test.mjs'
 
 import './provider/stream-liveness.test.mjs'
+
+import './provider/tool-progress.test.mjs'

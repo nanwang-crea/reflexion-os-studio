@@ -1,3 +1,4 @@
+import { createModelActivityReporter } from './model-activity.js'
 import { redactBrowserCalls } from './browser-admission.js'
 import { resolveOutputBudget } from '../../provider/output-budget.js'
 import { resolveModelImages } from '../context/model-images.js'
@@ -94,6 +95,12 @@ export async function executeModelTurn(
     store.messages.markStreaming(draft.id)
   }
 
+  const activity = createModelActivityReporter(emitter, draft.id)
+  emitter.next({
+    type: 'run.model_activity',
+    messageId: draft.id,
+    phase: 'waiting',
+  })
   const outputBudget = resolveOutputBudget(provider)
   const result = await streamChat(
     {
@@ -108,6 +115,10 @@ export async function executeModelTurn(
         signal,
       ),
       tools: registry.specs(),
+      onToolCallProgress: (call) => {
+        markStreaming()
+        activity.report(call)
+      },
       ...(provider.reasoningEffort !== undefined
         ? { reasoningEffort: provider.reasoningEffort }
         : {}),
@@ -124,6 +135,7 @@ export async function executeModelTurn(
         ? { timeoutMs: provider.timeoutMs }
         : {}),
       onRetry: ({ attempt, maxRetries, reason, waitMs }) => {
+        activity.reset()
         draft.content = ''
         draft.reasoning = ''
         chunkSeq = 0

@@ -1,11 +1,13 @@
 import { useCallback, useRef, useState } from 'react'
 
 /** Run 级活动阶段：由事件驱动，对齐 Codex——不靠“内容长什么样”猜状态。 */
-export type RunPhase = 'thinking' | 'answering' | 'tool'
+export type RunPhase =
+  'thinking' | 'answering' | 'tool' | 'waiting' | 'preparing_tool'
 export interface RunActivity {
   phase: RunPhase
   /** phase === 'tool' 时正在执行的工具名。 */
   toolName?: string
+  taskName?: string
   /** 当前正在进行的 Provider 重试。 */
   retry?: {
     attempt: number
@@ -33,6 +35,14 @@ export function useRunActivity(): {
   >({})
   const runActivitiesRef = useRef<Record<string, RunActivity>>({})
   const setRunActivity = useCallback((runId: string, activity: RunActivity) => {
+    const current = runActivitiesRef.current[runId]
+    if (
+      current?.phase === activity.phase &&
+      current.toolName === activity.toolName &&
+      current.taskName === activity.taskName &&
+      current.retry === activity.retry
+    )
+      return
     const next = {
       ...runActivitiesRef.current,
       [runId]: activity,

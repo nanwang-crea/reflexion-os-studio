@@ -144,6 +144,13 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     parts: z.array(ContentPartSchema).optional(),
   }),
   RunEnvelopeSchema.extend({
+    type: z.literal('run.model_activity'),
+    messageId: z.string().min(1),
+    phase: z.enum(['waiting', 'preparing_tool']),
+    toolName: z.string().min(1).max(200).optional(),
+    taskName: z.string().min(1).max(80).optional(),
+  }),
+  RunEnvelopeSchema.extend({
     type: z.literal('run.started'),
     run: RunSchema,
   }),
