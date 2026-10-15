@@ -57,6 +57,7 @@ export function WorkSummary(props: WorkSummaryProps): React.JSX.Element {
   const active = props.runActive
   const thinkingActive = active && props.phase === 'thinking'
   const [open, setOpen] = useState(false)
+  const followThinking = useRef(true)
   const bodyRef = useRef<HTMLDivElement>(null)
   // 上一次的 active：只在状态翻转时同步 open，避免相同值的 setState 触发重渲染。
   const prevActiveRef = useRef<boolean | null>(null)
@@ -74,7 +75,7 @@ export function WorkSummary(props: WorkSummaryProps): React.JSX.Element {
 
   // 思考进行中正文自动滚到底部，让用户持续看到新思考内容。
   useEffect(() => {
-    if (!open || !thinkingActive) return
+    if (!open || !thinkingActive || !followThinking.current) return
     const el = bodyRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [props.reasoningText, open, thinkingActive])
@@ -110,7 +111,18 @@ export function WorkSummary(props: WorkSummaryProps): React.JSX.Element {
           {props.reasoningText !== '' && (
             <div className="work-thinking">
               <div className="work-thinking-label">思考</div>
-              <div className="work-thinking-text" ref={bodyRef}>
+              <div
+                className="work-thinking-text"
+                ref={bodyRef}
+                onWheel={(event) => {
+                  if (event.deltaY < 0) followThinking.current = false
+                }}
+                onScroll={(event) => {
+                  const el = event.currentTarget
+                  followThinking.current =
+                    el.scrollHeight - el.scrollTop - el.clientHeight < 2
+                }}
+              >
                 {props.reasoningText}
               </div>
             </div>

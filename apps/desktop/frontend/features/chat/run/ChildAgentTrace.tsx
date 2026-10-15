@@ -13,6 +13,7 @@ import {
 import type { HistoryCursor } from '@reflexion-os-studio/runtime-client'
 import { ReadOnlyDialog } from '../../../components/dialogs/ReadOnlyDialog'
 import { RunBlock } from './RunBlock'
+import { useChildTraceStreaming } from './useChildTraceStreaming'
 
 interface ChildAgentTraceProps {
   delegation: Delegation
@@ -27,6 +28,12 @@ export function ChildAgentTrace({
   const scrollRef = useRef<HTMLDivElement>(null)
   const [data, setData] = useState<SessionData | null>(null)
   const [selected, setSelected] = useState(delegation)
+  const live = useChildTraceStreaming(selected.childSessionId, [
+    ...(selected.childRunId ? [selected.childRunId] : []),
+    ...(data?.session?.id === selected.childSessionId
+      ? data.runs.map((run) => run.id)
+      : []),
+  ])
   const [tree, setTree] = useState<Delegation[]>([])
   const [error, setError] = useState<string | null>(null)
   const running = tree.some((item) =>
@@ -60,16 +67,17 @@ export function ChildAgentTrace({
       return
     }
     let disposed = false
-    let requestId = 0
+    let refreshing = false
     setData((current) => (current?.session?.id === sessionId ? current : null))
     const refresh = (): void => {
-      const request = ++requestId
+      if (refreshing) return
+      refreshing = true
       void Promise.all([
         getSessionData(sessionId),
         getDelegationTree(rootRunId),
       ])
         .then(([next, nextTree]) => {
-          if (!disposed && request === requestId) {
+          if (!disposed) {
             setData((current) => mergeLatestHistory(current, next))
             setTree(nextTree)
             setSelected(
@@ -82,6 +90,9 @@ export function ChildAgentTrace({
         .catch((caught) => {
           if (!disposed)
             setError(caught instanceof Error ? caught.message : String(caught))
+        })
+        .finally(() => {
+          refreshing = false
         })
     }
     refresh()
@@ -178,7 +189,10 @@ export function ChildAgentTrace({
           <span className={`delegation-status ${selected.status}`}>
             {selectedStatus}
           </span>
-          <div>{selected.task}</div>
+          <details className="child-trace-task">
+            <summary>查看任务说明</summary>
+            <div>{selected.task}</div>
+          </details>
         </div>
       }
     >
@@ -224,8 +238,16 @@ export function ChildAgentTrace({
                   finalItem={block.finalItem}
                   delegations={[]}
                   runActive={activeRunIds.has(block.runId)}
-                  streaming={streaming}
-                  streamingReasoning={streamingReasoning}
+                  streaming={
+                    activeRunIds.has(block.runId)
+                      ? { ...streaming, ...live.streaming }
+                      : {}
+                  }
+                  streamingReasoning={
+                    activeRunIds.has(block.runId)
+                      ? { ...streamingReasoning, ...live.streamingReasoning }
+                      : {}
+                  }
                   runDurationMs={
                     finalMessage
                       ? computeRunDurationMs(run, finalMessage)

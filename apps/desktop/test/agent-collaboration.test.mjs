@@ -39,7 +39,10 @@ test('roles configure real model/scope fields; collaboration shows canonical tre
               providers: providersApi,
               projects: projectsApi,
               skills: skillsApi,
-              sessions: sessionsApi,
+              sessions: sessionsApi.replaceAll(
+                "status:'completed'",
+                "status:window.traceRunning?'running':'completed'",
+              ),
             }))
               build.onLoad(
                 {
@@ -73,6 +76,8 @@ import './frontend/features/chat/chat.css';
 import {InteractionQueue} from './frontend/features/chat/interactions/InteractionQueue';
 import {ApprovalCard} from './frontend/features/chat/approvals/ApprovalCard';
 import './frontend/features/chat/approvals/approvals.css';
+import {WorkSummary} from './frontend/features/chat/run/WorkSummary';
+import {ChildAgentTrace} from './frontend/features/chat/run/ChildAgentTrace';
 import {AgentRolesView} from './frontend/features/agents/AgentRolesView';
 import {CollaborationPanel} from './frontend/features/chat/collaboration/CollaborationPanel';
 import {useSkillCatalog} from './frontend/hooks/useAppSurfaces';
@@ -84,6 +89,8 @@ window.showCollaboration=()=>root.render(<React.Profiler id="collaboration" onRe
 window.showCatalog=()=>{function Catalog(){const [project,setProject]=React.useState('project');window.catalogProject=setProject;const skills=useSkillCatalog(true,project);return <div>{skills.map(skill=><p key={skill.id}>{skill.id}</p>)}</div>};root.render(<Catalog/>)};
 window.showQuestions=()=>root.render(<div className="chat-view" style={{height:'100vh'}}><div className="chat-scroll"><p>实际对话正文</p></div><div className="composer-wrap"><InteractionQueue interactions={[{interactionId:'questions',kind:'user_question',questions:Array.from({length:3},(_,i)=>({id:'q'+i,header:'问题'+i,question:'请选择写作协作方式',multiSelect:false,options:Array.from({length:3},(_,j)=>({id:'o'+j,label:'选择'+i+'-'+j,description:'用于写作协作的方法说明。'.repeat(10)}))}))}]} onSubmit={async(id,answers)=>{window.questionAnswers=answers;return false}}/><div style={{height:80}}>输入框</div></div></div>);
 window.showTeamApproval=()=>root.render(<ApprovalCard focusable={false} onChoose={()=>{}} approval={{toolCallId:'team',runId:'root-run',operation:'agent_team.create',summary:'创建写作团队',subject:{kind:'operation',operation:'agent_team.create'},choices:[{id:'allow-once',decision:'approved',presentation:'primary',label:'允许一次'},{id:'deny',decision:'denied',presentation:'secondary',label:'拒绝'}],context:{permissionPreset:'workspace-read',sandbox:'workspace-write',workspaceScope:'inside',displayCwd:'…/project',network:false,escalation:false,sandboxProvider:null,review:JSON.stringify({scope:'project',roles:Array.from({length:8},(_,i)=>({name:'Role '+i,modelBinding:{mode:'inherit'},instructions:'明确职责、输入输出、交接和验收标准。'.repeat(40)}))},null,2)}}}/>);
+window.showThinking=()=>{let text='一行思考内容。\\n'.repeat(300);function Thinking(){const [value,setValue]=React.useState(text);window.appendThinking=()=>setValue(v=>v+'新的思考。\\n');return <WorkSummary reasoningText={value} phase="thinking" toolCalls={[]} runActive={true} runDurationMs={null}/>};root.render(<Thinking/>)};
+window.showTrace=()=>{window.traceRunning=true;root.render(<ChildAgentTrace delegation={{...window.tree[0],task:'很长的任务说明。'.repeat(600)}} onClose={()=>root.render(null)}/>)};
 window.clearUI=()=>root.render(null);window.showRoles();
 `,
       },
@@ -335,6 +342,57 @@ window.clearUI=()=>root.render(null);window.showRoles();
     )
     await page.evaluate(() => window.clearUI())
     await page.waitForFunction(() => window.listenerCount() === 0)
+    await page.evaluate(() => window.showTrace())
+    await page.getByText('Synthetic review result', { exact: true }).waitFor()
+    assert.ok(
+      (await page
+        .locator('.child-trace-body')
+        .evaluate((el) => el.clientHeight)) > 300,
+    )
+    await page.getByText('查看任务说明', { exact: true }).click()
+    assert.ok(
+      (await page
+        .locator('.child-trace-body')
+        .evaluate((el) => el.clientHeight)) > 200,
+    )
+    await page.evaluate(() => {
+      window.emitAgentEvent({
+        type: 'message.delta',
+        runId: 'unrelated',
+        messageId: 'assistant',
+        delta: 'WRONG SESSION',
+      })
+      window.emitAgentEvent({
+        type: 'message.delta',
+        runId: 'child-run',
+        messageId: 'assistant',
+        delta: 'Live child output',
+      })
+    })
+    await page.getByText('Live child output', { exact: true }).waitFor()
+    assert.equal(
+      await page.getByText('WRONG SESSION', { exact: true }).count(),
+      0,
+    )
+    await page.waitForTimeout(200)
+    await page.getByText('Live child output', { exact: true }).waitFor()
+    await page.evaluate(() => window.clearUI())
+    await page.waitForFunction(() => window.listenerCount() === 0)
+    await page.evaluate(() => window.showThinking())
+    const thinking = page.locator('.work-thinking-text')
+    await thinking.waitFor()
+    await thinking.hover()
+    await page.mouse.wheel(0, -120)
+    await page.waitForTimeout(100)
+    const thinkingTop = await thinking.evaluate((el) => el.scrollTop)
+    await page.evaluate(() => window.appendThinking())
+    await page.waitForTimeout(100)
+    assert.equal(
+      await thinking.evaluate((el) => el.scrollTop),
+      thinkingTop,
+      'new reasoning must not pull a reader back to the bottom',
+    )
+    await page.evaluate(() => window.clearUI())
     await page.evaluate(() => window.showCatalog())
     await page.getByText('project-skill', { exact: true }).waitFor()
     await page.evaluate(() => {

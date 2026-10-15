@@ -194,11 +194,15 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
     [visibleRuns],
   )
 
+  const lastScrollTop = useRef(0)
   const handleScroll = useCallback((): void => {
     const el = scrollRef.current
     if (!el) return
+    const movingUp = el.scrollTop < lastScrollTop.current
+    lastScrollTop.current = el.scrollTop
     setPinned(
-      el.scrollHeight - el.scrollTop - el.clientHeight < PIN_THRESHOLD_PX,
+      !movingUp &&
+        el.scrollHeight - el.scrollTop - el.clientHeight < PIN_THRESHOLD_PX,
     )
   }, [])
 
@@ -334,7 +338,14 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
 
   return (
     <div className="chat-view">
-      <div className="chat-scroll" ref={scrollRef} onScroll={handleScroll}>
+      <div
+        className="chat-scroll"
+        ref={scrollRef}
+        onScroll={handleScroll}
+        onWheel={(event) => {
+          if (event.deltaY < 0) setPinned(false)
+        }}
+      >
         <div className="transcript">
           {sessionId && props.sessionData?.nextBefore && (
             <HistoryLoader

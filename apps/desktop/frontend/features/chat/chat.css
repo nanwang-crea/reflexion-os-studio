@@ -1605,7 +1605,14 @@
   word-break: break-word;
 }
 
+.child-trace-task > div {
+  max-height: 25dvh;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
 .child-trace-body {
+  min-height: 0;
   overflow-anchor: none;
   flex: 1;
   overflow: auto;
