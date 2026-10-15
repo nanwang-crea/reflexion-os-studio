@@ -271,8 +271,14 @@ export async function executeToolCall(
         : undefined,
     agent: agentContextForRun(store, run, input.rootRunId),
   })
-  if (request.name === 'agent_team.create') {
-    context.review = teamApprovalReview(args)
+  if (
+    request.name.startsWith('agent_team.') &&
+    request.name !== 'agent_team.inspect'
+  ) {
+    context.review = teamApprovalReview(args, request.name, {
+      store,
+      projectId,
+    })
   }
   if (request.name === 'skill.save')
     context.review = skillSaveReview({ store, projectId }, args)

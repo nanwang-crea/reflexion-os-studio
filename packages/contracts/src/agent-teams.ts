@@ -30,9 +30,32 @@ export const AgentTeamCreateInputSchema = z
   })
   .strict()
 
+const AgentTeamTargetSchema = AgentTeamCreateInputSchema.pick({
+  teamId: true,
+  scope: true,
+}).extend({
+  expectedRevision: z.string().regex(/^[a-f0-9]{64}$/),
+})
+
+export const AgentTeamUpdateInputSchema = AgentTeamTargetSchema.extend({
+  roles: z
+    .array(
+      AgentTeamRoleInputSchema.extend({
+        id: z.string().min(1).optional(),
+      }).strict(),
+    )
+    .max(8)
+    .default([]),
+  removeRoleIds: z.array(z.string().min(1)).max(8).default([]),
+}).strict()
+
+export const AgentTeamDeleteInputSchema = AgentTeamTargetSchema.strict()
+
 export type AgentTeamCreateInput = z.infer<typeof AgentTeamCreateInputSchema>
 
 export const agentTeamToolParameters = {
   inspect: z.toJSONSchema(AgentTeamInspectInputSchema, { io: 'input' }),
+  update: z.toJSONSchema(AgentTeamUpdateInputSchema, { io: 'input' }),
+  delete: z.toJSONSchema(AgentTeamDeleteInputSchema, { io: 'input' }),
   create: z.toJSONSchema(AgentTeamCreateInputSchema, { io: 'input' }),
 }

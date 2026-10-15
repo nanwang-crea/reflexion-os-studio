@@ -16,6 +16,10 @@ const TOOL_LABELS: Record<string, string> = {
   'browser.navigate': '打开网页',
   'browser.read': '读取网页',
   'browser.close': '关闭网页',
+  'agent_team.inspect': '查看团队角色',
+  'agent_team.create': '创建团队角色',
+  'agent_team.update': '修改团队角色',
+  'agent_team.delete': '删除团队',
   'skill.use': '加载技能',
   get_current_time: '获取时间',
 }

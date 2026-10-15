@@ -206,6 +206,8 @@ export function buildApprovalSubject(
         digest: shellDigest(shell),
       }
     }
+    case 'agent_team.update':
+    case 'agent_team.delete':
     case 'agent_team.create':
     case 'skill.save': {
       return {

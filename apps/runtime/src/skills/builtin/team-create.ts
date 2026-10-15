@@ -3,19 +3,25 @@ import type { SkillDefinition } from '../types.js'
 export const TEAM_CREATE_SKILL: SkillDefinition = {
   manifest: {
     id: 'team-create',
-    name: '创建协作团队',
-    version: '1.0.1',
+    name: '管理协作团队',
+    version: '1.1.0',
     description:
-      '根据目标设计团队职责、交接和验收要求，复用可见角色或经审批批量保存新角色；使用内置 Runtime 工具直接落地到 Agent 配置。',
-    tools: ['agent_team.inspect', 'agent_team.create', 'ask_user'],
+      '设计团队职责、交接和验收要求，复用角色，或经审批创建、增补、修改和删除团队角色；直接落地到 Agent 配置。',
+    tools: [
+      'agent_team.inspect',
+      'agent_team.create',
+      'agent_team.update',
+      'agent_team.delete',
+      'ask_user',
+    ],
     argumentHint: '<团队用途与目标>',
     whenToUse:
-      '用户希望创建、预设或保存开发、写作、调研等可复用 Agent 团队时。',
+      '用户希望创建、预设、修改或删除开发、写作、调研等可复用 Agent 团队时。',
     license: null,
     metadata: {},
   },
   instructions: `
-# 创建团队
+# 管理团队
 
 ## 查询真实配置
 先调用 agent_team.inspect。角色保存在应用数据库中，不要搜索工作区寻找角色模板文件，不要猜测模型或模板 ID。查询返回当前项目可见团队、完整角色指令、工具权限、模型能力和实际工作区。
@@ -33,7 +39,7 @@ export const TEAM_CREATE_SKILL: SkillDefinition = {
 
 ## 保存与交付
 先在对话给出简明角色配置和交接方案，再调用 agent_team.create，传入 teamId、scope、roles。工具走正式审批；不要为同一保存再增加 ask_user 确认。用户拒绝后不重试绕过。只有工具成功才声明角色已保存；批量保存失败不会留下部分角色。
-同范围同团队标识已经存在时使用现有角色，需编辑模型/权限等可在 Agent 页进行；不要以改名反复创建重复团队，不覆盖或删除旧配置。
+修改已有团队先 inspect 获取完整成员和 revision，用 agent_team.update 携带 teamId、scope、expectedRevision。roles 不带 id 新增、带真实 id 更新完整角色配置；不提及的成员保留，removeRoleIds 显式移除。删除团队用 agent_team.delete 携带相同范围和 expectedRevision。独占成员模板删除，多团队成员只解除当前团队关系；共享成员的模型或职责修改影响其他团队，须说明。先展示具体变更再走工具审批，不转交用户手工录入，也不通过新建同名团队绕过。配置变更冲突时重新 inspect、核对后再次审批；拒绝不重试。历史和运行中的实例不会改变。
 成功后列出团队、实际角色 ID、职责、模型继承/预设、工具上限和下一步使用方法：$agent-collaboration 加目标。团队配置在 Agent 页管理，不额外生成假配置文件。
 产物保存目录遵循用户和已有项目约定；没有约定则选择与任务有关的相对路径并告知用户，不为建立团队遍历整个项目，也不在创建角色时生成空稿件。
 `.trim(),

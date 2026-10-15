@@ -4,7 +4,7 @@ export const AGENT_COLLABORATION_SKILL: SkillDefinition = {
   manifest: {
     id: 'agent-collaboration',
     name: 'Agent 协作',
-    version: '1.1.2',
+    version: '1.1.3',
     description:
       '根据用户目标规划、选择角色并动态协作，按依赖交接，独立验证并交付；不要求用户手动编排。',
     tools: [
@@ -24,7 +24,7 @@ export const AGENT_COLLABORATION_SKILL: SkillDefinition = {
 
 ## 团队选择
 本 Skill 主要供主 Agent 调度。子 Agent 仅执行收到的任务与相关方法，不具备 agent_team 管理工具时使用父级已给出的角色和上下文，不尝试创建或查询团队。
-先调用 agent_team.inspect，按用户指定的团队、当前项目和目标选择真实角色。团队是 domains 中 team:<teamId> 的角色集合；全局团队和项目团队按 projectId 区分。同名时优先当前项目。角色模板在应用存储中，不要到工作区寻找配置文件；只为理解实际素材、代码和产物约定读取必要文件。
+需要增删成员或修改角色配置时加载 team-create，使用 update/delete 正式审批落地，不要求用户手工录入。先调用 agent_team.inspect，按用户指定的团队、当前项目和目标选择真实角色。团队是 domains 中 team:<teamId> 的角色集合；全局团队和项目团队按 projectId 区分。同名时优先当前项目。角色模板在应用存储中，不要到工作区寻找配置文件；只为理解实际素材、代码和产物约定读取必要文件。
 没有合适团队但用户要长期复用时加载 team-create 并创建；只是一次性任务则动态创建角色，不强迫用户保存团队。独立研究、实现/写作和审阅按职责组合，不要求每次使用全部成员。
 检查 enabled、policy.allowedTools、canDelegate、permissionCeiling 与 modelBinding。网络调研需要实际可用的 browser.navigate/read/close；加载 web-research，通过浏览器找真实链接，web.fetch 只读已知 URL。旧用户模板缺少浏览器工具时，由主 Agent 搜索并把可靠资料交给该角色，或请用户在 Agent 页显式调整；不自动改模板权限，也不把浏览器页面身份跨 Run 传递。Worker/Research/Review 内置模板只读，不能让它们撰写文件；任务需要写入时选择有对应工具的作者/实现角色或动态角色，审批仍有效。
 会话显式默认模板会覆盖 task 的 templateId；不要声称不同角色已生效。若它不符合团队任务，说明需要将 Composer 的角色选择改为自动，然后由用户决定；不得修改用户已设定的默认值绕过。

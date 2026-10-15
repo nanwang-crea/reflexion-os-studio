@@ -39,6 +39,7 @@ import { createMcpTool } from './mcp.js'
 import { createLegacyUpdatePlanTool, createManagePlanTool } from './plans.js'
 import { createTaskTool } from './task.js'
 import { createTeamInspectTool } from './team/inspect.js'
+import { createTeamMutationTool } from './team/mutate.js'
 import { createTeamCreateTool } from './team/create.js'
 import { FileReadState } from './read-state.js'
 import { createAskUserTool } from './ask-user.js'
@@ -166,7 +167,12 @@ function alwaysAvailableTools(ctx: ToolContext): ToolDefinition[] {
     createLegacyUpdatePlanTool(ctx),
   ]
   if (ctx.store.runs?.get(ctx.runId)?.parentRunId === null) {
-    tools.push(createTeamInspectTool(ctx), createTeamCreateTool(ctx))
+    tools.push(
+      createTeamInspectTool(ctx),
+      createTeamCreateTool(ctx),
+      createTeamMutationTool(ctx, 'update'),
+      createTeamMutationTool(ctx, 'delete'),
+    )
     if (ctx.skillTools) tools.push(createSkillSaveTool(ctx))
   }
   if (ctx.skillTools) tools.push(createSkillPrepareTool(ctx))

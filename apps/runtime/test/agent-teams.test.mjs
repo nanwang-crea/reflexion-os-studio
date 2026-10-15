@@ -91,7 +91,7 @@ test('both skill registries expose creation and upgraded collaboration methods',
   const service = new SkillPluginService(f.store, f.root, () => {})
   for (const registry of [f.ctx.skills, service.registry]) {
     assert.ok(registry.get('team-create'))
-    assert.equal(registry.get('agent-collaboration').manifest.version, '1.1.2')
+    assert.equal(registry.get('agent-collaboration').manifest.version, '1.1.3')
     assert.ok(
       registry.get('team-create').instructions.includes('agent_team.create'),
     )
@@ -306,99 +306,144 @@ test('saving needs exact one-time approval even with Danger, and cannot execute 
   )
 })
 
-for (const choice of ['allow-once', 'deny'])
-  test(`real agent loop ${choice} records canonical team output without bypassing approval`, async (t) => {
-    const f = fixture(t, false)
-    const approvals = new ApprovalGateway()
-    const events = []
-    const emitter = new RunEventEmitter(f.run.id, (event) => {
-      events.push(event)
-      if (event.type === 'approval.required')
-        queueMicrotask(() => approvals.resolveChoice(event.toolCallId, choice))
-    })
-    const registry = createToolRegistry({ ...f.ctx, emitter })
-    let turn = 0,
-      observed = false
-    const server = createServer(async (req, res) => {
-      let raw = ''
-      for await (const chunk of req) raw += chunk
-      const body = JSON.parse(raw)
-      const delta =
-        ++turn === 1
-          ? {
-              tool_calls: [
-                {
-                  index: 0,
-                  id: 'team-call',
-                  type: 'function',
-                  function: {
-                    name: 'agent_team.create',
-                    arguments: JSON.stringify({ ...input, scope: 'global' }),
+for (const operation of ['create', 'update', 'delete'])
+  for (const choice of ['allow-once', 'deny'])
+    test(`real agent loop ${operation} ${choice} records canonical team output without bypassing approval`, async (t) => {
+      const f = fixture(t, false)
+      const toolName = `agent_team.${operation}`
+      let args = { ...input, scope: 'global' }
+      if (operation !== 'create') {
+        invoke(f.ctx, args)
+        const team = createTeamInspectTool(f.ctx).execute({
+          args: { teamId: 'writing' },
+        }).data.teams[0]
+        args = {
+          teamId: 'writing',
+          scope: 'global',
+          expectedRevision: team.revision,
+          ...(operation === 'update'
+            ? { roles: [{ ...role, name: 'Architect' }] }
+            : {}),
+        }
+      }
+      const approvals = new ApprovalGateway()
+      const events = []
+      const emitter = new RunEventEmitter(f.run.id, (event) => {
+        events.push(event)
+        if (event.type === 'approval.required')
+          queueMicrotask(() =>
+            approvals.resolveChoice(event.toolCallId, choice),
+          )
+      })
+      const registry = createToolRegistry({ ...f.ctx, emitter })
+      let turn = 0,
+        observed = false
+      const server = createServer(async (req, res) => {
+        let raw = ''
+        for await (const chunk of req) raw += chunk
+        const body = JSON.parse(raw)
+        const delta =
+          ++turn === 1
+            ? {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: 'team-call',
+                    type: 'function',
+                    function: {
+                      name: toolName,
+                      arguments: JSON.stringify(args),
+                    },
                   },
-                },
-              ],
-            }
-          : { content: 'Completed.' }
-      if (turn === 2)
-        observed = JSON.stringify(body.messages).includes(
-          choice === 'allow-once' ? 'team:writing' : '拒绝',
+                ],
+              }
+            : { content: 'Completed.' }
+        if (turn === 2)
+          observed = JSON.stringify(body.messages).includes(
+            choice === 'allow-once'
+              ? operation === 'delete'
+                ? 'deleted'
+                : 'team:writing'
+              : '拒绝',
+          )
+        res.writeHead(200, { 'content-type': 'text/event-stream' })
+        res.end(
+          `data: ${JSON.stringify({ choices: [{ delta, finish_reason: turn === 1 ? 'tool_calls' : 'stop' }] })}\n\ndata: [DONE]\n\n`,
         )
-      res.writeHead(200, { 'content-type': 'text/event-stream' })
-      res.end(
-        `data: ${JSON.stringify({ choices: [{ delta, finish_reason: turn === 1 ? 'tool_calls' : 'stop' }] })}\n\ndata: [DONE]\n\n`,
-      )
+      })
+      await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+      try {
+        const assistant = f.store.messages.create({
+          sessionId: f.session.id,
+          runId: f.run.id,
+          role: 'assistant',
+          content: '',
+          status: 'pending',
+        })
+        await new RunRunner(f.store).execute({
+          run: f.run,
+          provider: {
+            baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
+            apiKey: 'synthetic-fixture',
+            model: 'fixture',
+            maxRetries: 0,
+          },
+          buildHistory: async () => [
+            { role: 'user', content: 'Create a writing team.' },
+          ],
+          registry,
+          workspaceRoot: null,
+          gate: gate(),
+          approvals,
+          settings: { maxTurns: 3 },
+          controller: new AbortController(),
+          emitter,
+          firstAssistantMessage: assistant,
+        })
+        const team = f.store.agents
+          .list()
+          .filter((role) => role.domains.includes('team:writing'))
+        assert.equal(
+          team.length,
+          operation === 'create'
+            ? choice === 'allow-once'
+              ? 2
+              : 0
+            : operation === 'update'
+              ? choice === 'allow-once'
+                ? 3
+                : 2
+              : choice === 'allow-once'
+                ? 0
+                : 2,
+        )
+        assert.equal(
+          events.filter((event) => event.type === 'approval.required').length,
+          1,
+        )
+        const approval = events.find(
+          (event) => event.type === 'approval.required',
+        )
+        const preview = JSON.parse(approval.context.review)
+        assert.equal(
+          operation === 'create'
+            ? preview.roles[1].name
+            : preview.currentMembers.length,
+          operation === 'create' ? 'Editor' : 2,
+        )
+        assert.equal(approval.choices.length, 2)
+        const [call] = f.store.toolCalls.listByRun(f.run.id)
+        assert.equal(
+          call.status,
+          choice === 'allow-once' ? 'completed' : 'failed',
+        )
+        if (choice === 'allow-once')
+          assert.equal(
+            call.output.data.templates.length,
+            operation === 'create' ? 2 : operation === 'update' ? 1 : 0,
+          )
+        assert.equal(observed, true)
+      } finally {
+        await new Promise((resolve) => server.close(resolve))
+      }
     })
-    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
-    try {
-      const assistant = f.store.messages.create({
-        sessionId: f.session.id,
-        runId: f.run.id,
-        role: 'assistant',
-        content: '',
-        status: 'pending',
-      })
-      await new RunRunner(f.store).execute({
-        run: f.run,
-        provider: {
-          baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
-          apiKey: 'synthetic-fixture',
-          model: 'fixture',
-          maxRetries: 0,
-        },
-        buildHistory: async () => [
-          { role: 'user', content: 'Create a writing team.' },
-        ],
-        registry,
-        workspaceRoot: null,
-        gate: gate(),
-        approvals,
-        settings: { maxTurns: 3 },
-        controller: new AbortController(),
-        emitter,
-        firstAssistantMessage: assistant,
-      })
-      const team = f.store.agents
-        .list()
-        .filter((role) => role.domains.includes('team:writing'))
-      assert.equal(team.length, choice === 'allow-once' ? 2 : 0)
-      assert.equal(
-        events.filter((event) => event.type === 'approval.required').length,
-        1,
-      )
-      const approval = events.find(
-        (event) => event.type === 'approval.required',
-      )
-      assert.equal(JSON.parse(approval.context.review).roles[1].name, 'Editor')
-      assert.equal(approval.choices.length, 2)
-      const [call] = f.store.toolCalls.listByRun(f.run.id)
-      assert.equal(
-        call.status,
-        choice === 'allow-once' ? 'completed' : 'failed',
-      )
-      if (choice === 'allow-once')
-        assert.equal(call.output.data.templates.length, 2)
-      assert.equal(observed, true)
-    } finally {
-      await new Promise((resolve) => server.close(resolve))
-    }
-  })

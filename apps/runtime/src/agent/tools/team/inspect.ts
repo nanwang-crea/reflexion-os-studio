@@ -7,6 +7,7 @@ import {
 import type { ToolDefinition } from '@reflexion-os-studio/agent-core'
 import type { ToolContext } from '../shared.js'
 import { INHERITABLE_CHILD_TOOLS } from '../../delegation/instance.js'
+import { teamMembers, teamRevision } from './members.js'
 import { requirePrimaryTeamAccess } from './access.js'
 
 export function createTeamInspectTool(ctx: ToolContext): ToolDefinition {
@@ -72,7 +73,12 @@ export function createTeamInspectTool(ctx: ToolContext): ToolDefinition {
       const data = {
         projectId: ctx.projectId,
         workspaceRoot: ctx.workspaceRoot,
-        teams: [...groups.values()],
+        teams: [...groups.values()].map((group) => ({
+          ...group,
+          revision: teamRevision(
+            teamMembers(ctx, group.projectId, group.teamId),
+          ),
+        })),
         templates,
         models,
         browserAvailable: Boolean(ctx.browser?.enabled),

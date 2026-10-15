@@ -49,6 +49,8 @@ const OPERATION_LABELS: Record<string, string> = {
   'browser.read': '读取渲染页面',
   'browser.close': '关闭 Agent 浏览器',
   sandbox_network: '命令联网',
+  'agent_team.update': '修改团队角色',
+  'agent_team.delete': '删除团队',
   'agent_team.create': '保存团队角色',
   'skill.save': '保存技能',
 }
