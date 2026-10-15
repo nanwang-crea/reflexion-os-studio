@@ -15,11 +15,18 @@ const READ_TOOLS = [
   'file.grep',
 ]
 
-function readOnlyPolicy(canDelegate: boolean): AgentDefinition['policy'] {
+function readOnlyPolicy(
+  canDelegate: boolean,
+  browser = false,
+): AgentDefinition['policy'] {
   return {
     version: 1,
     permissionCeiling: 'workspace-read',
-    allowedTools: [...READ_TOOLS, ...(canDelegate ? ['task'] : [])],
+    allowedTools: [
+      ...READ_TOOLS,
+      ...(browser ? ['browser.navigate', 'browser.read', 'browser.close'] : []),
+      ...(canDelegate ? ['task'] : []),
+    ],
     canDelegate,
   }
 }
@@ -40,8 +47,8 @@ export const BUILTIN_AGENTS: readonly BuiltinAgentDefinition[] = [
     name: 'Research Agent',
     description: '并行检索项目或公开资料并归纳证据。',
     systemPrompt:
-      'Research the assigned question. Distinguish evidence from inference and return a concise, source-oriented summary.',
-    policy: readOnlyPolicy(true),
+      'Research the assigned question. Use skill.use(web-research) for public web research: discover real URLs with browser.navigate/read, then verify source pages. web.fetch only reads a known URL; never invent article links. If browser tools are unavailable, report that limitation and use supplied evidence. Distinguish facts from inference and return citations.',
+    policy: readOnlyPolicy(true, true),
     enabled: true,
   },
   {

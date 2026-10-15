@@ -299,3 +299,47 @@ test('historical final messages repair proven line fragments during rendering', 
     assert.match(html, /class="md-resource md-resource-workspaceFile"/)
   }
 })
+
+test('browser traces distinguish real search navigation from source reads', () => {
+  const html = render({
+    items: [
+      {
+        message: { id: 'browser', content: '', reasoning: '' },
+        toolCalls: [
+          {
+            ...call('search', 'browser.navigate', ''),
+            args: { url: 'https://www.google.com/search?q=public%20topic' },
+          },
+          {
+            ...call('open', 'browser.navigate', ''),
+            args: { url: 'https://example.com/article' },
+          },
+          { ...call('read', 'browser.read', ''), args: {} },
+        ],
+      },
+    ],
+    streaming: {},
+    streamingReasoning: {},
+    runActive: false,
+  })
+  assert.match(html, /搜索网页/)
+  assert.match(html, /打开网页/)
+  assert.match(html, /读取网页/)
+  const other = render({
+    items: [
+      {
+        message: { id: 'other', content: '', reasoning: '' },
+        toolCalls: [
+          {
+            ...call('other', 'browser.navigate', ''),
+            args: { url: 'https://www.google.com.example.org/search?q=test' },
+          },
+        ],
+      },
+    ],
+    streaming: {},
+    streamingReasoning: {},
+    runActive: false,
+  })
+  assert.doesNotMatch(other, /搜索网页/)
+})

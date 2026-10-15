@@ -17,7 +17,7 @@ export function createWebFetchTool(): ToolDefinition {
   return {
     name: 'web.fetch',
     description:
-      '抓取一个 http/https URL 并返回正文文本（HTML 自动去掉标签）。不能访问需要登录的页面，不要用它下载二进制文件。',
+      '读取已知真实 http/https URL 的正文（HTML 自动去标签），不是关键词搜索工具。找链接请使用可用的 browser.navigate/read 读取搜索结果页，不要猜文章地址。不能读取登录页或下载二进制文件。',
     parameters: {
       type: 'object',
       properties: {

@@ -91,7 +91,7 @@ test('both skill registries expose creation and upgraded collaboration methods',
   const service = new SkillPluginService(f.store, f.root, () => {})
   for (const registry of [f.ctx.skills, service.registry]) {
     assert.ok(registry.get('team-create'))
-    assert.equal(registry.get('agent-collaboration').manifest.version, '1.1.1')
+    assert.equal(registry.get('agent-collaboration').manifest.version, '1.1.2')
     assert.ok(
       registry.get('team-create').instructions.includes('agent_team.create'),
     )

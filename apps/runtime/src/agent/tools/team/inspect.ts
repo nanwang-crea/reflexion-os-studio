@@ -75,6 +75,7 @@ export function createTeamInspectTool(ctx: ToolContext): ToolDefinition {
         teams: [...groups.values()],
         templates,
         models,
+        browserAvailable: Boolean(ctx.browser?.enabled),
         delegationLimits: ctx.store.agentSettings.get(),
         delegatableTools: [
           ...INHERITABLE_CHILD_TOOLS,

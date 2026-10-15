@@ -9,6 +9,9 @@ import type {
 export const INHERITABLE_CHILD_TOOLS = [
   'get_current_time',
   'web.fetch',
+  'browser.navigate',
+  'browser.read',
+  'browser.close',
   'skill.use',
   'ask_user',
   'file.read',

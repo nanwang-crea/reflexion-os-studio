@@ -14,7 +14,7 @@ export function browserTools(ctx: ToolContext): ToolDefinition[] {
     [
       'navigate',
       AgentBrowserNavigateSchema,
-      '在隔离的 Playwright 浏览器打开网页，只返回页面身份；正文需另行 browser.read 审批。跨来源需重新导航审批；from 可绑定原页面，页面变化则不带 from 重新建立页面。',
+      '在隔离的 Playwright 浏览器打开网页或已知搜索引擎的关键词结果页（搜索 URL 的关键词需编码），只返回页面身份；正文需另行 browser.read 审批。跨来源需重新导航审批；from 可绑定原页面，页面变化则不带 from 重新建立页面。',
     ],
     [
       'read',
@@ -76,7 +76,9 @@ export function browserTools(ctx: ToolContext): ToolDefinition[] {
                 ? '当前来源没有可用浏览器。请用户在“设置 → Agent 浏览器”选择本机 Chrome 或下载受管 Chromium；Agent 不会自动下载。'
                 : code === 'browser_system_chrome_unavailable'
                   ? '本机 Chrome 未检测到或启动不兼容。请用户在“设置 → Agent 浏览器”选择自动模式或下载并选择受管 Chromium。'
-                  : `浏览器操作被拒绝或失败（${code}）。页面版本失效时重新导航；浏览器不可用时检查浏览器组件与系统依赖。`,
+                  : code === 'browser_network_denied'
+                    ? '浏览器目标未通过公网网络检查（browser_network_denied）。DNS 返回私有/保留地址（含 Fake-IP）等情况会被拒绝；请检查 DNS/代理与目标来源。这不是搜索无结果，不通过更换工具或关闭安全边界绕过。'
+                    : `浏览器操作被拒绝或失败（${code}）。页面版本失效时重新导航；浏览器不可用时检查浏览器组件与系统依赖。`,
             code,
             isError: true,
           }
