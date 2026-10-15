@@ -71,7 +71,7 @@ export function RoleModelField({
             }
           }}
         >
-          <option value="">继承上级 Agent 模型</option>
+          <option value="">继承上级模型与思考等级</option>
           {key && !options.some((option) => option.key === key) && (
             <option value={key} disabled>
               当前指定模型不可用

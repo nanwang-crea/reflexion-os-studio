@@ -22,7 +22,7 @@ function roleModelLabel(
 ): string {
   const binding = template.modelBinding
   return binding.mode === 'inherit'
-    ? '继承上级 Agent 模型'
+    ? '继承上级模型与思考等级'
     : `${profiles.find((profile) => profile.id === binding.providerId)?.name ?? binding.providerId} / ${binding.model}`
 }
 
@@ -102,7 +102,10 @@ export function AgentRolesView({
           type="button"
           disabled={busy}
           onClick={() =>
-            void edit({ ...emptyRole, projectId: initialProjectId })
+            void edit({
+              ...emptyRole,
+              projectId: scope === '*' ? initialProjectId : scope || null,
+            })
           }
         >
           新建角色
@@ -110,21 +113,21 @@ export function AgentRolesView({
       </header>
       <div className="agent-role-filters">
         <label>
-          作用范围
+          角色可用位置
           <Select value={scope} onValueChange={setScope}>
             <option value="">全局角色</option>
             <option value="*">全部角色</option>
             {projects.map((project) => (
               <option key={project.id} value={project.id}>
-                {project.name}与全局角色
+                {project.name}（含全局角色）
               </option>
             ))}
           </Select>
         </label>
         <label>
-          领域
+          领域分类
           <Select value={domain} onValueChange={setDomain}>
-            <option value="">所有领域</option>
+            <option value="">全部分类</option>
             {domains.map((domain) => (
               <option key={domain} value={domain}>
                 {domain}
@@ -158,7 +161,13 @@ export function AgentRolesView({
                 {roleModelLabel(template, profiles)}
               </small>
               <small>
-                {template.policy.allowedTools.length} 个工具 ·{' '}
+                位置：
+                {template.projectId
+                  ? (projects.find(
+                      (project) => project.id === template.projectId,
+                    )?.name ?? '原项目不可用')
+                  : '全局'}{' '}
+                · {template.policy.allowedTools.length} 个工具 ·{' '}
                 {template.policy.canDelegate ? '允许继续委派' : '独立执行'}
               </small>
               <footer>
@@ -173,7 +182,11 @@ export function AgentRolesView({
                         : template.name,
                       description: template.description,
                       systemPrompt: template.systemPrompt,
-                      projectId: template.projectId,
+                      projectId: template.builtin
+                        ? scope === '*'
+                          ? initialProjectId
+                          : scope || null
+                        : template.projectId,
                       domains: template.domains,
                       modelBinding: template.modelBinding,
                       enabled: template.enabled,
@@ -232,6 +245,7 @@ export function AgentRolesView({
             onChange={setDraft}
             profiles={profiles}
             projects={projects}
+            domains={domains}
             busy={busy}
             onSave={() =>
               void action(async () => {

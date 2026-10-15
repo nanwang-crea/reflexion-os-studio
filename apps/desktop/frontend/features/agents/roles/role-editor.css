@@ -1,0 +1,119 @@
+.role-editor-section {
+  padding-top: 18px;
+  margin-top: 18px;
+  border-top: 1px solid var(--border-subtle);
+  min-width: 0;
+}
+.role-editor-section h3 {
+  margin: 0 0 14px;
+  font-size: 14px;
+}
+.role-section-heading {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 18px 0 10px;
+}
+.role-section-heading h4 {
+  margin: 0;
+  font-size: 13px;
+}
+.role-section-heading span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.role-boundary-note {
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--bg-inset);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.role-quick-actions,
+.role-domain-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.role-domain-tags button[aria-pressed='true'] {
+  color: var(--text);
+  background: var(--bg-active);
+  border-color: var(--focus-ring);
+}
+.agent-role-editor .role-tool-group {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  margin: 12px 0;
+  padding: 10px 12px;
+}
+.role-tool-group legend {
+  padding: 0 5px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.role-group-toggle {
+  display: block;
+  margin: 0 0 10px auto;
+}
+.role-tool-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px 14px;
+}
+.agent-roles-view .role-tool-options .agent-checkbox,
+.agent-roles-view .role-delegation-toggle {
+  margin: 0;
+  gap: 8px;
+  line-height: 1.5;
+}
+.role-tool-options input {
+  flex-shrink: 0;
+}
+.role-custom-tools {
+  margin: 16px 0;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.role-custom-tools summary {
+  cursor: pointer;
+}
+.role-custom-tools[open] summary {
+  margin-bottom: 12px;
+}
+.role-custom-tool {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 8px 0;
+}
+.role-custom-tool code {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.role-custom-tool button {
+  flex-shrink: 0;
+}
+.role-delegation-toggle + small {
+  margin-top: 8px;
+}
+.agent-role-editor button:focus-visible,
+.role-custom-tools summary:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+@media (max-width: 600px) {
+  .agent-role-editor {
+    padding: 14px;
+  }
+  .agent-role-filters label {
+    min-width: 0;
+    width: 100%;
+  }
+}

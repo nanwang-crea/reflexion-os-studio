@@ -1,3 +1,4 @@
+import { verifyRoleEditor } from './agent-ui/roles.mjs'
 import { activityFixture, verifyRunLayouts } from './agent-ui/run-activity.mjs'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
@@ -132,38 +133,7 @@ window.clearUI=()=>root.render(null);window.showRoles();
     const errors = []
     page.on('pageerror', (error) => errors.push(error.message))
     await page.goto(`http://127.0.0.1:${server.address().port}`)
-    await page.getByRole('button', { name: '新建角色', exact: true }).click()
-    await page
-      .getByRole('textbox', { name: '角色名称', exact: true })
-      .fill('Feature reviewer')
-    await page
-      .getByRole('textbox', { name: '职责与适用场景', exact: true })
-      .fill('Independent review')
-    await page
-      .getByRole('textbox', { name: '领域分类', exact: true })
-      .fill('开发, 写作')
-    await page
-      .getByRole('textbox', { name: '角色指令', exact: true })
-      .fill('Review evidence and report actionable findings.')
-    await page.getByRole('combobox', { name: '执行模型', exact: true }).click()
-    await page
-      .getByRole('option', { name: 'Synthetic / review-model', exact: true })
-      .click()
-    await page.getByRole('combobox', { name: '思考强度', exact: true }).click()
-    await page.getByRole('option', { name: '高', exact: true }).click()
-    await page.getByRole('button', { name: '保存角色', exact: true }).click()
-    await page.waitForFunction(() => window.roleSaves.length === 1)
-    const saved = await page.evaluate(() => window.roleSaves[0])
-    assert.deepEqual(saved.domains, ['开发', '写作'])
-    assert.equal(saved.projectId, 'project')
-    assert.deepEqual(saved.modelBinding, {
-      mode: 'fixed',
-      providerId: 'synthetic',
-      model: 'review-model',
-      reasoningEffort: 'high',
-    })
-    assert.equal(saved.permissionCeiling, 'workspace-read')
-    await page.screenshot({ path: '/tmp/reflexion-agent-roles.png' })
+    await verifyRoleEditor(page)
     await page.evaluate(() => window.showCollaboration())
     await page
       .getByRole('button', { name: 'Review Agent · 已完成', exact: true })
