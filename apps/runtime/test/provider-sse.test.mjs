@@ -10,3 +10,5 @@ import './provider/native-continuation.test.mjs'
 import './provider/native-store.test.mjs'
 import './provider/native-runner.test.mjs'
 import './provider/native-protocol.test.mjs'
+
+import './provider/stream-liveness.test.mjs'

@@ -31,7 +31,7 @@ export const AGENT_RUNTIME_FIELDS: AgentRuntimeField[] = [
     'requestTimeoutSec',
     '请求超时（秒）',
     '120（默认）',
-    '单次 Provider 请求超时；流式输出期间也受此约束。',
+    '等待响应头或连续未收到流数据的超时；持续输出会刷新计时，不限制总生成时长。',
   ],
   [
     'maxRunTimeoutSec',

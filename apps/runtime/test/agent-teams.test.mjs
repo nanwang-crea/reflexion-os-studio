@@ -91,7 +91,7 @@ test('both skill registries expose creation and upgraded collaboration methods',
   const service = new SkillPluginService(f.store, f.root, () => {})
   for (const registry of [f.ctx.skills, service.registry]) {
     assert.ok(registry.get('team-create'))
-    assert.equal(registry.get('agent-collaboration').manifest.version, '1.1.0')
+    assert.equal(registry.get('agent-collaboration').manifest.version, '1.1.1')
     assert.ok(
       registry.get('team-create').instructions.includes('agent_team.create'),
     )
@@ -160,6 +160,9 @@ test('team creation persists real role templates atomically and inspect isolates
     ),
   )
   assert.equal(inspected.data.models[0].reasoningEffortSupported, true)
+  assert.deepEqual(inspected.data.delegationLimits, f.store.agentSettings.get())
+  assert.ok(inspected.data.delegatableTools.includes('file.write'))
+  assert.ok(!inspected.data.delegatableTools.includes('agent_team.create'))
   const specific = createTeamInspectTool(f.ctx).execute({
     args: { templateId: result.data.templates[1].id },
   })

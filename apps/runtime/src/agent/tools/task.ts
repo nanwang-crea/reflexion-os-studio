@@ -11,7 +11,12 @@ export function createTaskTool(ctx: ToolContext): ToolDefinition {
     parameters: {
       type: 'object',
       properties: {
-        task: { type: 'string', description: '要委派的子任务' },
+        task: {
+          type: 'string',
+          minLength: 1,
+          description:
+            '必填：完整子任务，包含目标、输入与交付要求。instructions 不能代替 task。',
+        },
         agentId: {
           type: 'string',
           description: '兼容字段：可选模板 ID。新调用优先使用 templateId。',
@@ -19,7 +24,10 @@ export function createTaskTool(ctx: ToolContext): ToolDefinition {
         templateId: { type: 'string', description: '可选模板 ID' },
         name: { type: 'string', description: '动态 Agent 名称' },
         role: { type: 'string', description: '动态 Agent 职责' },
-        instructions: { type: 'string', description: '本次实例补充指令' },
+        instructions: {
+          type: 'string',
+          description: '可选补充约束；任务主体必须填写 task',
+        },
       },
       required: ['task'],
     },

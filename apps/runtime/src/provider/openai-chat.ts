@@ -1,8 +1,8 @@
+import { ProviderRequestTimeout } from './request-timeout.js'
 import { streamReaderCleanup } from './stream-reader.js'
 import { chatRequestBody } from './openai-chat/projection.js'
 import {
   DEFAULT_MAX_RETRIES,
-  DEFAULT_TIMEOUT_MS,
   StreamCallbackError,
   buildToolNameMapping,
   isAbort,
@@ -49,11 +49,12 @@ export async function streamOpenAIChat(
   let attempt = 0
   attempts: for (;;) {
     let response: Response
+    let requestTimeout!: ProviderRequestTimeout
     for (;;) {
-      const attemptTimeout = AbortSignal.timeout(
-        options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      requestTimeout = new ProviderRequestTimeout(
+        options.signal,
+        options.timeoutMs,
       )
-      const attemptSignal = AbortSignal.any([options.signal, attemptTimeout])
       try {
         response = await fetch(
           `${options.baseUrl.replace(/\/$/, '')}/chat/completions`,
@@ -67,10 +68,11 @@ export async function streamOpenAIChat(
               authorization: `Bearer ${options.apiKey}`,
             },
             body: JSON.stringify(chatRequestBody(options, canonicalToProvider)),
-            signal: attemptSignal,
+            signal: requestTimeout.signal,
           },
         )
       } catch (error) {
+        requestTimeout.dispose()
         if (options.signal.aborted) throw error
         if (isAbort(error)) throw error
         if (attempt < maxRetries) {
@@ -88,8 +90,12 @@ export async function streamOpenAIChat(
         )
       }
 
-      if (response.ok) break
+      if (response.ok) {
+        requestTimeout.refresh()
+        break
+      }
       const detail = await response.text().catch(() => '')
+      requestTimeout.dispose()
       if (shouldRetryStatus(response.status, detail) && attempt < maxRetries) {
         attempt += 1
         await backoffAfterRetry({
@@ -105,6 +111,7 @@ export async function streamOpenAIChat(
       )
     }
     if (!response.body) {
+      requestTimeout.dispose()
       const error = new Error('provider response has no body')
       if (attempt < maxRetries) {
         attempt += 1
@@ -149,6 +156,7 @@ export async function streamOpenAIChat(
         return
       }
       let parsed: {
+        error?: { message?: unknown; code?: unknown } | string
         choices?: {
           delta?: {
             content?: string
@@ -175,6 +183,19 @@ export async function streamOpenAIChat(
         parsed = JSON.parse(payload)
       } catch {
         throw new Error('malformed SSE data payload')
+      }
+      if (parsed.error) {
+        const detail =
+          typeof parsed.error === 'string' ? parsed.error : parsed.error.message
+        const code =
+          typeof parsed.error === 'object' &&
+          typeof parsed.error.code === 'number'
+            ? mapHttpStatus(parsed.error.code)
+            : 'provider'
+        throw new ProviderError(
+          code,
+          `provider stream error: ${redactProviderError(detail, options.apiKey).slice(0, 200)}`,
+        )
       }
       const delta = parsed.choices?.[0]?.delta
       const reasoningDelta = delta?.reasoning_content ?? delta?.reasoning
@@ -233,6 +254,7 @@ export async function streamOpenAIChat(
       for (;;) {
         const { done, value } = await reader.read()
         if (done) break
+        requestTimeout.refresh()
         buffer += decoder.decode(value, { stream: true })
         let newlineIndex = buffer.indexOf('\n')
         while (newlineIndex !== -1) {
@@ -240,14 +262,19 @@ export async function streamOpenAIChat(
           buffer = buffer.slice(newlineIndex + 1)
           newlineIndex = buffer.indexOf('\n')
         }
+        if (sawDone) break
       }
       handleLine(buffer)
       if (!sawDone) {
         throw new Error('stream ended before [DONE]')
       }
     } catch (error) {
+      requestTimeout.dispose()
+      cleanupReader()
+      if (options.signal.aborted) throw error
       if (error instanceof StreamCallbackError) throw error.cause
       if (isAbort(error)) throw error
+      if (error instanceof ProviderError) throw error
       if (attempt < maxRetries) {
         attempt += 1
         await backoffAfterRetry({
@@ -264,6 +291,7 @@ export async function streamOpenAIChat(
         `provider stream failed: ${redactProviderError(error, options.apiKey)}`,
       )
     } finally {
+      requestTimeout.dispose()
       cleanupReader()
     }
 

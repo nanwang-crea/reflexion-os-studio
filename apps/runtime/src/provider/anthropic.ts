@@ -1,3 +1,4 @@
+import { ProviderRequestTimeout } from './request-timeout.js'
 import { streamReaderCleanup } from './stream-reader.js'
 import { buildContinuationToolMapping } from './continuation.js'
 import { resolveOutputBudget } from './output-budget.js'
@@ -6,7 +7,6 @@ import { toAnthropicMessages } from './anthropic/projection.js'
 import { AnthropicContinuation } from './anthropic/continuation.js'
 import {
   DEFAULT_MAX_RETRIES,
-  DEFAULT_TIMEOUT_MS,
   StreamCallbackError,
   isAbort,
   isTimeout,
@@ -47,11 +47,12 @@ export async function streamAnthropic(
   let attempt = 0
   attempts: for (;;) {
     let response: Response
+    let requestTimeout!: ProviderRequestTimeout
     for (;;) {
-      const attemptTimeout = AbortSignal.timeout(
-        options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      requestTimeout = new ProviderRequestTimeout(
+        options.signal,
+        options.timeoutMs,
       )
-      const attemptSignal = AbortSignal.any([options.signal, attemptTimeout])
       try {
         const tools =
           options.tools && options.tools.length > 0
@@ -87,10 +88,11 @@ export async function streamAnthropic(
                 : {}),
               ...(tools !== undefined ? { tools } : {}),
             }),
-            signal: attemptSignal,
+            signal: requestTimeout.signal,
           },
         )
       } catch (error) {
+        requestTimeout.dispose()
         if (options.signal.aborted) throw error
         if (isAbort(error)) throw error
         if (attempt < maxRetries) {
@@ -108,8 +110,12 @@ export async function streamAnthropic(
         )
       }
 
-      if (response.ok) break
+      if (response.ok) {
+        requestTimeout.refresh()
+        break
+      }
       const detail = await response.text().catch(() => '')
+      requestTimeout.dispose()
       if (shouldRetryStatus(response.status, detail) && attempt < maxRetries) {
         attempt += 1
         await backoffAfterRetry({
@@ -125,6 +131,7 @@ export async function streamAnthropic(
       )
     }
     if (!response.body) {
+      requestTimeout.dispose()
       const error = new Error('provider response has no body')
       if (attempt < maxRetries) {
         attempt += 1
@@ -160,6 +167,7 @@ export async function streamAnthropic(
     const cleanupReader = streamReaderCleanup(reader)
     const decoder = new TextDecoder()
     let buffer = ''
+    let sawStop = false
 
     const handleLine = (line: string): void => {
       const trimmed = line.trim()
@@ -251,6 +259,7 @@ export async function streamAnthropic(
       }
 
       if (eventType === 'message_stop') {
+        sawStop = true
         return
       }
 
@@ -267,6 +276,7 @@ export async function streamAnthropic(
       for (;;) {
         const { done, value } = await reader.read()
         if (done) break
+        requestTimeout.refresh()
         buffer += decoder.decode(value, { stream: true })
         let newlineIndex = buffer.indexOf('\n')
         while (newlineIndex !== -1) {
@@ -274,9 +284,13 @@ export async function streamAnthropic(
           buffer = buffer.slice(newlineIndex + 1)
           newlineIndex = buffer.indexOf('\n')
         }
+        if (sawStop) break
       }
       handleLine(buffer)
     } catch (error) {
+      requestTimeout.dispose()
+      cleanupReader()
+      if (options.signal.aborted) throw error
       if (error instanceof StreamCallbackError) throw error.cause
       if (isAbort(error)) throw error
       if (error instanceof ProviderError) throw error
@@ -296,6 +310,7 @@ export async function streamAnthropic(
         `provider stream failed: ${redactProviderError(error, options.apiKey)}`,
       )
     } finally {
+      requestTimeout.dispose()
       cleanupReader()
     }
 

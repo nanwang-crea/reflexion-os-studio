@@ -194,7 +194,7 @@ export const AgentSettingsSchema = z.object({
   reflectionThreshold: z.number().int().min(0).max(10).nullable(),
   // Provider 请求建立阶段失败(可恢复 400/429/5xx/网络)自动重试次数。
   requestRetries: z.number().int().min(0).max(15).nullable(),
-  // Provider 请求超时(秒)。
+  // Provider 响应头等待与流式数据空闲超时（秒），不限制持续输出总时长。
   requestTimeoutSec: z.number().int().min(10).max(600).nullable(),
   // —— W4 Run 预算：null 表示使用内置默认，而不是无限制 ——
   // Run 总时长上限（秒）。

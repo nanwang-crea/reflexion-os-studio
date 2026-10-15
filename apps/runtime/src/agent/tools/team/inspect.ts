@@ -6,6 +6,7 @@ import {
 } from '@reflexion-os-studio/contracts'
 import type { ToolDefinition } from '@reflexion-os-studio/agent-core'
 import type { ToolContext } from '../shared.js'
+import { INHERITABLE_CHILD_TOOLS } from '../../delegation/instance.js'
 import { requirePrimaryTeamAccess } from './access.js'
 
 export function createTeamInspectTool(ctx: ToolContext): ToolDefinition {
@@ -74,6 +75,13 @@ export function createTeamInspectTool(ctx: ToolContext): ToolDefinition {
         teams: [...groups.values()],
         templates,
         models,
+        delegationLimits: ctx.store.agentSettings.get(),
+        delegatableTools: [
+          ...INHERITABLE_CHILD_TOOLS,
+          ...(ctx.mcp
+            ?.allTools()
+            .map((tool) => `${tool.serverId}/${tool.toolName}`) ?? []),
+        ],
         templateSelection:
           '用户在会话指定的默认模板优先于 task 的 templateId；多角色团队建议使用自动选择。',
       }
