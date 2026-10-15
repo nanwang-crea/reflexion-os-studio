@@ -1,3 +1,4 @@
+import { verifyDelegationLayout } from './agent-ui/delegation-layout.mjs'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { build } from 'esbuild'
@@ -77,6 +78,7 @@ import {InteractionQueue} from './frontend/features/chat/interactions/Interactio
 import {ApprovalCard} from './frontend/features/chat/approvals/ApprovalCard';
 import './frontend/features/chat/approvals/approvals.css';
 import {WorkSummary} from './frontend/features/chat/run/WorkSummary';
+import {DelegationList} from './frontend/features/chat/run/DelegationList';
 import {ChildAgentTrace} from './frontend/features/chat/run/ChildAgentTrace';
 import {AgentRolesView} from './frontend/features/agents/AgentRolesView';
 import {CollaborationPanel} from './frontend/features/chat/collaboration/CollaborationPanel';
@@ -91,6 +93,7 @@ window.showQuestions=()=>root.render(<div className="chat-view" style={{height:'
 window.showTeamApproval=()=>root.render(<ApprovalCard focusable={false} onChoose={()=>{}} approval={{toolCallId:'team',runId:'root-run',operation:'agent_team.create',summary:'创建写作团队',subject:{kind:'operation',operation:'agent_team.create'},choices:[{id:'allow-once',decision:'approved',presentation:'primary',label:'允许一次'},{id:'deny',decision:'denied',presentation:'secondary',label:'拒绝'}],context:{permissionPreset:'workspace-read',sandbox:'workspace-write',workspaceScope:'inside',displayCwd:'…/project',network:false,escalation:false,sandboxProvider:null,review:JSON.stringify({scope:'project',roles:Array.from({length:8},(_,i)=>({name:'Role '+i,modelBinding:{mode:'inherit'},instructions:'明确职责、输入输出、交接和验收标准。'.repeat(40)}))},null,2)}}}/>);
 window.showThinking=()=>{let text='一行思考内容。\\n'.repeat(300);function Thinking(){const [value,setValue]=React.useState(text);window.appendThinking=()=>setValue(v=>v+'新的思考。\\n');return <WorkSummary reasoningText={value} phase="thinking" toolCalls={[]} runActive={true} runDurationMs={null}/>};root.render(<Thinking/>)};
 window.showTrace=()=>{window.traceRunning=true;root.render(<ChildAgentTrace delegation={{...window.tree[0],task:'很长的任务说明。'.repeat(600)}} onClose={()=>root.render(null)}/>)};
+window.showDelegations=()=>root.render(<div style={{maxWidth:900,margin:'0 auto'}}><DelegationList runActive={false} items={['completed','failed','cancelled','running'].map((status,i)=>({...window.tree[0],id:'layout-'+i,status,agentInstance:{...window.tree[0].agentInstance,name:'大纲架构 · 时差以及很长的中文角色标题'},task:'【剧本杀大纲架构】把选题《时差》扩展为完整稿件。'.repeat(20),error:status==='failed'?'provider stream failed: TimeoutError: The operation was aborted due to timeout '+ 'long_unbroken_error_'.repeat(30):status==='cancelled'?'父 Run 已取消':null}))}/></div>);
 window.clearUI=()=>root.render(null);window.showRoles();
 `,
       },
@@ -461,6 +464,7 @@ window.clearUI=()=>root.render(null);window.showRoles();
       'q2',
     )
     await page.screenshot({ path: '/tmp/reflexion-question-scroll.png' })
+    await verifyDelegationLayout(page)
     await page.evaluate(() => window.showTeamApproval())
     await page.getByRole('button', { name: '查看详情', exact: true }).click()
     const preview = page.getByRole('region', {

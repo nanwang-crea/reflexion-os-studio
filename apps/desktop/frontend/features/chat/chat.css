@@ -1393,7 +1393,8 @@
 }
 
 .delegation-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: flex-start;
   padding: 6px 8px;
@@ -1409,7 +1410,7 @@
 
 .delegation-open {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 2fr) minmax(0, 3fr) auto;
   align-items: center;
   gap: 8px;
   flex: 1;
@@ -1419,6 +1420,24 @@
   background: transparent;
   color: inherit;
   text-align: left;
+}
+
+.delegation-open .trace-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.delegation-open .trace-status {
+  white-space: nowrap;
+}
+
+.delegation-row > .delegation-error {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding-left: 14px;
+  overflow-wrap: anywhere;
 }
 
 .delegation-open:hover:not(:disabled) .trace-name {
