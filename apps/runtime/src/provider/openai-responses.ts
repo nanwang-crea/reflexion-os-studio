@@ -1,12 +1,13 @@
+import { streamReaderCleanup } from './stream-reader.js'
+import { buildContinuationToolMapping } from './continuation.js'
 import { ResponsesToolCalls } from './openai-responses/tool-calls.js'
 import { responsesStopReason } from './stop-reasons.js'
-import { userImageContent } from './image-content.js'
-import type { ModelMessage } from '@reflexion-os-studio/agent-core'
+import { toResponsesInput } from './openai-responses/projection.js'
+import { ResponsesContinuation } from './openai-responses/continuation.js'
 import {
   DEFAULT_MAX_RETRIES,
   DEFAULT_TIMEOUT_MS,
   StreamCallbackError,
-  buildToolNameMapping,
   isAbort,
   isTimeout,
   mapHttpStatus,
@@ -14,73 +15,12 @@ import {
   shouldRetryStatus,
   sleep,
 } from './shared.js'
-import { ProviderError } from './provider-error.js'
+import { ProviderError, redactProviderError } from './provider-error.js'
 import type {
   StreamChatOptions,
   StreamChatResult,
   StreamedToolCall,
 } from './types.js'
-
-/**
- * canonical ModelMessage 投影为 OpenAI Responses API input 格式：
- * system 消息提取为 instructions，assistant 的工具调用保留为 function_call，
- * 工具结果走 function_call_output。
- */
-function toResponsesInput(
-  messages: ModelMessage[],
-  canonicalToProvider: ReadonlyMap<string, string>,
-): {
-  instructions: string | undefined
-  input: Array<Record<string, unknown>>
-} {
-  let instructions: string | undefined
-  const input: Array<Record<string, unknown>> = []
-
-  for (const message of messages) {
-    if (message.role === 'system') {
-      instructions = instructions
-        ? `${instructions}\n${message.content}`
-        : message.content
-      continue
-    }
-    if (message.role === 'user') {
-      input.push({
-        role: 'user',
-        content: userImageContent(message, 'openai-responses'),
-      })
-      continue
-    }
-    if (message.role === 'assistant') {
-      if (message.toolCalls.length === 0) {
-        input.push({ role: 'assistant', content: message.content })
-      } else {
-        // 文本部分
-        if (message.content) {
-          input.push({ role: 'assistant', content: message.content })
-        }
-        // 工具调用部分
-        for (const call of message.toolCalls) {
-          input.push({
-            type: 'function_call',
-            call_id: call.id,
-            name: canonicalToProvider.get(call.name) ?? call.name,
-            arguments: call.arguments,
-          })
-        }
-      }
-      continue
-    }
-    if (message.role === 'tool') {
-      input.push({
-        type: 'function_call_output',
-        call_id: message.toolCallId,
-        output: message.content,
-      })
-    }
-  }
-
-  return { instructions, input }
-}
 
 export async function streamOpenAIResponses(
   options: StreamChatOptions,
@@ -99,19 +39,10 @@ export async function streamOpenAIResponses(
     await sleep(waitMs, options.signal)
   }
 
-  const canonicalToolNames = (options.tools ?? []).map((tool) => tool.name)
-  const messageToolNames = options.messages.flatMap((msg) =>
-    msg.role === 'assistant' ? msg.toolCalls.map((c) => c.name) : [],
-  )
-  const { canonicalToProvider, providerToCanonical } = buildToolNameMapping(
-    canonicalToolNames,
-    messageToolNames,
-  )
+  const { canonicalToProvider, providerToCanonical } =
+    buildContinuationToolMapping(options, 'openai-responses')
 
-  const { instructions, input } = toResponsesInput(
-    options.messages,
-    canonicalToProvider,
-  )
+  const { instructions, input } = toResponsesInput(options, canonicalToProvider)
 
   let attempt = 0
   attempts: for (;;) {
@@ -146,6 +77,7 @@ export async function streamOpenAIResponses(
               model: options.model,
               input,
               stream: true,
+              include: ['reasoning.encrypted_content'],
               ...(options.reasoningEffort !== undefined
                 ? { reasoning: { effort: options.reasoningEffort } }
                 : {}),
@@ -169,13 +101,13 @@ export async function streamOpenAIResponses(
           await backoffAfterRetry({
             attempt,
             maxRetries,
-            reason: `${isTimeout(error) ? 'timeout' : 'network'}: ${String(error)}`,
+            reason: `${isTimeout(error) ? 'timeout' : 'network'}: ${redactProviderError(error, options.apiKey)}`,
           })
           continue
         }
         throw new ProviderError(
           isTimeout(error) ? 'timeout' : 'network',
-          `provider request failed: ${String(error)}`,
+          `provider request failed: ${redactProviderError(error, options.apiKey)}`,
         )
       }
 
@@ -192,7 +124,7 @@ export async function streamOpenAIResponses(
       }
       throw new ProviderError(
         mapHttpStatus(response.status),
-        `provider responded ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`,
+        `provider responded ${response.status}${detail ? `: ${redactProviderError(detail, options.apiKey).slice(0, 200)}` : ''}`,
       )
     }
     if (!response.body) {
@@ -202,16 +134,17 @@ export async function streamOpenAIResponses(
         await backoffAfterRetry({
           attempt,
           maxRetries,
-          reason: `stream failure: ${String(error)}`,
+          reason: `stream failure: ${redactProviderError(error, options.apiKey)}`,
         })
         continue
       }
       throw new ProviderError(
         'network',
-        `provider stream failed: ${String(error)}`,
+        `provider stream failed: ${redactProviderError(error, options.apiKey)}`,
       )
     }
 
+    const continuation = new ResponsesContinuation()
     let content = ''
     let reasoning = ''
     let finishReason: StreamChatResult['finishReason'] | null = null
@@ -222,6 +155,7 @@ export async function streamOpenAIResponses(
     const toolCalls: StreamedToolCall[] = []
     const streamedCalls = new ResponsesToolCalls()
     const reader = response.body.getReader()
+    const cleanupReader = streamReaderCleanup(reader)
     const decoder = new TextDecoder()
     let buffer = ''
 
@@ -237,6 +171,7 @@ export async function streamOpenAIResponses(
         throw new Error('malformed SSE data payload')
       }
       const eventType = parsed.type as string | undefined
+      continuation.handle(parsed)
 
       if (eventType === 'response.output_text.delta') {
         const delta = String(parsed.delta ?? '')
@@ -244,6 +179,7 @@ export async function streamOpenAIResponses(
         try {
           onDelta(delta)
         } catch (error) {
+          cleanupReader()
           throw new StreamCallbackError(error)
         }
         return
@@ -269,6 +205,14 @@ export async function streamOpenAIResponses(
         const item = (parsed.response ?? parsed.item) as
           Record<string, unknown> | undefined
         if (item) {
+          if (Array.isArray(item.output)) {
+            for (const output of item.output) {
+              streamedCalls.handle({
+                type: 'response.output_item.done',
+                item: output,
+              })
+            }
+          }
           const terminal = responsesStopReason(item)
           finishReason = terminal.finishReason
           rawStopReason = terminal.rawStopReason
@@ -323,19 +267,32 @@ export async function streamOpenAIResponses(
           attempt,
           maxRetries,
           reason: isTimeout(error)
-            ? `timeout: ${String(error)}`
-            : `stream failure: ${String(error)}`,
+            ? `timeout: ${redactProviderError(error, options.apiKey)}`
+            : `stream failure: ${redactProviderError(error, options.apiKey)}`,
         })
         continue attempts
       }
       throw new ProviderError(
         isTimeout(error) ? 'timeout' : 'network',
-        `provider stream failed: ${String(error)}`,
+        `provider stream failed: ${redactProviderError(error, options.apiKey)}`,
       )
+    } finally {
+      cleanupReader()
     }
 
-    // 将 toolCalls 从 map 转换为数组，并还原 canonical 名。
-    for (const toolCall of streamedCalls.values()) {
+    // 按原生 output 顺序回填调用，保证重启后仍可按位置配对原始 id。
+    const providerContinuation = continuation.result(options)
+    const calls =
+      providerContinuation?.apiFormat === 'openai-responses'
+        ? providerContinuation.items
+            .filter((item) => item.type === 'function_call')
+            .map((item) => ({
+              id: item.call_id,
+              name: item.name,
+              arguments: item.arguments,
+            }))
+        : streamedCalls.values()
+    for (const toolCall of calls) {
       toolCalls.push({
         ...toolCall,
         name: providerToCanonical.get(toolCall.name) ?? toolCall.name,
@@ -354,6 +311,7 @@ export async function streamOpenAIResponses(
     return {
       content,
       reasoning,
+      providerContinuation,
       finishReason,
       rawStopReason,
       usage: {

@@ -438,6 +438,14 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
     }
     if (version < 46) db.exec(WORKFLOW_AUTHORING_SCHEMA)
     if (version < 48) migrateAgentTemplates(db)
+    if (
+      version < 49 &&
+      !tableColumns(db, 'messages').some(
+        (column) => column.name === 'provider_continuation_json',
+      )
+    ) {
+      db.exec('ALTER TABLE messages ADD COLUMN provider_continuation_json TEXT')
+    }
     db.exec('COMMIT')
     // 迁移全部执行完毕才推进版本号；否则下次启动会重复进入迁移分支。
     version = LATEST_SCHEMA_VERSION

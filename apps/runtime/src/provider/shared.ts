@@ -1,3 +1,4 @@
+import { ProviderError } from './provider-error.js'
 import type { RuntimeErrorCode } from '@reflexion-os-studio/contracts'
 
 const DEFAULT_TIMEOUT_MS = 120_000
@@ -123,13 +124,27 @@ export interface ToolNameMapping {
 export function buildToolNameMapping(
   toolNames: string[],
   messageToolNames: string[],
+  replayAliases: ReadonlyMap<string, string> = new Map(),
 ): ToolNameMapping {
   const canonicalToProvider = new Map<string, string>()
   const providerToCanonical = new Map<string, string>()
   const usedNames = new Set<string>()
   const canonicalNames = new Set([...toolNames, ...messageToolNames])
 
+  for (const [canonical, alias] of replayAliases) {
+    if (!canonicalNames.has(canonical)) continue
+    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(alias) || providerToCanonical.has(alias))
+      throw new ProviderError(
+        'provider_protocol',
+        'conflicting native tool aliases',
+      )
+    canonicalToProvider.set(canonical, alias)
+    providerToCanonical.set(alias, canonical)
+    usedNames.add(alias)
+  }
+
   for (const canonicalName of canonicalNames) {
+    if (canonicalToProvider.has(canonicalName)) continue
     let safeName = sanitizeToolName(canonicalName)
     let suffix = 2
     while (usedNames.has(safeName)) {

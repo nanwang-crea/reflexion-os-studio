@@ -85,7 +85,7 @@ test('reconstruction keeps multi-tool round atomic including failed calls', () =
     },
     'file_not_found',
   )
-  store.messages.finalize(assistant.id, '读取中', 'completed', '')
+  store.messages.finalize(assistant.id, '读取中', 'completed', '先读两个文件')
 
   const frames = reconstructSessionFrames(store, session.id, 'sys')
   assert.deepEqual(
@@ -93,6 +93,8 @@ test('reconstruction keeps multi-tool round atomic including failed calls', () =
     ['system', 'user', 'tool_round'],
   )
   const round = frames[2]
+  assert.equal(round.assistant.reasoning, '先读两个文件')
+  assert.equal(framesToValidatedMessages(frames)[2].reasoning, '先读两个文件')
   assert.equal(round.assistant.toolCalls.length, 2)
   assert.equal(round.results.length, 2)
   // 失败调用也有 error result（历史可重放）。
@@ -264,3 +266,37 @@ function framesToMessagesOf(frames) {
   }
   return messages
 }
+
+test('completed text history restores persisted reasoning', () => {
+  const store = freshStore()
+  const session = store.sessions.create(null)
+  const message = store.messages.create({
+    sessionId: session.id,
+    runId: null,
+    role: 'assistant',
+    content: '答案',
+    status: 'completed',
+  })
+  store.messages.finalize(message.id, '答案', 'completed', '历史思考')
+  const messages = framesToValidatedMessages(
+    reconstructSessionFrames(store, session.id, 'sys'),
+  )
+  assert.equal(messages[1].reasoning, '历史思考')
+  store.close()
+})
+
+test('Runtime projection preserves task and continuation control markers from SDK frames', () => {
+  const messages = framesToValidatedMessages([
+    { kind: 'system', content: 'system' },
+    {
+      kind: 'runtime_control',
+      control: 'task_context',
+      content: 'original task',
+    },
+    { kind: 'user', content: 'user request' },
+    { kind: 'assistant_text', content: 'partial answer' },
+    { kind: 'runtime_control', control: 'continuation', content: 'continue' },
+  ])
+  assert.equal(messages[1].control, 'task_context')
+  assert.equal(messages[4].control, 'continuation')
+})

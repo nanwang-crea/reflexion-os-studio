@@ -108,6 +108,10 @@ export async function runAgentLoop(
       messages.push({
         role: 'assistant',
         content: turn.content,
+        ...(turn.reasoning ? { reasoning: turn.reasoning } : {}),
+        ...(turn.providerContinuation
+          ? { providerContinuation: turn.providerContinuation }
+          : {}),
         toolCalls: [],
       })
       return { status: 'completed', turns, finalTurn: turn, messages }
@@ -140,13 +144,19 @@ export async function runAgentLoop(
 
     if (disposition.kind === 'truncated') {
       const hasContent = turn.content.trim() !== ''
-      const hasReasoning = (turn.reasoning ?? '').trim() !== ''
+      const hasReasoning =
+        (turn.reasoning ?? '').trim() !== '' ||
+        turn.providerContinuation !== undefined
       // 即使额度耗尽，最后一个片段也必须保留。
-      // 空正文不回填 assistant，避免供应商拒绝空消息；思考由 Runtime 保存。
-      if (hasContent) {
+      // 思考单独占一轮时也保留；适配层只回传自身支持的思考格式。
+      if (hasContent || hasReasoning) {
         messages.push({
           role: 'assistant',
           content: turn.content,
+          ...(turn.reasoning ? { reasoning: turn.reasoning } : {}),
+          ...(turn.providerContinuation
+            ? { providerContinuation: turn.providerContinuation }
+            : {}),
           toolCalls: [],
         })
       }
@@ -186,6 +196,10 @@ export async function runAgentLoop(
     messages.push({
       role: 'assistant',
       content: turn.content,
+      ...(turn.reasoning ? { reasoning: turn.reasoning } : {}),
+      ...(turn.providerContinuation
+        ? { providerContinuation: turn.providerContinuation }
+        : {}),
       toolCalls: turn.toolCalls,
     })
 

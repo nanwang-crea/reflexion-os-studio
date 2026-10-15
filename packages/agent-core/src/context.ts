@@ -31,6 +31,13 @@ export function estimateMessageTokens(messages: ModelMessage[]): number {
       total +
       estimateTokens(message.content) +
       toolArgs +
+      (message.role === 'assistant'
+        ? estimateTokens(
+            message.providerContinuation
+              ? JSON.stringify(message.providerContinuation)
+              : (message.reasoning ?? ''),
+          )
+        : 0) +
       (message.role === 'user' ? (message.images?.length ?? 0) * 4096 : 0)
     )
   }, 0)

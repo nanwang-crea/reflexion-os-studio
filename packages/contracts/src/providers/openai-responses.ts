@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ResponsesReplayItemSchema } from './continuation.js'
 
 // ── Request ──
 
@@ -69,7 +70,21 @@ export type OpenAIResponsesTool = z.infer<typeof OpenAIResponsesToolSchema>
 
 export const OpenAIResponsesRequestSchema = z.object({
   model: z.string(),
-  input: z.union([z.string(), z.array(OpenAIResponsesInputMessageSchema)]),
+  input: z.union([
+    z.string(),
+    z.array(
+      z.union([
+        OpenAIResponsesInputMessageSchema,
+        ResponsesReplayItemSchema,
+        z.object({
+          type: z.literal('function_call_output'),
+          call_id: z.string(),
+          output: z.string(),
+        }),
+      ]),
+    ),
+  ]),
+  include: z.array(z.string()).optional(),
   instructions: z.string().optional(),
   tools: z.array(OpenAIResponsesToolSchema).optional(),
   stream: z.boolean().optional(),

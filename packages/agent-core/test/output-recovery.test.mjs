@@ -66,7 +66,7 @@ test('fully empty truncation stops without continuation', async () => {
   assert.equal(calls, 1)
 })
 
-test('reasoning-only truncation recovers without sending empty assistant or raw thinking', async () => {
+test('reasoning-only truncation retains reasoning for provider-specific replay', async () => {
   const recoveries = []
   const { outcome, calls, seen } = await run(
     [{ ...text(''), reasoning: 'private thinking' }, text('answer', 'stop')],
@@ -77,9 +77,9 @@ test('reasoning-only truncation recovers without sending empty assistant or raw 
   assert.deepEqual(recoveries, [{ kind: 'reasoning', attempt: 1 }])
   assert.equal(
     seen[1].some((m) => m.role === 'assistant'),
-    false,
+    true,
   )
-  assert.equal(JSON.stringify(seen[1]).includes('private thinking'), false)
+  assert.equal(seen[1][1].reasoning, 'private thinking')
   assert.equal(seen[1].at(-1).control, 'continuation')
   assert.match(seen[1].at(-1).content, /尚未生成正文/)
 })

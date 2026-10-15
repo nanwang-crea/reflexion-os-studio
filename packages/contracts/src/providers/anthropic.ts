@@ -1,8 +1,10 @@
 import { z } from 'zod'
+import { AnthropicReplayBlockSchema } from './continuation.js'
 
 // ── Request ──
 
 export const AnthropicContentBlockParamSchema = z.union([
+  AnthropicReplayBlockSchema,
   z.object({
     type: z.literal('text'),
     text: z.string(),

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ProviderContinuationSchema } from '../../providers/continuation.js'
 import { IsoDateTimeSchema } from '../shared.js'
 import { PermissionPresetSchema } from '../tools/permissions.js'
 import { ResourceLinkSchema } from '../../resource-links.js'
@@ -55,6 +56,7 @@ export const MessageSchema = z.object({
   parts: z.array(ContentPartSchema),
   // 推理模型的思考内容；非思考模型或旧数据为空字符串。
   reasoning: z.string(),
+  providerContinuation: ProviderContinuationSchema.optional(),
   status: MessageStatusSchema,
   createdAt: IsoDateTimeSchema,
   completedAt: IsoDateTimeSchema.nullable(),

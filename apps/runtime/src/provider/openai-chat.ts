@@ -1,3 +1,4 @@
+import { streamReaderCleanup } from './stream-reader.js'
 import { chatRequestBody } from './openai-chat/projection.js'
 import {
   DEFAULT_MAX_RETRIES,
@@ -12,7 +13,7 @@ import {
   shouldRetryStatus,
   sleep,
 } from './shared.js'
-import { ProviderError } from './provider-error.js'
+import { ProviderError, redactProviderError } from './provider-error.js'
 import type {
   StreamChatOptions,
   StreamChatResult,
@@ -77,13 +78,13 @@ export async function streamOpenAIChat(
           await backoffAfterRetry({
             attempt,
             maxRetries,
-            reason: `${isTimeout(error) ? 'timeout' : 'network'}: ${String(error)}`,
+            reason: `${isTimeout(error) ? 'timeout' : 'network'}: ${redactProviderError(error, options.apiKey)}`,
           })
           continue
         }
         throw new ProviderError(
           isTimeout(error) ? 'timeout' : 'network',
-          `provider request failed: ${String(error)}`,
+          `provider request failed: ${redactProviderError(error, options.apiKey)}`,
         )
       }
 
@@ -100,7 +101,7 @@ export async function streamOpenAIChat(
       }
       throw new ProviderError(
         mapHttpStatus(response.status),
-        `provider responded ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`,
+        `provider responded ${response.status}${detail ? `: ${redactProviderError(detail, options.apiKey).slice(0, 200)}` : ''}`,
       )
     }
     if (!response.body) {
@@ -110,13 +111,13 @@ export async function streamOpenAIChat(
         await backoffAfterRetry({
           attempt,
           maxRetries,
-          reason: `stream failure: ${String(error)}`,
+          reason: `stream failure: ${redactProviderError(error, options.apiKey)}`,
         })
         continue
       }
       throw new ProviderError(
         'network',
-        `provider stream failed: ${String(error)}`,
+        `provider stream failed: ${redactProviderError(error, options.apiKey)}`,
       )
     }
 
@@ -134,6 +135,7 @@ export async function streamOpenAIChat(
       | undefined
     const toolCallByIndex = new Map<number, StreamedToolCall>()
     const reader = response.body.getReader()
+    const cleanupReader = streamReaderCleanup(reader)
     const decoder = new TextDecoder()
     let buffer = ''
     let sawDone = false
@@ -181,6 +183,7 @@ export async function streamOpenAIChat(
         try {
           onReasoningDelta?.(reasoningDelta)
         } catch (error) {
+          cleanupReader()
           throw new StreamCallbackError(error)
         }
       }
@@ -251,15 +254,17 @@ export async function streamOpenAIChat(
           attempt,
           maxRetries,
           reason: isTimeout(error)
-            ? `timeout: ${String(error)}`
-            : `stream failure: ${String(error)}`,
+            ? `timeout: ${redactProviderError(error, options.apiKey)}`
+            : `stream failure: ${redactProviderError(error, options.apiKey)}`,
         })
         continue attempts
       }
       throw new ProviderError(
         isTimeout(error) ? 'timeout' : 'network',
-        `provider stream failed: ${String(error)}`,
+        `provider stream failed: ${redactProviderError(error, options.apiKey)}`,
       )
+    } finally {
+      cleanupReader()
     }
 
     const toolCalls = [...toolCallByIndex.entries()]
@@ -272,7 +277,7 @@ export async function streamOpenAIChat(
     if (finishReason === null) {
       throw new ProviderError(
         'provider_protocol',
-        `stream ended without a valid finish_reason (raw: ${String(rawFinishReason).slice(0, 40)})`,
+        `stream ended without a valid finish_reason (raw: ${redactProviderError(rawFinishReason, options.apiKey).slice(0, 40)})`,
       )
     }
 

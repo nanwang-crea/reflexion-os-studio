@@ -30,3 +30,20 @@ Chat Completions 投影为 `reasoning_effort`，Responses 投影为 `reasoning.e
 切换模型时重置思考强度为模型/Provider 默认；支持列表变化使选择失效时回退默认，不支持时显示禁用状态。
 模型和 effort 控件复用 Radix Select，实际参数由 Runtime 解析，存储与解析使用
 TypeScript/SQLite，macOS、Windows 和 Linux 共用相同实现，不引入平台专属依赖。
+
+Chat Completions 将 assistant 的非空思考正文回填为 `reasoning_content`，覆盖工具续轮、文本续写与持久化历史重建；无思考的旧消息省略该字段。canonical 消息与上下文帧保留 reasoning 并计入 token 估算，Responses / Anthropic 回传供应商原生 continuation，不能从展示正文伪造签名或加密数据。该链路为平台无关 TypeScript，macOS / Windows / Linux 使用相同实现。
+
+## 思考回传
+
+- OpenAI Chat：assistant 的非空 `reasoning` 投影为 `reasoning_content`。
+- Responses：请求 `include: ["reasoning.encrypted_content"]`，保存完整 reasoning/message/function_call output items，下一轮按原顺序回传，保留原始 call_id 与 reasoning item id。
+- Anthropic：按 block index 聚合 thinking、signature_delta 与 redacted_thinking，连同原始 text/tool_use 顺序保存并回传；tool_result 置于后续 user 消息，多工具结果合并，不混入 assistant。
+- 原生 continuation 绑定 API 格式、端点与模型，只在来源匹配时回放。展示思考正文不替代缺失的原生数据；旧历史没有签名/加密信息时不伪造。
+- Schema v49 新增可空 `messages.provider_continuation_json`，与正文/思考终态一起写入，重启后历史重建保留。旧库只加列，不改写历史；Retry 清空该字段。
+- 上下文帧与循环保留原生数据，估算包含原生载荷；带签名的 assistant 正文不做局部截断。既有历史摘要/整帧省略策略仍会淘汰旧轮次。
+
+三种适配器使用平台无关 TypeScript/SQLite，macOS、Windows、Linux 共用同一链路。
+
+历史原生工具别名会在当前工具映射之前预留，避免工具列表变化后把同名清洗别名解析为另一个工具；历史别名冲突时明确返回协议错误。切换到 Chat Completions 时，不把其他协议原生思考的展示摘要回填为 reasoning_content，也不生成空 assistant 消息。
+
+Provider 错误与重试诊断会先去除本次请求密钥，再截断或发布，避免上游错误回显泄漏完整密钥或其被截断的前缀。

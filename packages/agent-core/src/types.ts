@@ -1,3 +1,4 @@
+import type { ProviderContinuation } from '@reflexion-os-studio/contracts'
 import type {
   ChangedFile,
   JsonValue,
@@ -26,14 +27,22 @@ export type ModelMessage =
       content: string
       images?: (ImagePart & { base64?: string })[]
     }
-  | { role: 'assistant'; content: string; toolCalls: AssistantToolCall[] }
+  | {
+      role: 'assistant'
+      content: string
+      /** Provider 返回的思考正文，由支持该字段的适配层回传。 */
+      reasoning?: string
+      providerContinuation?: ProviderContinuation
+      toolCalls: AssistantToolCall[]
+    }
   | { role: 'tool'; toolCallId: string; content: string; isError: boolean }
 
 /** 一次模型调用的完整结果。 */
 export interface ModelTurn {
   content: string
-  /** 思考内容仅用于持久化展示，不回传给模型。 */
+  /** 思考内容用于持久化展示与支持该字段的 Provider 回传。 */
   reasoning: string
+  providerContinuation?: ProviderContinuation
   /** 供应商原始停止原因，仅用于诊断。 */
   rawStopReason?: string
   toolCalls: AssistantToolCall[]

@@ -17,14 +17,17 @@ export function shrinkLargestFrameContent(
     const frame = frames[i]
     if (frame.kind === 'system' || protectedIndices.has(i)) continue
     if (frame.kind !== 'tool_round') {
+      // 签名/加密 continuation 的正文不能裁剪后再回放原始块。
+      if (frame.kind === 'assistant_text' && frame.providerContinuation)
+        continue
       if (target === null || frame.content.length > target.text.length) {
         target = { frameIndex: i, resultIndex: null, text: frame.content }
       }
       continue
     }
     if (
-      target === null ||
-      frame.assistant.content.length > target.text.length
+      !frame.assistant.providerContinuation &&
+      (target === null || frame.assistant.content.length > target.text.length)
     ) {
       target = {
         frameIndex: i,

@@ -148,3 +148,68 @@ test('ContextBuilder.buildIsolated injects only child system prompt and task his
   assert.doesNotMatch(JSON.stringify(messages), /must-not-enter-child-context/)
   store.close()
 })
+
+for (const field of ['constraints', 'knownErrors']) {
+  test(`a checkpoint containing only ${field} is reused without another summary request`, async (t) => {
+    const root = mkdtempSync(join(tmpdir(), 'reflexion-ctx-only-'))
+    const store = new Store(root)
+    t.after(() => store.close())
+    const session = store.sessions.create(null)
+    for (let i = 0; i < 16; i++)
+      store.messages.create({
+        sessionId: session.id,
+        runId: null,
+        role: i % 2 ? 'assistant' : 'user',
+        content: `message-${i}-${'内容'.repeat(300)}`,
+        status: 'completed',
+      })
+    const saved = store.messages.listBySession(session.id)
+    const prefix = saved.slice(0, 8).map((message) => ({
+      kind: message.role === 'user' ? 'user' : 'assistant_text',
+      content: message.content,
+    }))
+    const { computeSourceHash } =
+      await import('../dist/agent/context/context-checkpoint.js')
+    store.contextCheckpoints.upsert({
+      sessionId: session.id,
+      throughMessageId: saved[7].id,
+      sourceHash: computeSourceHash(prefix),
+      summary: {
+        goal: null,
+        constraints: [],
+        decisions: [],
+        completed: [],
+        pending: [],
+        toolFacts: [],
+        knownErrors: [],
+        [field]: ['preserved-important-context'],
+      },
+      tokenEstimate: 10,
+      model: 'm',
+      schemaVersion: 1,
+    })
+    let requests = 0
+    const fetch = globalThis.fetch
+    globalThis.fetch = async () => {
+      requests++
+      throw new Error('checkpoint should have been reused')
+    }
+    t.after(() => {
+      globalThis.fetch = fetch
+    })
+    const result = await new ContextBuilder(store).build(
+      session.id,
+      'system',
+      {
+        baseUrl: 'https://mock.invalid',
+        apiKey: 'test',
+        model: 'm',
+        contextBudget: 5000,
+        maxRetries: 0,
+      },
+      new AbortController().signal,
+    )
+    assert.match(result[0].content, /preserved-important-context/)
+    assert.equal(requests, 0)
+  })
+}

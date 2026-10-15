@@ -1,5 +1,6 @@
 import {
   FrameError,
+  framesToMessages,
   type AssistantToolCall,
   type ContextFrame,
   type ModelMessage,
@@ -57,8 +58,19 @@ export function reconstructSessionFramesWithIds(
     const toolCallRows = store.toolCalls.listByMessage(message.id)
     if (toolCallRows.length === 0) {
       // 非完成的纯文本 assistant（interrupted/failed）不回放正文。
-      if (message.status !== 'completed' || text === '') continue
-      frames.push({ kind: 'assistant_text', content: text })
+      if (
+        message.status !== 'completed' ||
+        (text === '' && !message.reasoning && !message.providerContinuation)
+      )
+        continue
+      frames.push({
+        kind: 'assistant_text',
+        content: text,
+        ...(message.reasoning ? { reasoning: message.reasoning } : {}),
+        ...(message.providerContinuation
+          ? { providerContinuation: message.providerContinuation }
+          : {}),
+      })
       messageIds.push(message.id)
       continue
     }
@@ -69,6 +81,10 @@ export function reconstructSessionFramesWithIds(
       assistant: {
         role: 'assistant',
         content: text,
+        ...(message.reasoning ? { reasoning: message.reasoning } : {}),
+        ...(message.providerContinuation
+          ? { providerContinuation: message.providerContinuation }
+          : {}),
         toolCalls: toolCallRows.map(toAssistantToolCall),
       },
       results: toolCallRows.map((row) => ({
@@ -95,48 +111,13 @@ export function reconstructSessionFrames(
 export function framesToValidatedMessages(
   frames: ContextFrame[],
 ): ModelMessage[] {
-  const messages = projectFrames(frames)
+  const messages = framesToMessages(frames)
   const issues = validateModelMessages(messages)
   if (issues.length > 0) {
     const first = issues[0]
     throw new FrameError(
       `canonical history corrupted (${issues.length} issue(s)); first: message#${first.index}: ${first.detail}`,
     )
-  }
-  return messages
-}
-
-function projectFrames(frames: ContextFrame[]): ModelMessage[] {
-  const messages: ModelMessage[] = []
-  for (const frame of frames) {
-    switch (frame.kind) {
-      case 'system':
-        messages.push({ role: 'system', content: frame.content })
-        break
-      case 'user':
-        messages.push({
-          role: 'user',
-          content: frame.content,
-          ...('images' in frame && frame.images?.length
-            ? { images: frame.images }
-            : {}),
-        })
-        break
-      case 'assistant_text':
-        messages.push({
-          role: 'assistant',
-          content: frame.content,
-          toolCalls: [],
-        })
-        break
-      case 'tool_round':
-        messages.push(frame.assistant)
-        messages.push(...frame.results)
-        break
-      case 'runtime_control':
-        messages.push({ role: 'user', content: frame.content })
-        break
-    }
   }
   return messages
 }

@@ -183,7 +183,19 @@ export async function executeModelTurn(
     },
     result.usage === undefined,
   )
-  result.toolCalls = redactBrowserCalls(result.toolCalls)
+  const admittedCalls = redactBrowserCalls(result.toolCalls)
+  if (
+    result.providerContinuation &&
+    admittedCalls.some(
+      (call, index) => call.arguments !== result.toolCalls[index].arguments,
+    )
+  ) {
+    throw new ProviderError(
+      'provider_protocol',
+      'native continuation contains rejected browser arguments',
+    )
+  }
+  result.toolCalls = admittedCalls
 
   process.stderr.write(
     `${JSON.stringify({
@@ -225,6 +237,7 @@ export async function executeModelTurn(
       'failed',
       result.reasoning,
       normalized.parts,
+      result.providerContinuation,
     )
     state.turn = null
     if (state.currentTurnId !== null) {
@@ -239,6 +252,7 @@ export async function executeModelTurn(
       turn: {
         content: result.content,
         reasoning: result.reasoning,
+        providerContinuation: result.providerContinuation,
         rawStopReason: result.rawStopReason,
         toolCalls: result.toolCalls,
         finishReason: result.finishReason,
@@ -257,6 +271,7 @@ export async function executeModelTurn(
       : 'completed',
     result.reasoning,
     normalized.parts,
+    result.providerContinuation,
   )
   // length 是已完成模型轮而非 Run 完成：照常发 message.completed(length)。
   emitter.next({
@@ -343,6 +358,7 @@ export async function executeModelTurn(
     turn: {
       content: result.content,
       reasoning: result.reasoning,
+      providerContinuation: result.providerContinuation,
       rawStopReason: result.rawStopReason,
       toolCalls: result.toolCalls,
       finishReason: result.finishReason,

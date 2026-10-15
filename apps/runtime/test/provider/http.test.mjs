@@ -156,3 +156,128 @@ test('does not retry authentication errors', async () => {
   server.close()
   assert.equal(calls, 1)
 })
+
+for (const format of ['openai-chat', 'openai-responses', 'anthropic']) {
+  test(`${format} redacts a returned credential before truncating HTTP diagnostics`, async (t) => {
+    const { streamChat } = await import('../../dist/provider.js')
+    const credential = 'synthetic-credential-' + 'x'.repeat(320)
+    const fetch = globalThis.fetch
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({ error: `invalid credential: ${credential}` }),
+        { status: 401 },
+      )
+    t.after(() => {
+      globalThis.fetch = fetch
+    })
+    await assert.rejects(
+      streamChat(
+        {
+          baseUrl: 'https://mock.invalid',
+          apiKey: credential,
+          model: 'm',
+          messages: [],
+          maxRetries: 0,
+          signal: new AbortController().signal,
+        },
+        format,
+        () => {},
+      ),
+      (error) => {
+        assert.equal(error.code, 'authentication')
+        assert.ok(!error.message.includes('synthetic-credential-'))
+        assert.match(error.message, /\[redacted\]/)
+        return true
+      },
+    )
+  })
+
+  test(`${format} redacts transport errors before publishing retry diagnostics`, async (t) => {
+    const { streamChat } = await import('../../dist/provider.js')
+    const credential = 'synthetic-credential-for-retry'
+    const fetch = globalThis.fetch
+    globalThis.fetch = async () => {
+      throw new Error(`transport rejected ${credential}`)
+    }
+    t.after(() => {
+      globalThis.fetch = fetch
+    })
+    const controller = new AbortController()
+    const retries = []
+    await assert.rejects(
+      streamChat(
+        {
+          baseUrl: 'https://mock.invalid',
+          apiKey: credential,
+          model: 'm',
+          messages: [],
+          maxRetries: 1,
+          signal: controller.signal,
+          onRetry: (retry) => {
+            retries.push(retry)
+            controller.abort()
+          },
+        },
+        format,
+        () => {},
+      ),
+      (error) => error.name === 'AbortError',
+    )
+    assert.equal(retries.length, 1)
+    assert.ok(!retries[0].reason.includes(credential))
+    assert.match(retries[0].reason, /\[redacted\]/)
+  })
+}
+
+for (const [format, event] of [
+  ['openai-chat', { choices: [{ delta: { content: 'text' } }] }],
+  ['openai-responses', { type: 'response.output_text.delta', delta: 'text' }],
+  [
+    'anthropic',
+    {
+      type: 'content_block_delta',
+      index: 0,
+      delta: { type: 'text_delta', text: 'text' },
+    },
+  ],
+]) {
+  test(`${format} callback failures cancel and release the HTTP body`, async (t) => {
+    const { streamChat } = await import('../../dist/provider.js')
+    const fetch = globalThis.fetch
+    let cancelled = 0
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`),
+        )
+      },
+      cancel() {
+        cancelled++
+      },
+    })
+    globalThis.fetch = async () => new Response(body)
+    t.after(() => {
+      globalThis.fetch = fetch
+    })
+    const failure = new Error('consumer failed')
+    await assert.rejects(
+      streamChat(
+        {
+          baseUrl: 'https://mock.invalid',
+          apiKey: 'test',
+          model: 'm',
+          messages: [],
+          maxRetries: 0,
+          signal: new AbortController().signal,
+        },
+        format,
+        () => {
+          throw failure
+        },
+      ),
+      (error) => error === failure,
+    )
+    assert.equal(cancelled, 1)
+    assert.equal(body.locked, false)
+  })
+}

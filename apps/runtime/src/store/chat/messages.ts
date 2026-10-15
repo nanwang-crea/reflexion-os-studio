@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import {
   ContentPartSchema,
+  ProviderContinuationSchema,
+  type ProviderContinuation,
   type ContentPart,
   type Message,
   type MessageRole,
@@ -128,15 +130,21 @@ export class MessageStore {
     status: MessageStatus,
     reasoning: string,
     parts?: ContentPart[],
+    providerContinuation?: ProviderContinuation,
   ): void {
     this.db
       .prepare(
-        'UPDATE messages SET content = ?, parts_json = ?, reasoning = ?, status = ?, completed_at = ? WHERE id = ?',
+        'UPDATE messages SET content = ?, parts_json = ?, reasoning = ?, provider_continuation_json = ?, status = ?, completed_at = ? WHERE id = ?',
       )
       .run(
         content,
         JSON.stringify(parts ?? textParts(content)),
         reasoning,
+        providerContinuation
+          ? JSON.stringify(
+              ProviderContinuationSchema.parse(providerContinuation),
+            )
+          : null,
         status,
         nowIso(),
         id,
@@ -164,7 +172,7 @@ export class MessageStore {
   resetPending(id: string): void {
     this.db
       .prepare(
-        "UPDATE messages SET content = '', parts_json = '[]', reasoning = '', status = 'pending', completed_at = NULL WHERE id = ?",
+        "UPDATE messages SET content = '', parts_json = '[]', reasoning = '', provider_continuation_json = NULL, status = 'pending', completed_at = NULL WHERE id = ?",
       )
       .run(id)
   }
@@ -209,6 +217,13 @@ export class MessageStore {
       content: String(row.content),
       parts: this.parseParts(row),
       reasoning: row.reasoning == null ? '' : String(row.reasoning),
+      ...(row.provider_continuation_json != null
+        ? {
+            providerContinuation: ProviderContinuationSchema.parse(
+              JSON.parse(String(row.provider_continuation_json)),
+            ),
+          }
+        : {}),
       status: String(row.status) as MessageStatus,
       createdAt: String(row.created_at),
       completedAt: row.completed_at == null ? null : String(row.completed_at),

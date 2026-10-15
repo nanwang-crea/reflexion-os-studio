@@ -25,7 +25,16 @@ test('canonical ToolSpec is projected into OpenAI function tools', async () => {
       baseUrl: `http://127.0.0.1:${port}/v1`,
       apiKey: 'sk-test',
       model: 'mock-model',
-      messages: [{ role: 'user', content: 'hi' }],
+      messages: [
+        { role: 'user', content: 'hi' },
+        {
+          role: 'assistant',
+          content: 'previous',
+          reasoning: 'previous thought',
+          toolCalls: [],
+        },
+        { role: 'user', content: 'continue' },
+      ],
       signal: new AbortController().signal,
       tools: [
         {
@@ -41,6 +50,7 @@ test('canonical ToolSpec is projected into OpenAI function tools', async () => {
     () => {},
   )
   server.close()
+  assert.equal(requestBody.messages[1].reasoning_content, 'previous thought')
   assert.deepEqual(requestBody.tools, [
     {
       type: 'function',
@@ -247,4 +257,88 @@ test('tool_calls finish reason and accumulated calls surface together', async ()
   assert.equal(result.content, '让我读取文件')
   assert.equal(result.finishReason, 'tool_calls')
   assert.deepEqual(result.usage, { promptTokens: 5, completionTokens: 1 })
+})
+
+test('chat request returns assistant reasoning_content and omits absent reasoning', async () => {
+  const { chatRequestBody } =
+    await import('../../dist/provider/openai-chat/projection.js')
+  const body = chatRequestBody(
+    {
+      model: 'thinking-model',
+      messages: [
+        { role: 'user', content: '检查' },
+        {
+          role: 'assistant',
+          content: '',
+          reasoning: '先读取\n再判断',
+          toolCalls: [{ id: 'c1', name: 'file.read', arguments: '{}' }],
+        },
+        { role: 'tool', toolCallId: 'c1', content: 'ok', isError: false },
+        {
+          role: 'assistant',
+          content: '完成',
+          reasoning: '已确认',
+          toolCalls: [],
+        },
+        { role: 'assistant', content: '旧消息', toolCalls: [] },
+      ],
+    },
+    new Map(),
+  )
+  const { OpenAIChatRequestSchema } =
+    await import('@reflexion-os-studio/contracts')
+  assert.equal(
+    OpenAIChatRequestSchema.parse(body).messages[1].reasoning_content,
+    '先读取\n再判断',
+  )
+  assert.equal(body.messages[1].reasoning_content, '先读取\n再判断')
+  assert.equal(body.messages[3].reasoning_content, '已确认')
+  assert.equal(Object.hasOwn(body.messages[4], 'reasoning_content'), false)
+  assert.equal(Object.hasOwn(body.messages[2], 'reasoning_content'), false)
+})
+
+test('switching from native thinking to Chat does not replay foreign reasoning or an empty assistant', async () => {
+  const { chatRequestBody } =
+    await import('../../dist/provider/openai-chat/projection.js')
+  const native = {
+    apiFormat: 'anthropic',
+    baseUrl: 'https://old.invalid',
+    model: 'old',
+    blocks: [
+      { type: 'thinking', thinking: 'foreign thought', signature: 'signature' },
+    ],
+  }
+  const body = chatRequestBody(
+    {
+      model: 'new',
+      messages: [
+        { role: 'user', content: 'task' },
+        {
+          role: 'assistant',
+          content: '',
+          reasoning: 'foreign thought',
+          providerContinuation: native,
+          toolCalls: [],
+        },
+        {
+          role: 'assistant',
+          content: 'previous answer',
+          reasoning: 'foreign thought',
+          providerContinuation: native,
+          toolCalls: [],
+        },
+        {
+          role: 'assistant',
+          content: 'compatible answer',
+          reasoning: 'chat thought',
+          toolCalls: [],
+        },
+      ],
+    },
+    new Map(),
+  )
+  assert.equal(body.messages.length, 3)
+  assert.equal(body.messages[1].content, 'previous answer')
+  assert.equal(Object.hasOwn(body.messages[1], 'reasoning_content'), false)
+  assert.equal(body.messages[2].reasoning_content, 'chat thought')
 })

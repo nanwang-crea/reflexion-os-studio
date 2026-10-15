@@ -5,6 +5,7 @@ import { z } from 'zod'
 export const OpenAIChatMessageSchema = z.object({
   role: z.enum(['system', 'user', 'assistant', 'tool']),
   content: z.union([z.string(), z.array(z.unknown())]).optional(),
+  reasoning_content: z.string().optional(),
   tool_calls: z
     .array(
       z.object({

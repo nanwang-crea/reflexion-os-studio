@@ -9,16 +9,25 @@ import type { StreamChatOptions } from '../types.js'
 function toProviderMessage(
   message: ModelMessage,
   canonicalToProvider: ReadonlyMap<string, string>,
-): Record<string, unknown> {
+): Record<string, unknown> | null {
   switch (message.role) {
     case 'system':
       return { role: message.role, content: message.content }
     case 'user':
       return { role: 'user', content: userImageContent(message, 'openai-chat') }
     case 'assistant':
+      if (
+        !message.content &&
+        !message.toolCalls.length &&
+        (!message.reasoning || message.providerContinuation)
+      )
+        return null
       return {
         role: 'assistant',
         content: message.content,
+        ...(message.reasoning && !message.providerContinuation
+          ? { reasoning_content: message.reasoning }
+          : {}),
         ...(message.toolCalls.length > 0
           ? {
               tool_calls: message.toolCalls.map((call) => ({
@@ -48,9 +57,9 @@ export function chatRequestBody(
   const tools = options.tools
   return {
     model: options.model,
-    messages: options.messages.map((message) =>
-      toProviderMessage(message, canonicalToProvider),
-    ),
+    messages: options.messages
+      .map((message) => toProviderMessage(message, canonicalToProvider))
+      .filter((message) => message !== null),
     stream: true,
     ...(options.reasoningEffort !== undefined
       ? { reasoning_effort: options.reasoningEffort }

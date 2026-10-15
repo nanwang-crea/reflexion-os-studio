@@ -1,12 +1,13 @@
+import { streamReaderCleanup } from './stream-reader.js'
+import { buildContinuationToolMapping } from './continuation.js'
 import { resolveOutputBudget } from './output-budget.js'
 import { anthropicStopReason } from './stop-reasons.js'
-import { userImageContent } from './image-content.js'
-import type { ModelMessage } from '@reflexion-os-studio/agent-core'
+import { toAnthropicMessages } from './anthropic/projection.js'
+import { AnthropicContinuation } from './anthropic/continuation.js'
 import {
   DEFAULT_MAX_RETRIES,
   DEFAULT_TIMEOUT_MS,
   StreamCallbackError,
-  buildToolNameMapping,
   isAbort,
   isTimeout,
   mapHttpStatus,
@@ -14,100 +15,12 @@ import {
   shouldRetryStatus,
   sleep,
 } from './shared.js'
-import { ProviderError } from './provider-error.js'
+import { ProviderError, redactProviderError } from './provider-error.js'
 import type {
   StreamChatOptions,
   StreamChatResult,
   StreamedToolCall,
 } from './types.js'
-
-/**
- * canonical ModelMessage 投影为 Anthropic Messages 方言：
- * system 消息单独提取，assistant 的工具调用回到 content 块，
- * 工具结果走 content type=tool_result。
- */
-function toAnthropicMessages(
-  messages: ModelMessage[],
-  canonicalToProvider: ReadonlyMap<string, string>,
-): { system: string | undefined; messages: Array<Record<string, unknown>> } {
-  let system: string | undefined
-  const result: Array<Record<string, unknown>> = []
-
-  for (const message of messages) {
-    if (message.role === 'system') {
-      // Anthropic system 是顶层字段；多条 system 合并。
-      system = system ? `${system}\n${message.content}` : message.content
-      continue
-    }
-    if (message.role === 'user') {
-      result.push({
-        role: 'user',
-        content: userImageContent(message, 'anthropic'),
-      })
-      continue
-    }
-    if (message.role === 'assistant') {
-      if (message.toolCalls.length === 0) {
-        result.push({ role: 'assistant', content: message.content })
-      } else {
-        const content: Array<Record<string, unknown>> = []
-        if (message.content) {
-          content.push({ type: 'text', text: message.content })
-        }
-        for (const call of message.toolCalls) {
-          content.push({
-            type: 'tool_use',
-            id: call.id,
-            name: canonicalToProvider.get(call.name) ?? call.name,
-            input: tryParseJson(call.arguments),
-          })
-        }
-        result.push({ role: 'assistant', content })
-      }
-      continue
-    }
-    if (message.role === 'tool') {
-      // Anthropic 用 content type=tool_result 表达工具结果。
-      // 找到最后一条 assistant 消息，在其后插入 tool_result。
-      let lastAssistant: Record<string, unknown> | undefined
-      for (let i = result.length - 1; i >= 0; i--) {
-        if (result[i].role === 'assistant') {
-          lastAssistant = result[i]
-          break
-        }
-      }
-      if (lastAssistant && Array.isArray(lastAssistant.content)) {
-        lastAssistant.content.push({
-          type: 'tool_result',
-          tool_use_id: message.toolCallId,
-          content: message.content,
-        })
-      } else {
-        // 兜底：如果找不到 assistant 消息，创建一个 user 消息包裹 tool_result。
-        result.push({
-          role: 'user',
-          content: [
-            {
-              type: 'tool_result',
-              tool_use_id: message.toolCallId,
-              content: message.content,
-            },
-          ],
-        })
-      }
-    }
-  }
-
-  return { system, messages: result }
-}
-
-function tryParseJson(str: string): unknown {
-  try {
-    return JSON.parse(str)
-  } catch {
-    return {}
-  }
-}
 
 export async function streamAnthropic(
   options: StreamChatOptions,
@@ -126,19 +39,10 @@ export async function streamAnthropic(
     await sleep(waitMs, options.signal)
   }
 
-  const canonicalToolNames = (options.tools ?? []).map((tool) => tool.name)
-  const messageToolNames = options.messages.flatMap((msg) =>
-    msg.role === 'assistant' ? msg.toolCalls.map((c) => c.name) : [],
-  )
-  const { canonicalToProvider, providerToCanonical } = buildToolNameMapping(
-    canonicalToolNames,
-    messageToolNames,
-  )
+  const { canonicalToProvider, providerToCanonical } =
+    buildContinuationToolMapping(options, 'anthropic')
 
-  const { system, messages } = toAnthropicMessages(
-    options.messages,
-    canonicalToProvider,
-  )
+  const { system, messages } = toAnthropicMessages(options, canonicalToProvider)
 
   let attempt = 0
   attempts: for (;;) {
@@ -194,13 +98,13 @@ export async function streamAnthropic(
           await backoffAfterRetry({
             attempt,
             maxRetries,
-            reason: `${isTimeout(error) ? 'timeout' : 'network'}: ${String(error)}`,
+            reason: `${isTimeout(error) ? 'timeout' : 'network'}: ${redactProviderError(error, options.apiKey)}`,
           })
           continue
         }
         throw new ProviderError(
           isTimeout(error) ? 'timeout' : 'network',
-          `provider request failed: ${String(error)}`,
+          `provider request failed: ${redactProviderError(error, options.apiKey)}`,
         )
       }
 
@@ -217,7 +121,7 @@ export async function streamAnthropic(
       }
       throw new ProviderError(
         mapHttpStatus(response.status),
-        `provider responded ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`,
+        `provider responded ${response.status}${detail ? `: ${redactProviderError(detail, options.apiKey).slice(0, 200)}` : ''}`,
       )
     }
     if (!response.body) {
@@ -227,16 +131,17 @@ export async function streamAnthropic(
         await backoffAfterRetry({
           attempt,
           maxRetries,
-          reason: `stream failure: ${String(error)}`,
+          reason: `stream failure: ${redactProviderError(error, options.apiKey)}`,
         })
         continue
       }
       throw new ProviderError(
         'network',
-        `provider stream failed: ${String(error)}`,
+        `provider stream failed: ${redactProviderError(error, options.apiKey)}`,
       )
     }
 
+    const continuation = new AnthropicContinuation()
     let content = ''
     let reasoning = ''
     let finishReason: StreamChatResult['finishReason'] | null = null
@@ -252,6 +157,7 @@ export async function streamAnthropic(
     let currentToolId = ''
     let currentToolName = ''
     const reader = response.body.getReader()
+    const cleanupReader = streamReaderCleanup(reader)
     const decoder = new TextDecoder()
     let buffer = ''
 
@@ -267,6 +173,7 @@ export async function streamAnthropic(
         throw new Error('malformed SSE data payload')
       }
       const eventType = parsed.type as string | undefined
+      continuation.handle(parsed)
 
       if (eventType === 'message_start') {
         const msg = parsed.message as Record<string, unknown> | undefined
@@ -284,6 +191,14 @@ export async function streamAnthropic(
         if (block?.type === 'tool_use') {
           currentToolId = String(block.id ?? '')
           currentToolName = String(block.name ?? '')
+          toolCallById.set(currentToolId, {
+            id: currentToolId,
+            name: currentToolName,
+            arguments:
+              block.input && Object.keys(block.input as object).length > 0
+                ? JSON.stringify(block.input)
+                : '',
+          })
         }
         return
       }
@@ -296,6 +211,7 @@ export async function streamAnthropic(
           try {
             onDelta(text)
           } catch (error) {
+            cleanupReader()
             throw new StreamCallbackError(error)
           }
         } else if (delta?.type === 'thinking_delta') {
@@ -370,21 +286,34 @@ export async function streamAnthropic(
           attempt,
           maxRetries,
           reason: isTimeout(error)
-            ? `timeout: ${String(error)}`
-            : `stream failure: ${String(error)}`,
+            ? `timeout: ${redactProviderError(error, options.apiKey)}`
+            : `stream failure: ${redactProviderError(error, options.apiKey)}`,
         })
         continue attempts
       }
       throw new ProviderError(
         isTimeout(error) ? 'timeout' : 'network',
-        `provider stream failed: ${String(error)}`,
+        `provider stream failed: ${redactProviderError(error, options.apiKey)}`,
       )
+    } finally {
+      cleanupReader()
     }
 
-    // 将 toolCalls 从 map 转换为数组，并还原 canonical 名。
-    for (const [, toolCall] of toolCallById) {
+    const providerContinuation = continuation.result(options)
+    const calls =
+      providerContinuation?.apiFormat === 'anthropic'
+        ? providerContinuation.blocks
+            .filter((block) => block.type === 'tool_use')
+            .map((block) => ({
+              id: block.id,
+              name: block.name,
+              arguments: JSON.stringify(block.input),
+            }))
+        : [...toolCallById.values()]
+    for (const toolCall of calls) {
       toolCalls.push({
         ...toolCall,
+        arguments: toolCall.arguments || '{}',
         name: providerToCanonical.get(toolCall.name) ?? toolCall.name,
       })
     }
@@ -399,6 +328,7 @@ export async function streamAnthropic(
     return {
       content,
       reasoning,
+      providerContinuation,
       finishReason,
       rawStopReason,
       usage: {

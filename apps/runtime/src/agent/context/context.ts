@@ -36,7 +36,9 @@ function checkpointSummaryHasContent(
     summary.completed.length > 0 ||
     summary.pending.length > 0 ||
     summary.decisions.length > 0 ||
-    summary.toolFacts.length > 0
+    summary.toolFacts.length > 0 ||
+    summary.constraints.length > 0 ||
+    summary.knownErrors.length > 0
   )
 }
 
