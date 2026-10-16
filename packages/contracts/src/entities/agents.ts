@@ -186,7 +186,7 @@ export const DelegationSchema = z.object({
 })
 export type Delegation = z.infer<typeof DelegationSchema>
 
-/** 可显式取消的应用级累计预算；并发、深度、网络重试等不在此列。 */
+/** 可显式取消的应用级运行限制；并发、深度、网络重试等不在此列。 */
 export const AgentUnlimitedLimitSchema = z.enum([
   'maxTurns',
   'maxRunTimeoutSec',
@@ -221,7 +221,7 @@ export const AgentSettingsSchema = z.object({
   maxContinuationTurns: z.number().int().min(0).max(8).nullable(),
   // 子 Agent 最大委派深度。
   maxDepth: z.number().int().min(1).max(4).nullable(),
-  // 单个顶层 Run 的整棵委派树最多创建的子 Agent 数量。
+  // 单个顶层 Run 的整棵委派树中未结束的子 Agent 数量上限，终态释放名额。
   maxChildRuns: z.number().int().min(1).max(32).nullable(),
   // 单个顶层 Run 的整棵委派树最大并行数。
   maxParallelChildren: z.number().int().min(1).max(8).nullable(),

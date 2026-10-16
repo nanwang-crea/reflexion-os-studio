@@ -53,6 +53,7 @@
   position: relative;
 }
 .right-surface-content .workspace-panel {
+  width: 100%;
   flex: 1;
   min-width: 0;
   max-width: 100%;
@@ -459,16 +460,12 @@
 .main-chat-column[hidden] {
   display: none;
 }
-.browser-expanded > .right-surface {
+.surface-expanded > .right-surface {
   flex: 1;
   max-width: 100%;
 }
-.browser-expanded > .right-surface > .resize-handle {
+.surface-expanded > .right-surface > .resize-handle {
   display: none;
-}
-.browser-expand-button[aria-pressed='true'] {
-  background: var(--bg-active);
-  color: var(--text);
 }
 
 @container (max-width: 420px) {

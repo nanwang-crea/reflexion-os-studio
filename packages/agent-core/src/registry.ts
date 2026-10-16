@@ -93,6 +93,13 @@ export class ToolRegistry {
           ? schema.examples
           : undefined
       const example = Array.isArray(examples) ? examples[0] : undefined
+      const guidance =
+        schema &&
+        typeof schema === 'object' &&
+        !Array.isArray(schema) &&
+        typeof schema.description === 'string'
+          ? `。${schema.description}`
+          : ''
       const hint =
         example === undefined
           ? ''
@@ -100,7 +107,7 @@ export class ToolRegistry {
       return {
         ok: false,
         result: {
-          content: `invalid tool arguments: ${issues.slice(0, 4).join('; ')}${hint}`,
+          content: `invalid tool arguments: ${issues.slice(0, 4).join('; ')}${guidance}${hint}`,
           isError: true,
           code: 'invalid_request',
         },

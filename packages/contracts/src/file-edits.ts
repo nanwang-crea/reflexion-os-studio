@@ -85,11 +85,14 @@ export const FileEditDiagnosticSchema = z.object({
 })
 export type FileEditOperation = z.infer<typeof FileEditOperationSchema>
 export type FileEditDiagnostic = z.infer<typeof FileEditDiagnosticSchema>
+export const FileEditArgumentGuidance =
+  '推荐格式为 {"path":"file.md","edits":[{"kind":"replace","oldText":"原文","newText":"新文"}]}。edits 每项必须显式填写 kind；文本替换使用 kind=replace。旧格式仅在顶层传 path、oldText、newText（可选 expectedCount），不可与 edits 混用。请按错误字段修正参数后重试；未写入任何修改。'
 const fileEditJsonSchema = z.toJSONSchema(FileEditInputSchema)
 // 部分兼容 Provider 只读取顶层 properties；字段仍从同一 Zod schema 派生。
 export const FileEditParameters = JsonValueSchema.parse({
   ...fileEditJsonSchema,
   type: 'object',
+  description: FileEditArgumentGuidance,
   properties: Object.assign(
     {},
     ...FileEditInputSchema.options.map(

@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { BrowserSurfacePanel } from './features/browser/BrowserSurfacePanel'
 import {
   useBrowserPanelState,
-  setBrowserPanelExpanded,
   setBrowserPanelOpen,
 } from './features/browser/panel-state'
 import type { ComponentProps, Dispatch, SetStateAction } from 'react'
@@ -24,6 +23,7 @@ import { FileViewerPanel } from './features/workspace/files/FileViewerPanel'
 import { TerminalPanel } from './features/terminal/TerminalPanel'
 import { isTerminalEntryDisabled } from './features/terminal/entry-switch'
 import { ResizeHandle } from './components/ResizeHandle'
+import { SurfacePanelTabs } from './components/surfaces/SurfacePanelTabs'
 
 export interface AppMainProps {
   view: ViewName
@@ -73,17 +73,20 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
   const surfaceRef = useRef<HTMLDivElement>(null)
   const [collaborationOpen, setCollaborationOpen] = useState(false)
   const [browserWidth, setBrowserWidth] = useState<number | null>(null)
-  const { open: browserOpen, expanded: browserExpanded } =
-    useBrowserPanelState()
+  const { open: browserOpen } = useBrowserPanelState()
+  const [surfaceExpanded, setSurfaceExpanded] = useState(false)
   useEffect(() => {
     setBrowserPanelOpen(false)
     setCollaborationOpen(false)
   }, [workspace.panel.activeTabId, view])
   useEffect(() => {
-    setBrowserPanelExpanded(false)
+    setSurfaceExpanded(false)
   }, [activeSessionId])
   const surfaceOpen =
     browserOpen || (view === 'chat' && (workspace.open || collaborationOpen))
+  useEffect(() => {
+    if (!surfaceOpen) setSurfaceExpanded(false)
+  }, [surfaceOpen])
   const contextTitle =
     view === 'settings'
       ? '设置'
@@ -101,12 +104,12 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
 
   return (
     <div
-      className={`main-pane surface-split-layout${browserExpanded ? ' browser-expanded' : ''}`}
+      className={`main-pane surface-split-layout${surfaceExpanded ? ' surface-expanded' : ''}`}
     >
       <div
         className="main-chat-column"
-        hidden={browserExpanded}
-        inert={browserExpanded}
+        hidden={surfaceExpanded}
+        inert={surfaceExpanded}
       >
         <TopBar
           {...props.topBar}
@@ -189,7 +192,7 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
         className="right-surface"
         style={{
           display: surfaceOpen ? 'flex' : 'none',
-          width: browserExpanded
+          width: surfaceExpanded
             ? '100%'
             : browserOpen
               ? (browserWidth ?? '50%')
@@ -212,57 +215,30 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
           }}
         />
         <div className="right-surface-content">
-          <nav
-            className="right-surface-tabs"
-            aria-label="右侧面板"
-            style={{ display: browserOpen ? 'none' : 'flex' }}
-          >
-            <button
-              type="button"
-              aria-pressed={!browserOpen && !collaborationOpen}
-              onClick={() => {
-                setCollaborationOpen(false)
-                setBrowserPanelOpen(false)
-                workspace.setOpen(true)
-              }}
-            >
-              工作区
-            </button>
-            <button
-              type="button"
-              aria-pressed={browserOpen}
-              onClick={() => {
-                setCollaborationOpen(false)
-                setBrowserPanelOpen(true)
-              }}
-            >
-              浏览器
-            </button>
-            {view === 'chat' && (
-              <button
-                type="button"
-                aria-pressed={collaborationOpen}
-                onClick={() => {
-                  setCollaborationOpen(true)
-                  setBrowserPanelOpen(false)
-                }}
-              >
-                协作
-              </button>
-            )}
-            <button
-              type="button"
-              className="right-surface-collapse"
-              aria-label="收起右侧面板"
-              onClick={() => {
-                setBrowserPanelOpen(false)
-                workspace.setOpen(false)
-                setCollaborationOpen(false)
-              }}
-            >
-              收起
-            </button>
-          </nav>
+          <SurfacePanelTabs
+            active={
+              browserOpen
+                ? 'browser'
+                : collaborationOpen
+                  ? 'collaboration'
+                  : 'workspace'
+            }
+            showWorkspace={view === 'chat'}
+            showCollaboration={view === 'chat'}
+            expanded={surfaceExpanded}
+            onToggleExpanded={() => setSurfaceExpanded((expanded) => !expanded)}
+            onSelect={(surface) => {
+              setCollaborationOpen(surface === 'collaboration')
+              setBrowserPanelOpen(surface === 'browser')
+              if (surface === 'workspace') workspace.setOpen(true)
+            }}
+            onCollapse={() => {
+              setSurfaceExpanded(false)
+              setBrowserPanelOpen(false)
+              workspace.setOpen(false)
+              setCollaborationOpen(false)
+            }}
+          />
           <div
             className="workspace-surface"
             style={{
@@ -272,7 +248,7 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
                   : 'none',
             }}
           >
-            <FileViewerPanel {...workspace.panel} width={workspace.width} />
+            <FileViewerPanel {...workspace.panel} />
           </div>
           {view === 'chat' && collaborationOpen && (
             <Suspense fallback={<p>正在加载协作…</p>}>
@@ -304,16 +280,13 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
           >
             <BrowserSurfacePanel
               visible={browserOpen}
-              expanded={browserExpanded}
-              onToggleExpanded={() => setBrowserPanelExpanded(!browserExpanded)}
               onWorkspace={() => {
-                setCollaborationOpen(false)
                 setCollaborationOpen(false)
                 setBrowserPanelOpen(false)
                 workspace.setOpen(true)
               }}
               onTerminal={() => {
-                setBrowserPanelExpanded(false)
+                setSurfaceExpanded(false)
                 if (!terminal.open) terminal.onToggle()
               }}
               onCollapse={() => {

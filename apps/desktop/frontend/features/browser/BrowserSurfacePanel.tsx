@@ -15,15 +15,11 @@ import { useBrowserSettings } from '../../api/browser-settings'
 /** Trusted browser chrome; native webpage content remains a separate view. */
 export function BrowserSurfacePanel({
   visible,
-  expanded,
-  onToggleExpanded,
   onWorkspace,
   onTerminal,
   onCollapse,
 }: {
   visible: boolean
-  expanded: boolean
-  onToggleExpanded: () => void
   onWorkspace: () => void
   onTerminal: () => void
   onCollapse: () => void
@@ -69,8 +65,6 @@ export function BrowserSurfacePanel({
       <BrowserPanelHeader
         state={state}
         control={control}
-        expanded={expanded}
-        onToggleExpanded={onToggleExpanded}
         onWorkspace={onWorkspace}
         onCollapse={onCollapse}
       />

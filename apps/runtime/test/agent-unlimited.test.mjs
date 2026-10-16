@@ -78,7 +78,7 @@ test('eight explicit unlimited flags survive persistence without changing numeri
   )
 })
 
-test('unlimited cumulative children preserves the concurrency boundary', (t) => {
+test('unlimited active children preserves the concurrency boundary', (t) => {
   const store = fixture(t)
   const settings = {
     ...store.agentSettings.get(),

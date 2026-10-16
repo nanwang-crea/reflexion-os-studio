@@ -32,7 +32,7 @@ test('delegation budget is shared across the whole root tree', () => {
   first.release()
   const second = budget.acquire()
   second.release()
-  assert.throws(() => budget.acquire(), /整棵委派树的子 Agent 数量/)
+  budget.acquire().release()
 })
 
 test('root mutation coordinator serializes sibling writes', async () => {

@@ -59,7 +59,7 @@ export const FIELD_LABELS: Readonly<Record<string, string>> = Object.freeze({
   maxToolCalls: '单次运行工具调用上限',
   maxContinuationTurns: '续写轮次上限',
   maxDepth: '子 Agent 嵌套层数上限',
-  maxChildRuns: '子 Agent 总数上限',
+  maxChildRuns: '活跃子 Agent 上限',
   maxParallelChildren: '子 Agent 并发上限',
   maxChildTimeoutSec: '子 Agent 超时（秒）',
   maxChildTotalTokens: '子 Agent 输出预算',

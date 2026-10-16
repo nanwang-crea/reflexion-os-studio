@@ -48,7 +48,7 @@ export function createChildRunStarter(
       settings,
       deps.store.delegations.listByRootRun(
         parentRun.parentRunId ?? parentRun.id,
-      ).length,
+      ),
     )
   const childDeps = { ...deps, budget }
   return async (input) => {

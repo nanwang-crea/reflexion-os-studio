@@ -180,7 +180,9 @@ Agent、Memory、Skill、Context 和 Delegation/Policy 是一等领域，分别�
 独立 WKWebView；Windows/Linux 保持 fail-closed 与系统浏览器回退。
 用户网页支持 HTTP/HTTPS、内网及网站脚本；不注册 Tauri IPC、应用脚本消息
 处理器和内部协议。可信工具栏经 contracts/runtime-client Host facade 控制
-右侧原生面板，弹层显示时隐藏网页。显式 `--no-default-features` 可关闭。
+右侧原生面板，弹层显示时隐藏网页。工作区、浏览器和协作共用右侧 Surface 标签栏；
+放大/还原属于公共容器，切换标签保持放大，收起面板或切换会话后恢复分栏。
+文件编辑器保持挂载，浏览器按可见性同步原生视口；三平台共用布局，Windows/Linux 继续系统浏览器回退。显式 `--no-default-features` 可关闭。
 
 用户网页默认临时 store，macOS 14+ 可选择独立 UUID 的持久 store，与应用
 Renderer 隔离。引擎数据清理关闭网页、等待完成，本地历史单独清理，未选择的数据保留；下载

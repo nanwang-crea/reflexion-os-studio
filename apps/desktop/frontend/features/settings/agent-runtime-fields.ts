@@ -65,9 +65,9 @@ export const AGENT_RUNTIME_FIELDS: AgentRuntimeField[] = [
   ],
   [
     'maxChildRuns',
-    '整棵委派树的子 Agent 总数',
+    '整棵委派树的活跃子 Agent 上限',
     '4（默认）',
-    '限制整棵树累计创建数量；“不限制”不解除并发数和委派深度上限。',
+    '仅未结束的子 Agent 占用名额，完成、失败或取消后释放；“不限制”不解除并发数和委派深度上限。',
   ],
   [
     'maxParallelChildren',

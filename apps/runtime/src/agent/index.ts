@@ -419,7 +419,7 @@ export class ChatAgent {
     const budget = new DelegationBudgetCoordinator(
       input.run.id,
       settings,
-      this.store.delegations.listByRootRun(input.run.id).length,
+      this.store.delegations.listByRootRun(input.run.id),
     )
     const mutationCoordinator = new RootMutationCoordinator()
     const permissionPreset = resolveInputPreset({

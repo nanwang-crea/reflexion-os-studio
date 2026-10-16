@@ -119,6 +119,48 @@ test('top-level fields are visible while invalid and mixed calls remain rejected
   assert.match(PRIMARY_AGENT_SYSTEM_PROMPT, /空对象或空 arguments/)
 })
 
+test('missing kind and mixed formats return repair guidance without writing', async () => {
+  const { registry, writes } = fixture()
+  assert.match(registry.specs()[0].description, /每项必须显式填写 kind/)
+  for (const args of [
+    {
+      path: 'timeline.md',
+      edits: [{ oldText: 'old', newText: 'new' }],
+    },
+    {
+      path: 'timeline.md',
+      edits: [{ kind: 'replace', oldText: 'old', newText: 'new' }],
+      oldText: 'old',
+      newText: 'new',
+    },
+  ]) {
+    const result = await registry.call(
+      { id: 'bad-edit', name: 'file.edit', arguments: JSON.stringify(args) },
+      signal,
+    )
+    assert.equal(result.code, 'invalid_request')
+    assert.match(result.content, /edits 每项必须显式填写 kind/)
+    assert.match(result.content, /kind=replace/)
+    assert.match(result.content, /不可与 edits 混用/)
+    assert.match(result.content, /未写入任何修改/)
+  }
+  assert.equal(writes(), 0)
+  for (const args of [
+    { path: 'timeline.md', oldText: 'old', newText: 'new' },
+    {
+      path: 'timeline.md',
+      edits: [{ kind: 'replace', oldText: 'old', newText: 'new' }],
+    },
+  ]) {
+    const result = await registry.call(
+      { id: 'fixed-edit', name: 'file.edit', arguments: JSON.stringify(args) },
+      signal,
+    )
+    assert.ok(!result.isError)
+  }
+  assert.equal(writes(), 2)
+})
+
 for (const dialect of ['openai-chat', 'openai-responses', 'anthropic']) {
   test(`${dialect} receives the complete file.edit schema`, async (t) => {
     const originalFetch = globalThis.fetch
