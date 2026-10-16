@@ -1,5 +1,6 @@
+import { rolePackageHandlers } from './templates/package/handlers.js'
+import { resolveRoleSkills } from './templates/skills.js'
 import { exportTeam, importTeam } from './templates/team-share.js'
-import { exportRole } from './templates/share.js'
 import { bulkUpdateTemplates } from './templates/bulk.js'
 import { validateRoleTemplate } from './templates/validation.js'
 import { agentTemplateCommands } from '@reflexion-os-studio/contracts'
@@ -29,20 +30,31 @@ export const agentCommandHandlers: Record<string, CommandHandler> = {
     return { agent }
   },
   'agent_template.team_export': (p, { store }) => exportTeam(p, store),
-  'agent_template.team_import': (p, { store }) => importTeam(p, store),
-  'agent_template.export': (p, { store }) => {
-    const input = agentTemplateCommands['agent_template.export'].params.parse(p)
-    return exportRole(store, input.templateId, input.directory)
-  },
+  'agent_template.team_import': (p, { store, plugins }) =>
+    importTeam(p, store, plugins?.registry),
+  ...rolePackageHandlers,
   'agent_template.list': (p, { store }) => ({
     templates: store.agents.list(
       agentTemplateCommands['agent_template.list'].params.parse(p).projectId,
     ),
   }),
-  'agent_template.save': (p, { store }) => {
+  'agent_template.save': (p, { store, plugins }) => {
     try {
       const input = agentTemplateCommands['agent_template.save'].params.parse(p)
       validateRoleTemplate(store, input)
+      const current = input.id ? store.agents.get(input.id) : null
+      if ((input.skills ?? current?.skills ?? []).length)
+        resolveRoleSkills(
+          {
+            ...input,
+            skills: input.skills ?? current?.skills,
+            projectId:
+              input.projectId === undefined
+                ? current?.projectId
+                : input.projectId,
+          },
+          plugins.registry,
+        )
       return { template: store.agents.saveUser(input) }
     } catch (error) {
       throw new CommandError(
@@ -51,7 +63,8 @@ export const agentCommandHandlers: Record<string, CommandHandler> = {
       )
     }
   },
-  'agent_template.bulk_update': (p, { store }) => bulkUpdateTemplates(p, store),
+  'agent_template.bulk_update': (p, { store, plugins }) =>
+    bulkUpdateTemplates(p, store, plugins?.registry),
   'agent_template.remove': (p, { store }) => ({
     removed: store.agents.removeUser(requireString(p, 'templateId')),
   }),

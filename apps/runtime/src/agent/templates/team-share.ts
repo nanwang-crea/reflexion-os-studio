@@ -1,3 +1,5 @@
+import { resolveRoleSkills } from './skills.js'
+import type { SkillRegistry } from '../../skills/registry.js'
 import { randomUUID } from 'node:crypto'
 import {
   agentTemplateCommands,
@@ -50,7 +52,11 @@ export async function exportTeam(params: unknown, store: Store) {
   return { ...result, roleCount: selected.length }
 }
 
-export function importTeam(params: unknown, store: Store) {
+export function importTeam(
+  params: unknown,
+  store: Store,
+  registry?: SkillRegistry,
+) {
   try {
     const input =
       agentTemplateCommands['agent_template.team_import'].params.parse(params)
@@ -83,6 +89,10 @@ export function importTeam(params: unknown, store: Store) {
           .omit({ requestId: true })
           .parse(draft)
         validateRoleTemplate(store, validated)
+        if (validated.skills?.length) {
+          if (!registry) throw new Error('角色技能注册表不可用')
+          resolveRoleSkills(validated, registry)
+        }
         return validated
       })
       return {

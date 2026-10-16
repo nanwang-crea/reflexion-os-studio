@@ -9,6 +9,7 @@ export const SharedAgentRoleSchema = AgentTemplateSaveParamsSchema.pick({
   description: true,
   systemPrompt: true,
   domains: true,
+  skills: true,
   permissionCeiling: true,
   canDelegate: true,
   allowedTools: true,
@@ -37,3 +38,13 @@ export const AgentTeamShareSchema = z.strictObject({
   roles: z.array(SharedAgentRoleSchema).min(1).max(500),
 })
 export type AgentTeamShare = z.infer<typeof AgentTeamShareSchema>
+
+/** Full ZIP manifest; installed role still maps providers locally. */
+export const AgentRolePackageSchema = AgentRoleShareSchema.extend({
+  modelPreference: z
+    .object({
+      model: z.string().min(1),
+      reasoningEffort: z.string().nullable(),
+    })
+    .optional(),
+}).strict()

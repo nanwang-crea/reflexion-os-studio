@@ -86,6 +86,7 @@ export class AgentStore {
         ? (current?.projectId ?? null)
         : input.projectId
     const configuration = {
+      skills: input.skills ?? current?.skills ?? [],
       domains: input.domains ?? current?.domains ?? [],
       modelBinding: input.modelBinding ??
         current?.modelBinding ?? { mode: 'inherit' },
@@ -124,9 +125,11 @@ export class AgentStore {
 
   private toAgent(row: Row): AgentTemplate {
     return {
-      ...AgentTemplateSchema.pick({ domains: true, modelBinding: true }).parse(
-        JSON.parse(String(row.configuration_json ?? '{}')),
-      ),
+      ...AgentTemplateSchema.pick({
+        domains: true,
+        modelBinding: true,
+        skills: true,
+      }).parse(JSON.parse(String(row.configuration_json ?? '{}'))),
       projectId: row.project_id == null ? null : String(row.project_id),
       id: String(row.id),
       name: String(row.name),

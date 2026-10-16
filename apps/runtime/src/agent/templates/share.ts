@@ -32,6 +32,7 @@ export function portableRole(template: AgentTemplate) {
     description: template.description,
     systemPrompt: template.systemPrompt,
     domains: template.domains,
+    ...(template.skills.length ? { skills: template.skills } : {}),
     permissionCeiling: template.policy.permissionCeiling,
     canDelegate: template.policy.canDelegate,
     allowedTools: template.policy.allowedTools,

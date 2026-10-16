@@ -1,9 +1,15 @@
+import { resolveRoleSkills } from './skills.js'
+import type { SkillRegistry } from '../../skills/registry.js'
 import { agentTemplateCommands } from '@reflexion-os-studio/contracts'
 import type { Store } from '../../store/index.js'
 import { CommandError } from '../errors.js'
 
 /** Validate the complete selection before committing, preserving unedited fields. */
-export function bulkUpdateTemplates(params: unknown, store: Store) {
+export function bulkUpdateTemplates(
+  params: unknown,
+  store: Store,
+  registry?: SkillRegistry,
+) {
   try {
     const { targets, patch } =
       agentTemplateCommands['agent_template.bulk_update'].params.parse(params)
@@ -29,6 +35,20 @@ export function bulkUpdateTemplates(params: unknown, store: Store) {
             allowedTools = canDelegate
               ? [...new Set([...allowedTools, 'task'])]
               : allowedTools.filter((tool) => tool !== 'task')
+          }
+          if (role.skills.length) {
+            if (!registry) throw new Error('角色技能注册表不可用')
+            resolveRoleSkills(
+              {
+                skills: role.skills,
+                projectId:
+                  patch.projectId === undefined
+                    ? role.projectId
+                    : patch.projectId,
+                allowedTools,
+              },
+              registry,
+            )
           }
           return store.agents.saveUser({
             id: role.id,

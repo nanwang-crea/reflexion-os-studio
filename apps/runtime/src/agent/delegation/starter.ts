@@ -1,3 +1,4 @@
+import { roleSkillsSnapshot } from '../templates/skills.js'
 import { childLimit, limitSettingsHint } from '../run/budgets.js'
 import { resolveRoleModel } from './role-model.js'
 import type {
@@ -18,6 +19,7 @@ import { createAgentInstance, INHERITABLE_CHILD_TOOLS } from './instance.js'
 
 export interface ChildRunDependencies {
   store: Store
+  skills?: import('../../skills/registry.js').SkillRegistry
   resolveProvider?: typeof import('../provider-resolver.js').resolveProvider
   notifier: EventNotifier
   launcher: RunLauncher
@@ -99,7 +101,11 @@ export function createChildRunStarter(
       deps,
       deps.resolveProvider,
     )
-    const lease = budget.acquire()
+    const roleSkills = roleSkillsSnapshot(
+      template,
+      deps.skills,
+      parentSession.projectId,
+    )
     const instance = {
       ...createAgentInstance({
         spawn,
@@ -110,6 +116,8 @@ export function createChildRunStarter(
         canDelegateByDepth:
           settings.enableChildRuns &&
           childDepth < Math.min(settings.maxDepth ?? 4, 4),
+        skillInstructions: roleSkills.instructions,
+        skills: roleSkills.skills,
       }),
       projectId: parentSession.projectId,
       workspaceRoot: parentSession.projectId
@@ -119,6 +127,12 @@ export function createChildRunStarter(
       model: roleModel.model,
       reasoningEffort: roleModel.profile.reasoningEffort,
     }
+    if (
+      roleSkills.skills.some((skill) => skill.mode === 'preferred') &&
+      !instance.allowedTools.includes('skill.use')
+    )
+      throw new Error('父任务未允许 skill.use，无法使用角色的按需优先技能')
+    const lease = budget.acquire()
     const { permissionPreset, canDelegate } = instance
     const allowedTools = new Set(instance.allowedTools)
     const execution = {

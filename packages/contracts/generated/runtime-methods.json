@@ -14,6 +14,8 @@
     "agent_template.bulk_update",
     "agent_template.export",
     "agent_template.list",
+    "agent_template.package_import",
+    "agent_template.package_preview",
     "agent_template.remove",
     "agent_template.save",
     "agent_template.team_export",

@@ -365,6 +365,7 @@ test('ordinary chat delegates through the real loop to the role model and stream
   })
   const template = f.store.agents.saveUser({
     ...role,
+    skills: [{ skillId: 'code-review', mode: 'startup' }],
     projectId: f.project.id,
     modelBinding: {
       mode: 'fixed',
@@ -450,6 +451,12 @@ test('ordinary chat delegates through the real loop to the role model and stream
     JSON.stringify(
       f.store.toolCalls.listByRun(root.id).map((call) => call.output),
     ),
+  )
+  assert.match(requests[0].messages[0].content, /Skill code-review v.*启动加载/)
+  assert.equal(
+    f.store.delegations.listByParentRun(root.id)[0].agentInstance.skills[0]
+      .skillId,
+    'code-review',
   )
   assert.equal(requests[0].model, 'review-model')
   assert.equal(requests[0].reasoning_effort, 'high')

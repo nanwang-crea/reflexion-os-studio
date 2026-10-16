@@ -45,6 +45,7 @@ export {
 
 export type {
   AgentTeamExportParams,
+  AgentRolePackagePreview,
   AgentTemplateSaveParams,
   AgentTemplateBulkUpdateParams,
 } from './commands/agent-template.js'

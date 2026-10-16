@@ -92,10 +92,15 @@ export function bulkUpdateAgentTemplates(
   return request('agent_template.bulk_update', input)
 }
 
-export function exportAgentTemplate(templateId: string, directory: string) {
+export function exportAgentTemplate(
+  templateId: string,
+  directory: string,
+  includeSkills = false,
+) {
   return request<{ path: string }>('agent_template.export', {
     templateId,
     directory,
+    includeSkills,
   })
 }
 
@@ -118,4 +123,24 @@ export function importAgentTeam(
     'agent_template.team_import',
     { archive, projectId },
   )
+}
+
+export function previewAgentRolePackage(
+  data: string,
+  projectId: string | null,
+) {
+  return request<
+    import('@reflexion-os-studio/contracts').AgentRolePackagePreview
+  >('agent_template.package_preview', { data, projectId })
+}
+export function importAgentRolePackage(
+  data: string,
+  projectId: string | null,
+  digest: string,
+) {
+  return request<{ template: AgentTemplate }>('agent_template.package_import', {
+    data,
+    projectId,
+    digest,
+  })
 }

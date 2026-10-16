@@ -9,11 +9,21 @@ export function RoleExportButton({
   templateId: string
   busy: boolean
 }) {
+  const [includeSkills, setIncludeSkills] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [message, setMessage] = useState('')
   const [failed, setFailed] = useState(false)
   return (
     <>
+      <label className="agent-checkbox">
+        <input
+          type="checkbox"
+          checked={includeSkills}
+          disabled={busy || exporting}
+          onChange={(event) => setIncludeSkills(event.target.checked)}
+        />
+        包含完整技能包（ZIP）
+      </label>
       <button
         type="button"
         disabled={busy || exporting}
@@ -28,17 +38,25 @@ export function RoleExportButton({
               title: '选择角色导出目录',
             })
             if (typeof directory !== 'string') return
-            const result = await exportAgentTemplate(templateId, directory)
+            const result = await exportAgentTemplate(
+              templateId,
+              directory,
+              includeSkills,
+            )
             setMessage(`已导出：${result.path}`)
-          } catch {
+          } catch (error) {
             setFailed(true)
-            setMessage('导出失败，请确认目录可写，且角色配置不包含机密。')
+            setMessage(
+              error instanceof Error
+                ? error.message
+                : '导出失败，请确认目录可写，且角色配置不包含机密。',
+            )
           } finally {
             setExporting(false)
           }
         }}
       >
-        导出
+        {includeSkills ? '导出完整角色包' : '导出配置'}
       </button>
       {message && <small role={failed ? 'alert' : 'status'}>{message}</small>}
     </>

@@ -81,6 +81,7 @@ export function RoleListItem({
                 ?.name ?? '原项目不可用')
             : '跨项目通用'}{' '}
           · {template.policy.allowedTools.length} 个工具 ·{' '}
+          {template.skills?.length ?? 0} 个技能 ·{' '}
           {template.policy.canDelegate ? '允许继续委派' : '独立执行'}
         </small>
       </div>
@@ -104,6 +105,7 @@ export function RoleListItem({
                 : template.projectId,
               domains: template.domains,
               modelBinding: template.modelBinding,
+              skills: template.skills,
               enabled: template.enabled,
               permissionCeiling: template.policy.permissionCeiling,
               canDelegate: template.policy.canDelegate,

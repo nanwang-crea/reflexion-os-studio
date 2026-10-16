@@ -1,5 +1,9 @@
 import { z } from 'zod'
-import { AgentModelBindingSchema, PermissionPresetSchema } from '../entities.js'
+import {
+  AgentModelBindingSchema,
+  AgentSkillBindingsSchema,
+  PermissionPresetSchema,
+} from '../entities.js'
 import { RequestIdSchema } from './params.js'
 
 export const AgentTemplateSaveParamsSchema = z.object({
@@ -11,6 +15,7 @@ export const AgentTemplateSaveParamsSchema = z.object({
   projectId: z.string().min(1).nullable().optional(),
   domains: z.array(z.string().min(1).max(40)).max(12).optional(),
   modelBinding: AgentModelBindingSchema.optional(),
+  skills: AgentSkillBindingsSchema.optional(),
   permissionCeiling: PermissionPresetSchema.optional(),
   enabled: z.boolean(),
   canDelegate: z.boolean(),

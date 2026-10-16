@@ -125,6 +125,20 @@ export async function verifyRoleEditor(page) {
     .waitFor()
 
   await editor
+    .getByRole('combobox', { name: '添加角色技能', exact: true })
+    .click()
+  await page
+    .getByRole('option', {
+      name: 'Report helper · Report guidance',
+      exact: true,
+    })
+    .click()
+  await editor
+    .getByRole('combobox', { name: 'project-skill 加载方式', exact: true })
+    .click()
+  await page.getByRole('option', { name: '启动加载', exact: true }).click()
+
+  await editor
     .getByRole('heading', { name: '执行权限', exact: true })
     .scrollIntoViewIfNeeded()
   await page.screenshot({ path: '/tmp/reflexion-role-permissions-desktop.png' })
@@ -148,6 +162,10 @@ export async function verifyRoleEditor(page) {
   const saved = await page.evaluate(() => window.roleSaves[0])
   assert.deepEqual(saved.domains, ['开发', '写作'])
   assert.equal(saved.projectId, 'project')
+  assert.deepEqual(saved.skills, [
+    { skillId: 'project-skill', mode: 'startup' },
+  ])
+  assert.ok(saved.allowedTools.includes('skill.use'))
   assert.deepEqual(saved.modelBinding, {
     mode: 'fixed',
     providerId: 'synthetic',

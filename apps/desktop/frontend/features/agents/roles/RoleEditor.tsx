@@ -1,3 +1,4 @@
+import { RoleSkillsField } from './RoleSkillsField'
 import type {
   AgentTemplateSaveParams,
   Project,
@@ -15,6 +16,7 @@ export const emptyRole: RoleDraft = {
   systemPrompt: '',
   enabled: true,
   domains: [],
+  skills: [],
   projectId: null,
   modelBinding: { mode: 'inherit' },
   permissionCeiling: 'workspace-read',
@@ -110,6 +112,7 @@ export function RoleEditor({
             />
           </label>
         </section>
+        <RoleSkillsField value={value} onChange={onChange} />
         <RolePermissionsField value={value} onChange={onChange} />
         <label className="agent-checkbox">
           <input

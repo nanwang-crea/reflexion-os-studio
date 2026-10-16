@@ -117,3 +117,15 @@
     width: 100%;
   }
 }
+
+.role-skill-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.role-skill-row > span {
+  flex: 1;
+  min-width: 120px;
+  overflow-wrap: anywhere;
+}

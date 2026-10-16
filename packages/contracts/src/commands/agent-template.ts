@@ -34,10 +34,38 @@ export const agentTemplateCommands = {
       teamId: z.string(),
     }),
   },
+  'agent_template.package_preview': {
+    params: z.strictObject({
+      requestId: RequestIdSchema,
+      data: z.string().max(48 * 1024 * 1024),
+      projectId: z.string().nullable(),
+    }),
+    result: z.object({
+      digest: z.string(),
+      role: AgentTemplateSaveParamsSchema.omit({ requestId: true }),
+      skills: z.array(
+        z.object({
+          id: z.string(),
+          version: z.string(),
+          action: z.enum(['install', 'reuse']),
+        }),
+      ),
+    }),
+  },
+  'agent_template.package_import': {
+    params: z.strictObject({
+      requestId: RequestIdSchema,
+      data: z.string().max(48 * 1024 * 1024),
+      projectId: z.string().nullable(),
+      digest: z.string().length(64),
+    }),
+    result: z.object({ template: AgentTemplateSchema }),
+  },
   'agent_template.export': {
     params: z.strictObject({
       requestId: RequestIdSchema,
       templateId: z.string().min(1),
+      includeSkills: z.boolean().optional(),
       directory: z.string().min(1),
     }),
     result: z.object({ path: z.string() }),
@@ -103,4 +131,8 @@ export type AgentTemplateBulkUpdateParams = z.input<
 
 export type AgentTeamExportParams = z.input<
   (typeof agentTemplateCommands)['agent_template.team_export']['params']
+>
+
+export type AgentRolePackagePreview = z.infer<
+  (typeof agentTemplateCommands)['agent_template.package_preview']['result']
 >

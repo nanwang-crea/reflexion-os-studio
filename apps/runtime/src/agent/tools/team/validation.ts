@@ -1,4 +1,8 @@
-import type { AgentTeamCreateInput } from '@reflexion-os-studio/contracts'
+import { resolveRoleSkills } from '../../templates/skills.js'
+import type {
+  AgentTemplate,
+  AgentTeamCreateInput,
+} from '@reflexion-os-studio/contracts'
 import type { ToolContext } from '../shared.js'
 import { INHERITABLE_CHILD_TOOLS } from '../../delegation/instance.js'
 import { validateRoleTemplate } from '../../templates/validation.js'
@@ -44,6 +48,7 @@ export function prepareTeamRole(
   projectId: string | null,
   teamId: string,
   currentDomains: string[] = [],
+  currentSkills?: AgentTemplate['skills'],
 ) {
   const mcpTools = new Set(
     ctx.mcp?.allTools().map((tool) => `${tool.serverId}/${tool.toolName}`) ??
@@ -59,11 +64,13 @@ export function prepareTeamRole(
     throw new Error('允许继续委派的角色必须包含 task 工具')
   const value = {
     ...role,
+    skills: role.skills ?? currentSkills,
     projectId,
     domains: teamRoleDomains(role.domains, teamId, currentDomains),
     permissionCeiling: role.permissionCeiling ?? ('workspace-read' as const),
     modelBinding: role.modelBinding ?? { mode: 'inherit' as const },
   }
   validateRoleTemplate(ctx.store, value)
+  if (value.skills?.length) resolveRoleSkills(value, ctx.skills)
   return value
 }

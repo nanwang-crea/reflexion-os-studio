@@ -71,6 +71,7 @@ export function createTeamMutationTool(
             projectId,
             input.teamId,
             current?.domains,
+            current?.skills,
           )
           return { ...value, ...(id ? { id } : {}) }
         })

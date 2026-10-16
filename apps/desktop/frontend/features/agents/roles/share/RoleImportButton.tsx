@@ -1,3 +1,6 @@
+import { RolePackageImport } from './RolePackageImport'
+import { previewAgentRolePackage } from '../../../../api/agents'
+import type { AgentRolePackagePreview } from '@reflexion-os-studio/contracts'
 import { RoleTeamImport } from './RoleTeamImport'
 import { useRef, useState } from 'react'
 import {
@@ -20,6 +23,11 @@ export function RoleImportButton({
   projectId: string | null
   onImport: (draft: RoleDraft) => Promise<void>
 }) {
+  const [bundle, setBundle] = useState<{
+    data: string
+    preview: AgentRolePackagePreview
+    projectId: string | null
+  } | null>(null)
   const [team, setTeam] = useState<AgentTeamShare | null>(null)
   const input = useRef<HTMLInputElement>(null)
   const [error, setError] = useState('')
@@ -36,7 +44,7 @@ export function RoleImportButton({
       <input
         ref={input}
         type="file"
-        accept=".reflexion-role.json,.reflexion-team.json"
+        accept=".reflexion-role.json,.reflexion-team.json,.zip"
         hidden
         disabled={busy || reading}
         onChange={async (event) => {
@@ -46,6 +54,20 @@ export function RoleImportButton({
           setError('')
           setReading(true)
           try {
+            if (file.name.endsWith('.zip')) {
+              if (file.size > 32 * 1024 * 1024)
+                throw new Error('角色 ZIP 不得超过 32MB')
+              const bytes = new Uint8Array(await file.arrayBuffer())
+              let binary = ''
+              for (let offset = 0; offset < bytes.length; offset += 32768)
+                binary += String.fromCharCode(
+                  ...bytes.subarray(offset, offset + 32768),
+                )
+              const data = btoa(binary)
+              const preview = await previewAgentRolePackage(data, projectId)
+              setBundle({ data, preview, projectId })
+              return
+            }
             const isTeam = file.name.endsWith('.reflexion-team.json')
             if (
               (!isTeam && !file.name.endsWith('.reflexion-role.json')) ||
@@ -85,6 +107,13 @@ export function RoleImportButton({
           }
         }}
       />
+      {bundle && (
+        <RolePackageImport
+          {...bundle}
+          onClose={() => setBundle(null)}
+          onImported={onTeamImported}
+        />
+      )}
       {team && (
         <RoleTeamImport
           archive={team}

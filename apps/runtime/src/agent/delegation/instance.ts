@@ -51,6 +51,8 @@ export function createAgentInstance(input: {
   inheritedTools: ReadonlySet<string>
   permissionDomainId: string
   canDelegateByDepth: boolean
+  skillInstructions?: string
+  skills?: AgentInstance['skills']
 }): AgentInstance {
   const inherited = [...input.inheritedTools].filter(
     (tool) => INHERITABLE_CHILD_TOOLS.includes(tool) || tool.includes('/'),
@@ -77,6 +79,7 @@ export function createAgentInstance(input: {
     input.spawn.role ? `Role: ${input.spawn.role}` : undefined,
     input.spawn.instructions,
     'Complete only the assigned task. Report evidence, actions, and unresolved risks concisely.',
+    input.skillInstructions,
   ].filter((part): part is string => Boolean(part))
   return {
     id: `agent-${randomUUID()}`,
@@ -86,6 +89,7 @@ export function createAgentInstance(input: {
       input.template?.description ??
       'delegated task specialist',
     templateId: input.template?.id ?? null,
+    skills: input.skills,
     instructions: instructions.join('\n\n'),
     permissionPreset,
     permissionDomainId: input.permissionDomainId,

@@ -436,6 +436,7 @@ export class ChatAgent {
       ? createChildRunStarter(
           {
             store: this.store,
+            skills: this.skills,
             notifier: this.notifier,
             launcher: this.launcher,
             profile: input.profile,

@@ -52,10 +52,27 @@ export const AgentModelBindingSchema = z.discriminatedUnion('mode', [
 ])
 export type AgentModelBinding = z.infer<typeof AgentModelBindingSchema>
 
+export const AgentSkillBindingSchema = z.strictObject({
+  skillId: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9-]*$/)
+    .max(128),
+  mode: z.enum(['preferred', 'startup']),
+})
+export const AgentSkillBindingsSchema = z
+  .array(AgentSkillBindingSchema)
+  .max(20)
+  .refine(
+    (items) => new Set(items.map((item) => item.skillId)).size === items.length,
+    '技能不能重复',
+  )
+export type AgentSkillBinding = z.infer<typeof AgentSkillBindingSchema>
+
 export const AgentTemplateSchema = AgentDefinitionSchema.extend({
   projectId: z.string().min(1).nullable().default(null),
   domains: z.array(z.string().min(1).max(40)).max(12).default([]),
   modelBinding: AgentModelBindingSchema.default({ mode: 'inherit' }),
+  skills: AgentSkillBindingsSchema.default([]),
   source: AgentTemplateSourceSchema,
   builtin: z.boolean(),
 })
@@ -80,6 +97,9 @@ export const AgentInstanceSchema = z.object({
   providerId: z.string().min(1).nullable().optional(),
   model: z.string().min(1).optional(),
   reasoningEffort: ReasoningEffortSchema.nullable().optional(),
+  skills: z
+    .array(AgentSkillBindingSchema.extend({ version: z.string() }))
+    .optional(),
   instructions: z.string().min(1),
   permissionPreset: PermissionPresetSchema,
   permissionDomainId: z.string().min(1),

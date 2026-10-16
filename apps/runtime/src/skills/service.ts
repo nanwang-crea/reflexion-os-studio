@@ -114,6 +114,31 @@ export class SkillPluginService {
     return plugin
   }
 
+  async installRoleSkill(
+    directory: string,
+    projectId: string | null,
+  ): Promise<PluginRecord> {
+    const plugin = await this.installer.install(
+      {
+        source: 'local',
+        path: directory,
+        installScope: projectId === null ? 'global' : 'project',
+        ...(projectId ? { installProjectId: projectId } : {}),
+      },
+      {},
+    )
+    // The ZIP extraction directory is temporary, never persist it as an update source.
+    try {
+      const saved = this.store.plugins.upsert({ ...plugin, sourceRef: null })
+      this.reloadRegistry()
+      this.emit(saved)
+      return saved
+    } catch (error) {
+      this.uninstall(plugin.id)
+      throw error
+    }
+  }
+
   prepare(
     skillId: string,
     projectId: string | null,
