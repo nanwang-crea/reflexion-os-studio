@@ -11,8 +11,8 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 10px;
-  padding: 14px;
+  gap: 6px;
+  padding: 12px;
   min-height: 170px;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
@@ -58,4 +58,90 @@
 .agent-role-card.is-selected {
   border-color: var(--accent-border);
   background: var(--accent-soft);
+}
+
+/* Keep library actions distinct from editor and dialog controls. */
+.agent-role-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+.agent-role-heading-actions button,
+.role-catalog-toolbar button,
+.agent-role-filters > button,
+.agent-role-card footer button {
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background 120ms,
+    border-color 120ms;
+}
+.agent-role-heading-actions button {
+  min-height: 34px;
+  padding: 6px 12px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.agent-role-heading-actions .role-create-button {
+  background: var(--text);
+  color: var(--bg);
+  border-color: transparent;
+  font-weight: 600;
+}
+.agent-role-heading-actions button:hover:not(:disabled),
+.role-catalog-toolbar button:hover:not(:disabled),
+.agent-role-filters > button:hover:not(:disabled),
+.agent-role-card footer button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--border);
+}
+.agent-role-heading-actions button:disabled,
+.role-catalog-toolbar button:disabled,
+.agent-role-card footer button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.agent-role-filters {
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-sidebar);
+}
+.role-catalog-toolbar {
+  padding: 10px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.agent-role-card,
+.agent-role-card:last-child {
+  background: var(--bg);
+  border-radius: 10px;
+}
+.agent-role-card p {
+  line-height: 1.6;
+}
+.agent-role-card footer {
+  padding-top: 6px;
+  border-top: 1px solid var(--border-subtle);
+}
+.agent-role-card footer > .agent-checkbox:first-child {
+  margin-left: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.agent-role-card footer > .agent-checkbox:last-child {
+  margin-left: auto;
+}
+@media (max-width: 600px) {
+  .agent-roles-heading {
+    flex-wrap: wrap;
+  }
+  .agent-role-heading-actions {
+    justify-content: flex-start;
+  }
 }

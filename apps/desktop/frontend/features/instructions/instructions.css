@@ -1,7 +1,9 @@
 /* ---------- 指令页（全局/项目 × AGENTS.md / MEMORY.md） ---------- */
 
 .instructions-view {
-  max-width: 860px;
+  width: 100%;
+  max-width: 960px;
+  min-width: 0;
   margin: 0 auto;
   padding: 24px 16px 48px;
 }
@@ -15,6 +17,7 @@
 .instructions-toolbar {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
   align-items: center;
   margin-bottom: 24px;
 }
@@ -49,8 +52,9 @@
   pointer-events: none;
 }
 .instruction-pane {
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
+  background: var(--bg);
   padding: 16px;
   margin-bottom: 24px;
 }
@@ -74,10 +78,15 @@
   font-size: 13px;
   resize: vertical;
   box-sizing: border-box;
+  color: var(--text);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
 }
 .instruction-actions {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
   align-items: center;
   margin-top: 10px;
 }
@@ -104,4 +113,39 @@
 }
 .instruction-status.error {
   color: var(--danger);
+}
+
+.instructions-toolbar {
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-sidebar);
+}
+.instructions-toolbar button {
+  min-height: 34px;
+  padding: 6px 12px;
+}
+.instructions-toolbar .ui-select {
+  min-width: 0;
+  max-width: 100%;
+}
+.instructions-toolbar .primary,
+.instruction-actions .primary {
+  background: var(--text);
+  color: var(--bg);
+}
+.instruction-pane textarea:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+@media (max-width: 600px) {
+  .instructions-view {
+    padding: 16px 12px 32px;
+  }
+  .instructions-toolbar .ui-select {
+    flex: 1 1 160px;
+  }
+  .instruction-pane {
+    padding: 12px;
+  }
 }

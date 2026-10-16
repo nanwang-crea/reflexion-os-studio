@@ -13,7 +13,7 @@
 .task-results article {
   padding: 12px;
   margin: 10px 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
 }
 .task-results strong {
@@ -62,4 +62,43 @@
   overflow: auto;
   min-height: 0;
   flex: 1;
+}
+
+.task-results h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 8px;
+}
+.task-results h3 small {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--bg-inset);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.task-results article {
+  background: var(--bg-sidebar);
+}
+.task-result-source {
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+  overflow-wrap: anywhere;
+}
+.task-results form {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-sidebar);
+}
+.task-results form > button + button {
+  margin-left: 8px;
+}
+.collaboration-details > summary:hover {
+  background: var(--bg-hover);
+}
+.collaboration-details[open] > summary {
+  margin-bottom: 12px;
 }

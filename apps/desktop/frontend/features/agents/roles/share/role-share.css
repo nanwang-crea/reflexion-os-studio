@@ -43,7 +43,7 @@
 }
 
 .agent-team-export-trigger {
-  margin-bottom: 12px;
+  margin-bottom: 0;
 }
 .agent-roles-heading > div:has(> button) {
   flex-shrink: 0;

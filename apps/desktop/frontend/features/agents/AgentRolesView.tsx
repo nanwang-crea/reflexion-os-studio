@@ -150,43 +150,46 @@ export function AgentRolesView({
             <h1>角色库</h1>
             <p>配置职责与执行能力，供主对话按需调用。</p>
           </div>
-          <RoleImportButton
-            onTeamImported={async (projectId) => {
-              revealImports(projectId)
-              await reload()
-            }}
-            onFeedback={(message, failed = false) => {
-              setNotice('')
-              setImportFeedback({ message, failed })
-            }}
-            busy={busy}
-            projectId={scope === '*' ? initialProjectId : scope || null}
-            onImport={async (value) => {
-              const opened = await edit(value)
-              if (opened) revealImports(value.projectId ?? null)
-              return opened
-            }}
-          />
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() =>
-              void edit({
-                ...emptyRole,
-                projectId: scope === '*' ? initialProjectId : scope || null,
-              })
-            }
-          >
-            新建角色
-          </button>
+          <div className="agent-role-heading-actions">
+            <RoleTeamExport
+              templates={templates}
+              projects={projects}
+              busy={busy || loading}
+              scope={scope}
+              domain={domain}
+            />
+            <RoleImportButton
+              onTeamImported={async (projectId) => {
+                revealImports(projectId)
+                await reload()
+              }}
+              onFeedback={(message, failed = false) => {
+                setNotice('')
+                setImportFeedback({ message, failed })
+              }}
+              busy={busy}
+              projectId={scope === '*' ? initialProjectId : scope || null}
+              onImport={async (value) => {
+                const opened = await edit(value)
+                if (opened) revealImports(value.projectId ?? null)
+                return opened
+              }}
+            />
+            <button
+              className="role-create-button"
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                void edit({
+                  ...emptyRole,
+                  projectId: scope === '*' ? initialProjectId : scope || null,
+                })
+              }
+            >
+              新建角色
+            </button>
+          </div>
         </header>
-        <RoleTeamExport
-          templates={templates}
-          projects={projects}
-          busy={busy || loading}
-          scope={scope}
-          domain={domain}
-        />
         <RoleFilters
           scope={scope}
           setScope={setScope}
