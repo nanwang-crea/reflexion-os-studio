@@ -23,9 +23,6 @@ jobs:
           - platform: windows
             os: windows-latest
             artifact_name: reflexion-os-studio-windows
-          - platform: linux
-            os: ubuntu-22.04
-            artifact_name: reflexion-os-studio-linux
           - platform: macos
             os: macos-latest
             artifact_name: reflexion-os-studio-macos

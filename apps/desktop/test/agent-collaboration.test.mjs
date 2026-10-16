@@ -104,7 +104,7 @@ window.showRoles=()=>root.render(<AgentRolesView profiles={profiles} initialProj
 window.showRoleLayout=()=>root.render(<div className="app-shell"><main className="main-pane"><div className="main-chat-column"><header className="topbar"><span className="topbar-title">Agent 角色</span></header><div className="content-area"><div className="content-main"><AgentRolesView profiles={profiles} initialProjectId="project" confirm={async()=>!window.blockRoleSwitch}/></div></div></div></main></div>);
 window.showRuntimeLimits=()=>root.render(<div className="settings-view"><div className="settings-content"><div className="settings-content-inner"><AgentRuntimePanel key={Math.random()}/></div></div></div>);
 window.collaborationCommits=0;
-window.showCollaboration=()=>root.render(<React.Profiler id="collaboration" onRender={()=>window.collaborationCommits++}><CollaborationPanel onCollapse={()=>{}} chat={{sessionData:{session:{id:'session',projectId:'project'},messages:[{id:'user',runId:'root-run'}],runs:[{id:window.currentRootRun??'root-run',parentRunId:null,supersededByRunId:null,model:'parent-model',providerId:'synthetic',status:'completed',planId:'plan'}],plans:[{id:'plan',goal:'Deliver feature',steps:[{id:'step',title:'Implement and verify',status:'completed'}]}]},pendingApprovals:[],pendingInteractions:[]}}/></React.Profiler>);
+window.showCollaboration=()=>root.render(<React.Profiler id="collaboration" onRender={()=>window.collaborationCommits++}><CollaborationPanel onCollapse={()=>{}} chat={{sessionData:{session:{id:'session',projectId:'project'},toolCalls:[{runId:'root-run',status:'completed',toolName:'task',output:{changedFiles:[{path:'draft.md',action:'modified'}]}}],messages:[{id:'user',runId:'root-run'}],runs:[{id:window.currentRootRun??'root-run',parentRunId:null,supersededByRunId:null,model:'parent-model',providerId:'synthetic',status:'completed',planId:'plan'}],plans:[{id:'plan',goal:'Deliver feature',steps:[{id:'step',title:'Implement and verify',status:'completed'}]}]},pendingApprovals:[],pendingInteractions:[],onSend:async(content)=>{window.fileFeedback=content},onResourceClick:(link)=>{window.openedFile=link},onOpenDiff:(path)=>{window.openedDiff=path}}}/></React.Profiler>);
 window.showCatalog=()=>{function Catalog(){const [project,setProject]=React.useState('project');window.catalogProject=setProject;const skills=useSkillCatalog(true,project);return <div>{skills.map(skill=><p key={skill.id}>{skill.id}</p>)}</div>};root.render(<Catalog/>)};
 window.showQuestions=()=>root.render(<div className="chat-view" style={{height:'100vh'}}><div className="chat-scroll"><p>实际对话正文</p></div><div className="composer-wrap"><InteractionQueue interactions={[{interactionId:'questions',kind:'user_question',questions:Array.from({length:3},(_,i)=>({id:'q'+i,header:'问题'+i,question:'请选择写作协作方式',multiSelect:false,options:Array.from({length:3},(_,j)=>({id:'o'+j,label:'选择'+i+'-'+j,description:'用于写作协作的方法说明。'.repeat(10)}))}))}]} onSubmit={async(id,answers)=>{window.questionAnswers=answers;return false}}/><div style={{height:80}}>输入框</div></div></div>);
 window.showTeamApproval=()=>root.render(<ApprovalCard focusable={false} onChoose={()=>{}} approval={{toolCallId:'team',runId:'root-run',operation:'agent_team.create',summary:'创建写作团队',subject:{kind:'operation',operation:'agent_team.create'},choices:[{id:'allow-once',decision:'approved',presentation:'primary',label:'允许一次'},{id:'deny',decision:'denied',presentation:'secondary',label:'拒绝'}],context:{permissionPreset:'workspace-read',sandbox:'workspace-write',workspaceScope:'inside',displayCwd:'…/project',network:false,escalation:false,sandboxProvider:null,review:JSON.stringify({scope:'project',roles:Array.from({length:8},(_,i)=>({name:'Role '+i,modelBinding:{mode:'inherit'},instructions:'明确职责、输入输出、交接和验收标准。'.repeat(40)}))},null,2)}}}/>);
@@ -155,10 +155,46 @@ window.clearUI=()=>root.render(null);window.showRoles();
     await verifyRoleSharing(page)
     await verifyTeamSharing(page)
     await verifyRuntimeLimits(page)
-    await page.evaluate(() => window.showCollaboration())
+    await page.evaluate(() => {
+      window.tree[0].structuredResult.changedFiles = [
+        { path: 'draft.md', action: 'modified', before: 'old', after: 'new' },
+      ]
+      window.showCollaboration()
+    })
+    await page.getByText('draft.md', { exact: true }).waitFor()
+    assert.equal(await page.locator('.react-flow__node').count(), 0)
+    assert.equal(await page.locator('.task-result-source').count(), 1)
+    await page.getByRole('button', { name: '打开文件', exact: true }).click()
+    assert.equal(await page.evaluate(() => window.openedFile.path), 'draft.md')
+    await page.getByRole('button', { name: '查看修改', exact: true }).click()
+    assert.equal(await page.evaluate(() => window.openedDiff), 'draft.md')
+    await page
+      .getByRole('button', { name: '针对文件反馈', exact: true })
+      .click()
+    await page
+      .getByRole('textbox', { name: '对 draft.md 的反馈' })
+      .fill('请核对人物动机')
+    await page
+      .getByRole('button', { name: '发送给主 Agent', exact: true })
+      .click()
+    await page.waitForFunction(() =>
+      window.fileFeedback?.includes('请核对人物动机'),
+    )
+    assert.match(await page.evaluate(() => window.fileFeedback), /draft\.md/)
+    await page.setViewportSize({ width: 600, height: 800 })
+    assert.equal(
+      await page.evaluate(() => document.body.scrollWidth > innerWidth),
+      false,
+    )
+    await page.screenshot({ path: '/tmp/reflexion-collaboration-results.png' })
+    await page.setViewportSize({ width: 1200, height: 850 })
+    await page.getByText('执行详情', { exact: true }).click()
     await page
       .getByRole('button', { name: 'Review Agent · 已完成', exact: true })
       .waitFor()
+    await page.waitForFunction(
+      () => document.querySelectorAll('.react-flow__node').length === 3,
+    )
     assert.equal(await page.locator('.react-flow__node').count(), 3)
     await page
       .locator('.react-flow__node')

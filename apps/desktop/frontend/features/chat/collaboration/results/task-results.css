@@ -1,0 +1,65 @@
+.task-results {
+  padding: 0 16px 16px;
+}
+.task-results h3 {
+  font-size: 14px;
+}
+.task-results p,
+.task-result-source {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+.task-results article {
+  padding: 12px;
+  margin: 10px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.task-results strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.task-result-actions,
+.task-result-source {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+.task-results label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.task-results textarea {
+  min-height: 90px;
+  resize: vertical;
+  width: 100%;
+  box-sizing: border-box;
+  color: var(--text);
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  font: inherit;
+}
+.collaboration-details > summary {
+  padding: 12px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  border-top: 1px solid var(--border);
+}
+.collaboration-details .collaboration-graph {
+  height: 400px;
+  flex: none;
+}
+.collaboration-work {
+  overflow: auto;
+  min-height: 0;
+  flex: 1;
+}

@@ -278,7 +278,19 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
             <Suspense fallback={<p>正在加载协作…</p>}>
               <CollaborationPanel
                 key={activeSessionId ?? 'new'}
-                chat={props.chat}
+                chat={{
+                  ...props.chat,
+                  onResourceClick: (link) => {
+                    props.chat.onResourceClick?.(link)
+                    setCollaborationOpen(false)
+                    workspace.setOpen(true)
+                  },
+                  onOpenDiff: (path, options) => {
+                    props.chat.onOpenDiff?.(path, options)
+                    setCollaborationOpen(false)
+                    workspace.setOpen(true)
+                  },
+                }}
                 onCollapse={() => {
                   setCollaborationOpen(false)
                   workspace.setOpen(false)

@@ -195,6 +195,8 @@ B4 采用内置受管官方 Playwright MCP：每 Run 独立 stdio worker 与临�
 本机验收及剩余门槛见 [验收报告](docs/BROWSER-ACCEPTANCE-2026-10-13.md)；
 硬件媒体、旧 macOS 和三平台矩阵不能用代码测试代替。
 
+协作 Surface 的成果优先试用边界见 [围绕成果的协作体验试用](docs/COLLABORATION-RESULTS-PILOT-2026-10-16.md)。
+
 当前角色模型、作用范围与协作 Surface 设计见 [对话驱动的 Agent 协作](docs/AGENT-COLLABORATION-2026-10-14.md)。
 
 ### 角色库的分页与批量配置

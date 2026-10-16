@@ -10,6 +10,7 @@ import { CollaborationGraph } from './CollaborationGraph'
 import { useCollaborationTree } from './useCollaborationTree'
 import { SaveCollaborationSkill } from './SaveCollaborationSkill'
 import './collaboration.css'
+import { TaskResults } from './results/TaskResults'
 
 export function CollaborationPanel({
   chat,
@@ -30,6 +31,7 @@ export function CollaborationPanel({
   const { items, error, refresh } = useCollaborationTree(run?.id ?? null)
   const [selected, setSelected] = useState<Delegation | null>(null)
   const [savingSkill, setSavingSkill] = useState(false)
+  const [showDetails, setShowDetails] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const plans = chat.sessionData?.plans ?? []
   const plan =
@@ -62,8 +64,8 @@ export function CollaborationPanel({
     <section className="collaboration-panel" aria-label="Agent 协作">
       <header className="collaboration-heading">
         <div>
-          <strong>任务与协作</strong>
-          <small>计划随执行调整 · 实际委派关系来自运行记录</small>
+          <strong>成果与协作</strong>
+          <small>查看文件、追溯修改，并向主 Agent 反馈</small>
         </div>
         <button type="button" onClick={onCollapse}>
           收起
@@ -88,9 +90,11 @@ export function CollaborationPanel({
               ))}
             </Select>
           </label>
-          <button type="button" onClick={() => setSavingSkill(true)}>
-            保存为协作 Skill
-          </button>
+          {run?.status === 'completed' && (
+            <button type="button" onClick={() => setSavingSkill(true)}>
+              保存为协作 Skill
+            </button>
+          )}
         </div>
       )}
       {pending > 0 && (
@@ -100,50 +104,65 @@ export function CollaborationPanel({
       )}
       {(error || notice) && <p role="alert">{error ?? notice}</p>}
       {run ? (
-        <>
-          <div className="collaboration-legend">
-            <span>虚线：计划顺序</span>
-            <span>实线：实际 Agent 委派</span>
-          </div>
-          <CollaborationGraph
-            run={run}
-            plan={plan}
+        <div className="collaboration-work">
+          <TaskResults
+            key={run.id}
+            chat={chat}
+            runId={run.id}
             items={items}
             onSelect={setSelected}
           />
-          <div className="collaboration-agents" aria-label="协作 Agent 列表">
-            {items.map((item) => (
-              <article key={item.id}>
-                <button type="button" onClick={() => setSelected(item)}>
-                  {item.agentInstance?.name ?? item.agentId} ·{' '}
-                  {collaborationStatus(item.status)}
-                </button>
-                <small>
-                  {item.agentInstance?.workspaceRoot ?? '当前会话工作空间'} ·{' '}
-                  {item.execution?.model}
-                </small>
-                <small>
-                  {item.structuredResult?.changedFiles.length ?? 0} 个变更文件
-                </small>
-                {['pending', 'running'].includes(item.status) && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void cancelDelegation(item.id)
-                        .then(refresh)
-                        .catch((error) => setNotice(String(error)))
-                    }
-                  >
-                    停止此 Agent
-                  </button>
-                )}
-              </article>
-            ))}
-            {!items.length && (
-              <p>主 Agent 正在独立处理。需要分工时，协作节点会显示在这里。</p>
+          <details
+            className="collaboration-details"
+            onToggle={(event) => setShowDetails(event.currentTarget.open)}
+          >
+            <summary>执行详情</summary>
+            <div className="collaboration-legend">
+              <span>虚线：计划顺序</span>
+              <span>实线：实际 Agent 委派</span>
+            </div>
+            {showDetails && (
+              <CollaborationGraph
+                run={run}
+                plan={plan}
+                items={items}
+                onSelect={setSelected}
+              />
             )}
-          </div>
-        </>
+            <div className="collaboration-agents" aria-label="协作 Agent 列表">
+              {items.map((item) => (
+                <article key={item.id}>
+                  <button type="button" onClick={() => setSelected(item)}>
+                    {item.agentInstance?.name ?? item.agentId} ·{' '}
+                    {collaborationStatus(item.status)}
+                  </button>
+                  <small>
+                    {item.agentInstance?.workspaceRoot ?? '当前会话工作空间'} ·{' '}
+                    {item.execution?.model}
+                  </small>
+                  <small>
+                    {item.structuredResult?.changedFiles.length ?? 0} 个变更文件
+                  </small>
+                  {['pending', 'running'].includes(item.status) && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void cancelDelegation(item.id)
+                          .then(refresh)
+                          .catch((error) => setNotice(String(error)))
+                      }
+                    >
+                      停止此 Agent
+                    </button>
+                  )}
+                </article>
+              ))}
+              {!items.length && (
+                <p>主 Agent 正在独立处理。需要分工时，协作节点会显示在这里。</p>
+              )}
+            </div>
+          </details>
+        </div>
       ) : (
         <div className="collaboration-empty">
           <h3>从对话开始</h3>
