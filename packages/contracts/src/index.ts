@@ -44,6 +44,7 @@ export {
 } from './commands/skill.js'
 
 export type {
+  AgentTeamExportParams,
   AgentTemplateSaveParams,
   AgentTemplateBulkUpdateParams,
 } from './commands/agent-template.js'
@@ -54,3 +55,5 @@ export * from './file-writing.js'
 
 export * from './chat-archive.js'
 export type { ChatArchiveImportParams } from './commands/chat-archive.js'
+
+export * from './agent-role-share.js'

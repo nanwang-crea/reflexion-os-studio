@@ -91,3 +91,31 @@ export function bulkUpdateAgentTemplates(
 ): Promise<{ templates: AgentTemplate[] }> {
   return request('agent_template.bulk_update', input)
 }
+
+export function exportAgentTemplate(templateId: string, directory: string) {
+  return request<{ path: string }>('agent_template.export', {
+    templateId,
+    directory,
+  })
+}
+
+export function exportAgentTeam(
+  input: Omit<
+    import('@reflexion-os-studio/contracts').AgentTeamExportParams,
+    'requestId'
+  >,
+) {
+  return request<{ path: string; roleCount: number }>(
+    'agent_template.team_export',
+    input,
+  )
+}
+export function importAgentTeam(
+  archive: import('@reflexion-os-studio/contracts').AgentTeamShare,
+  projectId: string | null,
+) {
+  return request<{ templates: AgentTemplate[]; teamId: string }>(
+    'agent_template.team_import',
+    { archive, projectId },
+  )
+}

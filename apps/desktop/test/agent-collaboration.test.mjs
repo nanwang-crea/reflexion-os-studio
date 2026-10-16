@@ -1,3 +1,7 @@
+import {
+  verifyRoleSharing,
+  verifyTeamSharing,
+} from './agent-ui/role-sharing.mjs'
 import { verifyRuntimeLimits } from './agent-ui/runtime-limits.mjs'
 import { verifyRoleBulk } from './agent-ui/role-bulk.mjs'
 import { verifyRoleLayouts } from './agent-ui/role-layouts.mjs'
@@ -148,6 +152,8 @@ window.clearUI=()=>root.render(null);window.showRoles();
     await verifyRoleEditor(page)
     await verifyRoleLayouts(page)
     await verifyRoleBulk(page)
+    await verifyRoleSharing(page)
+    await verifyTeamSharing(page)
     await verifyRuntimeLimits(page)
     await page.evaluate(() => window.showCollaboration())
     await page

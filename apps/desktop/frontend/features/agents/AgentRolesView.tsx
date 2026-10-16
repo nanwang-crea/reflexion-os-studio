@@ -1,3 +1,5 @@
+import { RoleTeamExport } from './roles/share/RoleTeamExport'
+import { RoleImportButton } from './roles/share/RoleImportButton'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   AgentTemplate,
@@ -90,13 +92,14 @@ export function AgentRolesView({
     )
   }
   const edit = async (value: RoleDraft) => {
-    if (!(await allowSwitch())) return
+    if (!(await allowSwitch())) return false
     setError(null)
     setEditorKey((key) => key + 1)
     setBulkTargets(null)
     setBulkDirty(false)
     originalDraft.current = JSON.stringify(value)
     setDraft(value)
+    return true
   }
   const visible = templates.filter(
     (template) =>
@@ -121,6 +124,17 @@ export function AgentRolesView({
             <h1>角色库</h1>
             <p>配置职责与执行能力，供主对话按需调用。</p>
           </div>
+          <RoleImportButton
+            onTeamImported={reload}
+            busy={busy}
+            projectId={scope === '*' ? initialProjectId : scope || null}
+            onImport={async (value) => {
+              if (!(await edit(value))) return
+              setNotice(
+                '已读取分享角色，请检查指令、工具和权限后保存。导入默认停用，模型继承上级；保存将创建新角色。',
+              )
+            }}
+          />
           <button
             type="button"
             disabled={busy}
@@ -134,6 +148,13 @@ export function AgentRolesView({
             新建角色
           </button>
         </header>
+        <RoleTeamExport
+          templates={templates}
+          projects={projects}
+          busy={busy || loading}
+          scope={scope}
+          domain={domain}
+        />
         <RoleFilters
           scope={scope}
           setScope={setScope}

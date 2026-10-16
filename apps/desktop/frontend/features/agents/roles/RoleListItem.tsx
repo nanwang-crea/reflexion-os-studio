@@ -1,3 +1,4 @@
+import { RoleExportButton } from './share/RoleExportButton'
 import type {
   AgentTemplate,
   Project,
@@ -84,6 +85,7 @@ export function RoleListItem({
         </small>
       </div>
       <footer>
+        <RoleExportButton templateId={template.id} busy={busy} />
         <button
           type="button"
           disabled={busy}

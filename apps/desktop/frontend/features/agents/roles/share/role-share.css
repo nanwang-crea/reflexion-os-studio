@@ -1,0 +1,50 @@
+.role-share-dialog {
+  width: min(620px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  box-sizing: border-box;
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  color: var(--text);
+  background: var(--bg-elevated);
+}
+.role-share-dialog::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+.role-share-dialog header,
+.role-share-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.role-share-dialog h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.role-share-dialog > label {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+.role-share-members {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0;
+  overflow-wrap: anywhere;
+}
+.role-share-members pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+
+.agent-team-export-trigger {
+  margin-bottom: 12px;
+}
+.agent-roles-heading > div:has(> button) {
+  flex-shrink: 0;
+}

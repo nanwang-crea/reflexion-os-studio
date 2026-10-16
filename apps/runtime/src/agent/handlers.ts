@@ -1,3 +1,5 @@
+import { exportTeam, importTeam } from './templates/team-share.js'
+import { exportRole } from './templates/share.js'
 import { bulkUpdateTemplates } from './templates/bulk.js'
 import { validateRoleTemplate } from './templates/validation.js'
 import { agentTemplateCommands } from '@reflexion-os-studio/contracts'
@@ -25,6 +27,12 @@ export const agentCommandHandlers: Record<string, CommandHandler> = {
     )
     if (!agent) throw new CommandError('not_found', 'Agent 不存在')
     return { agent }
+  },
+  'agent_template.team_export': (p, { store }) => exportTeam(p, store),
+  'agent_template.team_import': (p, { store }) => importTeam(p, store),
+  'agent_template.export': (p, { store }) => {
+    const input = agentTemplateCommands['agent_template.export'].params.parse(p)
+    return exportRole(store, input.templateId, input.directory)
   },
   'agent_template.list': (p, { store }) => ({
     templates: store.agents.list(

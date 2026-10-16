@@ -1,12 +1,47 @@
+import { AgentTeamShareSchema } from '../agent-role-share.js'
+import { AgentTemplateSaveParamsSchema } from './agent-template-input.js'
 import { z } from 'zod'
-import {
-  AgentTemplateSchema,
-  AgentModelBindingSchema,
-  PermissionPresetSchema,
-} from '../entities.js'
+import { AgentTemplateSchema, PermissionPresetSchema } from '../entities.js'
 import { RequestIdSchema } from './params.js'
 
 export const agentTemplateCommands = {
+  'agent_template.team_export': {
+    params: z.strictObject({
+      requestId: RequestIdSchema,
+      teamId: AgentTeamShareSchema.shape.teamId,
+      projectId: z.string().min(1).nullable(),
+      templateIds: z
+        .array(z.string().min(1))
+        .min(1)
+        .max(500)
+        .refine((ids) => new Set(ids).size === ids.length)
+        .optional(),
+      directory: z.string().min(1),
+    }),
+    result: z.object({
+      path: z.string(),
+      roleCount: z.number().int().positive(),
+    }),
+  },
+  'agent_template.team_import': {
+    params: z.strictObject({
+      requestId: RequestIdSchema,
+      archive: AgentTeamShareSchema,
+      projectId: z.string().min(1).nullable(),
+    }),
+    result: z.object({
+      templates: z.array(AgentTemplateSchema),
+      teamId: z.string(),
+    }),
+  },
+  'agent_template.export': {
+    params: z.strictObject({
+      requestId: RequestIdSchema,
+      templateId: z.string().min(1),
+      directory: z.string().min(1),
+    }),
+    result: z.object({ path: z.string() }),
+  },
   'agent_template.list': {
     params: z.object({
       requestId: RequestIdSchema,
@@ -15,20 +50,7 @@ export const agentTemplateCommands = {
     result: z.object({ templates: z.array(AgentTemplateSchema) }),
   },
   'agent_template.save': {
-    params: z.object({
-      requestId: RequestIdSchema,
-      id: z.string().min(1).optional(),
-      name: z.string().min(1).max(80),
-      description: z.string().max(500),
-      systemPrompt: z.string().min(1).max(20_000),
-      projectId: z.string().min(1).nullable().optional(),
-      domains: z.array(z.string().min(1).max(40)).max(12).optional(),
-      modelBinding: AgentModelBindingSchema.optional(),
-      permissionCeiling: PermissionPresetSchema.optional(),
-      enabled: z.boolean(),
-      canDelegate: z.boolean(),
-      allowedTools: z.array(z.string().min(1)),
-    }),
+    params: AgentTemplateSaveParamsSchema,
     result: z.object({ template: AgentTemplateSchema }),
   },
   'agent_template.bulk_update': {
@@ -77,4 +99,8 @@ export type AgentTemplateSaveParams = z.input<
 
 export type AgentTemplateBulkUpdateParams = z.input<
   (typeof agentTemplateCommands)['agent_template.bulk_update']['params']
+>
+
+export type AgentTeamExportParams = z.input<
+  (typeof agentTemplateCommands)['agent_template.team_export']['params']
 >
