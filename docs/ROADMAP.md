@@ -36,7 +36,7 @@ Rust File/Shell Service、Workspace 边界、read-only/workspace Profile、Chat 
 - **已完成（2026-09，Agent Loop Hardening 与 Context Engine V2）**：完成状态机（只有 stop 且无工具才算完成；length 限次续写；provider_protocol 如实失败）、Atomic Run Finalizer（单事务终态收敛）、Atomic Frames 与请求前校验、副作用感知调度（read 并行/mutation 串行/ToolCall 批量预建）、Loop Guard（重复/无进展拦截）、Run 预算（时长/token/工具数/续写）、增量 Context Checkpoint（source hash/single-flight）、AgentSettings 新预算字段与设置页循环分组。
 - **Terminal Surface（集成终端）**：设计与范围见 `docs/superpowers/specs/2026-09-12-integrated-terminal-design.md`，架构定位见 `ARCHITECTURE.md` §13。**W0–W4 macOS 已验证**（事件信封 1.1 与 terminal 契约冻结；portable-pty 纵向切片；后端多会话服务 + attach/ack/窗口背压/公平调度；前端多标签保活面板 xterm v6；故障矩阵 26/26、性能门槛 P0/P1/P2 实测全 PASS——见 `docs/TERMINAL-SPIKE-REPORT.md` §9/§11；打包冒烟见 §12）。**GUI 人工清单待执行**（`docs/TERMINAL-GUI-ACCEPTANCE.md`）；**Windows/Linux 待对应环境真机验收，不得宣称三平台完成**。发布入口开关：构建期 `VITE_TERMINAL_DISABLED=1`，或运行期 localStorage `terminal.forceDisabled='1'`（逃生舱，重启后生效）——禁用新建终端入口（顶栏按钮隐藏、create/recreate 拒绝），已打开的终端不受影响。`terminal.*` 不注册为 Agent 工具。
 - **已完成（2026-09，权限模型 V2 / Codex 风格）**：`permissionMode + trusted` 双轨合并为三档 `PermissionPreset`（谨慎模式 / 工作区读写 / 工作区完全允许）+ 会话级 `ask-everything` 覆盖项 + 两段确认的 Danger 租约（capability fail-closed）；文件审批绑定"操作 + 工作区相对路径"精确资源、Shell 按 token 前缀会话规则（复合命令只允许一次）、工作区外走显式提权（escalated 档 + 提权根 digest 绑定）、网络授权收敛到 shell rule 维度；grant 升级 ApprovalGrantV2（source/subjectDigest/sandbox），Rust 按实际请求重算 digest 复核并落实 read-only/workspace-write/escalated 三档沙箱（macOS 真机验证，Linux 渲染完成待真机、Windows 提权沿用受限令牌待真机）；审批 UI 重构为单焦点队列 + choice 驱动（Runtime 下发 choices，前端只回传 choiceId）。协议 1.1→1.2（握手 fail-closed，legacy message.send 字段兼容一个版本）。设计见 `docs/PERMISSION-MODEL.md`。**Windows/Linux 运行时边界待对应真机验收；Danger 在 Linux（待真机）与 Windows（无可验证凭据守卫）保持 fail-closed，不得宣称三平台完成。**
-- **待完成**：Provider/Tool Plugins（动态代码隔离模型确定后开放）、Browser Tool 后续批次（点击/输入/登录）、检索式记忆（mem0 候选）、更完整的资产检索；权限规则持久化（当前刻意 session-only）与 Windows Danger credential guard spike。
+- **待完成**：Provider/Tool Plugins（动态代码隔离模型确定后开放）、Browser Tool 后续批次（登录、跨站与写入提交；公开同源点击/普通输入已按用户请求实现，见 BROWSER-AGENT.md）、检索式记忆（mem0 候选）、更完整的资产检索；权限规则持久化（当前刻意 session-only）与 Windows Danger credential guard spike。
 
 Browser B2–B3 macOS 收尾与验收记录保留；B4 静态导航/只读快照已移除；内置受管 Playwright MCP 首批导航/读取/关闭已实现。见 [B4 设计](BROWSER-AGENT.md) 与 [验收报告](BROWSER-ACCEPTANCE-2026-10-13.md)。
 
@@ -85,3 +85,5 @@ B4 内置受管 Playwright MCP 首批导航/读取/关闭已实现，交互工�
 B1 设置与路由 → B2 三平台用户浏览及数据治理 → B3 下载/网站权限/自动填充 →
 B4 Agent 读取与操作 → B5 站点工具。前三批属于 Surface 产品能力；后两批属于 Phase 2 Browser Tool，
 均需独立验收，设置界面不得提前表现为可用。
+
+- 2026-10-16 用户授权扩展：browser.execute 统一动作及静态受限 Playwright 风格脚本，支持滚动/拖拽/键盘/截图；计划逐次审批、截图资产与视觉模型接线，不开放任意 JS/Node、登录凭据或网络写入。跨平台实现共用，Windows/Linux GUI 待真机验收。

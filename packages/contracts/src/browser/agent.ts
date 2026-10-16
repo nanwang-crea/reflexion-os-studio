@@ -51,6 +51,9 @@ export const AgentBrowserOperationSchema = z.enum([
   'browser.navigate',
   'browser.read',
   'browser.close',
+  'browser.click',
+  'browser.type',
+  'browser.execute',
 ])
 
 export const AgentBrowserNavigateJsonSchema = z.toJSONSchema(

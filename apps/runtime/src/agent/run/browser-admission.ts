@@ -5,17 +5,40 @@ import type {
 import {
   AgentBrowserNavigateSchema,
   AgentBrowserPageSchema,
+  AgentBrowserClickSchema,
+  AgentBrowserTypeSchema,
 } from '@reflexion-os-studio/contracts'
+import { compileBrowserExecution } from '../../browser/agent/automation/script.js'
 import { isIP } from 'node:net'
 import { publicIp } from '../../browser/agent/security/network.js'
 
 export function validBrowserArgs(name: string, args: unknown): boolean {
-  if (!['browser.navigate', 'browser.read', 'browser.close'].includes(name))
+  if (name === 'browser.execute') {
+    try {
+      compileBrowserExecution(args)
+      return true
+    } catch {
+      return false
+    }
+  }
+  if (
+    ![
+      'browser.navigate',
+      'browser.read',
+      'browser.close',
+      'browser.click',
+      'browser.type',
+    ].includes(name)
+  )
     return true
   const schema =
     name === 'browser.navigate'
       ? AgentBrowserNavigateSchema
-      : AgentBrowserPageSchema
+      : name === 'browser.click'
+        ? AgentBrowserClickSchema
+        : name === 'browser.type'
+          ? AgentBrowserTypeSchema
+          : AgentBrowserPageSchema
   const input = schema.safeParse(args)
   if (!input.success) return false
   if ('url' in input.data) {

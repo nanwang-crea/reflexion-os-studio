@@ -23,7 +23,12 @@ export type ModelMessage =
   | {
       role: 'user'
       /** 仅用于 Runtime 控制，不投影到 Provider 请求。 */
-      control?: 'continuation' | 'tool_recovery' | 'reflection' | 'task_context'
+      control?:
+        | 'continuation'
+        | 'tool_recovery'
+        | 'reflection'
+        | 'task_context'
+        | 'tool_observation'
       content: string
       images?: (ImagePart & { base64?: string })[]
     }
@@ -35,7 +40,13 @@ export type ModelMessage =
       providerContinuation?: ProviderContinuation
       toolCalls: AssistantToolCall[]
     }
-  | { role: 'tool'; toolCallId: string; content: string; isError: boolean }
+  | {
+      role: 'tool'
+      toolCallId: string
+      content: string
+      isError: boolean
+      images?: ImagePart[]
+    }
 
 /** 一次模型调用的完整结果。 */
 export interface ModelTurn {
@@ -83,6 +94,8 @@ export interface ToolExecutionArgs {
 }
 
 export interface ToolResult {
+  /** Host-projected image references; raw bytes never enter persisted tool results. */
+  images?: ImagePart[]
   /** 回传给模型的文本结果；错误时为可读错误说明。 */
   content: string
   isError: boolean

@@ -31,6 +31,8 @@ export interface ApprovalDisplay {
   choices: ApprovalChoice[]
   context: ApprovalContextView | null
   fallbackSummary: string
+  reviewTitle: string
+  reviewAlwaysVisible: boolean
 }
 
 const OPERATION_LABELS: Record<string, string> = {
@@ -47,6 +49,9 @@ const OPERATION_LABELS: Record<string, string> = {
   'shell.execute': '执行命令',
   'browser.navigate': '打开浏览器网页',
   'browser.read': '读取渲染页面',
+  'browser.click': '点击网页控件',
+  'browser.execute': '执行浏览器计划或脚本',
+  'browser.type': '填写网页文本',
   'browser.close': '关闭 Agent 浏览器',
   sandbox_network: '命令联网',
   'agent_team.update': '修改团队角色',
@@ -95,6 +100,12 @@ function chipsFor(
   }
   if (operation.startsWith('browser.')) {
     chips.push('隔离 Playwright 浏览器', '本次授权')
+    if (
+      operation === 'browser.click' ||
+      operation === 'browser.type' ||
+      operation === 'browser.execute'
+    )
+      chips.push('网页交互需单独确认', '仅同源 GET/HEAD，禁止跨站与写入请求')
     if (operation === 'browser.navigate')
       chips.push('目标来源联网，跨来源请求拒绝')
     return chips
@@ -137,7 +148,7 @@ function subjectOf(
     case 'browser-page':
       return {
         kind: 'text',
-        value: `${subject.source ? `${subject.source.origin} → ` : ''}${subject.origin}${subject.source ? ` · 标签 ${subject.source.tabId} · 页面 ${subject.source.pageVersion}` : ''}`,
+        value: `${subject.source ? `${subject.source.origin} → ` : ''}${subject.origin}${subject.target ? ` · 控件 ${subject.target.element}（${subject.target.ref}）` : ''}${subject.source ? ` · 标签 ${subject.source.tabId} · 页面 ${subject.source.pageVersion}` : ''}`,
       }
     case 'workspace-path':
       return { kind: 'path', value: subject.path }
@@ -261,6 +272,16 @@ export function presentApproval(approval: PendingApproval): ApprovalDisplay {
     choices,
     context: approval.context ?? null,
     fallbackSummary: approval.summary,
+    reviewTitle: ['browser.click', 'browser.type', 'browser.execute'].includes(
+      approval.operation,
+    )
+      ? '本次网页操作（含输入内容）'
+      : '本次将保存的配置',
+    reviewAlwaysVisible: [
+      'browser.click',
+      'browser.type',
+      'browser.execute',
+    ].includes(approval.operation),
   }
 }
 

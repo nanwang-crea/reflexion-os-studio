@@ -1,3 +1,4 @@
+import { toolImageParts } from './tool-images.js'
 import {
   FrameError,
   framesToMessages,
@@ -87,12 +88,24 @@ export function reconstructSessionFramesWithIds(
           : {}),
         toolCalls: toolCallRows.map(toAssistantToolCall),
       },
-      results: toolCallRows.map((row) => ({
-        role: 'tool' as const,
-        toolCallId: row.id,
-        content: toolResultText(row),
-        isError: row.status !== 'completed',
-      })),
+      results: toolCallRows.map((row) => {
+        const images = row.output
+          ? toolImageParts(
+              store,
+              sessionId,
+              row.runId,
+              row.toolName,
+              row.output,
+            )
+          : []
+        return {
+          role: 'tool' as const,
+          toolCallId: row.id,
+          content: toolResultText(row),
+          isError: row.status !== 'completed',
+          ...(images.length ? { images } : {}),
+        }
+      }),
     })
     messageIds.push(message.id)
   }

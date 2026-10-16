@@ -1,14 +1,18 @@
+import { automationTarget } from './automation/targets.js'
+import { executeBrowserPlan } from './automation/execute.js'
 import { launchAgentBrowser } from './launch.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createHash, randomUUID } from 'node:crypto'
-import { createConnection } from '@playwright/mcp'
+import { randomUUID } from 'node:crypto'
 import { type Browser, type BrowserContext } from 'playwright'
-import { Client } from '@modelcontextprotocol/sdk/client/index.js'
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { connectBrowserMcp } from './connection.js'
 import {
   AgentBrowserPageSchema,
+  BrowserPlanSchema,
+  AgentBrowserClickSchema,
+  AgentBrowserTypeSchema,
   isSafeAgentBrowserUrl,
   type AgentBrowserDocument,
   type AgentBrowserPage,
@@ -17,7 +21,7 @@ import {
 } from '@reflexion-os-studio/contracts'
 import { createBrowserProxy } from '../security/proxy.js'
 import { allowedRequest, publicAddress } from '../security/network.js'
-import { filterBrowserContent, snapshotSection } from '../security/content.js'
+import { observeBrowserPage } from './observation.js'
 
 type Proxy = Awaited<ReturnType<typeof createBrowserProxy>>
 export class PlaywrightBackend {
@@ -25,12 +29,16 @@ export class PlaywrightBackend {
   private context: BrowserContext | null = null
   private proxy: Proxy | null = null
   private client: Client | null = null
-  private server: Awaited<ReturnType<typeof createConnection>> | null = null
+  private server:
+    Awaited<ReturnType<typeof connectBrowserMcp>>['server'] | null = null
   private document: AgentBrowserDocument | null = null
   private digest: string | null = null
+  private readVersion: string | null = null
   private generation = 0
   private output: string | null = null
   private origin: string | null = null
+  private interacting = false
+  private interactionBlocked = false
 
   constructor(
     private readonly proxyFactory = createBrowserProxy,
@@ -59,6 +67,7 @@ export class PlaywrightBackend {
     this.origin = origin
     this.document = null
     this.digest = null
+    this.readVersion = null
     try {
       if (!reusable) {
         await this.resolveAddress(new URL(url).hostname)
@@ -94,9 +103,10 @@ export class PlaywrightBackend {
         const context = this.context
         await context.route('**/*', async (route) => {
           const request = route.request()
-          if (!allowedRequest(origin, request.url(), request.method()))
+          if (!allowedRequest(origin, request.url(), request.method())) {
+            if (this.interacting) this.interactionBlocked = true
             await route.abort('blockedbyclient')
-          else await route.continue()
+          } else await route.continue()
         })
         await context.routeWebSocket('**/*', (socket) => socket.close())
         context.on('page', (page) => {
@@ -107,26 +117,10 @@ export class PlaywrightBackend {
           )
         })
         this.output = await mkdtemp(join(tmpdir(), 'reflexion-playwright-'))
-        this.server = await createConnection(
-          {
-            // Use the supplied isolated context; MCP must not create another one.
-            browser: { browserName: 'chromium', isolated: false },
-            capabilities: ['core'],
-            webmcp: false,
-            outputDir: this.output,
-            saveSession: false,
-            imageResponses: 'omit',
-            codegen: 'none',
-            snapshot: { mode: 'none' },
-            timeouts: { navigation: 15000, action: 5000 },
-          },
-          async () => context,
-        )
-        const [clientTransport, serverTransport] =
-          InMemoryTransport.createLinkedPair()
-        this.client = new Client({ name: 'reflexion-browser', version: '1' })
-        await this.server.connect(serverTransport)
-        await this.client.connect(clientTransport)
+        const connection = await connectBrowserMcp(context, this.output)
+        this.server = connection.server
+        this.client = connection.client
+        if (generation !== this.generation) throw new Error('browser_closed')
       }
       await this.call('browser_navigate', { url })
       const observed = await this.observe()
@@ -157,7 +151,84 @@ export class PlaywrightBackend {
   async read(page: AgentBrowserPage): Promise<AgentBrowserDocument> {
     await this.assertCurrent(page)
     if (!this.document) throw new Error('browser_page_stale')
+    this.readVersion = page.pageVersion
     return this.document
+  }
+
+  async interact(
+    operation: 'click' | 'type',
+    args: unknown,
+  ): Promise<AgentBrowserDocument> {
+    const typing =
+      operation === 'type' ? AgentBrowserTypeSchema.parse(args) : null
+    const input = typing ?? AgentBrowserClickSchema.parse(args)
+    if (this.readVersion !== input.page.pageVersion)
+      throw new Error('browser_page_stale')
+    await this.assertCurrent(input.page)
+    const browserPage = this.context?.pages()[0]
+    if (!browserPage || !this.document?.snapshot)
+      throw new Error('browser_page_stale')
+    await automationTarget(
+      browserPage,
+      this.document.snapshot,
+      { ref: input.ref, name: input.element },
+      !!typing,
+      typing?.submit ?? false,
+    )
+    const result = await this.execute({
+      mode: 'actions',
+      page: input.page,
+      steps: [
+        {
+          action: operation,
+          target: { ref: input.ref, name: input.element },
+          ...(typing ? { text: typing.text, submit: typing.submit } : {}),
+        },
+      ],
+    })
+    if (result.error || !result.document)
+      throw new Error(result.error ?? 'browser_interaction_failed')
+    const { page, sourceUrl, title, truncated, injectionWarning } =
+      result.document
+    return { page, sourceUrl, title, truncated, injectionWarning }
+  }
+
+  async execute(raw: unknown) {
+    const plan = BrowserPlanSchema.parse(raw)
+    await this.assertCurrent(plan.page)
+    const generation = this.generation
+    this.interacting = true
+    this.interactionBlocked = false
+    try {
+      return await executeBrowserPlan(plan, {
+        page: () => this.context?.pages()[0],
+        capture: async () => {
+          const { digest, ...document } = await this.observe()
+          this.document = {
+            ...document,
+            page: {
+              tabId: this.document?.page.tabId ?? plan.page.tabId,
+              origin: plan.page.origin,
+              pageVersion: randomUUID(),
+            },
+          }
+          this.digest = digest
+          this.readVersion = this.document.page.pageVersion
+          return this.document
+        },
+        navigate: (url) => this.navigate(url),
+        blocked: () => this.interactionBlocked,
+        current: () => generation === this.generation,
+        invalidate: () => {
+          this.document = null
+          this.digest = null
+          this.readVersion = null
+        },
+        close: () => this.close(),
+      })
+    } finally {
+      this.interacting = false
+    }
   }
 
   async close(page?: AgentBrowserPage): Promise<void> {
@@ -165,6 +236,7 @@ export class PlaywrightBackend {
     ++this.generation
     this.document = null
     this.digest = null
+    this.readVersion = null
     this.origin = null
     const [client, server, browser, proxy] = [
       this.client,
@@ -202,27 +274,10 @@ export class PlaywrightBackend {
     this.assertIdentity(page)
     if (observed.digest !== this.digest) throw new Error('browser_page_stale')
   }
-  private async observe() {
-    const page = this.context?.pages()[0]
-    if (!page || page.isClosed()) throw new Error('browser_page_stale')
-    const before = page.url()
-    if (
-      !isSafeAgentBrowserUrl(before) ||
-      new URL(before).origin !== this.origin
+  private observe() {
+    return observeBrowserPage(this.context, this.origin, (name, args) =>
+      this.call(name, args),
     )
-      throw new Error('browser_page_stale')
-    const result = await this.call('browser_snapshot', {})
-    const sourceUrl = page.url()
-    if (sourceUrl !== before || !isSafeAgentBrowserUrl(sourceUrl))
-      throw new Error('browser_page_stale')
-    const snapshot = snapshotSection(result)
-    const title = await page.title()
-    const content = filterBrowserContent(title, snapshot)
-    return {
-      ...content,
-      sourceUrl,
-      digest: fingerprint({ sourceUrl, title, snapshot }),
-    }
   }
   private async call(
     name: string,
@@ -237,11 +292,4 @@ export class PlaywrightBackend {
       .map((item) => item.text)
       .join('\n')
   }
-}
-function fingerprint(document: {
-  sourceUrl: string
-  title: string
-  snapshot: string
-}): string {
-  return createHash('sha256').update(JSON.stringify(document)).digest('hex')
 }

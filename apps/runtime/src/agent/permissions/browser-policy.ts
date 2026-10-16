@@ -5,7 +5,7 @@ import type {
 } from '@reflexion-os-studio/contracts'
 import type { DecisionMode } from './presets.js'
 
-/** This policy covers only the current read-only browser tool allowlist. */
+/** Automatic policies cover read-only tools; interactions always require approval. */
 export function browserDecision(
   operation: string,
   policy: AgentBrowserApproval,

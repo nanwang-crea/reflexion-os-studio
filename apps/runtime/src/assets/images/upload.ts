@@ -16,6 +16,7 @@ export async function uploadImageAsset(
   store: Store,
   dataDir: string,
   raw: ImageUpload,
+  generated?: { runId: string; metadata: Record<string, unknown> },
 ): Promise<AssetRef> {
   const parsed = ImageUploadSchema.safeParse(raw)
   if (!parsed.success)
@@ -44,11 +45,11 @@ export async function uploadImageAsset(
     size: content.length,
     hash: createHash('sha256').update(content).digest('hex'),
     fileName: input.fileName,
-    runId: null,
+    runId: generated?.runId ?? null,
     nodeRunId: null,
-    createdBy: 'user',
+    createdBy: generated ? 'agent' : 'user',
     createdAt: nowIso(),
-    metadata: {},
+    metadata: generated?.metadata ?? {},
     preview: 'ready',
   }
   asset.uri = `asset://${asset.assetId}`

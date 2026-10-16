@@ -295,3 +295,69 @@ test('managed browser approval shows bound source/version without a shell sandbo
   assert.ok(display.chips.includes('隔离 Playwright 浏览器'))
   assert.ok(!display.chips.includes('沙箱 seatbelt'))
 })
+
+test('网页交互审批展示精确控件、一次性提示及完整输入供审阅', () => {
+  const review = JSON.stringify({
+    ref: 'e2',
+    element: 'Search',
+    text: 'public query',
+    submit: true,
+  })
+  const display = presentApproval({
+    toolCallId: 'click-fixture',
+    runId: 'run-fixture',
+    operation: 'browser.type',
+    summary: 'Fill public search',
+    risk: 'warning',
+    choices: [],
+    subject: {
+      kind: 'browser-page',
+      operation: 'browser.type',
+      origin: 'https://example.com',
+      target: { ref: 'e2', element: 'Search' },
+    },
+    context: { ...CONTEXT, network: true, sandboxProvider: null, review },
+  })
+  assert.equal(display.actionLabel, '填写网页文本')
+  assert.match(display.subject.value, /Search（e2）/)
+  assert.ok(display.chips.includes('网页交互需单独确认'))
+  assert.equal(display.context.review, review)
+  assert.equal(actionLabelFor('browser.click'), '点击网页控件')
+})
+
+test('网页输入内容默认可见，配置预览仍按需展开', async () => {
+  const outfile = join(outDir, 'details.mjs')
+  await build({
+    absWorkingDir: ROOT,
+    stdin: {
+      contents: `import React from 'react'; import { renderToStaticMarkup } from 'react-dom/server'; import { ApprovalDetails } from './frontend/features/chat/approvals/ApprovalDetails'; export const render = display => renderToStaticMarkup(React.createElement(ApprovalDetails, { display, descriptionId: 'fixture' }));`,
+      resolveDir: ROOT,
+      loader: 'tsx',
+    },
+    bundle: true,
+    format: 'esm',
+    platform: 'node',
+    banner: {
+      js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);",
+    },
+    jsx: 'automatic',
+    outfile,
+  })
+  const { render } = await import(pathToFileURL(outfile).href)
+  const base = {
+    toolCallId: 'fixture',
+    runId: 'run',
+    summary: 'Public input',
+    risk: 'warning',
+    choices: [],
+    context: { ...CONTEXT, review: 'public query to review' },
+  }
+  const interactive = presentApproval({ ...base, operation: 'browser.type' })
+  assert.equal(interactive.reviewAlwaysVisible, true)
+  assert.match(render(interactive), /本次网页操作（含输入内容）/)
+  assert.match(render(interactive), /public query to review/)
+  assert.doesNotMatch(
+    render(presentApproval({ ...base, operation: 'skill.save' })),
+    /public query to review/,
+  )
+})

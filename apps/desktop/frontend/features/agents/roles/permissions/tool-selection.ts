@@ -32,6 +32,15 @@ export const ROLE_TOOL_GROUPS = [
       ['browser.close', '关闭网页'],
     ],
   },
+  {
+    id: 'browser-interaction',
+    title: '网页交互',
+    tools: [
+      ['browser.click', '点击网页控件'],
+      ['browser.type', '填写网页文本'],
+      ['browser.execute', '通用动作与受控脚本'],
+    ],
+  },
   { id: 'shell', title: '命令执行', tools: [['shell.execute', '执行命令']] },
   {
     id: 'assist',

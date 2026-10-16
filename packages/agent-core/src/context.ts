@@ -38,7 +38,9 @@ export function estimateMessageTokens(messages: ModelMessage[]): number {
               : (message.reasoning ?? ''),
           )
         : 0) +
-      (message.role === 'user' ? (message.images?.length ?? 0) * 4096 : 0)
+      (message.role === 'user' || message.role === 'tool'
+        ? (message.images?.length ?? 0) * 4096
+        : 0)
     )
   }, 0)
 }

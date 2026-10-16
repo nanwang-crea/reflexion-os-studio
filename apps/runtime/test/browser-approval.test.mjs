@@ -130,7 +130,7 @@ test('managed stdio worker exposes only the adapter and refuses script tools and
     await client.connect()
     assert.deepEqual(
       (await client.listTools()).map((tool) => tool.name),
-      ['navigate', 'read', 'close'],
+      ['execute', 'navigate', 'click', 'type', 'read', 'close'],
     )
     await assert.rejects(
       client.callTool('browser_run_code', { code: '1+1' }),

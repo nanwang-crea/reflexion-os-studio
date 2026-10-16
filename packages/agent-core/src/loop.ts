@@ -221,6 +221,7 @@ export async function runAgentLoop(
         toolCallId: call.id,
         content: result.content,
         isError: result.isError,
+        ...(result.images?.length ? { images: result.images } : {}),
       })
       if (result.isError) {
         failuresSinceReflection += 1

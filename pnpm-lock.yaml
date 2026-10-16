@@ -123,6 +123,9 @@ importers:
       '@reflexion-os-studio/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      acorn:
+        specifier: 8.18.0
+        version: 8.18.0
       cross-spawn:
         specifier: ^7.0.6
         version: 7.0.6

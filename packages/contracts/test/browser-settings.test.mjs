@@ -138,3 +138,38 @@ test('Agent browser source rejects arbitrary executable paths and settings resul
     )
   }
 })
+
+test('browser interactions accept only bound AX references and ordinary text', async () => {
+  const {
+    AgentBrowserClickSchema,
+    AgentBrowserTypeSchema,
+    AgentBrowserOperationSchema,
+  } = await import('../dist/index.js')
+  const target = {
+    page: {
+      tabId: '11111111-1111-4111-8111-111111111111',
+      origin: 'https://example.com',
+      pageVersion: '22222222-2222-4222-8222-222222222222',
+    },
+    ref: 'e2',
+    element: 'Search',
+  }
+  assert.equal(
+    AgentBrowserOperationSchema.parse('browser.click'),
+    'browser.click',
+  )
+  assert.equal(AgentBrowserClickSchema.safeParse(target).success, true)
+  assert.equal(
+    AgentBrowserTypeSchema.parse({ ...target, text: '普通搜索词' }).submit,
+    false,
+  )
+  for (const extra of [
+    { text: 'api_key=synthetic_fixture_value' },
+    { text: 'public', ref: '#query' },
+    { text: 'public', evaluate: '1+1' },
+  ])
+    assert.equal(
+      AgentBrowserTypeSchema.safeParse({ ...target, ...extra }).success,
+      false,
+    )
+})

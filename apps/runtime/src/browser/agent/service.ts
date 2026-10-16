@@ -1,3 +1,4 @@
+import { validateExecutionResult } from './automation/validate-result.js'
 import { BrowserRuntimeService } from './runtime/service.js'
 import {
   AgentBrowserDocumentSchema,
@@ -59,7 +60,11 @@ export class BrowserAgentService {
     args: Record<string, unknown>,
     signal: AbortSignal,
   ) {
-    if (!['navigate', 'read', 'close'].includes(operation))
+    if (
+      !['navigate', 'read', 'close', 'click', 'type', 'execute'].includes(
+        operation,
+      )
+    )
       throw new Error('browser_operation_failed')
     if (!this.enabled) throw new Error('browser_disabled')
     signal.throwIfAborted()
@@ -70,7 +75,13 @@ export class BrowserAgentService {
       throw new Error('browser_page_stale')
     if (operation !== 'navigate' || args.from) {
       const page = AgentBrowserPageSchema.parse(
-        operation === 'navigate' ? args.from : args,
+        operation === 'navigate'
+          ? args.from
+          : operation === 'click' ||
+              operation === 'type' ||
+              operation === 'execute'
+            ? args.page
+            : args,
       )
       if (!entry?.page || JSON.stringify(page) !== JSON.stringify(entry.page))
         throw new Error('browser_page_stale')
@@ -125,6 +136,21 @@ export class BrowserAgentService {
         this.clients.get(runId) !== current
       )
         throw new Error('browser_disabled')
+      if (operation === 'execute') {
+        const result = validateExecutionResult(args, current.page, raw)
+        if (result.document)
+          filterBrowserContent(
+            result.document.title,
+            result.document.snapshot ?? '',
+          )
+        current.page = result.document?.page ?? null
+        if (
+          result.error === 'browser_sensitive_content' ||
+          result.error === 'browser_plan_timeout'
+        )
+          this.release(runId)
+        return result
+      }
       const document = AgentBrowserDocumentSchema.parse(JSON.parse(raw))
       const target =
         operation === 'navigate'
@@ -143,7 +169,13 @@ export class BrowserAgentService {
         JSON.stringify(document.page) !== JSON.stringify(current.page)
       )
         throw new Error('browser_page_stale')
-      if (operation === 'navigate' && document.snapshot !== undefined)
+      if (
+        (operation === 'click' || operation === 'type') &&
+        (document.page.tabId !== current.page?.tabId ||
+          document.page.pageVersion === current.page?.pageVersion)
+      )
+        throw new Error('browser_response_invalid')
+      if (operation !== 'read' && document.snapshot !== undefined)
         throw new Error('browser_response_invalid')
       current.page = document.page
       return document
@@ -152,8 +184,10 @@ export class BrowserAgentService {
       // Navigation failures have already closed the backend and must be released.
       if (!(
         error instanceof Error &&
-        error.message === 'browser_page_stale' &&
-        operation === 'read' &&
+        ((error.message === 'browser_page_stale' && operation !== 'navigate') ||
+          error.message === 'browser_interaction_denied' ||
+          error.message === 'browser_interaction_network_denied' ||
+          error.message === 'browser_interaction_failed') &&
         !signal.aborted
       ))
         this.release(runId)

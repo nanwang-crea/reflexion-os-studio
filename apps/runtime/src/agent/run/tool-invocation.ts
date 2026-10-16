@@ -1,3 +1,4 @@
+import { toolImageParts } from '../context/tool-images.js'
 import type {
   ToolCallRequest,
   ToolResult,
@@ -33,6 +34,15 @@ export async function invokeAdmittedTool(
     ...result,
     content: capToolResultForModel(result.content),
   }
+  delete modelResult.images
+  const images = toolImageParts(
+    store,
+    run.sessionId,
+    run.id,
+    request.name,
+    output,
+  )
+  if (images.length) modelResult.images = images
   if (result.isError) {
     const errorCode = result.code ?? 'tool_error'
     finalizeToolCall(store, state, emitter, rowId, 'failed', errorCode, output)

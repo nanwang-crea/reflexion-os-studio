@@ -3,6 +3,7 @@ import {
   AgentBrowserOperationSchema,
   AgentBrowserPageSchema,
 } from './browser/agent.js'
+import { AgentBrowserTargetSchema } from './browser/interaction.js'
 import { JsonValueSchema } from './json-value.js'
 import {
   PermissionPresetSchema,
@@ -42,6 +43,7 @@ export const ApprovalSubjectSchema = z.discriminatedUnion('kind', [
     operation: AgentBrowserOperationSchema,
     origin: z.string().min(1),
     source: AgentBrowserPageSchema.optional(),
+    target: AgentBrowserTargetSchema.omit({ page: true }).optional(),
   }),
   z.object({
     kind: z.literal('operation'),

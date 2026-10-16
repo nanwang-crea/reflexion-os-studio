@@ -35,7 +35,7 @@ export const TEAM_CREATE_SKILL: SkillDefinition = {
 ## 配置能力
 默认项目范围；无项目时全局。用户明确要求跨项目复用时选择全局。teamId 使用短英文标识，domains 只填开发/写作等领域，工具会添加 team:<teamId> 成员标识。
 用户未指定模型时用 modelBinding={"mode":"inherit"}，不要擅自选择昂贵模型；指定模型时依据 inspect 的 providerId/model 和支持的思考选项设置 fixed，不可用先说明缺失配置。
-只读研究/审阅角色使用 file.read/list/glob/grep、skill.use；公开网络调研角色需要 browser.navigate、browser.read、browser.close，加载 web-research 用搜索结果找真实链接。web.fetch 可保留用于已知 URL 的轻量读取，不能替代搜索；没有启用浏览器时说明限制。需要形成文件的作者/实现角色增加 file.write、file.edit、file.mkdir，按需要加入 file.write_stream。Shell、删除和继续委派只在目标确需时配置；canDelegate=true 必须包含 task。默认 permissionCeiling=workspace-read，实际写入仍需审批；用户需要更宽上限时明确说明。模板不能扩张父 Run 的权限。
+只读研究/审阅角色使用 file.read/list/glob/grep、skill.use；公开网络调研角色需要 browser.navigate、browser.read、browser.close，加载 web-research 用搜索结果找真实链接。确需填写普通搜索框、展开或翻页时另加 browser.execute（可组合动作及受限 Playwright 风格脚本，包含截图），旧 browser.click/type 仍可用；这些操作逐次审批，不因只读浏览策略自动允许，不给所有研究角色默认增加交互能力。web.fetch 可保留用于已知 URL 的轻量读取，不能替代搜索；没有启用浏览器时说明限制。需要形成文件的作者/实现角色增加 file.write、file.edit、file.mkdir，按需要加入 file.write_stream。Shell、删除和继续委派只在目标确需时配置；canDelegate=true 必须包含 task。默认 permissionCeiling=workspace-read，实际写入仍需审批；用户需要更宽上限时明确说明。模板不能扩张父 Run 的权限。
 
 ## 保存与交付
 先在对话给出简明角色配置和交接方案，再调用 agent_team.create，传入 teamId、scope、roles。工具走正式审批；不要为同一保存再增加 ask_user 确认。用户拒绝后不重试绕过。只有工具成功才声明角色已保存；批量保存失败不会留下部分角色。

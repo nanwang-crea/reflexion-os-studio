@@ -6,8 +6,10 @@ import './message-images.css'
 /** Load once per mounted attachment, including history after restart. */
 export function MessageImage({
   assetId,
+  expectedRunId,
 }: {
   assetId: string
+  expectedRunId?: string
 }): React.JSX.Element {
   const [image, setImage] = useState<{
     src: string
@@ -25,6 +27,10 @@ export function MessageImage({
       .then(({ asset, base64 }) => {
         if (!active) return
         if (
+          (expectedRunId !== undefined &&
+            (asset.runId !== expectedRunId ||
+              asset.createdBy !== 'agent' ||
+              asset.metadata.type !== 'browser-screenshot')) ||
           !base64 ||
           !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(
             asset.mimeType,
@@ -45,7 +51,7 @@ export function MessageImage({
     return () => {
       active = false
     }
-  }, [assetId])
+  }, [assetId, expectedRunId])
   if (!image)
     return (
       <span className="message-image-state" role="status">

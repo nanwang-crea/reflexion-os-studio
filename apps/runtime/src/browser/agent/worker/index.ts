@@ -6,11 +6,14 @@ import {
 } from '@modelcontextprotocol/sdk/types.js'
 import {
   AgentBrowserLaunchSchema,
+  BrowserPlanJsonSchema,
   AgentBrowserNavigateSchema,
   AgentBrowserDisplaySchema,
   AgentBrowserNavigateJsonSchema,
   AgentBrowserPageJsonSchema,
   AgentBrowserPageSchema,
+  AgentBrowserClickJsonSchema,
+  AgentBrowserTypeJsonSchema,
 } from '@reflexion-os-studio/contracts'
 import { PlaywrightBackend } from './backend.js'
 
@@ -40,10 +43,16 @@ const errors = new Set([
   'browser_page_stale',
   'browser_source_changed',
   'browser_snapshot_unavailable',
+  'browser_interaction_denied',
+  'browser_interaction_failed',
+  'browser_interaction_network_denied',
 ])
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
+    { name: 'execute', inputSchema: BrowserPlanJsonSchema },
     { name: 'navigate', inputSchema: AgentBrowserNavigateJsonSchema },
+    { name: 'click', inputSchema: AgentBrowserClickJsonSchema },
+    { name: 'type', inputSchema: AgentBrowserTypeJsonSchema },
     { name: 'read', inputSchema: AgentBrowserPageJsonSchema },
     { name: 'close', inputSchema: { type: 'object' } },
   ],
@@ -53,10 +62,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     try {
       const { name, arguments: args } = request.params
       let result: unknown
-      if (name === 'navigate') {
+      if (name === 'execute') result = await backend.execute(args)
+      else if (name === 'navigate') {
         const input = AgentBrowserNavigateSchema.parse(args)
         result = await backend.navigate(input.url, input.from)
-      } else if (name === 'read')
+      } else if (name === 'click' || name === 'type')
+        result = await backend.interact(name, args)
+      else if (name === 'read')
         result = await backend.read(AgentBrowserPageSchema.parse(args))
       else if (name === 'close') {
         await backend.close()

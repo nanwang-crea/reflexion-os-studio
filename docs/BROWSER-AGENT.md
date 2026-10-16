@@ -4,7 +4,7 @@
 
 ## 首批范围
 
-browser.navigate、browser.read、browser.close；先导航取得页面身份，再按浏览器批准策略读取真实渲染后的无障碍快照。导航结果不向模型返回正文；读取校验所属 Session、当前 Run 的占用权、标签/来源/页面版本，并重新取快照核对内容摘要，页面变化要求重新导航取得新版本。导航可携带 from 绑定原页面；不带 from 时重新绑定页面版本，同源复用窗口，跨源重建隔离上下文。点击、输入、上传、下载、脚本执行、截图和登录态导入不在本批工具清单中。
+browser.navigate、browser.read、browser.close、browser.execute、browser.click、browser.type；先导航取得页面身份，再按浏览器批准策略读取真实渲染后的无障碍快照。导航结果不向模型返回正文；读取校验所属 Session、当前 Run 的占用权、标签/来源/页面版本，并重新取快照核对内容摘要，页面变化要求重新导航取得新版本。导航可携带 from 绑定原页面；不带 from 时重新绑定页面版本，同源复用窗口，跨源重建隔离上下文。公开页面控件点击与普通文本输入现已支持；上传、下载、任意 JavaScript/Node 执行和登录态导入不在本批工具清单中。
 
 不保留静态 HTML 抓取或离线只读标签。用户 Browser Surface 继续使用原生 WebView，不由 Playwright 接管。
 
@@ -99,3 +99,21 @@ browser.navigate/read/close 加入可继承工具集合，内置 Research Agent 
 设置 → 模型与工具 → Agent 浏览器 → 回复结束后：默认“保留浏览器，同一会话继续使用”，可选“关闭浏览器，每次回复重新打开”。保留模式下回复完成/失败以及切换聊天不会关闭窗口；同一 Session 的下一次 Run 可接管空闲浏览器，仍须逐次经过既有审批与页面身份检查，不继承上次 Run 的授权。不同 Session 不共享浏览器或页面身份。取消任务、删除所属 Session/项目、关闭浏览器开关、更改来源/显示/批准方式、改为每次回复关闭与应用退出会释放对应窗口。
 
 “关闭所有 Agent 浏览器窗口”经 typed API 调用 agent_browser.close_all，立即撤销活动与空闲 worker 并等待退出；不改变开关或保留偏好。总上限仍为 8 个活动/保留 worker，不自动淘汰用户保留窗口，达到上限提示去设置手动释放。页面和临时网站状态仅存在进程内，不跨应用重启恢复。Windows/macOS/Linux 共用 Runtime 生命周期；有头窗口仍需所在平台具备图形环境，Windows/Linux 真机验收待完成。
+
+### 公开页面交互（2026-10-16）
+
+用户明确请求后增加 browser.click 与 browser.type，初期使用官方 Playwright MCP core-input，现统一交由受控 Playwright 动作执行器；仅开放适配器 schema，原始 MCP 脚本、坐标、任意 CSS/XPath 等不暴露。输入参数包含 page 身份、最新一次已获准 read 的 ref 和控件精确名称；type 另含 text 与 submit（默认 false，true 时在该控件按 Enter）。未读取、陈旧身份、控件名称与快照不符均不可执行。操作完成生成新 pageVersion，仅返回页面身份；再次 read 审批后才披露正文。
+
+点击与输入始终逐次 ask，不继承“自动允许只读浏览”、workspace-full 或 Danger 自动放行；plan 模式拒绝。审批绑定完整参数 digest，展示来源、页面、ref、控件名及完整输入/提交参数，不提供会话规则。新工具列入可委派工具交集与角色页“网页交互”组，但不会自动扩张已有模板；“读取与研究”预设继续不含交互。内置网络调研 Skill 和主 Agent 提示已同步操作及结果核验指引。
+
+当前交互仅支持同源 GET/HEAD 导航、普通输入和页面内展开/翻页，不支持凭据/验证码/支付、文件上传、跨来源或 POST 等写入提交。凭据形态输入在入库前校验并清除非法工具参数；执行时检查控件元数据，不读取输入值；凭据/上传/支付控件拒绝，GET 表单也拒绝凭据表单和跨站目标。已有网络代理、逐连接公网 DNS 检查、下载/弹窗/权限保护保持。拒绝的写请求不自动重试或宣称提交成功，保留窗口供核对；不可恢复或敏感内容错误仍关闭。合成有头/无头验收不代表任意真实站点兼容；Windows/Linux 有头真机仍待验收。
+
+## 通用操作与受限脚本（2026-10-16）
+
+`browser.execute` 统一执行动作列表或静态脚本。`mode=actions` 接收 steps；`mode=script` 接收 script。两者均绑定当前 page 身份，整份原始输入和展开动作计划需单次审批，自动只读策略、Danger 和全权限均不跳过。最多20步、4张截图、20秒，失败报告 completed/failedStep 并停止，不自动重放。
+
+支持 click/type/hover/press/select/drag/scroll/reveal/screenshot/read/goto/wait。目标为精确唯一的 role/name 或快照 ref/name，导航仍限制同源 GET/HEAD。脚本通过 Acorn 静态解析，不运行 eval、vm 或 Node；支持 const、有限 for...of 字面量数组、page.getByRole(...).click/fill/press/hover/selectOption/dragTo/scrollIntoViewIfNeeded、page.mouse.wheel、page.goto/waitForTimeout/screenshot。禁止任意函数、while、计算属性、DOM/evaluate、文件、进程、网络和浏览器上下文/凭据 API。
+
+截图仅限受控网页 JPEG，默认当前视口，可选 fullPage（宽度最多8000px、高度最多16000px、总面积最多3200万像素），每张最多2MiB；所有输入框、文本域、选择框、contenteditable 及 iframe 遮罩（不读取控件值）。截图前后校验页面快照和来源，保存为绑定 Session/Run 的 agent 资产。ToolOutput 只保存引用，工具轨迹展开时显示缩略图。视觉模型请求前才读取图片字节，并在完整工具结果组之后附加明确标记为不可信网页证据的图片消息；历史与即时调用统一从 canonical resourceLinks 及资产归属投影。历史工具截图丢失或损坏时提示不可用并继续文字对话，用户主动上传图片仍严格校验。
+
+旧 click/type 通过同一 Playwright 执行器执行，仍要求 read 后真实 ref，执行结果仅返回页面身份。新 execute 已审批完整计划，返回最终快照与截图。macOS headed/headless 合成页验收；Windows/Linux 使用相同 Playwright/Node 实现，但尚无本次真机 GUI 验收。

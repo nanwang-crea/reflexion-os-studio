@@ -1,3 +1,4 @@
+import { compileBrowserExecution } from '../../browser/agent/automation/script.js'
 import { validateToolAdmission } from './browser-admission.js'
 import {
   type ToolCallRequest,
@@ -263,7 +264,14 @@ export async function executeToolCall(
       unsandboxed || built.subject.kind === 'browser-page'
         ? null
         : (prepared?.sandboxProvider ?? input.sandboxProvider),
-    network: networkRequested || request.name === 'browser.navigate',
+    network:
+      networkRequested ||
+      [
+        'browser.navigate',
+        'browser.click',
+        'browser.type',
+        'browser.execute',
+      ].includes(request.name),
     escalation,
     justification:
       typeof record.justification === 'string'
@@ -280,6 +288,14 @@ export async function executeToolCall(
       projectId,
     })
   }
+  if (request.name === 'browser.click' || request.name === 'browser.type')
+    context.review = JSON.stringify(args, null, 2)
+  if (request.name === 'browser.execute')
+    context.review = JSON.stringify(
+      { ...(args as object), compiledPlan: compileBrowserExecution(args) },
+      null,
+      2,
+    )
   if (request.name === 'skill.save')
     context.review = skillSaveReview({ store, projectId }, args)
 

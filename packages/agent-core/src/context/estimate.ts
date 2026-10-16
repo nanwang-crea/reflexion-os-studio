@@ -33,7 +33,8 @@ export function estimateFrameTokens(frames: ContextFrame[]): number {
           total += estimateTokens(call.arguments)
         }
         for (const result of frame.results) {
-          total += estimateTokens(result.content)
+          total +=
+            estimateTokens(result.content) + (result.images?.length ?? 0) * 4096
         }
         break
       }

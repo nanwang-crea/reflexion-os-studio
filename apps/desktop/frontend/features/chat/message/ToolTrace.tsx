@@ -1,3 +1,4 @@
+import { BrowserScreenshotResults } from '../images/BrowserScreenshotResults'
 import { toolLabel } from '../tools/labels'
 import { PlanSnapshotSchema } from '@reflexion-os-studio/runtime-client'
 import { PlanReview } from '../interactions/PlanReview'
@@ -93,12 +94,15 @@ function ToolTraceItem(props: {
       >
         <span className={`trace-dot ${inFlight ? 'pulse' : ''}`} aria-hidden />
         <span className="trace-name">{label}</span>
-        <span className="trace-summary">{summarizeArgs(call.args)}</span>
+        <span className="trace-summary">
+          {summarizeArgs(call.args, call.toolName)}
+        </span>
         {showStatus && <span className="trace-status">{statusText}</span>}
       </button>
       {call.toolName === 'exit_plan_mode' && snapshot.success && (
         <PlanReview snapshot={snapshot.data} historical />
       )}
+      {open && <BrowserScreenshotResults call={call} />}
       {open && detail !== '' && <pre className="trace-detail">{detail}</pre>}
     </div>
   )
@@ -114,7 +118,17 @@ function isInFlight(call: ToolCall): boolean {
 }
 
 /** 一行摘要：文件显示路径，shell 显示命令，其余回退参数 JSON。 */
-function summarizeArgs(args: JsonValue): string {
+function summarizeArgs(args: JsonValue, toolName: string): string {
+  if (
+    toolName === 'browser.execute' &&
+    args &&
+    typeof args === 'object' &&
+    !Array.isArray(args)
+  )
+    return args.mode === 'script'
+      ? '动作脚本'
+      : `动作计划 · ${Array.isArray(args.steps) ? args.steps.length : 0} 步`
+
   if (
     typeof args === 'object' &&
     args !== null &&

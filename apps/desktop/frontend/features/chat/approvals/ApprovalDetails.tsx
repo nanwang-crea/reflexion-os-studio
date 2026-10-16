@@ -29,6 +29,17 @@ export function ApprovalDetails({
     document.addEventListener('keydown', onKeyDown, true)
     return () => document.removeEventListener('keydown', onKeyDown, true)
   }, [expanded])
+  const review = display.context?.review ? (
+    <section
+      className="approval-config-review"
+      aria-label={
+        display.reviewAlwaysVisible ? display.reviewTitle : '待保存的配置'
+      }
+    >
+      <strong>{display.reviewTitle}</strong>
+      <pre tabIndex={0}>{display.context.review}</pre>
+    </section>
+  ) : null
   return (
     <div
       className={`approval-body${display.context?.review ? ' has-review' : ''}`}
@@ -97,6 +108,7 @@ export function ApprovalDetails({
       {display.ruleNote !== null && (
         <p className="approval-rule-note">{display.ruleNote}</p>
       )}
+      {display.reviewAlwaysVisible && review}
       <button
         type="button"
         className="approval-details-toggle ghost"
@@ -107,15 +119,7 @@ export function ApprovalDetails({
       </button>
       {expanded && (
         <>
-          {display.context?.review && (
-            <section
-              className="approval-config-review"
-              aria-label="待保存的配置"
-            >
-              <strong>本次将保存的配置</strong>
-              <pre tabIndex={0}>{display.context.review}</pre>
-            </section>
-          )}
+          {!display.reviewAlwaysVisible && review}
           <dl className="approval-detail-list">
             {display.details.map((item) => (
               <div key={item.label} className="approval-detail-item">

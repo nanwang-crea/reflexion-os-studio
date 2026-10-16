@@ -38,6 +38,12 @@ export function riskFor(
   toolName: string,
 ): ApprovalRisk {
   if (escalation || network) return 'elevated'
+  if (
+    toolName === 'browser.click' ||
+    toolName === 'browser.type' ||
+    toolName === 'browser.execute'
+  )
+    return 'warning'
   if (toolName === 'file.delete' || toolName === 'file.move') return 'warning'
   if (subject.kind === 'shell-command' && subject.prefixCandidate === null) {
     return 'warning'

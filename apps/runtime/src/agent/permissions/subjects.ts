@@ -1,6 +1,9 @@
 import {
   AgentBrowserNavigateSchema,
+  BrowserExecuteSchema,
   AgentBrowserPageSchema,
+  AgentBrowserClickSchema,
+  AgentBrowserTypeSchema,
 } from '@reflexion-os-studio/contracts'
 import { createHash } from 'node:crypto'
 import type {
@@ -120,6 +123,36 @@ export function buildApprovalSubject(
   shell?: ShellSubjectInput,
 ): { subject: ApprovalSubject; digest: string } {
   switch (toolName) {
+    case 'browser.execute': {
+      const input = BrowserExecuteSchema.parse(args)
+      return {
+        subject: {
+          kind: 'browser-page',
+          operation: toolName,
+          origin: input.page.origin,
+          source: input.page,
+        },
+        digest: canonicalDigest(toolName, [JSON.stringify(args)]),
+      }
+    }
+    case 'browser.click':
+    case 'browser.type': {
+      const input = (
+        toolName === 'browser.click'
+          ? AgentBrowserClickSchema
+          : AgentBrowserTypeSchema
+      ).parse(args)
+      return {
+        subject: {
+          kind: 'browser-page',
+          operation: toolName,
+          origin: input.page.origin,
+          source: input.page,
+          target: { ref: input.ref, element: input.element },
+        },
+        digest: canonicalDigest(toolName, [JSON.stringify(args)]),
+      }
+    }
     case 'browser.navigate':
     case 'browser.read':
     case 'browser.close': {
