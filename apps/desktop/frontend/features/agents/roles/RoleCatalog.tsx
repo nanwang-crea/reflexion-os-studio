@@ -1,3 +1,4 @@
+import { RoleBulkDeleteButton } from './bulk/RoleBulkDeleteButton'
 import { useState, type ComponentProps } from 'react'
 import type { AgentTemplate } from '@reflexion-os-studio/contracts'
 import { RoleListItem } from './RoleListItem'
@@ -12,10 +13,12 @@ export function RoleCatalog({
   items,
   itemProps,
   onBulkEdit,
+  deletion,
 }: {
   items: AgentTemplate[]
   itemProps: ItemProps
   onBulkEdit: (roles: AgentTemplate[]) => void
+  deletion: Omit<ComponentProps<typeof RoleBulkDeleteButton>, 'roles' | 'busy'>
 }): React.JSX.Element {
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<string[]>([])
@@ -84,6 +87,11 @@ export function RoleCatalog({
         >
           批量修改
         </button>
+        <RoleBulkDeleteButton
+          {...deletion}
+          roles={chosen}
+          busy={itemProps.busy}
+        />
       </div>
       <small className="role-catalog-hint">
         内置角色请先复制后配置；可按分类筛选后选择整组。每次批量最多 500 个。

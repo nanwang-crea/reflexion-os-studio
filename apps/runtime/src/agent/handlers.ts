@@ -1,3 +1,4 @@
+import { bulkRemoveTemplates } from './templates/remove.js'
 import { rolePackageHandlers } from './templates/package/handlers.js'
 import { resolveRoleSkills } from './templates/skills.js'
 import { exportTeam, importTeam } from './templates/team-share.js'
@@ -65,6 +66,7 @@ export const agentCommandHandlers: Record<string, CommandHandler> = {
   },
   'agent_template.bulk_update': (p, { store, plugins }) =>
     bulkUpdateTemplates(p, store, plugins?.registry),
+  'agent_template.bulk_remove': (p, { store }) => bulkRemoveTemplates(p, store),
   'agent_template.remove': (p, { store }) => ({
     removed: store.agents.removeUser(requireString(p, 'templateId')),
   }),

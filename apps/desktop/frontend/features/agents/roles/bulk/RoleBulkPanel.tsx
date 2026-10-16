@@ -1,3 +1,5 @@
+import { RoleBulkDeleteButton } from './RoleBulkDeleteButton'
+import type { ComponentProps } from 'react'
 import { useState } from 'react'
 import type {
   AgentTemplate,
@@ -21,6 +23,7 @@ export function RoleBulkPanel({
   onSave,
   onClose,
   onDirtyChange,
+  deletion,
 }: {
   roles: AgentTemplate[]
   projects: Project[]
@@ -29,6 +32,7 @@ export function RoleBulkPanel({
   onSave: (input: BulkInput) => Promise<boolean>
   onClose: () => void
   onDirtyChange: (dirty: boolean) => void
+  deletion: Omit<ComponentProps<typeof RoleBulkDeleteButton>, 'roles' | 'busy'>
 }): React.JSX.Element {
   const [changes, setChanges] = useState<string[]>([])
   const [projectId, setProjectId] = useState('')
@@ -175,6 +179,7 @@ export function RoleBulkPanel({
           <button type="button" disabled={busy} onClick={onClose}>
             取消
           </button>
+          <RoleBulkDeleteButton {...deletion} roles={roles} busy={busy} />
         </footer>
       </form>
     </RoleSidePanel>

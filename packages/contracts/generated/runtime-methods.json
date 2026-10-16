@@ -11,6 +11,7 @@
     "agent_browser_settings.update",
     "agent_settings.get",
     "agent_settings.update",
+    "agent_template.bulk_remove",
     "agent_template.bulk_update",
     "agent_template.export",
     "agent_template.list",

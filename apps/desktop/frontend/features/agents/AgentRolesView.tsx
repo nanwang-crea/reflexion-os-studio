@@ -12,6 +12,7 @@ import {
   listAgentTemplates,
   saveAgentTemplate,
   removeAgentTemplate,
+  removeAgentTemplates,
   setAgentEnabled,
 } from '../../api/agents'
 import { listProjects } from '../../api/projects'
@@ -77,6 +78,20 @@ export function AgentRolesView({
     } finally {
       setBusy(false)
     }
+  }
+  const deletion = {
+    confirm,
+    onDelete: (input: Parameters<typeof removeAgentTemplates>[0]) =>
+      action(async () => {
+        const { removedIds } = await removeAgentTemplates(input)
+        if (draft?.id && removedIds.includes(draft.id)) setDraft(null)
+        if (bulkTargets?.some((role) => removedIds.includes(role.id))) {
+          setBulkTargets(null)
+          setBulkDirty(false)
+        }
+        setCatalogRevision((value) => value + 1)
+        setNotice(`已删除 ${removedIds.length} 个角色，执行记录和技能已保留。`)
+      }),
   }
   const allowSwitch = async () => {
     const dirty = draft
@@ -194,6 +209,7 @@ export function AgentRolesView({
               catalogRevision,
             ])}
             items={visible}
+            deletion={deletion}
             onBulkEdit={(roles) => {
               void (async () => {
                 if (!(await allowSwitch())) return
@@ -271,6 +287,7 @@ export function AgentRolesView({
         <RoleBulkPanel
           key={`bulk-${editorKey}`}
           roles={bulkTargets}
+          deletion={deletion}
           projects={projects}
           busy={busy}
           error={error}

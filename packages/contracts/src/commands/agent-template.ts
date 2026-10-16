@@ -4,6 +4,20 @@ import { z } from 'zod'
 import { AgentTemplateSchema, PermissionPresetSchema } from '../entities.js'
 import { RequestIdSchema } from './params.js'
 
+const AgentTemplateTargetsSchema = z
+  .array(
+    z.strictObject({
+      id: z.string().min(1),
+      updatedAt: z.string().min(1),
+    }),
+  )
+  .min(1)
+  .max(500)
+  .refine(
+    (items) => new Set(items.map((item) => item.id)).size === items.length,
+    '角色不能重复',
+  )
+
 export const agentTemplateCommands = {
   'agent_template.team_export': {
     params: z.strictObject({
@@ -85,19 +99,7 @@ export const agentTemplateCommands = {
     params: z
       .object({
         requestId: RequestIdSchema,
-        targets: z
-          .array(
-            z
-              .object({ id: z.string().min(1), updatedAt: z.string().min(1) })
-              .strict(),
-          )
-          .min(1)
-          .max(500)
-          .refine(
-            (items) =>
-              new Set(items.map((item) => item.id)).size === items.length,
-            '角色不能重复',
-          ),
+        targets: AgentTemplateTargetsSchema,
         patch: z
           .object({
             projectId: z.string().min(1).nullable().optional(),
@@ -111,6 +113,13 @@ export const agentTemplateCommands = {
       })
       .strict(),
     result: z.object({ templates: z.array(AgentTemplateSchema) }),
+  },
+  'agent_template.bulk_remove': {
+    params: z.strictObject({
+      requestId: RequestIdSchema,
+      targets: AgentTemplateTargetsSchema,
+    }),
+    result: z.object({ removedIds: z.array(z.string()) }),
   },
   'agent_template.remove': {
     params: z.object({
@@ -135,4 +144,8 @@ export type AgentTeamExportParams = z.input<
 
 export type AgentRolePackagePreview = z.infer<
   (typeof agentTemplateCommands)['agent_template.package_preview']['result']
+>
+
+export type AgentTemplateBulkRemoveParams = z.input<
+  (typeof agentTemplateCommands)['agent_template.bulk_remove']['params']
 >

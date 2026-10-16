@@ -161,4 +161,38 @@ export async function verifyRoleBulk(page) {
   assert.equal('projectId' in toolPatch, false)
   assert.equal('permissionCeiling' in toolPatch, false)
   await page.setViewportSize({ width: 1200, height: 850 })
+  await page
+    .getByRole('button', { name: '选择筛选结果（23）', exact: true })
+    .click()
+  await page.evaluate(() => {
+    window.blockRoleSwitch = true
+  })
+  await page.getByRole('button', { name: '批量删除', exact: true }).click()
+  assert.equal(await page.evaluate(() => window.roleBulkRemovals.length), 0)
+  const confirmation = await page.evaluate(() => window.lastRoleConfirmation)
+  assert.equal(confirmation.danger, true)
+  assert.match(confirmation.message, /Role 0/)
+  assert.match(confirmation.message, /Role 22/)
+  await page.evaluate(() => {
+    window.blockRoleSwitch = false
+    window.failBulkDelete = true
+  })
+  await page.getByRole('button', { name: '批量删除', exact: true }).click()
+  await page
+    .getByRole('alert')
+    .filter({ hasText: 'Synthetic bulk delete failure' })
+    .waitFor()
+  assert.equal(await page.evaluate(() => window.roleBulkRemovals.length), 0)
+  await page.evaluate(() => {
+    window.failBulkDelete = false
+  })
+  await page.getByRole('button', { name: '批量修改', exact: true }).click()
+  await dialog.getByRole('button', { name: '批量删除', exact: true }).click()
+  await dialog.waitFor({ state: 'detached' })
+  const removed = await page.evaluate(() => window.roleBulkRemovals[0].targets)
+  assert.equal(removed.length, 23)
+  assert.ok(removed.every((item) => item.id !== 'builtin' && item.updatedAt))
+  await page
+    .getByText('已删除 23 个角色，执行记录和技能已保留。', { exact: true })
+    .waitFor()
 }

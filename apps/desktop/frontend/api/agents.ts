@@ -144,3 +144,12 @@ export function importAgentRolePackage(
     digest,
   })
 }
+
+export function removeAgentTemplates(
+  input: Omit<
+    import('@reflexion-os-studio/contracts').AgentTemplateBulkRemoveParams,
+    'requestId'
+  >,
+) {
+  return request<{ removedIds: string[] }>('agent_template.bulk_remove', input)
+}

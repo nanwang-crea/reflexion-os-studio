@@ -1,7 +1,7 @@
 export const agentApi = `
 let templates = [{ id:'reviewer', name:'Reviewer', description:'Review changes', systemPrompt:'Review evidence', domains:['开发'], projectId:null, modelBinding:{mode:'inherit'}, source:'user', builtin:false, enabled:true, policy:{permissionCeiling:'workspace-read',allowedTools:['file.read'],canDelegate:false} }];
 window.setRoleTemplates=items=>{templates=items};
-window.roleBulkSaves=[];window.roleSaves=[]; window.tree=[{ id:'delegate-1', parentRunId:'root-run', rootRunId:'root-run', childRunId:'child-run', childSessionId:'child-session', status:'completed', agentId:'agent-1', task:'Review task', agentInstance:{ name:'Review Agent',templateId:'reviewer',workspaceRoot:'/synthetic/project' }, execution:{depth:1,model:'review-model',providerId:'synthetic'}, structuredResult:{changedFiles:[]} }];
+window.roleBulkRemovals=[];window.roleBulkSaves=[];window.roleSaves=[]; window.tree=[{ id:'delegate-1', parentRunId:'root-run', rootRunId:'root-run', childRunId:'child-run', childSessionId:'child-session', status:'completed', agentId:'agent-1', task:'Review task', agentInstance:{ name:'Review Agent',templateId:'reviewer',workspaceRoot:'/synthetic/project' }, execution:{depth:1,model:'review-model',providerId:'synthetic'}, structuredResult:{changedFiles:[]} }];
 export async function exportAgentTeam(input){window.teamExports=(window.teamExports??[]).concat(input);return {path:input.directory+'/team.reflexion-team.json',roleCount:input.templateIds.length}}
 export async function importAgentTeam(archive,projectId){const imported=archive.roles.map((role,i)=>({...role,id:'imported-'+i,projectId,enabled:false,builtin:false,modelBinding:{mode:'inherit'},policy:{permissionCeiling:role.permissionCeiling,allowedTools:role.allowedTools,canDelegate:role.canDelegate}}));templates=[...templates,...imported];window.importedTeam={archive,projectId};return {templates:imported,teamId:archive.teamId}}
 export async function previewAgentRolePackage(data,projectId){window.packagePreview={data,projectId};return window.packageFixture}
@@ -16,6 +16,7 @@ export async function bulkUpdateAgentTemplates(input){
  templates=templates.map(t=>!ids.includes(t.id)?t:{...t,...('projectId' in patch?{projectId:patch.projectId}:{}),...('enabled' in patch?{enabled:patch.enabled}:{}),updatedAt:new Date().toISOString(),policy:{...t.policy,...('permissionCeiling' in patch?{permissionCeiling:patch.permissionCeiling}:{}),...('allowedTools' in patch?{allowedTools:patch.allowedTools,canDelegate:patch.canDelegate}:{})}});
  return {templates:templates.filter(t=>ids.includes(t.id))}
 }
+export async function removeAgentTemplates(input){if(window.failBulkDelete)throw new Error('Synthetic bulk delete failure');window.roleBulkRemovals.push(input);const removedIds=input.targets.map(item=>item.id);templates=templates.filter(role=>!removedIds.includes(role.id));return {removedIds}}
 export async function removeAgentTemplate(id){ templates=templates.filter(t=>t.id!==id);return {removed:true} }
 export async function setAgentEnabled(id,enabled){templates=templates.map(t=>t.id===id?{...t,enabled}:t);return {agent:templates.find(t=>t.id===id)}}
 export async function getDelegationTree(){return structuredClone(window.tree)}

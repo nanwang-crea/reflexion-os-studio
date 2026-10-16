@@ -48,6 +48,7 @@ export type {
   AgentRolePackagePreview,
   AgentTemplateSaveParams,
   AgentTemplateBulkUpdateParams,
+  AgentTemplateBulkRemoveParams,
 } from './commands/agent-template.js'
 
 export { agentTemplateCommands } from './commands/agent-template.js'
