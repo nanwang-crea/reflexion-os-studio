@@ -93,6 +93,11 @@ jobs:
       - name: Verify multi-agent collaboration
         run: pnpm --filter @reflexion-os-studio/runtime exec node --import ./test/set-test-data-dir.mjs --test test/agent-roles.test.mjs test/agent-teams.test.mjs
 
+      - name: Install Chromium for UI tests
+        run: pnpm --filter @reflexion-os-studio/runtime exec playwright install --with-deps chromium
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/agent-browser
+
       - name: Verify Agent roles and collaboration UI
         run: pnpm --filter @reflexion-os-studio/desktop exec node --test test/agent-collaboration.test.mjs
 
