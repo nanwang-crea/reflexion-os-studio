@@ -59,7 +59,11 @@ export function RoleListItem({
           )}
           <strong>{template.name}</strong>
           <span>
-            {template.builtin ? '内置' : template.projectId ? '项目' : '全局'}
+            {template.builtin
+              ? '内置'
+              : template.projectId
+                ? '项目'
+                : '跨项目通用'}
           </span>
         </header>
         <p>{template.description}</p>
@@ -74,7 +78,7 @@ export function RoleListItem({
           {template.projectId
             ? (projects.find((project) => project.id === template.projectId)
                 ?.name ?? '原项目不可用')
-            : '全局'}{' '}
+            : '跨项目通用'}{' '}
           · {template.policy.allowedTools.length} 个工具 ·{' '}
           {template.policy.canDelegate ? '允许继续委派' : '独立执行'}
         </small>

@@ -37,3 +37,7 @@ export const installAgentBrowserRuntime = () =>
   runtimeCommand('agent_browser_runtime.install')
 export const cancelAgentBrowserRuntime = () =>
   runtimeCommand('agent_browser_runtime.cancel')
+
+export async function closeAgentBrowserWindows(): Promise<void> {
+  await request('agent_browser.close_all')
+}

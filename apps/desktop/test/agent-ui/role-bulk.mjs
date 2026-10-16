@@ -127,11 +127,9 @@ export async function verifyRoleBulk(page) {
     permissionCeiling: 'workspace-read',
   })
   assert.equal(await page.locator('.agent-role-card').count(), 1)
+  await page.getByRole('combobox', { name: '查看范围', exact: true }).click()
   await page
-    .getByRole('combobox', { name: '角色可用位置', exact: true })
-    .click()
-  await page
-    .getByRole('option', { name: 'Project B（含全局角色）', exact: true })
+    .getByRole('option', { name: 'Project B（含通用角色）', exact: true })
     .click()
   await page
     .getByRole('button', { name: '选择筛选结果（23）', exact: true })

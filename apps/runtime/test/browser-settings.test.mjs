@@ -176,6 +176,7 @@ test('independent Agent settings preserve user browser preferences, persist disp
         display: 'headed',
         approval: 'follow-session',
         source: 'auto',
+        lifetime: 'session',
       },
     )
     agentHandlers['agent_browser_settings.update'](
@@ -228,4 +229,44 @@ test('source updates revoke workers, persist and survive stale ordinary-browser 
   const reopened = new Store(dir)
   assert.equal(reopened.browserSettings.get().agentBrowserSource, 'managed')
   reopened.close()
+})
+
+test('reply retention defaults for old settings, persists and ordinary-browser writes cannot overwrite it', async () => {
+  const { agentBrowserSettingsCommandHandlers: handlers } =
+    await import('../dist/browser/agent/handlers.js')
+  const { browserSettingsCommandHandlers: ordinary } =
+    await import('../dist/browser-settings/handlers.js')
+  const dir = mkdtempSync(join(tmpdir(), 'browser-retention-settings-'))
+  const store = new Store(dir)
+  const old = store.browserSettings.get()
+  assert.equal(old.agentBrowserLifetime, 'session')
+  let revoked = 0
+  const ctx = { store, browser: { revoke: () => revoked++ } }
+  handlers['agent_browser_settings.update'](
+    { settings: { enabled: true, lifetime: 'run' } },
+    ctx,
+  )
+  assert.equal(revoked, 1)
+  ordinary['browser_settings.update']({ settings: old }, ctx)
+  assert.equal(
+    handlers['agent_browser_settings.get']({}, ctx).settings.lifetime,
+    'run',
+  )
+  store.close()
+  const reopened = new Store(dir)
+  try {
+    assert.equal(reopened.browserSettings.get().agentBrowserLifetime, 'run')
+    const ctx2 = { store: reopened, browser: { revoke: () => revoked++ } }
+    handlers['agent_browser_settings.update'](
+      { settings: { enabled: true, lifetime: 'session' } },
+      ctx2,
+    )
+    assert.equal(
+      revoked,
+      1,
+      'enabling retention should not close existing windows',
+    )
+  } finally {
+    reopened.close()
+  }
 })

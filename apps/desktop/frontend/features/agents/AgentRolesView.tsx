@@ -152,7 +152,9 @@ export function AgentRolesView({
           {loading
             ? '正在加载角色…'
             : `显示 ${visible.length} / ${templates.length} 个角色`}
-          {scope !== '*' && scope !== '' && ' · 包含此项目角色与全局角色'}
+          {scope === '*' && ' · 跨项目通用角色及各项目专属角色'}
+          {scope === '' && ' · 可在所有项目及独立会话中使用'}
+          {scope !== '*' && scope !== '' && ' · 此项目专属角色及跨项目通用角色'}
         </p>
         {notice && <p role="status">{notice}</p>}
         {error && !draft && !bulkTargets && (

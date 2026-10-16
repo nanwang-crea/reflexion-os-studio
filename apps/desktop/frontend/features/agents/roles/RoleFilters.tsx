@@ -40,13 +40,13 @@ export function RoleFilters({
         />
       </label>
       <label>
-        角色可用位置
+        查看范围
         <Select value={scope} onValueChange={setScope}>
-          <option value="">全局角色</option>
-          <option value="*">全部角色</option>
+          <option value="*">所有角色（通用及项目专属）</option>
+          <option value="">仅跨项目通用角色</option>
           {projects.map((project) => (
             <option key={project.id} value={project.id}>
-              {project.name}（含全局角色）
+              {project.name}（含通用角色）
             </option>
           ))}
         </Select>

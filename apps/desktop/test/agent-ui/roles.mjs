@@ -225,10 +225,10 @@ export async function verifyRoleEditor(page) {
 
   const scope = page
     .locator('.agent-role-filters')
-    .getByRole('combobox', { name: '角色可用位置', exact: true })
+    .getByRole('combobox', { name: '查看范围', exact: true })
   await scope.click()
   await page
-    .getByRole('option', { name: 'Project B（含全局角色）', exact: true })
+    .getByRole('option', { name: 'Project B（含通用角色）', exact: true })
     .click()
   await page.getByRole('button', { name: '新建角色', exact: true }).click()
   assert.equal(

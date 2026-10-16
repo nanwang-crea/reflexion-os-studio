@@ -18,6 +18,10 @@ export const agentBrowserSettingsCommands = {
     params: z.strictObject({ requestId: RequestIdSchema }),
     result: z.strictObject({ runtime: AgentBrowserRuntimeSchema }),
   },
+  'agent_browser.close_all': {
+    params: z.strictObject({ requestId: RequestIdSchema }),
+    result: z.strictObject({ closed: z.literal(true) }),
+  },
   'agent_browser_settings.get': {
     params: z.strictObject({ requestId: RequestIdSchema }),
     result: z.strictObject({

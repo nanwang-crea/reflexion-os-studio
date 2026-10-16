@@ -48,77 +48,86 @@ export class PlaywrightBackend {
   ): Promise<AgentBrowserDocument> {
     if (!isSafeAgentBrowserUrl(url)) throw new Error('browser_url_denied')
     if (from) await this.assertCurrent(from)
-    await this.close()
-    const generation = this.generation
     const origin = new URL(url).origin
+    const reusable =
+      this.origin === origin &&
+      this.browser?.isConnected() &&
+      this.context?.pages().some((page) => !page.isClosed()) &&
+      this.client
+    if (!reusable) await this.close()
+    const generation = this.generation
     this.origin = origin
+    this.document = null
+    this.digest = null
     try {
-      await this.resolveAddress(new URL(url).hostname)
-      if (generation !== this.generation) throw new Error('browser_closed')
-      this.proxy = await this.proxyFactory(origin)
-      if (generation !== this.generation) throw new Error('browser_closed')
-      this.browser = await launchAgentBrowser(
-        this.launch,
-        {
-          headless: this.display === 'headless',
-          chromiumSandbox: true,
-          proxy: { server: this.proxy.server, bypass: '<-loopback>' },
-          args: [
-            ...(process.platform === 'linux' &&
-            this.display === 'headed' &&
-            process.env.WAYLAND_DISPLAY &&
-            !process.env.DISPLAY
-              ? ['--ozone-platform=wayland']
-              : []),
-            '--disable-background-networking',
-            '--disable-quic',
-            '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
-          ],
-        },
-        () => generation === this.generation,
-      )
-      if (generation !== this.generation) throw new Error('browser_closed')
-      this.context = await this.browser.newContext({
-        acceptDownloads: false,
-        serviceWorkers: 'block',
-        permissions: [],
-      })
-      const context = this.context
-      await context.route('**/*', async (route) => {
-        const request = route.request()
-        if (!allowedRequest(origin, request.url(), request.method()))
-          await route.abort('blockedbyclient')
-        else await route.continue()
-      })
-      await context.routeWebSocket('**/*', (socket) => socket.close())
-      context.on('page', (page) => {
-        if (context.pages().length > 1) void page.close().catch(() => {})
-        page.on(
-          'download',
-          (download) => void download.cancel().catch(() => {}),
+      if (!reusable) {
+        await this.resolveAddress(new URL(url).hostname)
+        if (generation !== this.generation) throw new Error('browser_closed')
+        this.proxy = await this.proxyFactory(origin)
+        if (generation !== this.generation) throw new Error('browser_closed')
+        this.browser = await launchAgentBrowser(
+          this.launch,
+          {
+            headless: this.display === 'headless',
+            chromiumSandbox: true,
+            proxy: { server: this.proxy.server, bypass: '<-loopback>' },
+            args: [
+              ...(process.platform === 'linux' &&
+              this.display === 'headed' &&
+              process.env.WAYLAND_DISPLAY &&
+              !process.env.DISPLAY
+                ? ['--ozone-platform=wayland']
+                : []),
+              '--disable-background-networking',
+              '--disable-quic',
+              '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
+            ],
+          },
+          () => generation === this.generation,
         )
-      })
-      this.output = await mkdtemp(join(tmpdir(), 'reflexion-playwright-'))
-      this.server = await createConnection(
-        {
-          // Use the supplied isolated context; MCP must not create another one.
-          browser: { browserName: 'chromium', isolated: false },
-          capabilities: ['core'],
-          webmcp: false,
-          outputDir: this.output,
-          saveSession: false,
-          imageResponses: 'omit',
-          codegen: 'none',
-          snapshot: { mode: 'none' },
-          timeouts: { navigation: 15000, action: 5000 },
-        },
-        async () => context,
-      )
-      const [clientTransport, serverTransport] =
-        InMemoryTransport.createLinkedPair()
-      this.client = new Client({ name: 'reflexion-browser', version: '1' })
-      await this.server.connect(serverTransport)
-      await this.client.connect(clientTransport)
+        if (generation !== this.generation) throw new Error('browser_closed')
+        this.context = await this.browser.newContext({
+          acceptDownloads: false,
+          serviceWorkers: 'block',
+          permissions: [],
+        })
+        const context = this.context
+        await context.route('**/*', async (route) => {
+          const request = route.request()
+          if (!allowedRequest(origin, request.url(), request.method()))
+            await route.abort('blockedbyclient')
+          else await route.continue()
+        })
+        await context.routeWebSocket('**/*', (socket) => socket.close())
+        context.on('page', (page) => {
+          if (context.pages().length > 1) void page.close().catch(() => {})
+          page.on(
+            'download',
+            (download) => void download.cancel().catch(() => {}),
+          )
+        })
+        this.output = await mkdtemp(join(tmpdir(), 'reflexion-playwright-'))
+        this.server = await createConnection(
+          {
+            // Use the supplied isolated context; MCP must not create another one.
+            browser: { browserName: 'chromium', isolated: false },
+            capabilities: ['core'],
+            webmcp: false,
+            outputDir: this.output,
+            saveSession: false,
+            imageResponses: 'omit',
+            codegen: 'none',
+            snapshot: { mode: 'none' },
+            timeouts: { navigation: 15000, action: 5000 },
+          },
+          async () => context,
+        )
+        const [clientTransport, serverTransport] =
+          InMemoryTransport.createLinkedPair()
+        this.client = new Client({ name: 'reflexion-browser', version: '1' })
+        await this.server.connect(serverTransport)
+        await this.client.connect(clientTransport)
+      }
       await this.call('browser_navigate', { url })
       const observed = await this.observe()
       if (
@@ -202,10 +211,6 @@ export class PlaywrightBackend {
       new URL(before).origin !== this.origin
     )
       throw new Error('browser_page_stale')
-    for (const frame of page.frames()) {
-      if (await frame.locator('input[type="password"]').count())
-        throw new Error('browser_sensitive_content')
-    }
     const result = await this.call('browser_snapshot', {})
     const sourceUrl = page.url()
     if (sourceUrl !== before || !isSafeAgentBrowserUrl(sourceUrl))

@@ -5,11 +5,13 @@ import {
   AgentBrowserSourceSchema,
   AgentBrowserDisplaySchema,
   AgentBrowserApprovalSchema,
+  AgentBrowserLifetimeSchema,
   type AgentBrowserSettings,
 } from '@reflexion-os-studio/contracts'
 import {
   getAgentBrowserSettings,
   updateAgentBrowserSettings,
+  closeAgentBrowserWindows,
 } from '../../../api/agent-browser-settings'
 import { Select } from '../../../components/forms/Select'
 import '../../../components/browser-settings/browser-settings.css'
@@ -21,6 +23,7 @@ export function AgentBrowserSettingsPanel(): React.JSX.Element {
   const [loaded, setLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [windowsClosed, setWindowsClosed] = useState(false)
   const savingRef = useRef(false)
   useEffect(() => {
     let disposed = false
@@ -44,8 +47,25 @@ export function AgentBrowserSettingsPanel(): React.JSX.Element {
     savingRef.current = true
     setSaving(true)
     setNotice(null)
+    setWindowsClosed(false)
     try {
       setSettings(await updateAgentBrowserSettings(next))
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : String(error))
+    } finally {
+      savingRef.current = false
+      setSaving(false)
+    }
+  }, [])
+  const closeWindows = useCallback(async () => {
+    if (savingRef.current) return
+    savingRef.current = true
+    setSaving(true)
+    setNotice(null)
+    setWindowsClosed(false)
+    try {
+      await closeAgentBrowserWindows()
+      setWindowsClosed(true)
     } catch (error) {
       setNotice(error instanceof Error ? error.message : String(error))
     } finally {
@@ -63,6 +83,11 @@ export function AgentBrowserSettingsPanel(): React.JSX.Element {
       {notice && (
         <p className="settings-error" role="alert">
           {notice}
+        </p>
+      )}
+      {windowsClosed && (
+        <p className="hint" role="status">
+          已关闭所有 Agent 浏览器窗口；下次获准导航时重新打开。
         </p>
       )}
       <fieldset className="browser-settings-card" disabled={!loaded || saving}>
@@ -118,6 +143,28 @@ export function AgentBrowserSettingsPanel(): React.JSX.Element {
           </Select>
         </label>
         <label className="browser-settings-field">
+          <span>回复结束后</span>
+          <Select
+            aria-label="Agent 浏览器保留方式"
+            value={settings.lifetime}
+            onValueChange={(value) =>
+              void save({
+                ...settings,
+                lifetime: AgentBrowserLifetimeSchema.parse(value),
+              })
+            }
+          >
+            <option value="session">保留浏览器，同一会话继续使用</option>
+            <option value="run">关闭浏览器，每次回复重新打开</option>
+          </Select>
+        </label>
+        <p className="hint">
+          默认保留。回复结束或切换会话后窗口仍在，可继续查看网页；同一会话的下一次请求复用浏览器，读取仍遵守审批与页面版本检查。显示网页请选择“显示浏览器窗口”。
+        </p>
+        <button type="button" onClick={() => void closeWindows()}>
+          关闭所有 Agent 浏览器窗口
+        </button>
+        <label className="browser-settings-field">
           <span>批准模式</span>
           <Select
             aria-label="Agent 浏览器批准模式"
@@ -141,12 +188,12 @@ export function AgentBrowserSettingsPanel(): React.JSX.Element {
           自动允许只读浏览仅覆盖导航、读取和关闭；敏感内容、私网与页面版本检查仍生效。
         </p>
         <p className="hint">
-          显示窗口后，可以观察 Agent
-          打开的网页。浏览器在获准导航时启动，在任务结束或取消时关闭。
+          浏览器在获准导航时启动。保留仅持续到本次应用退出，不保存登录态到磁盘；取消任务、删除所属会话或项目、安全拦截时仍会关闭。最多保留
+          8 个活动或空闲浏览器，达到上限后可用上方按钮释放。
         </p>
         <p className="hint">
           切换来源、显示或批准模式会关闭当前 Agent
-          浏览器，下一次导航使用新配置。
+          浏览器；改为“每次回复重新打开”也会立即关闭已有窗口。下一次导航使用新配置。
         </p>
         <p className="hint">使用临时隔离会话，不加载用户浏览器资料。</p>
         {saving && (

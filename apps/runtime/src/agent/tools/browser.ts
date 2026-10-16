@@ -24,7 +24,7 @@ export function browserTools(ctx: ToolContext): ToolDefinition[] {
     [
       'close',
       AgentBrowserPageSchema,
-      '关闭本次 Run 的隔离浏览器页面并释放浏览器。',
+      '关闭当前会话正在使用的隔离浏览器页面并释放浏览器；保留模式下不因回复结束主动关闭，除非用户要求。',
     ],
   ] as const
   return definitions.map<ToolDefinition>(([name, input, description]) => {
@@ -74,11 +74,17 @@ export function browserTools(ctx: ToolContext): ToolDefinition[] {
             content:
               code === 'browser_runtime_not_installed'
                 ? '当前来源没有可用浏览器。请用户在“设置 → Agent 浏览器”选择本机 Chrome 或下载受管 Chromium；Agent 不会自动下载。'
-                : code === 'browser_system_chrome_unavailable'
-                  ? '本机 Chrome 未检测到或启动不兼容。请用户在“设置 → Agent 浏览器”选择自动模式或下载并选择受管 Chromium。'
-                  : code === 'browser_network_denied'
-                    ? '浏览器目标未通过公网网络检查（browser_network_denied）。DNS 返回私有/保留地址（含 Fake-IP）等情况会被拒绝；请检查 DNS/代理与目标来源。这不是搜索无结果，不通过更换工具或关闭安全边界绕过。'
-                    : `浏览器操作被拒绝或失败（${code}）。页面版本失效时重新导航；浏览器不可用时检查浏览器组件与系统依赖。`,
+                : code === 'browser_capacity'
+                  ? '已达到 8 个活动或保留浏览器的上限。请在“设置 → 模型与工具 → Agent 浏览器”点击“关闭所有 Agent 浏览器窗口”，再重新导航。'
+                  : code === 'browser_page_stale'
+                    ? '页面内容或地址已变化，旧页面版本不可读取（browser_page_stale）。请重新 browser.navigate 获取新版本，不携带旧 from；这不代表浏览器崩溃。'
+                    : code === 'browser_sensitive_content'
+                      ? '页面命中疑似凭据保护（browser_sensitive_content），访问已中止并释放隔离浏览器。不要重复访问或更换工具绕过保护。'
+                      : code === 'browser_system_chrome_unavailable'
+                        ? '本机 Chrome 未检测到或启动不兼容。请用户在“设置 → Agent 浏览器”选择自动模式或下载并选择受管 Chromium。'
+                        : code === 'browser_network_denied'
+                          ? '浏览器目标未通过公网网络检查（browser_network_denied）。DNS 返回私有/保留地址（含 Fake-IP）等情况会被拒绝；请检查 DNS/代理与目标来源。这不是搜索无结果，不通过更换工具或关闭安全边界绕过。'
+                          : `浏览器操作被拒绝或失败（${code}）。页面版本失效时重新导航；浏览器不可用时检查浏览器组件与系统依赖。`,
             code,
             isError: true,
           }

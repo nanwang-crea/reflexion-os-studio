@@ -68,7 +68,7 @@ export class ChatAgent {
     private readonly system: SystemRuntimeClient | null,
     private readonly mcp: McpManager | null = null,
     private readonly skills: SkillRegistry = createSkillRegistry(),
-    browser: BrowserAgentService | null = null,
+    private readonly browser: BrowserAgentService | null = null,
     skillTools?: import('../skills/tool-services.js').SkillToolServices,
   ) {
     this.resubmissions = new RunResubmissionService(
@@ -348,6 +348,7 @@ export class ChatAgent {
   }
 
   clearSessionResources(sessionId: string): void {
+    this.browser?.releaseSession(sessionId)
     this.clearQueue(sessionId)
     this.sessionTitles.clearSession(sessionId)
   }

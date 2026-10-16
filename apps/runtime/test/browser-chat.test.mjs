@@ -162,6 +162,24 @@ test('Agent receives approved rendered browser evidence through canonical ToolOu
       'provider must receive rendered evidence only after the read approval',
     )
     assert.equal(store.runs.get(run.id).status, 'completed')
+    const existingBrowser = backend.browser
+    browser.finishRun(run.id)
+    assert.equal(existingBrowser.isConnected(), true)
+    const nextRun = store.runs.create({
+      sessionId: session.id,
+      providerId: 'fixture',
+      model: 'fixture',
+    })
+    const continued = await browser.call(
+      session.id,
+      nextRun.id,
+      'read',
+      identity,
+      new AbortController().signal,
+    )
+    assert.match(continued.snapshot, /fixture count is 42/)
+    assert.equal(backend.browser, existingBrowser)
+    browser.finishRun(nextRun.id)
     const calls = store.toolCalls.listByRun(run.id)
     assert.deepEqual(
       calls.map((call) => call.toolName),

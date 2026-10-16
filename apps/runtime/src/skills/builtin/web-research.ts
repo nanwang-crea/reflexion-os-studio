@@ -5,7 +5,7 @@ export const WEB_RESEARCH_SKILL: SkillDefinition = {
   manifest: {
     id: 'web-research',
     name: '网络调研',
-    version: '1.1.0',
+    version: '1.2.0',
     description:
       '使用已有 browser.navigate/read 搜索公开网页、发现真实链接并核实来源，综合为带引用的调研摘要；不猜链接，不访问需要登录的页面。',
     tools: ['browser.navigate', 'browser.read', 'browser.close', 'web.fetch'],
@@ -26,7 +26,7 @@ export const WEB_RESEARCH_SKILL: SkillDefinition = {
 3. 需要找链接时，先用现有 browser.navigate 打开搜索引擎的 GET 搜索地址，例如 https://www.google.com/search?q= 加 URL 编码的公开关键词；也可使用 https://www.bing.com/search?q=。只编码查询参数，不把整个 URL 编码；不要把本地路径、私密材料或凭据当搜索词。
 4. navigate 只返回页面身份，不代表看到了搜索结果。随后用 browser.read 读取真实渲染快照，从返回的标题、链接和摘要选择 2-3 个相关来源。不凭记忆拼接文章地址，不虚构 web_search 工具。
 5. 对选定的真实链接重新 browser.navigate 并按原审批读取 browser.read，必要时换其他来源。搜索摘要只能标为摘要，打开核对后的正文才用于支持具体事实；只引用用户提供或工具实际返回的 URL。
-6. 完成后用 browser.close 关闭当前页面；Runtime 也会在 Run 结束时回收浏览器。相同页面身份的导航/读取必须依次执行，不并行消费陈旧版本。
+6. 浏览器保留方式由“设置 → 模型与工具 → Agent 浏览器 → 回复结束后”控制，默认保留供用户继续查看；不要在完成调研时主动调用 browser.close，除非用户要求关闭。选择每次回复关闭时由 Runtime 自动回收。相同页面身份的导航/读取必须依次执行，不并行消费陈旧版本。
 
 ## 可用性与失败
 

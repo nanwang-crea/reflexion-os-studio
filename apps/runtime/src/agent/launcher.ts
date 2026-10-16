@@ -259,7 +259,7 @@ export class RunLauncher {
       // runner 自吞全部执行期异常；此处仅保证取消句柄必然清理。
       .catch(() => {})
       .finally(() => {
-        this.deps.browser?.release(run.id)
+        this.deps.browser?.finishRun(run.id, controller.signal.aborted)
         parentSignal?.removeEventListener('abort', abortChild)
         this.streams.delete(run.id)
         this.runDepth.delete(run.id)

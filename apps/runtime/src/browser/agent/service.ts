@@ -16,6 +16,14 @@ export class BrowserAgentService {
     string,
     { sessionId: string; client: McpClient; page: AgentBrowserPage | null }
   >()
+  private readonly retained = new Map<
+    string,
+    {
+      sessionId: string
+      client: McpClient
+      page: AgentBrowserPage | null
+    }
+  >()
   private epoch = 0
   private readonly cleanup = new Set<Promise<void>>()
   constructor(
@@ -56,7 +64,8 @@ export class BrowserAgentService {
     if (!this.enabled) throw new Error('browser_disabled')
     signal.throwIfAborted()
     const epoch = this.epoch
-    let entry = this.clients.get(runId)
+    const active = this.clients.get(runId)
+    let entry = active ?? this.retained.get(sessionId)
     if (entry && entry.sessionId !== sessionId)
       throw new Error('browser_page_stale')
     if (operation !== 'navigate' || args.from) {
@@ -66,8 +75,13 @@ export class BrowserAgentService {
       if (!entry?.page || JSON.stringify(page) !== JSON.stringify(entry.page))
         throw new Error('browser_page_stale')
     }
+    if (entry && !active) {
+      this.retained.delete(sessionId)
+      this.clients.set(runId, entry)
+    }
     if (!entry) {
-      if (this.clients.size >= 8) throw new Error('browser_capacity')
+      if (this.clients.size + this.retained.size >= 8)
+        throw new Error('browser_capacity')
       const client = this.createClient(
         this.store.browserSettings.get().agentBrowserDisplay,
       )
@@ -134,7 +148,15 @@ export class BrowserAgentService {
       current.page = document.page
       return document
     } catch (error) {
-      this.release(runId)
+      // A stale snapshot is recoverable; identity checks still reject old reads.
+      // Navigation failures have already closed the backend and must be released.
+      if (!(
+        error instanceof Error &&
+        error.message === 'browser_page_stale' &&
+        operation === 'read' &&
+        !signal.aborted
+      ))
+        this.release(runId)
       if (signal.aborted)
         throw new DOMException('The operation was aborted.', 'AbortError')
       const code = error instanceof Error ? error.message : ''
@@ -144,14 +166,49 @@ export class BrowserAgentService {
       signal.removeEventListener('abort', abort)
     }
   }
+  finishRun(runId: string, cancelled = false): void {
+    const entry = this.clients.get(runId)
+    if (!entry) return
+    if (
+      cancelled ||
+      !this.enabled ||
+      this.store.browserSettings.get().agentBrowserLifetime !== 'session'
+    ) {
+      this.release(runId)
+      return
+    }
+    this.clients.delete(runId)
+    const previous = this.retained.get(entry.sessionId)
+    if (previous && previous !== entry) this.disposeClient(previous.client)
+    this.retained.set(entry.sessionId, entry)
+  }
+  releaseSession(sessionId: string): void {
+    // Deleting a root conversation also cascades its internal child sessions.
+    const removed = (id: string) =>
+      id === sessionId || !this.store.sessions.get(id)
+    for (const [id, entry] of this.retained) {
+      if (removed(id)) {
+        this.retained.delete(id)
+        this.disposeClient(entry.client)
+      }
+    }
+    for (const [runId, entry] of this.clients) {
+      if (removed(entry.sessionId)) this.release(runId)
+    }
+  }
   release(runId: string): void {
     const entry = this.clients.get(runId)
     this.clients.delete(runId)
-    if (entry) {
-      const promise = entry.client.disposeAndWait().catch(() => {})
-      this.cleanup.add(promise)
-      void promise.finally(() => this.cleanup.delete(promise))
-    }
+    if (entry) this.disposeClient(entry.client)
+  }
+  private disposeClient(client: McpClient): void {
+    const promise = client.disposeAndWait().catch(() => {})
+    this.cleanup.add(promise)
+    void promise.finally(() => this.cleanup.delete(promise))
+  }
+  async closeAll(): Promise<void> {
+    this.revoke()
+    await Promise.all(this.cleanup)
   }
   async shutdown(): Promise<void> {
     this.revoke()
@@ -161,5 +218,7 @@ export class BrowserAgentService {
   revoke(): void {
     ++this.epoch
     for (const runId of this.clients.keys()) this.release(runId)
+    for (const entry of this.retained.values()) this.disposeClient(entry.client)
+    this.retained.clear()
   }
 }

@@ -15,6 +15,7 @@ export const browserSettingsCommandHandlers: Record<string, CommandHandler> = {
         agentBrowserSource: current.agentBrowserSource,
         agentBrowserEnabled: current.agentBrowserEnabled,
         agentBrowserDisplay: current.agentBrowserDisplay,
+        agentBrowserLifetime: current.agentBrowserLifetime,
         agentBrowserApproval: current.agentBrowserApproval,
       }),
     }

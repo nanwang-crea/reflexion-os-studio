@@ -41,10 +41,11 @@ test('settings install flow shows progress, supports cancellation and stops idle
               () => ({
                 contents: `
             let state = { state: 'not-installed', phase: 'idle', progress: null, version: 'fixture', error: null, systemChromeAvailable: true };
-            window.requests = { status: 0, install: 0, cancel: 0, sources: [] };
-            let settings = { enabled: false, source: 'auto', display: 'headless', approval: 'follow-session' };
+            window.requests = { status: 0, install: 0, cancel: 0, sources: [], lifetimes: [], closed: 0 };
+            let settings = { enabled: false, source: 'auto', display: 'headless', approval: 'follow-session', lifetime: 'session' };
             export async function getAgentBrowserSettings() { return { ...settings }; }
-            export async function updateAgentBrowserSettings(next) { settings = next; window.requests.sources.push(next.source); return { ...settings }; }
+            export async function updateAgentBrowserSettings(next) { settings = next; window.requests.sources.push(next.source); window.requests.lifetimes.push(next.lifetime); return { ...settings }; }
+            export async function closeAgentBrowserWindows() { window.requests.closed++; }
             export async function getAgentBrowserRuntime() { window.requests.status++; const snapshot = { ...state }; if (window.holdNextStatus) { window.holdNextStatus = false; return new Promise(resolve => window.releaseStatus = () => resolve(snapshot)); } return snapshot; }
             export async function installAgentBrowserRuntime() { window.requests.install++; state = { ...state, state: 'downloading', phase: 'download', progress: 25 }; return { ...state }; }
             export async function cancelAgentBrowserRuntime() { window.requests.cancel++; state = { ...state, state: 'failed', phase: 'failed', error: 'download-cancelled' }; return { ...state }; }
@@ -94,6 +95,23 @@ test('settings install flow shows progress, supports cancellation and stops idle
     assert.deepEqual(await page.evaluate(() => window.requests.sources), [
       'system-chrome',
     ])
+    await page
+      .getByRole('combobox', { name: 'Agent 浏览器保留方式', exact: true })
+      .click()
+    await page
+      .getByRole('option', {
+        name: '关闭浏览器，每次回复重新打开',
+        exact: true,
+      })
+      .click()
+    assert.equal(
+      await page.evaluate(() => window.requests.lifetimes.at(-1)),
+      'run',
+    )
+    await page
+      .getByRole('button', { name: '关闭所有 Agent 浏览器窗口', exact: true })
+      .click()
+    assert.equal(await page.evaluate(() => window.requests.closed), 1)
     await page
       .getByRole('button', { name: '下载浏览器组件', exact: true })
       .click()

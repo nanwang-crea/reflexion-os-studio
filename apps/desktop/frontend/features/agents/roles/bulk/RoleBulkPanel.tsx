@@ -95,7 +95,7 @@ export function RoleBulkPanel({
               <label>
                 统一可用位置
                 <Select value={projectId} onValueChange={setProjectId}>
-                  <option value="">全局 · 所有项目可选</option>
+                  <option value="">跨项目通用 · 所有会话可选</option>
                   {projects.map((project) => (
                     <option key={project.id} value={project.id}>
                       仅项目 · {project.name}

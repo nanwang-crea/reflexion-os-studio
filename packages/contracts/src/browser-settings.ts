@@ -8,6 +8,7 @@ export const BrowserSettingsSchema = z.strictObject({
   agentBrowserSource: AgentBrowserSettingsSchema.shape.source,
   agentBrowserEnabled: AgentBrowserSettingsSchema.shape.enabled,
   agentBrowserDisplay: AgentBrowserSettingsSchema.shape.display,
+  agentBrowserLifetime: AgentBrowserSettingsSchema.shape.lifetime,
   agentBrowserApproval: AgentBrowserSettingsSchema.shape.approval,
   mode: z.enum(['embedded', 'system']),
   defaultRoute: z.enum(['embedded', 'system']),

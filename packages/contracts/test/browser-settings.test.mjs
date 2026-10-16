@@ -98,6 +98,7 @@ test('Agent browser display defaults to headless and only accepts supported mode
     display: 'headless',
     approval: 'follow-session',
     source: 'auto',
+    lifetime: 'session',
   })
   assert.equal(
     BrowserSettingsSchema.parse({ mode: 'embedded', defaultRoute: 'system' })

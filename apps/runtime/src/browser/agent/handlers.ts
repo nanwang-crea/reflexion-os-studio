@@ -17,11 +17,16 @@ export const agentBrowserSettingsCommandHandlers: Record<
     if (!browser) throw new Error('browser_unavailable')
     return { runtime: browser.runtime.cancel() }
   },
+  'agent_browser.close_all': async (_params, { browser }) => {
+    await browser?.closeAll()
+    return { closed: true }
+  },
   'agent_browser_settings.get': (_params, { store }) => {
     const stored = store.browserSettings.get()
     return {
       settings: {
         source: stored.agentBrowserSource,
+        lifetime: stored.agentBrowserLifetime,
         enabled: stored.agentBrowserEnabled,
         display: stored.agentBrowserDisplay,
         approval: stored.agentBrowserApproval,
@@ -35,12 +40,15 @@ export const agentBrowserSettingsCommandHandlers: Record<
       !next.enabled ||
       current.agentBrowserSource !== next.source ||
       current.agentBrowserDisplay !== next.display ||
-      current.agentBrowserApproval !== next.approval
+      current.agentBrowserApproval !== next.approval ||
+      (current.agentBrowserLifetime !== next.lifetime &&
+        next.lifetime === 'run')
     )
       browser?.revoke()
     store.browserSettings.upsert({
       ...current,
       agentBrowserSource: next.source,
+      agentBrowserLifetime: next.lifetime,
       agentBrowserEnabled: next.enabled,
       agentBrowserDisplay: next.display,
       agentBrowserApproval: next.approval,

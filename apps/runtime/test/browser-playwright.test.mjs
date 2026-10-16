@@ -240,7 +240,13 @@ test('official Playwright MCP observes actual dynamic DOM, rejects changes and b
     }
     response.setHeader('content-type', 'text/html')
     if (request.url === '/form-fixture') {
-      response.end('<input type="password"><h1>Public title</h1>')
+      response.end(
+        '<input type="password"><input type="password" hidden><h1>Public title</h1>',
+      )
+      return
+    }
+    if (request.url === '/sensitive-fixture') {
+      response.end('<h1>api_key=synthetic_fixture_value</h1>')
       return
     }
     if (request.url === '/redirect') {
@@ -279,8 +285,29 @@ test('official Playwright MCP observes actual dynamic DOM, rejects changes and b
       backend.navigate(origin + '/next', metadata.page),
       /browser_page_stale/,
     )
+    const existingBrowser = backend.browser
+    const existingContext = backend.context
+    const login = await backend.navigate(origin + '/form-fixture')
+    assert.equal(
+      backend.browser,
+      existingBrowser,
+      'same-origin navigation must retain the window',
+    )
+    assert.equal(backend.context, existingContext)
+    assert.match((await backend.read(login.page)).snapshot, /Public title/)
+    assert.equal(backend.context.pages()[0].isClosed(), false)
+    const other = await backend.navigate(
+      origin.replace('fixture.test', 'second.test') + '/form-fixture',
+    )
+    assert.notEqual(
+      backend.context,
+      existingContext,
+      'cross-origin navigation must create an isolated context',
+    )
+    assert.equal(existingBrowser.isConnected(), false)
+    assert.match((await backend.read(other.page)).snapshot, /Public title/)
     await assert.rejects(
-      backend.navigate(origin + '/form-fixture'),
+      backend.navigate(origin + '/sensitive-fixture'),
       /browser_sensitive_content/,
     )
     await assert.rejects(backend.navigate(origin + '/redirect'))
@@ -349,6 +376,17 @@ test(
         (await backend.read(metadata.page)).snapshot,
         /Visible Agent browser/,
       )
+      const existingBrowser = backend.browser
+      const next = await backend.navigate(origin + '/next')
+      assert.equal(
+        backend.browser,
+        existingBrowser,
+        'headed same-origin navigation must retain the window',
+      )
+      assert.match(
+        (await backend.read(next.page)).snapshot,
+        /Visible Agent browser/,
+      )
       const page = backend.context.pages()[0]
       await page.goto('data:text/html,<h1>Unapproved synthetic page</h1>')
       let snapshots = 0
@@ -357,7 +395,7 @@ test(
         if (args[0] === 'browser_snapshot') ++snapshots
         return call(...args)
       }
-      await assert.rejects(backend.read(metadata.page), /browser_page_stale/)
+      await assert.rejects(backend.read(next.page), /browser_page_stale/)
       assert.equal(snapshots, 0)
     } finally {
       await backend.close()

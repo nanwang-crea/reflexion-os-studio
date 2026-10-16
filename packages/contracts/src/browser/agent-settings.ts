@@ -21,8 +21,11 @@ export const AgentBrowserLaunchSchema = z.strictObject({
 })
 export type AgentBrowserLaunch = z.infer<typeof AgentBrowserLaunchSchema>
 
+export const AgentBrowserLifetimeSchema = z.enum(['session', 'run'])
+
 export const AgentBrowserSettingsSchema = z.strictObject({
   source: AgentBrowserSourceSchema.default('auto'),
+  lifetime: AgentBrowserLifetimeSchema.default('session'),
   enabled: z.boolean().default(false),
   display: AgentBrowserDisplaySchema.default('headless'),
   approval: AgentBrowserApprovalSchema.default('follow-session'),

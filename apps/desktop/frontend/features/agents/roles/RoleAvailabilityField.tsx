@@ -29,7 +29,7 @@ export function RoleAvailabilityField({
           value={value.projectId ?? ''}
           onValueChange={(id) => onChange({ ...value, projectId: id || null })}
         >
-          <option value="">全局 · 所有项目可选</option>
+          <option value="">跨项目通用 · 所有会话可选</option>
           {value.projectId &&
             !projects.some((project) => project.id === value.projectId) && (
               <option value={value.projectId} disabled>
@@ -44,7 +44,7 @@ export function RoleAvailabilityField({
         </Select>
       </label>
       <small>
-        这里决定模板在哪里可选。全局角色执行时仍使用当前任务的工作区。
+        通用角色可在所有项目及独立会话中选择；项目专属角色仅在所属项目中可选。执行目录始终使用当前任务的工作区。
       </small>
       <label>
         领域分类
