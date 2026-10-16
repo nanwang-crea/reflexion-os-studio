@@ -45,7 +45,7 @@ export function RoleImportButton({
       <input
         ref={input}
         type="file"
-        accept=".reflexion-role.json,.reflexion-team.json,.zip"
+        accept=".reflexion-role.json,.reflexion-team.json,.json,.txt,.zip"
         hidden
         disabled={busy || reading}
         onChange={async (event) => {
@@ -55,7 +55,7 @@ export function RoleImportButton({
           onFeedback(`正在读取并校验“${file.name}”…`)
           setReading(true)
           try {
-            if (file.name.endsWith('.zip')) {
+            if (file.name.toLowerCase().endsWith('.zip')) {
               if (file.size > 32 * 1024 * 1024)
                 throw new Error('角色 ZIP 不得超过 32MB')
               const bytes = new Uint8Array(await file.arrayBuffer())
@@ -72,17 +72,20 @@ export function RoleImportButton({
               )
               return
             }
-            const isTeam = file.name.endsWith('.reflexion-team.json')
-            if (
-              (!isTeam && !file.name.endsWith('.reflexion-role.json')) ||
-              file.size >
-                (isTeam
-                  ? MAX_AGENT_TEAM_SHARE_BYTES
-                  : MAX_AGENT_ROLE_SHARE_BYTES)
+            if (file.size > MAX_AGENT_TEAM_SHARE_BYTES)
+              throw new Error(
+                'JSON 文件超过 4MB 上限；角色配置限 256KB，团队配置限 4MB',
+              )
+            const content: unknown = JSON.parse(
+              (await file.text()).replace(/^\uFEFF/, ''),
             )
-              throw new Error('请选择角色文件（≤256KB）或团队文件（≤4MB）')
-            const content: unknown = JSON.parse(await file.text())
-            if (isTeam) {
+            const format =
+              typeof content === 'object' &&
+              content !== null &&
+              'format' in content
+                ? content.format
+                : null
+            if (format === 'reflexion-team') {
               const result = AgentTeamShareSchema.safeParse(content)
               if (!result.success)
                 throw new Error('团队文件格式或版本不支持，或配置字段无效')
@@ -92,6 +95,12 @@ export function RoleImportButton({
               )
               return
             }
+            if (format !== 'reflexion-role')
+              throw new Error(
+                '文件内容缺少有效的 format：应为 reflexion-role 或 reflexion-team；修改文件名不能转换格式',
+              )
+            if (file.size > MAX_AGENT_ROLE_SHARE_BYTES)
+              throw new Error('角色配置超过 256KB 上限')
             const parsed = AgentRoleShareSchema.safeParse(content)
             if (!parsed.success)
               throw new Error('角色文件格式或版本不支持，或配置字段无效')

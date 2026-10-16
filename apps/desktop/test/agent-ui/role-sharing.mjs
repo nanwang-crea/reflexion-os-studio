@@ -19,7 +19,7 @@ export async function verifyRoleSharing(page) {
     },
   }
   await input.setInputFiles({
-    name: 'shared.reflexion-role.json',
+    name: 'shared.json',
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify({ ...share, version: 99 })),
   })
@@ -29,7 +29,7 @@ export async function verifyRoleSharing(page) {
     .waitFor()
   assert.equal(await page.locator('.agent-role-editor').count(), 0)
   await input.setInputFiles({
-    name: 'shared.reflexion-role.json',
+    name: 'shared-role.txt',
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(share)),
   })
@@ -178,7 +178,7 @@ export async function verifyTeamSharing(page) {
   await page
     .locator('input[type="file"][accept*=".reflexion-team.json"]')
     .setInputFiles({
-      name: 'writing.reflexion-team.json',
+      name: 'team.json',
       mimeType: 'application/json',
       buffer: Buffer.from(JSON.stringify(archive)),
     })
