@@ -12,9 +12,6 @@ export const STATUS_LABELS: Record<string, string> = {
 }
 
 export interface TopBarProps {
-  onImportChat?: () => void
-  onExportChat?: () => void
-  archiveBusy?: boolean
   collaborationOpen?: boolean
   onToggleCollaboration?: () => void
   browserOpen: boolean

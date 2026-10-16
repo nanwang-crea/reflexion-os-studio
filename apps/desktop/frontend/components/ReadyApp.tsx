@@ -44,6 +44,9 @@ export function ReadyApp(props: ReadyAppProps): React.JSX.Element {
         onDeleteProject: props.deleteProject,
         onRenameSession: props.renameSession,
         onDeleteSession: props.deleteSession,
+        onImportChat: archive.openImport,
+        onExportChat: (sessionId) => void archive.exportChat(sessionId),
+        archiveBusy: archive.busy,
         onSelectView: (nextView) => {
           props.setView((current) => (current === nextView ? 'chat' : nextView))
         },
@@ -54,11 +57,6 @@ export function ReadyApp(props: ReadyAppProps): React.JSX.Element {
         notice: props.notice,
         onDismissNotice: () => props.setNotice(null),
         topBar: {
-          onImportChat: archive.openImport,
-          onExportChat: props.activeSessionId
-            ? () => void archive.exportChat()
-            : undefined,
-          archiveBusy: archive.busy,
           sidebarOpen: props.sidebarOpen,
           onToggleSidebar: () => props.setSidebarOpen((open) => !open),
           runtimeState: props.bootstrap.state,
@@ -210,7 +208,7 @@ export function ReadyApp(props: ReadyAppProps): React.JSX.Element {
       {archive.importOpen && (
         <ChatImportDialog
           projects={props.projects}
-          projectId={props.activeProjectId}
+          projectId={archive.importProjectId}
           onImport={archive.importChat}
           onClose={archive.closeImport}
         />

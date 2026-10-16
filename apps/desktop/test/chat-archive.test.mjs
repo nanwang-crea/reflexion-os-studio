@@ -58,12 +58,18 @@ export async function importChatArchive(input){window.imports.push(input);if(win
         contents: `
 import React from 'react';import {createRoot} from 'react-dom/client';
 import './frontend/styles/style.css';
+import './frontend/styles/sidebar.css';
 import {TopBar} from './frontend/components/TopBar';
+import {SessionRow} from './frontend/components/SessionRow';
+import {ChatsPanel} from './frontend/components/session/ChatsPanel';
 import {ChatImportDialog} from './frontend/features/chat/archive/ChatImportDialog';
 import {useChatArchiveActions} from './frontend/features/chat/archive/useChatArchiveActions';
 window.selections=[];window.imports=[];window.exports=[];window.notices=[];window.allowSwitch=true;window.guardCalls=0;
-function App(){const [session,setSession]=React.useState(null);const [project,setProject]=React.useState(null);const archive=useChatArchiveActions({activeSessionId:session,activeProjectId:project,setNotice:n=>window.notices.push(n),guardedResetWorkspaceFiles:async()=>{window.guardCalls++;return window.allowSwitch},refreshProjects:async()=>{if(window.refreshFails)throw Error('refresh failed')},refreshProjectSessions:async()=>{},refreshStandaloneSessions:async()=>{},setActiveProjectId:setProject,openSession:id=>{window.opened=id;setSession(id)}});
-return <><TopBar contextTitle="聊天" runtimeState="system-ready" statusLabel="" sidebarOpen={true} onToggleSidebar={()=>{}} browserOpen={false} onToggleBrowser={()=>{}} showWorkspaceToggle={false} showTerminalToggle={false} workspaceOpen={false} terminalOpen={false} onToggleWorkspace={()=>{}} onToggleTerminal={()=>{}} onImportChat={archive.openImport} onExportChat={session?()=>void archive.exportChat():undefined} archiveBusy={archive.busy}/>{archive.importOpen&&<ChatImportDialog projectId={project} projects={[{id:'p1',name:'项目一'}]} onImport={archive.importChat} onClose={archive.closeImport}/>}</>}
+function App(){const [empty,setEmpty]=React.useState(false);window.showEmpty=()=>setEmpty(true);const [session,setSession]=React.useState(null);const [project,setProject]=React.useState(null);const archive=useChatArchiveActions({activeSessionId:session,activeProjectId:project,setNotice:n=>window.notices.push(n),guardedResetWorkspaceFiles:async()=>{window.guardCalls++;return window.allowSwitch},refreshProjects:async()=>{if(window.refreshFails)throw Error('refresh failed')},refreshProjectSessions:async()=>{},refreshStandaloneSessions:async()=>{},setActiveProjectId:setProject,openSession:id=>{window.opened=id;setSession(id)}});
+return <><TopBar contextTitle="聊天" runtimeState="system-ready" statusLabel="" sidebarOpen={true} onToggleSidebar={()=>{}} browserOpen={false} onToggleBrowser={()=>{}} showWorkspaceToggle={false} showTerminalToggle={false} workspaceOpen={false} terminalOpen={false} onToggleWorkspace={()=>{}} onToggleTerminal={()=>{}}/>
+{empty?<ChatsPanel projects={[]} projectSessions={[]} standaloneSessions={[]} activeProjectId="p1" activeSessionId={null} creatingProject={false} onSelectProject={()=>{}} onSelectSession={()=>{}} onSelectStandaloneSession={()=>{}} onNewSessionInProject={()=>{}} onEnterProjectFiles={()=>{}} onCreateProject={async()=>{}} onNewChat={()=>{}} onDeleteProject={async()=>{}} onRenameSession={async()=>{}} onDeleteSession={async()=>{}} onImportChat={archive.openImport} onExportChat={id=>void archive.exportChat(id)}/>: [{id:'source-standalone',title:'独立会话',projectId:null},{id:'source-project',title:'项目会话',projectId:'p1'}].map(row=><SessionRow key={row.id} session={row} active={session===row.id} archiveBusy={archive.busy} onSelect={()=>{window.selected=row.id;setSession(row.id)}} onRename={async title=>{window.renamed=title}} onDelete={async()=>{window.deleted=row.id}} onImport={()=>archive.openImport(row.projectId)} onExport={()=>void archive.exportChat(row.id)}/>)}
+{archive.importOpen&&<ChatImportDialog projectId={archive.importProjectId} projects={[{id:'p1',name:'项目一'}]} onImport={archive.importChat} onClose={archive.closeImport}/>}</>}
+
 createRoot(document.getElementById('root')).render(<App/>);
 `,
       },
@@ -97,10 +103,10 @@ createRoot(document.getElementById('root')).render(<App/>);
     const errors = []
     page.on('pageerror', (error) => errors.push(error.message))
     await page.goto(`http://127.0.0.1:${server.address().port}`)
-    const showImport = async () => {
+    const showImport = async (title = '独立会话') => {
       await page
-        .getByRole('button', { name: '对话工具菜单', exact: true })
-        .click()
+        .getByRole('button', { name: title, exact: true })
+        .click({ button: 'right' })
       await page
         .getByRole('menuitem', { name: '导入聊天记录…', exact: true })
         .click()
@@ -116,6 +122,26 @@ createRoot(document.getElementById('root')).render(<App/>);
         .getByRole('button', { name: '选择备份文件…', exact: true })
         .click()
     }
+    await page
+      .getByRole('button', { name: '对话工具菜单', exact: true })
+      .click()
+    assert.equal(
+      await page
+        .getByRole('menuitem', { name: '导入聊天记录…', exact: true })
+        .count(),
+      0,
+    )
+    await page.keyboard.press('Escape')
+    const source = page.getByRole('button', { name: '独立会话', exact: true })
+    await source.focus()
+    await page.keyboard.press('Shift+F10')
+    await page
+      .getByRole('menuitem', { name: '导入聊天记录…', exact: true })
+      .waitFor()
+    await page.keyboard.press('Escape')
+    await page.waitForFunction(
+      () => document.activeElement?.getAttribute('title') === '独立会话',
+    )
     await showImport()
     await page.keyboard.press('Escape')
     await page
@@ -135,16 +161,28 @@ createRoot(document.getElementById('root')).render(<App/>);
 
     await page.evaluate(() => window.selections.push('/exports'))
     await page
-      .getByRole('button', { name: '对话工具菜单', exact: true })
-      .click()
+      .getByRole('button', { name: '项目会话', exact: true })
+      .click({ button: 'right' })
     await page
-      .getByRole('menuitem', { name: '导出当前聊天记录…', exact: true })
+      .getByRole('menuitem', { name: '导出聊天记录…', exact: true })
       .click()
     await page.waitForFunction(() => window.exports.length === 1)
     assert.deepEqual(await page.evaluate(() => window.exports[0]), {
-      sessionId: 'imported-1',
+      sessionId: 'source-project',
       directory: '/exports',
     })
+    assert.equal(await page.evaluate(() => window.selected), undefined)
+    await showImport('项目会话')
+    assert.match(
+      await page
+        .getByRole('combobox', { name: '导入位置', exact: true })
+        .textContent(),
+      /项目一/,
+    )
+    await page.keyboard.press('Escape')
+    await page
+      .getByRole('dialog', { name: '导入聊天记录', exact: true })
+      .waitFor({ state: 'detached' })
 
     await showImport()
     await chooseBackup()
@@ -222,6 +260,28 @@ createRoot(document.getElementById('root')).render(<App/>);
       await page.evaluate(() => window.notices.at(-1)),
       /已导入.*刷新失败/,
     )
+    await page.setViewportSize({ width: 390, height: 844 })
+    await source.click({ button: 'right', position: { x: 10, y: 10 } })
+    const menu = page.getByRole('menu')
+    const bounds = await menu.boundingBox()
+    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390)
+    assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= 844)
+    await page.screenshot({ path: '/tmp/reflexion-session-context-menu.png' })
+    await page.keyboard.press('Escape')
+    await page.evaluate(() => window.showEmpty())
+    await page
+      .getByRole('button', { name: '导入聊天记录…', exact: true })
+      .click()
+    await page
+      .getByRole('dialog', { name: '导入聊天记录', exact: true })
+      .waitFor()
+    assert.match(
+      await page
+        .getByRole('combobox', { name: '导入位置', exact: true })
+        .textContent(),
+      /项目一/,
+    )
+    await page.keyboard.press('Escape')
     assert.deepEqual(errors, [])
   } finally {
     await browser?.close()

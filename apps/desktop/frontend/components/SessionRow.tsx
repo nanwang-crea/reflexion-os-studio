@@ -1,3 +1,4 @@
+import { SessionContextMenu } from './session/SessionContextMenu'
 import { isComposing } from '../lib/keyboard'
 import { useEffect, useRef, useState } from 'react'
 import type { Session } from '@reflexion-os-studio/runtime-client'
@@ -12,6 +13,9 @@ export function SessionRow(props: {
   failed?: boolean
   /** 有等待审批的工具调用：优先级最高（待审批 > 失败 > 成功）。 */
   pendingApproval?: boolean
+  archiveBusy?: boolean
+  onImport?: () => void
+  onExport?: () => void
   onSelect: () => void
   onRename: (title: string) => Promise<void>
   onDelete: () => Promise<void>
@@ -19,6 +23,7 @@ export function SessionRow(props: {
   const [editing, setEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(props.session.title)
   const [pending, setPending] = useState(false)
+  const mainRef = useRef<HTMLButtonElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -69,81 +74,93 @@ export function SessionRow(props: {
   }
 
   return (
-    <div className={`session-row${props.active ? ' active' : ''}`}>
-      {editing ? (
-        <input
-          ref={inputRef}
-          className="rename-input"
-          value={editTitle}
-          disabled={pending}
-          onChange={(event) => setEditTitle(event.target.value)}
-          onBlur={() => void submitRename()}
-          onKeyDown={(event) => {
-            if (isComposing(event.nativeEvent)) return
-            if (event.key === 'Enter') {
-              event.preventDefault()
-              void submitRename()
-            } else if (event.key === 'Escape') {
-              setEditing(false)
-              setEditTitle(props.session.title)
-            }
-          }}
-        />
-      ) : (
-        <button
-          className="row session-main"
-          title={props.session.title}
-          onClick={props.onSelect}
-        >
-          <span
-            className={`session-status${statusKind === null ? '' : ` ${statusKind}`}`}
-            aria-label={
-              statusKind === 'approval'
-                ? '有工具调用等待审批'
-                : statusKind === 'running'
-                  ? '正在回复'
-                  : statusKind === 'failed'
-                    ? '回复失败'
-                    : statusKind === 'completed'
-                      ? '回复完成'
-                      : undefined
-            }
+    <SessionContextMenu
+      title={props.session.title}
+      editing={editing}
+      busy={props.archiveBusy ?? false}
+      returnFocus={mainRef}
+      onImport={props.onImport}
+      onExport={props.onExport}
+      onRename={startRename}
+      onDelete={() => void props.onDelete()}
+    >
+      <div className={`session-row${props.active ? ' active' : ''}`}>
+        {editing ? (
+          <input
+            ref={inputRef}
+            className="rename-input"
+            value={editTitle}
+            disabled={pending}
+            onChange={(event) => setEditTitle(event.target.value)}
+            onBlur={() => void submitRename()}
+            onKeyDown={(event) => {
+              if (isComposing(event.nativeEvent)) return
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                void submitRename()
+              } else if (event.key === 'Escape') {
+                setEditing(false)
+                setEditTitle(props.session.title)
+              }
+            }}
+          />
+        ) : (
+          <button
+            ref={mainRef}
+            className="row session-main"
+            title={props.session.title}
+            onClick={props.onSelect}
           >
-            {statusKind === 'approval' ? (
-              '✋'
-            ) : statusKind === 'running' ? (
-              <span className="session-spinner" />
-            ) : statusKind === 'failed' ? (
-              '!'
-            ) : statusKind === 'completed' ? (
-              '✓'
-            ) : null}
+            <span
+              className={`session-status${statusKind === null ? '' : ` ${statusKind}`}`}
+              aria-label={
+                statusKind === 'approval'
+                  ? '有工具调用等待审批'
+                  : statusKind === 'running'
+                    ? '正在回复'
+                    : statusKind === 'failed'
+                      ? '回复失败'
+                      : statusKind === 'completed'
+                        ? '回复完成'
+                        : undefined
+              }
+            >
+              {statusKind === 'approval' ? (
+                '✋'
+              ) : statusKind === 'running' ? (
+                <span className="session-spinner" />
+              ) : statusKind === 'failed' ? (
+                '!'
+              ) : statusKind === 'completed' ? (
+                '✓'
+              ) : null}
+            </span>
+            <span className="row-label">{props.session.title}</span>
+          </button>
+        )}
+        {editing ? (
+          <span className="row-hint">{pending ? '保存中…' : 'Enter 确认'}</span>
+        ) : (
+          <span className="session-actions">
+            <button
+              className="row-action"
+              title="重命名"
+              aria-label="重命名会话"
+              onClick={startRename}
+            >
+              <PencilIcon />
+            </button>
+            <button
+              className="row-action danger"
+              title="删除会话"
+              aria-label="删除会话"
+              onClick={() => void props.onDelete()}
+            >
+              <TrashIcon />
+            </button>
           </span>
-          <span className="row-label">{props.session.title}</span>
-        </button>
-      )}
-      {editing ? (
-        <span className="row-hint">{pending ? '保存中…' : 'Enter 确认'}</span>
-      ) : (
-        <span className="session-actions">
-          <button
-            className="row-action"
-            title="重命名"
-            aria-label="重命名会话"
-            onClick={startRename}
-          >
-            <PencilIcon />
-          </button>
-          <button
-            className="row-action danger"
-            title="删除会话"
-            aria-label="删除会话"
-            onClick={() => void props.onDelete()}
-          >
-            <TrashIcon />
-          </button>
-        </span>
-      )}
-    </div>
+        )}
+      </div>
+    </SessionContextMenu>
   )
 }

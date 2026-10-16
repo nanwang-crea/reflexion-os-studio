@@ -1,0 +1,42 @@
+.session-context-menu {
+  z-index: 1200;
+  width: 210px;
+  max-width: calc(100vw - 16px);
+  max-height: var(--radix-context-menu-content-available-height);
+  overflow: auto;
+  padding: 6px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  font-size: 13px;
+}
+.session-context-label {
+  color: var(--text-muted);
+  padding: 5px 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-context-item {
+  min-height: 34px;
+  padding: 7px 10px;
+  border-radius: 5px;
+  outline: none;
+  cursor: default;
+}
+.session-context-item[data-highlighted] {
+  background: var(--bg-hover);
+}
+.session-context-item[data-disabled] {
+  opacity: 0.45;
+}
+.session-context-item.danger {
+  color: var(--danger);
+}
+.session-context-separator {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 5px 4px;
+}

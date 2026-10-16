@@ -5,11 +5,12 @@ import type { ChatArchiveImportParams } from '@reflexion-os-studio/contracts'
 import type { ReadyAppProps } from '../../../components/ready-app-props'
 
 export function useChatArchiveActions(props: ReadyAppProps) {
-  const [importOpen, setImportOpen] = useState(false)
+  const [importTarget, setImportTarget] = useState<{
+    projectId: string | null
+  } | null>(null)
   const [busy, setBusy] = useState(false)
   const lock = useRef(false)
   const {
-    activeSessionId,
     activeProjectId,
     setNotice,
     guardedResetWorkspaceFiles,
@@ -19,30 +20,33 @@ export function useChatArchiveActions(props: ReadyAppProps) {
     setActiveProjectId,
     openSession,
   } = props
-  const openImport = useCallback(() => {
-    if (!lock.current) setImportOpen(true)
+  const openImport = useCallback((projectId: string | null) => {
+    if (!lock.current) setImportTarget({ projectId })
   }, [])
-  const closeImport = useCallback(() => setImportOpen(false), [])
-  const exportChat = useCallback(async () => {
-    if (lock.current || !activeSessionId) return
-    lock.current = true
-    setBusy(true)
-    try {
-      const directory = await open({
-        directory: true,
-        multiple: false,
-        title: '选择聊天记录导出目录',
-      })
-      if (typeof directory !== 'string') return
-      const result = await exportChatArchive(activeSessionId, directory)
-      setNotice(`已导出 ${result.messageCount} 条消息：${result.path}`)
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : String(error))
-    } finally {
-      lock.current = false
-      setBusy(false)
-    }
-  }, [activeSessionId, setNotice])
+  const closeImport = useCallback(() => setImportTarget(null), [])
+  const exportChat = useCallback(
+    async (sessionId: string) => {
+      if (lock.current) return
+      lock.current = true
+      setBusy(true)
+      try {
+        const directory = await open({
+          directory: true,
+          multiple: false,
+          title: '选择聊天记录导出目录',
+        })
+        if (typeof directory !== 'string') return
+        const result = await exportChatArchive(sessionId, directory)
+        setNotice(`已导出 ${result.messageCount} 条消息：${result.path}`)
+      } catch (error) {
+        setNotice(error instanceof Error ? error.message : String(error))
+      } finally {
+        lock.current = false
+        setBusy(false)
+      }
+    },
+    [setNotice],
+  )
   const importChat = useCallback(
     async (input: Omit<ChatArchiveImportParams, 'requestId'>) => {
       if (lock.current) return false
@@ -84,5 +88,13 @@ export function useChatArchiveActions(props: ReadyAppProps) {
       setNotice,
     ],
   )
-  return { importOpen, openImport, closeImport, busy, exportChat, importChat }
+  return {
+    importOpen: importTarget !== null,
+    importProjectId: importTarget?.projectId ?? null,
+    openImport,
+    closeImport,
+    busy,
+    exportChat,
+    importChat,
+  }
 }
