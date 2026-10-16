@@ -7,7 +7,8 @@
     "beforeDevCommand": "pnpm -w build:system && pnpm dev:frontend",
     "beforeBuildCommand": "pnpm prepare:package && pnpm build:frontend",
     "devUrl": "http://localhost:5173",
-    "frontendDist": "../dist-frontend"
+    "frontendDist": "../dist-frontend",
+    "beforeBundleCommand": "node ../../scripts/verify-desktop-assets.mjs"
   },
   "app": {
     "windows": [

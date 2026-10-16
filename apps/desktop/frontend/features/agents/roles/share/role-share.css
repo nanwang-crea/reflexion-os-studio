@@ -48,3 +48,15 @@
 .agent-roles-heading > div:has(> button) {
   flex-shrink: 0;
 }
+
+.role-import-feedback {
+  padding: 12px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.role-import-feedback.is-error {
+  color: var(--danger);
+}

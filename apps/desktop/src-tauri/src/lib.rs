@@ -3,6 +3,7 @@
 //! 关停与信号见 shutdown.rs；本文件只做装配与 Tauri 命令注册。
 
 mod browser;
+mod frontend_assets;
 mod host;
 mod logging;
 mod orphan_cleanup;
@@ -47,6 +48,15 @@ fn runtime_request(
         return Err(format!("method not allowed: {method}"));
     }
     supervisor::runtime_request_impl(&state, method, params)
+}
+
+fn application_context() -> tauri::Context<tauri::Wry> {
+    tauri::generate_context!()
+}
+
+/// Packaging-only probe: never initializes a window, sidecars, or user data.
+pub fn verify_frontend_assets() -> Result<(), String> {
+    frontend_assets::verify(&application_context())
 }
 
 pub fn run() {
@@ -95,7 +105,7 @@ pub fn run() {
             supervisor::start_sidecars(app.handle(), state_for_setup.clone());
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(application_context())
         .expect("error while building ReflexionOS Studio")
         .run(|app_handle, event| {
             match event {

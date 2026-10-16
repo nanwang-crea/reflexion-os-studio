@@ -48,6 +48,10 @@ export function AgentRolesView({
   const [status, setStatus] = useState('all')
   const [source, setSource] = useState('all')
   const [loading, setLoading] = useState(true)
+  const [importFeedback, setImportFeedback] = useState<{
+    message: string
+    failed: boolean
+  } | null>(null)
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -92,6 +96,13 @@ export function AgentRolesView({
         setCatalogRevision((value) => value + 1)
         setNotice(`已删除 ${removedIds.length} 个角色，执行记录和技能已保留。`)
       }),
+  }
+  const revealImports = (projectId: string | null) => {
+    setScope(projectId ?? '')
+    setQuery('')
+    setDomain('')
+    setStatus('all')
+    setSource('all')
   }
   const allowSwitch = async () => {
     const dirty = draft
@@ -140,14 +151,20 @@ export function AgentRolesView({
             <p>配置职责与执行能力，供主对话按需调用。</p>
           </div>
           <RoleImportButton
-            onTeamImported={reload}
+            onTeamImported={async (projectId) => {
+              revealImports(projectId)
+              await reload()
+            }}
+            onFeedback={(message, failed = false) => {
+              setNotice('')
+              setImportFeedback({ message, failed })
+            }}
             busy={busy}
             projectId={scope === '*' ? initialProjectId : scope || null}
             onImport={async (value) => {
-              if (!(await edit(value))) return
-              setNotice(
-                '已读取分享角色，请检查指令、工具和权限后保存。导入默认停用，模型继承上级；保存将创建新角色。',
-              )
+              const opened = await edit(value)
+              if (opened) revealImports(value.projectId ?? null)
+              return opened
             }}
           />
           <button
@@ -192,6 +209,14 @@ export function AgentRolesView({
           {scope === '' && ' · 可在所有项目及独立会话中使用'}
           {scope !== '*' && scope !== '' && ' · 此项目专属角色及跨项目通用角色'}
         </p>
+        {importFeedback && (
+          <p
+            className={`role-import-feedback${importFeedback.failed ? ' is-error' : ''}`}
+            role={importFeedback.failed ? 'alert' : 'status'}
+          >
+            {importFeedback.message}
+          </p>
+        )}
         {notice && <p role="status">{notice}</p>}
         {error && !draft && !bulkTargets && (
           <p role="alert" className="error">
@@ -276,11 +301,15 @@ export function AgentRolesView({
           onSave={() =>
             void action(async () => {
               await saveAgentTemplate(draft)
+              setImportFeedback(null)
               setDraft(null)
               setNotice(`已保存“${draft.name}”。列表保留当前筛选条件。`)
             })
           }
-          onCancel={() => setDraft(null)}
+          onCancel={() => {
+            setDraft(null)
+            setImportFeedback(null)
+          }}
         />
       )}
       {bulkTargets && (

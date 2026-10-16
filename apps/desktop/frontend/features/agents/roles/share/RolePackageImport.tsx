@@ -9,17 +9,28 @@ export function RolePackageImport({
   projectId,
   onClose,
   onImported,
+  onFeedback,
 }: {
   data: string
   preview: AgentRolePackagePreview
   projectId: string | null
   onClose: () => void
-  onImported: () => Promise<void>
+  onImported: (projectId: string | null) => Promise<void>
+  onFeedback: (message: string, failed?: boolean) => void
 }) {
   const [busy, setBusy] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   return (
-    <RoleShareDialog title="导入完整角色包" busy={busy} onClose={onClose}>
+    <RoleShareDialog
+      title="导入完整角色包"
+      busy={busy}
+      onClose={() => {
+        if (!saved && !error) onFeedback('已取消角色包导入，未保存任何角色。')
+        onClose()
+      }}
+    >
       <h3>{preview.role.name}</h3>
       <p>{preview.role.description}</p>
       <p>
@@ -53,25 +64,42 @@ export function RolePackageImport({
         ))}
       </ul>
       <p>技能包含的脚本不会在导入时执行。冲突包不会覆盖已有技能。</p>
+      {message && <p role="status">{message}</p>}
       {error && <p role="alert">{error}</p>}
       <button
         type="button"
-        disabled={busy}
+        disabled={busy || saved}
         onClick={async () => {
           setBusy(true)
           setError('')
           try {
-            await importAgentRolePackage(data, projectId, preview.digest)
-            await onImported()
-            onClose()
+            const result = await importAgentRolePackage(
+              data,
+              projectId,
+              preview.digest,
+            )
+            setSaved(true)
+            const success = `已导入角色“${result.template.name ?? preview.role.name}”，包含 ${preview.skills.length} 个技能。角色默认停用，可在角色库编辑后启用。`
+            setMessage(success)
+            onFeedback(success)
+            await onImported(projectId).catch(() => {
+              const warning = `${success} 列表刷新失败，请重新打开角色库；无需重复导入。`
+              setMessage(warning)
+              onFeedback(warning)
+            })
           } catch (error) {
-            setError(error instanceof Error ? error.message : '导入失败')
+            const failure =
+              error instanceof Error
+                ? `角色包导入失败：${error.message}`
+                : '角色包导入失败，请检查文件和目标项目。'
+            setError(failure)
+            onFeedback(failure, true)
           } finally {
             setBusy(false)
           }
         }}
       >
-        {busy ? '正在导入…' : '确认导入'}
+        {saved ? '已导入' : busy ? '正在导入…' : '确认导入'}
       </button>
     </RoleShareDialog>
   )

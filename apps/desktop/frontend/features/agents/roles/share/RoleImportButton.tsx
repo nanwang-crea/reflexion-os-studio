@@ -17,11 +17,13 @@ export function RoleImportButton({
   projectId,
   onImport,
   onTeamImported,
+  onFeedback,
 }: {
-  onTeamImported: () => Promise<void>
+  onTeamImported: (projectId: string | null) => Promise<void>
+  onFeedback: (message: string, failed?: boolean) => void
   busy: boolean
   projectId: string | null
-  onImport: (draft: RoleDraft) => Promise<void>
+  onImport: (draft: RoleDraft) => Promise<boolean>
 }) {
   const [bundle, setBundle] = useState<{
     data: string
@@ -30,7 +32,6 @@ export function RoleImportButton({
   } | null>(null)
   const [team, setTeam] = useState<AgentTeamShare | null>(null)
   const input = useRef<HTMLInputElement>(null)
-  const [error, setError] = useState('')
   const [reading, setReading] = useState(false)
   return (
     <div>
@@ -39,7 +40,7 @@ export function RoleImportButton({
         disabled={busy || reading}
         onClick={() => input.current?.click()}
       >
-        导入角色
+        {reading ? '正在读取…' : '导入角色'}
       </button>
       <input
         ref={input}
@@ -51,7 +52,7 @@ export function RoleImportButton({
           const file = event.target.files?.[0]
           event.target.value = ''
           if (!file) return
-          setError('')
+          onFeedback(`正在读取并校验“${file.name}”…`)
           setReading(true)
           try {
             if (file.name.endsWith('.zip')) {
@@ -66,6 +67,9 @@ export function RoleImportButton({
               const data = btoa(binary)
               const preview = await previewAgentRolePackage(data, projectId)
               setBundle({ data, preview, projectId })
+              onFeedback(
+                `“${file.name}”校验通过，请在预览中确认导入；尚未保存。`,
+              )
               return
             }
             const isTeam = file.name.endsWith('.reflexion-team.json')
@@ -83,24 +87,33 @@ export function RoleImportButton({
               if (!result.success)
                 throw new Error('团队文件格式或版本不支持，或配置字段无效')
               setTeam(result.data)
+              onFeedback(
+                `团队文件校验通过，包含 ${result.data.roles.length} 个角色，请在预览中确认导入；尚未保存。`,
+              )
               return
             }
             const parsed = AgentRoleShareSchema.safeParse(content)
             if (!parsed.success)
               throw new Error('角色文件格式或版本不支持，或配置字段无效')
-            await onImport({
+            const opened = await onImport({
               ...parsed.data.role,
               projectId,
               modelBinding: { mode: 'inherit' },
               enabled: false,
             })
+            onFeedback(
+              opened
+                ? `角色“${parsed.data.role.name}”已读取到编辑器，尚未保存。请检查配置后点击“保存角色”。`
+                : '未切换到导入角色，未保存任何角色。',
+            )
           } catch (error) {
-            setError(
+            onFeedback(
               error instanceof SyntaxError
                 ? '角色文件不是有效的 JSON'
                 : error instanceof Error
                   ? error.message
                   : '导入失败',
+              true,
             )
           } finally {
             setReading(false)
@@ -112,6 +125,7 @@ export function RoleImportButton({
           {...bundle}
           onClose={() => setBundle(null)}
           onImported={onTeamImported}
+          onFeedback={onFeedback}
         />
       )}
       {team && (
@@ -120,12 +134,8 @@ export function RoleImportButton({
           projectId={projectId}
           onClose={() => setTeam(null)}
           onImported={onTeamImported}
+          onFeedback={onFeedback}
         />
-      )}
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
       )}
     </div>
   )

@@ -33,6 +33,10 @@ export async function verifyRoleSharing(page) {
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(share)),
   })
+  await page
+    .getByRole('status')
+    .filter({ hasText: '已读取到编辑器，尚未保存' })
+    .waitFor()
   const editor = page.locator('.agent-role-editor')
   await editor.waitFor()
   assert.equal(
@@ -50,6 +54,11 @@ export async function verifyRoleSharing(page) {
   assert.equal(await page.evaluate(() => window.roleSaves.length), before)
   await editor.getByRole('button', { name: '保存角色', exact: true }).click()
   await editor.waitFor({ state: 'detached' })
+  await page
+    .getByRole('status')
+    .filter({ hasText: '已保存“Shared reviewer”' })
+    .waitFor()
+  assert.equal(await page.locator('.role-import-feedback').count(), 0)
   const saved = await page.evaluate(() => window.roleSaves.at(-1))
   assert.equal(saved.id, undefined)
   assert.equal(saved.enabled, false)
