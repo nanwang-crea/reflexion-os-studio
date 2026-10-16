@@ -36,8 +36,29 @@
   background: var(--bg-elevated);
   color: var(--text);
 }
-.right-surface-collapse {
+.right-surface-expand {
   margin-left: auto;
+}
+.right-surface-tabs .right-surface-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+}
+.right-surface-tabs .right-surface-action:hover {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+.right-surface-tabs .right-surface-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .browser-panel-host,
 .browser-surface-panel {

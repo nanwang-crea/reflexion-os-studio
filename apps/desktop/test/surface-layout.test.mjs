@@ -37,7 +37,7 @@ test('shared surface expands files, retains drafts across browser switches and r
             window.changeSession = () => setSession('s2');
             return <AppMain view="chat" activeSessionId={session} topBar={{}}
               notice={null} onDismissNotice={() => {}} chat={{}} landing={{}} settings={{}} instructions={{}} onUseSkill={() => {}}
-              workspace={{open, setOpen, width, setWidth, panel: { activeTabId: 'a.md' }}}
+              workspace={{open, setOpen, width, setWidth, panel: { project: { id: 'p1' }, systemReady: true, openTabs: [{ path: 'a.md' }], activeTabId: 'a.md', dirtyPaths: new Set(), width: 580 }}}
               terminal={{open: false, onToggle() {}, activeProjectId: null, confirm: async () => true}} />;
           }
           createRoot(document.getElementById('root')).render(<Fixture />);
@@ -57,7 +57,7 @@ test('shared surface expands files, retains drafts across browser switches and r
             build.onLoad(
               {
                 filter:
-                  /(?:TopBar|ChatView|LandingView|SkillsView|SettingsView|InstructionsView|AgentRolesView|CollaborationPanel|TerminalPanel|FileViewerPanel|BrowserSurfacePanel)\.tsx$/,
+                  /(?:TopBar|ChatView|LandingView|SkillsView|SettingsView|InstructionsView|AgentRolesView|CollaborationPanel|TerminalPanel|MarkdownFilePreview|BrowserSurfacePanel)\.tsx$/,
               },
               ({ path }) => {
                 const name = path.split('/').at(-1).replace('.tsx', '')
@@ -65,9 +65,9 @@ test('shared surface expands files, retains drafts across browser switches and r
                 if (name === 'TopBar')
                   body =
                     '<button onClick={props.onToggleWorkspace}>打开工作区</button>'
-                if (name === 'FileViewerPanel')
+                if (name === 'MarkdownFilePreview')
                   body =
-                    '<div className="workspace-panel"><textarea aria-label="文件草稿" defaultValue="原文" /></div>'
+                    '<div className="md-preview-body"><textarea aria-label="文件草稿" defaultValue="原文" /></div>'
                 if (name === 'BrowserSurfacePanel')
                   body =
                     '<div className="browser-surface-panel"><p>浏览器内容</p></div>'

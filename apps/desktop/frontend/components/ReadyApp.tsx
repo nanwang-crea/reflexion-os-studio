@@ -182,7 +182,6 @@ export function ReadyApp(props: ReadyAppProps): React.JSX.Element {
             onDirtyChange: props.setTabDirty,
             confirm: props.confirm,
             onResourceClick: props.handleResourceClick,
-            width: props.workspaceWidth,
           },
         },
         terminal: {

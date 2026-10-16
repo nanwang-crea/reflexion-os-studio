@@ -45,8 +45,6 @@ interface FileViewerPanelProps {
   onDirtyChange: (path: string, dirty: boolean) => void
   /** Markdown 源码→预览切换守卫用的应用级确认弹窗。 */
   confirm: (state: ConfirmDialogState) => Promise<boolean>
-  /** 面板宽度（由 App 拖拽控制）。 */
-  width?: number
   /** Markdown 预览内资源引用（相对路径 / workspace:// / asset://）分发。 */
   onResourceClick?: (link: ResourceLink) => void
   /** React 19 ref-as-prop：保存命令句柄（快捷键/守卫流程用）。 */
@@ -107,7 +105,7 @@ export function FileViewerPanel(
 
   if (project === null) {
     return (
-      <div className="workspace-panel" style={{ width: props.width }}>
+      <div className="workspace-panel">
         <div className="workspace-panel-empty">
           <EmptyState
             icon={<FolderIcon />}
@@ -120,7 +118,7 @@ export function FileViewerPanel(
   }
 
   return (
-    <div className="workspace-panel" style={{ width: props.width }}>
+    <div className="workspace-panel">
       {props.openTabs.length > 0 ? (
         <FileTabs
           openTabs={props.openTabs}
