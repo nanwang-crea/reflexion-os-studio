@@ -14,7 +14,13 @@ export const AgentTeamRoleInputSchema = agentTemplateCommands[
   .omit({ requestId: true, id: true, projectId: true })
   .extend({
     name: z.string().trim().min(1).max(80),
-    domains: z.array(z.string().min(1).max(40)).max(11).default([]),
+    domains: z
+      .array(z.string().min(1).max(40))
+      .max(12)
+      .default([])
+      .describe(
+        '领域标签；team:<teamId> 由工具自动维护。更新可保留 inspect 返回的原有团队标签，不可手动添加其他团队关系。含团队标签总计最多 12 项。',
+      ),
   })
   .strict()
 

@@ -273,3 +273,105 @@ for (const operation of ['update', 'delete'])
       /Aborted/,
     )
   })
+
+for (const scope of ['project', 'global'])
+  test(`${scope}: inspected membership tags round trip through batch updates and approval`, (t) => {
+    const f = fixture(t)
+    if (scope === 'global') {
+      createTeamCreateTool(f.ctx).execute({
+        args: {
+          teamId: 'writing',
+          scope,
+          roles: [role, { ...role, name: 'Editor' }],
+        },
+        signal: new AbortController().signal,
+      })
+    }
+    const projectId = scope === 'project' ? f.project.id : null
+    const inspected = createTeamInspectTool(f.ctx).execute({
+      args: { teamId: 'writing' },
+    }).data
+    const members = inspected.templates.filter(
+      (member) => member.projectId === projectId,
+    )
+    const args = {
+      teamId: 'writing',
+      scope,
+      expectedRevision: inspected.teams.find(
+        (team) => team.projectId === projectId,
+      ).revision,
+      roles: members.map((member) => ({
+        ...role,
+        id: member.id,
+        name: member.name,
+        systemPrompt: 'Updated instructions',
+        domains: member.domains,
+      })),
+    }
+    const preview = JSON.parse(
+      teamApprovalReview(args, 'agent_team.update', f.ctx),
+    )
+    const result = f.mutate('update', args)
+    assert.equal(result.data.templates.length, 2)
+    result.data.templates.forEach((member, index) => {
+      assert.deepEqual(member.domains, ['writing', 'team:writing'])
+      assert.deepEqual(member.domains, preview.roles[index].domains)
+      assert.equal(member.systemPrompt, 'Updated instructions')
+    })
+  })
+
+test('updates retain shared memberships, deduplicate tags, and reject foreign membership injection atomically', (t) => {
+  const f = fixture(t)
+  const member = f.created[0]
+  f.store.agents.saveUser({
+    ...role,
+    id: member.id,
+    projectId: f.project.id,
+    domains: ['writing', 'team:writing', 'team:other'],
+  })
+  const updated = f.mutate('update', {
+    ...f.target(),
+    roles: [
+      {
+        ...role,
+        id: member.id,
+        domains: ['writing', 'team:writing', 'team:writing', 'team:other'],
+      },
+    ],
+  })
+  assert.deepEqual(updated.data.templates[0].domains, [
+    'writing',
+    'team:writing',
+    'team:other',
+  ])
+  const baseline = f.store.agents.list()
+  assert.throws(
+    () =>
+      f.mutate('update', {
+        ...f.target(),
+        roles: [{ ...role, id: member.id, domains: ['team:injected'] }],
+      }),
+    /不能通过 domains/,
+  )
+  assert.deepEqual(f.store.agents.list(), baseline)
+  const domains = Array.from({ length: 10 }, (_, index) => `domain-${index}`)
+  const full = f.mutate('update', {
+    ...f.target(),
+    roles: [
+      {
+        ...role,
+        id: member.id,
+        domains: [...domains, 'team:writing', 'team:other'],
+      },
+    ],
+  })
+  assert.equal(full.data.templates[0].domains.length, 12)
+  assert.throws(
+    () =>
+      f.mutate('update', {
+        ...f.target(),
+        roles: [{ ...role, id: member.id, domains: [...domains, 'extra'] }],
+      }),
+    /领域数量超过上限/,
+  )
+})

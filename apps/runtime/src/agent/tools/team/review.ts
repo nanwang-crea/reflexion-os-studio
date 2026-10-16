@@ -6,6 +6,7 @@ import {
 } from '@reflexion-os-studio/contracts'
 import type { ToolContext } from '../shared.js'
 import { teamMembers, teamProjectId } from './members.js'
+import { teamRoleDomains } from './validation.js'
 import { containsSecretLike } from '../../instructions/secretGuard.js'
 import { redactSecrets } from '../../permissions/summaries.js'
 
@@ -50,14 +51,12 @@ export function teamApprovalReview(
           ? {
               roles: update.data.roles.map((role) => ({
                 ...role,
-                domains: [
-                  ...role.domains,
-                  ...(currentMembers
-                    .find((member) => member.id === role.id)
-                    ?.domains.filter((domain) =>
-                      domain.startsWith('team:'),
-                    ) ?? [`team:${parsed.data.teamId}`]),
-                ],
+                domains: teamRoleDomains(
+                  role.domains,
+                  parsed.data.teamId,
+                  currentMembers.find((member) => member.id === role.id)
+                    ?.domains,
+                ),
                 modelBinding: role.modelBinding ?? { mode: 'inherit' },
                 permissionCeiling: role.permissionCeiling ?? 'workspace-read',
               })),
@@ -79,7 +78,7 @@ export function teamApprovalReview(
       ...parsed.data,
       roles: parsed.data.roles.map((role) => ({
         ...role,
-        domains: [...role.domains, `team:${parsed.data.teamId}`],
+        domains: teamRoleDomains(role.domains, parsed.data.teamId),
         modelBinding: role.modelBinding ?? { mode: 'inherit' },
         permissionCeiling: role.permissionCeiling ?? 'workspace-read',
       })),

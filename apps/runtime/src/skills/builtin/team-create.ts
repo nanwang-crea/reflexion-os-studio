@@ -4,7 +4,7 @@ export const TEAM_CREATE_SKILL: SkillDefinition = {
   manifest: {
     id: 'team-create',
     name: '管理协作团队',
-    version: '1.1.0',
+    version: '1.1.1',
     description:
       '设计团队职责、交接和验收要求，复用角色，或经审批创建、增补、修改和删除团队角色；直接落地到 Agent 配置。',
     tools: [
@@ -39,7 +39,7 @@ export const TEAM_CREATE_SKILL: SkillDefinition = {
 
 ## 保存与交付
 先在对话给出简明角色配置和交接方案，再调用 agent_team.create，传入 teamId、scope、roles。工具走正式审批；不要为同一保存再增加 ask_user 确认。用户拒绝后不重试绕过。只有工具成功才声明角色已保存；批量保存失败不会留下部分角色。
-修改已有团队先 inspect 获取完整成员和 revision，用 agent_team.update 携带 teamId、scope、expectedRevision。roles 不带 id 新增、带真实 id 更新完整角色配置；不提及的成员保留，removeRoleIds 显式移除。删除团队用 agent_team.delete 携带相同范围和 expectedRevision。独占成员模板删除，多团队成员只解除当前团队关系；共享成员的模型或职责修改影响其他团队，须说明。先展示具体变更再走工具审批，不转交用户手工录入，也不通过新建同名团队绕过。配置变更冲突时重新 inspect、核对后再次审批；拒绝不重试。历史和运行中的实例不会改变。
+修改已有团队先 inspect 获取完整成员和 revision，用 agent_team.update 携带 teamId、scope、expectedRevision。roles 不带 id 新增、带真实 id 更新完整角色配置；将 inspect 的 policy.allowedTools/canDelegate/permissionCeiling 展平到角色参数，只传工具 schema 定义的字段，不传 builtin、projectId、时间戳等存储字段。domains 可仅填业务领域，也可保留 inspect 返回的原有团队标签，工具自动去重并保留原有成员关系，不允许添加其他团队标签；不提及的成员保留，removeRoleIds 显式移除。删除团队用 agent_team.delete 携带相同范围和 expectedRevision。独占成员模板删除，多团队成员只解除当前团队关系；共享成员的模型或职责修改影响其他团队，须说明。先展示具体变更再走工具审批，不转交用户手工录入，也不通过新建同名团队绕过。配置变更冲突时重新 inspect、核对后再次审批；拒绝不重试。其他错误按工具返回的具体校验原因修正，不切换 scope、重复原样调用或将参数错误推断为运行时循环。历史和运行中的实例不会改变。
 成功后列出团队、实际角色 ID、职责、模型继承/预设、工具上限和下一步使用方法：$agent-collaboration 加目标。团队配置在 Agent 页管理，不额外生成假配置文件。
 产物保存目录遵循用户和已有项目约定；没有约定则选择与任务有关的相对路径并告知用户，不为建立团队遍历整个项目，也不在创建角色时生成空稿件。
 `.trim(),
