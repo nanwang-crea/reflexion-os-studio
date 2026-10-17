@@ -3,7 +3,7 @@
 :root {
   --page-width: 1120px;
   --page-padding: clamp(20px, 4vw, 48px);
-  --focus-ring: #85abff;
+  --focus-ring: #88d6c4;
 }
 
 button:focus-visible,
@@ -28,8 +28,8 @@ a:focus-visible {
 }
 
 .brand-mark {
-  background: #c5d7ff;
-  color: #192438;
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .panel-search {
@@ -52,7 +52,7 @@ a:focus-visible {
 .project-row.active,
 .nav-item.active {
   background: var(--bg-active);
-  box-shadow: none;
+  box-shadow: inset 3px 0 var(--accent);
 }
 
 .session-row:focus-within .row-action,

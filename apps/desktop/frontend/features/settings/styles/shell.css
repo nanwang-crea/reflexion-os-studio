@@ -105,7 +105,7 @@
   flex-shrink: 0;
 }
 .settings-nav-item.active {
-  box-shadow: inset 3px 0 0 var(--text-muted);
+  box-shadow: inset 3px 0 0 var(--accent);
   color: var(--text);
   background: var(--bg-active);
   font-weight: 500;

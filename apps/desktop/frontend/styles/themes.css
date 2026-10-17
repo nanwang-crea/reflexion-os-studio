@@ -1,32 +1,32 @@
 /* Dark remains the default for existing installations. */
 :root {
-  --on-accent: #171717;
+  --on-accent: #102d28;
   --selection-bg: #345082;
   --selection-text: #fff;
 }
 :root[data-theme='light'] {
   color-scheme: light;
-  --bg: #ffffff;
-  --bg-sidebar: #f7f7f8;
+  --bg: #fbfcfd;
+  --bg-sidebar: #f1f4f5;
   --bg-elevated: #ffffff;
-  --bg-hover: #eeeeef;
-  --bg-active: #e3e3e6;
-  --bg-inset: #f9f9fa;
+  --bg-hover: #eaf0f0;
+  --bg-active: #e0eae8;
+  --bg-inset: #f5f7f8;
   --bg-editor: #ffffff;
   --surface-overlay: rgba(255, 255, 255, 0.94);
   --surface-translucent: rgba(255, 255, 255, 0.82);
   --scrim: rgba(0, 0, 0, 0.3);
-  --border: #d4d4d8;
-  --border-subtle: #e7e7eb;
-  --text: #202123;
-  --text-secondary: #55565c;
-  --text-muted: #686a73;
-  --accent: #202123;
-  --accent-hover: #3a3b3f;
+  --border: #dae3e5;
+  --border-subtle: #e3eaeb;
+  --text: #1c2d34;
+  --text-secondary: #5a6a72;
+  --text-muted: #60717a;
+  --accent: #176d60;
+  --accent-hover: #12594e;
   --on-accent: #ffffff;
-  --accent-soft: rgba(37, 99, 235, 0.07);
-  --accent-border: rgba(37, 99, 235, 0.5);
-  --focus-ring: #2563eb;
+  --accent-soft: rgba(23, 109, 96, 0.07);
+  --accent-border: rgba(23, 109, 96, 0.5);
+  --focus-ring: #258879;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
   --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.07);
   --danger: #c42b32;
@@ -34,8 +34,8 @@
   --warning-text: #96510b;
   --info: #2563b8;
   --ok: #167545;
-  --selection-bg: #dbeafe;
-  --selection-text: #202123;
+  --selection-bg: #dceee9;
+  --selection-text: #1c2d34;
 }
 ::selection {
   background: var(--selection-bg);

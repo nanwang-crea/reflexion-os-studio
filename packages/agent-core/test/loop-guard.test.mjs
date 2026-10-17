@@ -56,8 +56,7 @@ test('successful mutation replay without freshness change is blocked', () => {
   const guard = new LoopGuard()
   const edit = REQ('file.edit', { path: 'a.ts', content: 'new' })
   guard.recordExecution(edit, OK('written'), true)
-  // epoch 已推进；但 successfulMutations 绑定的是执行时的 epoch。
-  // 同一 mutation 在任何后续 epoch 都曾成功 → 重放拦截。
+  // 成功调用绑定自身完成后的 epoch，环境尚未发生其它变化时拦截重放。
   assert.equal(guard.admit(edit).verdict, 'block')
   assert.equal(guard.admit(edit).code, 'duplicate_side_effect')
   // 模型仍重复一次（recordBlocked 累计），第三次按 no_progress 收敛。

@@ -17,27 +17,27 @@
   --on-danger: #ffffff;
 
   color-scheme: dark;
-  --bg: #191c22;
-  --bg-sidebar: #13161b;
-  --bg-elevated: #242830;
-  --bg-hover: #282d36;
-  --bg-active: #343b47;
-  --bg-inset: #16191f;
+  --bg: #151d24;
+  --bg-sidebar: #10171d;
+  --bg-elevated: #1c2832;
+  --bg-hover: #24343f;
+  --bg-active: #2b3d48;
+  --bg-inset: #121b22;
   /* active 标签与编辑器背景融合；必须与
      features/workspace/editor/monaco.ts 的 editor.background 保持同值 */
   --bg-editor: #1e1e1e;
   --surface-overlay: rgba(23, 23, 23, 0.72);
   --surface-translucent: rgba(23, 23, 23, 0.45);
   --scrim: rgba(0, 0, 0, 0.6);
-  --border: #414957;
-  --border-subtle: #2c333e;
-  --text: #edf0f5;
-  --text-secondary: #bac3d1;
-  --text-muted: #939faf;
-  --accent: #f4f4f4;
-  --accent-hover: #ffffff;
-  --accent-soft: rgba(133, 171, 255, 0.1);
-  --accent-border: rgba(133, 171, 255, 0.45);
+  --border: #3b505c;
+  --border-subtle: #2a3944;
+  --text: #e7eff2;
+  --text-secondary: #b1c2cb;
+  --text-muted: #8da2af;
+  --accent: #88d6c4;
+  --accent-hover: #a5e5d7;
+  --accent-soft: rgba(136, 214, 196, 0.1);
+  --accent-border: rgba(136, 214, 196, 0.45);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.18);
   --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.22);
   --danger: #f87171;

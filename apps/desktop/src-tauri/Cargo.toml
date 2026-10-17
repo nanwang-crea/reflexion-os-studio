@@ -1,5 +1,6 @@
 [package]
 name = "reflexion-desktop"
+default-run = "reflexion-desktop"
 version = "0.1.0"
 description = "ReflexionOS Studio desktop host"
 edition = "2021"

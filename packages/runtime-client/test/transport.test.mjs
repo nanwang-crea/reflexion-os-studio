@@ -235,3 +235,30 @@ test('disposing during attach removes the late subscription', async () => {
   await attached
   assert.equal(removed, true)
 })
+
+test('a stale subscription cannot deliver responses after reattachment', async () => {
+  const handlers = []
+  const transport = new RuntimeTransport({
+    invoke: async () => 1,
+    listen: async (_event, handler) => {
+      handlers.push(handler)
+      return () => {}
+    },
+  })
+  await transport.attach()
+  transport.dispose()
+  await transport.attach()
+  const response = transport.request('project.list')
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  handlers[0]({
+    payload: {
+      name: 'runtime',
+      message: { id: 1, error: { code: -32603, message: 'stale' } },
+    },
+  })
+  handlers[1]({
+    payload: { name: 'runtime', message: { id: 1, result: { projects: [] } } },
+  })
+  assert.deepEqual(await response, { projects: [] })
+  transport.dispose()
+})

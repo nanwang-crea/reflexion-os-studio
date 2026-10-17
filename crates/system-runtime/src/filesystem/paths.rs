@@ -33,7 +33,7 @@ pub fn resolve_in_workspace(root: &Path, relative: &str) -> Result<PathBuf, Stri
 /// 尚不存在的目标向上找最近存在的祖先做 canonicalize，再把完整剩余路径拼回，
 /// 不拍平中间组件（`a/b/c.txt` 中 `a` 不存在时必须保持 `a/b/c.txt` 形状）。
 fn resolve_with_symlink_boundary(root: &Path, target: &Path) -> Result<PathBuf, String> {
-    if target.exists() {
+    if entry_exists(target)? {
         let canonical = target
             .canonicalize()
             .map_err(|error| format!("path resolve failed: {error}"))?;
@@ -41,7 +41,7 @@ fn resolve_with_symlink_boundary(root: &Path, target: &Path) -> Result<PathBuf, 
     }
     let mut ancestor = target.parent();
     while let Some(dir) = ancestor {
-        if dir.exists() {
+        if entry_exists(dir)? {
             let canonical = dir
                 .canonicalize()
                 .map_err(|error| format!("path resolve failed: {error}"))?;
@@ -57,6 +57,14 @@ fn resolve_with_symlink_boundary(root: &Path, target: &Path) -> Result<PathBuf, 
         ancestor = dir.parent();
     }
     Err("workspace root not found".to_string())
+}
+
+fn entry_exists(path: &Path) -> Result<bool, String> {
+    match path.symlink_metadata() {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(format!("path resolve failed: {error}")),
+    }
 }
 
 fn ensure_inside(root: &Path, canonical: PathBuf) -> Result<PathBuf, String> {
@@ -164,5 +172,4 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
         fs::remove_dir_all(outside).unwrap();
     }
-
 }

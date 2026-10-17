@@ -1,9 +1,11 @@
 # ReflexionOS Studio 分阶段路线图
 
-## 当前状态（2026-10-13）
+## 当前状态（2026-10-17）
 
 Phase 1A 全部完成；Phase 2 的技能（Skills）、记忆（Memory V2，文件即记忆）与 MCP 子集已完成，其余待办如下：
 工具（`file.*`/`shell.execute`）、审批与权限 Profile、技能斜杠激活、文件即记忆注入与 remember、MCP 工具桥（stdio,默认 ask 审批）均已接入对话链路与 UI。
+
+2026-10-17 的 UI 与可靠性审查记录见 [UI 调整与代码审查](REVIEW-AND-UI-2026-10-17.md)。下一步优先完成 CEF / Terminal 跨平台与真实模型验收，再推进后续功能；待验收项不计为完成。
 
 ## Phase 0：Architecture Foundation（已完成）
 
