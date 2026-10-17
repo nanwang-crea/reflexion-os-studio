@@ -19,14 +19,6 @@ struct Downloads {
 }
 thread_local! { static DOWNLOADS: RefCell<Downloads> = RefCell::new(Downloads::default()); }
 
-#[cfg(any(target_os = "windows", target_os = "linux"))]
-pub(crate) fn prepare(app: &AppHandle, source: &str, name: &str) -> Result<(u64, PathBuf), String> {
-    if full() {
-        return Err("下载记录或进行中下载已达上限".into());
-    }
-    register(app, destination::prepare(app, source, name)?)
-}
-
 /// CEF callbacks run on the UI thread. The blocking dialog must run off that thread,
 /// while the thread-local transfer registry and CEF continuation stay on the UI thread.
 #[cfg(feature = "cef-browser")]

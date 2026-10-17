@@ -1,5 +1,7 @@
 # 浏览器设置与能力规划
 
+> 2026-10-17 更新：本文中的 WKWebView / WebView2 / WebKitGTK 网页实现及 `browser-spike` 构建选项属于历史记录，现已移除。当前实现与构建方式见 [CEF 接入](CEF-BROWSER-INTEGRATION.md)；不能按下文旧命令启用旧引擎。
+
 状态（2026-10-13）：B1–B3 macOS 默认启用，本机证据见 [验收报告](BROWSER-ACCEPTANCE-2026-10-13.md)。B4 静态读取已移除，改为内置受管 Playwright MCP 首批导航/读取/关闭；B5 仍为规划，Windows/Linux 待真机。
 本规划承接 [Browser Surface](BROWSER-SURFACE.md)；用户要求后续提供网页读取与操作。
 

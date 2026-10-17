@@ -3,6 +3,56 @@ import { test } from 'node:test'
 import { randomUUID } from 'node:crypto'
 import { HostBrowserTransport } from '../dist/browser/agent/embedded/host.js'
 import { scopedContext } from '../dist/browser/agent/embedded/connection.js'
+import { BrowserAgentService } from '../dist/browser/agent/service.js'
+import { PlaywrightBackend } from '../dist/browser/agent/worker/backend.js'
+
+test('unavailable embedded engine never resolves a standalone browser launch', async (t) => {
+  let attempts = 0
+  t.mock.method(PlaywrightBackend.prototype, 'navigate', async () => {
+    attempts++
+    throw new Error('browser_unavailable')
+  })
+  const runtime = {
+    useEmbedded() {},
+    async shutdown() {},
+    resolveLaunch() {
+      assert.fail('CEF failure must not launch standalone Chromium')
+    },
+  }
+  const host = new HostBrowserTransport(() => {
+    assert.fail('navigation failure must not request a replacement lease')
+  })
+  const service = new BrowserAgentService(
+    {
+      browserSettings: {
+        get: () => ({
+          agentBrowserEnabled: true,
+          agentBrowserDisplay: 'headed',
+        }),
+      },
+    },
+    undefined,
+    runtime,
+    host,
+  )
+  t.after(async () => {
+    await service.shutdown()
+    host.dispose()
+  })
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await assert.rejects(
+      service.call(
+        'session',
+        `run-${attempt}`,
+        'navigate',
+        { url: 'https://example.com/' },
+        new AbortController().signal,
+      ),
+      /browser_unavailable/,
+    )
+  }
+  assert.equal(attempts, 2)
+})
 
 test('private host responses stay isolated and do not expose untrusted error text', async () => {
   const sent = []

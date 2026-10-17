@@ -48,7 +48,7 @@ pub fn report_with(mock_keychain: bool) -> Capabilities {
         features: serde_json::json!({
             "find": embedded_available, "zoom": embedded_available, "print": embedded_available,
             "persistentSession": super::platform::persistent_available(), "dataClearing": embedded_available,
-            "downloads": embedded_available, "passwordManagement": embedded_available && cfg!(all(feature="browser-spike",target_os="macos")), "contactFill": embedded_available
+            "downloads": embedded_available, "passwordManagement": embedded_available && cfg!(all(feature="cef-browser",target_os="macos")), "contactFill": embedded_available
         }),
     }
 }
@@ -62,9 +62,9 @@ mod tests {
             report.embedded_available,
             super::super::platform::available()
         );
-        #[cfg(not(any(
-            target_os = "macos",
-            all(target_os = "windows", feature = "cef-browser")
+        #[cfg(not(all(
+            feature = "cef-browser",
+            any(target_os = "macos", target_os = "windows")
         )))]
         {
             assert!(!report.embedded_available);

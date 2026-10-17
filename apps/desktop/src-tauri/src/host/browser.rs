@@ -1,6 +1,20 @@
 //! Private Runtime→Host requests are consumed here, never forwarded to webviews.
 use crate::supervisor::SupervisorState;
 use tauri::Manager;
+
+pub fn configure_runtime_engine(command: &mut std::process::Command) {
+    // Select by build capability, not readiness: failed CEF initialization must
+    // report an unavailable host instead of launching standalone Chromium.
+    if cfg!(all(
+        feature = "cef-browser",
+        any(target_os = "macos", target_os = "windows")
+    )) {
+        command.env("REFLEXION_BROWSER_ENGINE", "cef");
+    } else {
+        command.env_remove("REFLEXION_BROWSER_ENGINE");
+    }
+}
+
 pub fn control_changed(app: &tauri::AppHandle, lease: &str, paused: bool) {
     let state = app.state::<Arc<SupervisorState>>();
     let message = json!({"jsonrpc":"2.0","method":"host.browser.control","params":{"lease":lease,"paused":paused}});
@@ -52,4 +66,27 @@ pub fn dispatch(app: &tauri::AppHandle, state: &Arc<SupervisorState>, message: &
         }
     });
     true
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn runtime_engine_is_pinned_by_build_even_before_cef_is_ready() {
+        let mut command = std::process::Command::new("unused");
+        command.env("REFLEXION_BROWSER_ENGINE", "standalone");
+        super::configure_runtime_engine(&mut command);
+        let engine = command
+            .get_envs()
+            .find(|(key, _)| *key == "REFLEXION_BROWSER_ENGINE")
+            .map(|(_, value)| value);
+        let expected = if cfg!(all(
+            feature = "cef-browser",
+            any(target_os = "macos", target_os = "windows")
+        )) {
+            Some(std::ffi::OsStr::new("cef"))
+        } else {
+            None
+        };
+        assert_eq!(engine, Some(expected));
+    }
 }

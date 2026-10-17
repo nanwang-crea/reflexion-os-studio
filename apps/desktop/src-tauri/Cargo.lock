@@ -3103,8 +3103,6 @@ dependencies = [
  "cbc",
  "cef",
  "dispatch2",
- "gtk",
- "javascriptcore-rs",
  "libc",
  "objc2",
  "objc2-app-kit",
@@ -3123,10 +3121,6 @@ dependencies = [
  "tauri-plugin-clipboard-manager",
  "tauri-plugin-dialog",
  "url",
- "webkit2gtk",
- "webview2-com",
- "windows 0.61.3",
- "wry",
  "zeroize",
 ]
 

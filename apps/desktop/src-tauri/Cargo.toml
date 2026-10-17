@@ -29,17 +29,16 @@ libc = "0.2"
 
 [features]
 # CEF is selected on macOS/Windows; Linux keeps the explicit system-browser fallback.
-default = ["browser-spike", "cef-browser"]
+default = ["cef-browser"]
 cef-acceptance = ["cef-browser"]
-cef-browser = ["browser-spike", "dep:cef"]
-browser-spike = ["dep:objc2", "dep:objc2-foundation", "dep:objc2-app-kit", "dep:objc2-web-kit", "dep:block2", "dep:security-framework", "dep:rusqlite", "dep:aes", "dep:cbc", "dep:pbkdf2", "dep:sha1", "dep:sha2", "dep:zeroize"]
+cef-browser = ["dep:cef", "dep:objc2", "dep:objc2-foundation", "dep:objc2-app-kit", "dep:objc2-web-kit", "dep:block2", "dep:security-framework", "dep:rusqlite", "dep:aes", "dep:cbc", "dep:pbkdf2", "dep:sha1", "dep:sha2", "dep:zeroize"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
 dispatch2 = "0.3.1"
 objc2 = { version = "0.6.4", optional = true }
 objc2-foundation = { version = "0.3.2", optional = true, default-features = false, features = ["std", "NSObject", "NSString", "NSURL", "NSURLRequest", "NSArray", "NSError", "NSGeometry", "NSProcessInfo", "NSURLResponse", "NSHTTPCookie", "NSDictionary", "NSDate", "NSValue", "NSKeyValueObserving", "NSUUID", "NSBundle", "NSSet", "NSProgress", "NSData"] }
 objc2-app-kit = { version = "0.3.2", optional = true, default-features = false, features = ["std", "NSWindow", "NSView", "NSDragging", "NSPasteboard", "NSPrintOperation", "NSPrintInfo", "NSSavePanel", "NSAlert", "NSTextField", "NSSecureTextField", "NSControl", "NSButton", "NSStackView"] }
-objc2-web-kit = { version = "0.3.2", optional = true, default-features = false, features = ["std", "objc2-app-kit", "block2", "WKWebView", "WKWebViewConfiguration", "WKWebsiteDataStore", "WKPreferences", "WKNavigation", "WKNavigationAction", "WKNavigationDelegate", "WKNavigationResponse", "WKUIDelegate", "WKOpenPanelParameters", "WKFrameInfo", "WKSecurityOrigin", "WKWindowFeatures", "WKHTTPCookieStore", "WKFindConfiguration", "WKFindResult", "WKDownload", "WKDownloadDelegate", "WKWebsiteDataRecord"] }
+objc2-web-kit = { version = "0.3.2", optional = true, default-features = false, features = ["std", "objc2-app-kit", "WKWebView"] }
 block2 = { version = "0.6.2", optional = true }
 
 security-framework = { version = "3", optional = true }
@@ -50,16 +49,6 @@ pbkdf2 = { version = "0.12", optional = true }
 sha1 = { version = "0.10", optional = true }
 sha2 = { version = "0.10", optional = true }
 zeroize = { version = "1", optional = true, features = ["derive"] }
-
-[target.'cfg(target_os = "windows")'.dependencies]
-wry = "0.55.1"
-webview2-com = "0.38.2"
-windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Com"] }
-
-[target.'cfg(target_os = "linux")'.dependencies]
-gtk = "0.18"
-webkit2gtk = { version = "2.0.2", features = ["v2_40"] }
-javascriptcore-rs = "1.1.2"
 
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 cef = { version = "=154.5.0", optional = true, default-features = false, features = ["sandbox", "build-util"] }

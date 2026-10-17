@@ -2,14 +2,14 @@
 // Deterministic local website for manual Browser Surface acceptance; not product IPC.
 import { createServer } from 'node:http'
 
-const port = Number(process.env.BROWSER_SPIKE_PORT ?? 47630)
+const port = Number(process.env.BROWSER_TEST_PORT ?? 47630)
 if (!Number.isInteger(port) || port < 1024 || port > 65535)
-  throw new Error('Invalid BROWSER_SPIKE_PORT')
+  throw new Error('Invalid BROWSER_TEST_PORT')
 
 let cacheMarker = 0
 
 const page = (second = false) => `<!doctype html>
-<html lang="zh-CN"><meta charset="utf-8"><title>Browser Spike fixture</title>
+<html lang="zh-CN"><meta charset="utf-8"><title>Browser acceptance fixture</title>
 <style>body{font:16px system-ui;padding:24px;color:#17202a;background:#f7f9fb}button,a,input{margin:8px;padding:8px}output{display:block;margin:16px}</style>
 <h1>${second ? '第二页' : 'Browser Surface 验收页'}</h1>
 <p id="scripts">JavaScript 未运行</p><p id="bridge"></p><p id="storage"></p>
@@ -30,7 +30,7 @@ document.querySelector('#remember').onclick = () => { document.cookie='browser_s
 document.querySelector('#persistent').textContent = '持久测试标记: ' + (document.cookie.includes('browser_persistent_marker=1') && localStorage.getItem('browser_persistent_marker') === '1' ? '存在' : '不存在');
 document.querySelector('#persist').onclick = () => { document.cookie='browser_persistent_marker=1; Max-Age=86400; SameSite=Strict; path=/'; localStorage.setItem('browser_persistent_marker', '1'); location.reload(); };
 document.querySelector('#cache').onclick = async () => { document.querySelector('#cached').textContent = '缓存测试标记: ' + await (await fetch('/cache-marker', {cache:'force-cache'})).text(); };
-document.querySelector('#file').onclick = () => { location.href='file:///tmp/browser-spike-never-read'; };
+document.querySelector('#file').onclick = () => { location.href='file:///tmp/browser-test-never-read'; };
 document.querySelector('#media').onclick = async () => { try { const stream = await navigator.mediaDevices.getUserMedia({audio:true,video:true}); stream.getTracks().forEach(track=>track.stop()); result.textContent='媒体权限意外允许（失败）'; } catch (error) { result.textContent='媒体权限拒绝: ' + error.name; } };
 </script></html>`
 
@@ -76,9 +76,9 @@ const server = createServer((request, response) => {
   if (request.url === '/download' || request.url === '/attachment') {
     response.writeHead(200, {
       'Content-Type': 'text/plain',
-      'Content-Disposition': 'attachment; filename="browser-spike.txt"',
+      'Content-Disposition': 'attachment; filename="browser-test.txt"',
     })
-    response.end('Synthetic Browser Spike fixture. No user data.')
+    response.end('Synthetic Browser acceptance fixture. No user data.')
     return
   }
   if (request.url === '/redirect') {

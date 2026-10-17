@@ -1,5 +1,7 @@
 # Browser Surface Spike 报告
 
+> 2026-10-17 更新：本文中的 WKWebView / WebView2 / WebKitGTK 网页实现及 `browser-spike` 构建选项属于历史记录，现已移除。当前实现与构建方式见 [CEF 接入](CEF-BROWSER-INTEGRATION.md)；不能按下文旧命令启用旧引擎。
+
 日期：2026-10-11（历史 Spike）。当前状态以 [2026-10-13 验收报告](BROWSER-ACCEPTANCE-2026-10-13.md) 为准：macOS 默认开发/发布启用，B4 静态读取已移除，改为内置受管 Playwright MCP 首批导航/读取/关闭；下文是早期实验记录，不能作为当前发布开关或功能范围。
 
 ## 结论与发布状态
@@ -43,7 +45,7 @@
 
 ## macOS GUI 证据
 
-使用临时数据与日志目录，独立命名的临时 debug 应用，避免读取用户现有 Provider/会话。UI 通过 Computer Use 操作；合成页面由 `scripts/browser-spike-server.mjs` 提供，不读取文件或外部数据。
+使用临时数据与日志目录，独立命名的临时 debug 应用，避免读取用户现有 Provider/会话。UI 通过 Computer Use 操作；合成页面由 `scripts/browser-test-server.mjs` 提供，不读取文件或外部数据。
 
 已观测：
 
@@ -106,10 +108,10 @@ pnpm --filter @reflexion-os-studio/desktop dev --features browser-spike --no-wat
 测试网页另开终端运行：
 
 ```bash
-node scripts/browser-spike-server.mjs
+node scripts/browser-test-server.mjs
 ```
 
-点击顶栏“网页”，输入 `http://127.0.0.1:47630`。测试服务仅监听 loopback，端口可用 `BROWSER_SPIKE_PORT` 调整，它是验收网站，不是产品 IPC 服务。验收时为应用设置临时 `REFLEXION_DATA_DIR` 与 `REFLEXION_LOG_DIR`；不要在实验中复用真实登录资料。
+点击顶栏“网页”，输入 `http://127.0.0.1:47630`。测试服务仅监听 loopback，端口可用 `BROWSER_TEST_PORT` 调整，它是验收网站，不是产品 IPC 服务。验收时为应用设置临时 `REFLEXION_DATA_DIR` 与 `REFLEXION_LOG_DIR`；不要在实验中复用真实登录资料。
 
 ## 后续落地顺序
 

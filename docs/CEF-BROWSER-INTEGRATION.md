@@ -31,7 +31,13 @@ pnpm build:desktop
 
 开发构建在 `.cache/cef-native/ReflexionOS Studio Dev.app` 内运行，以满足 Chromium 沙箱对 macOS bundle/helper 的要求；原始 debug 二进制会复制自身并转入该 bundle。Windows 开发使用官方 bootstrap 与匹配的 sandbox DLL。安装包包含 CEF、helper/bootstrap、运行资源、Node、Runtime、Playwright MCP 及许可，不要求用户安装 Chrome、Node 或单独下载 Agent Chromium。
 
-旧 WKWebView 适配器已移除（2026-10-17）：macOS 只保留 CEF 一条嵌入实现，共享的原生能力（钥匙串密码、Chrome/Edge 迁移）独立于引擎保留。`browser-spike` feature 现在只承载这些共享原生依赖；macOS 上 `browser-spike` 不带 `cef-browser` 的组合编译为无内嵌引擎的降级路径，`--no-default-features` 验证同一降级。默认产品入口不在多个引擎间静默切换。
+旧网页引擎已清理（2026-10-17）：移除独立 WKWebView、WebView2、WebKitGTK 网页适配器以及旧 guest registry、弹窗、下载和初始定位脚本，不再保留 Windows 的非 CEF 引擎分支。默认构建仅启用 `cef-browser`，旧 `browser-spike` feature 已删除；原生密码管理、Chrome/Edge 迁移和联系信息填充继续由 CEF 使用。macOS/Windows 的网页嵌入只走 CEF；Linux 及 `--no-default-features` 构建明确不可用，保留系统浏览器入口。
+
+Tauri/Wry 仍负责 React 应用界面，因此其 WebKit/WebView2 传递依赖不属于旧网页引擎残留。`objc2-web-kit` 仅保留定位宿主 WKWebView 所需的类型，用于 CEF 坐标换算，不创建第二个网页视图。Playwright MCP 是 Agent 自动化层，CEF 构建连接受管 CEF 页面；无 CEF 平台或无宿主 Runtime 的受控 Chromium 启动支持不属于用户 Browser Surface。CEF 构建固定设置 Runtime 的宿主引擎选择，不受初始化是否成功影响；启动失败明确报错，不静默启动独立 Chromium。`scripts/browser-test-server.mjs` 是共享合成站点，`scripts/cef-spike/` 是 CEF 接入验证工具，均不注册产品引擎。
+
+清理与 review 验证：默认 CEF 宿主 45 项测试、`--no-default-features` 宿主 31 项测试、System Runtime 236 项测试、前端 84 项测试通过；格式、lint、双 TS typecheck、packages 构建、Rust check/fmt 与最终 `.app` / DMG 构建通过。前端测试首次受回环监听限制，正常宿主权限重跑后另有一项既有混合换行时间预算在编译高负载下失败，编译结束后全套重跑通过。首次打包与 packages 构建争用前端产物导致资源缺失，串行重跑解决；DMG 创建需要正常宿主权限。最终包启动日志确认 CEF 和两个 sidecar ready，但本轮最终原生关窗复测受 Mac 锁屏阻挡，未计为通过；先前关闭修复的 GUI 证据仍见生命周期回归记录。Windows/Linux 本轮未做真机 GUI 验证。
+
+Review 补修：宿主不再根据 `cef::ready()` 决定 Runtime 是否使用 CEF。引擎选择在应用构建边界固定，并在设置其他 sidecar 环境后写入，避免初始化失败或环境覆盖让 Runtime 启动独立 Chromium；非 CEF 构建清除继承的引擎选择。宿主回归覆盖初始化前的选择与降级构建，Runtime 回归覆盖连续两次嵌入导航失败均不解析独立浏览器启动选项。Runtime 嵌入相关 4 项测试通过。
 
 ## 产品原生接管验收
 
@@ -55,7 +61,7 @@ Windows 原生输入、IME、高 DPI、沙箱 bootstrap、下载与退出需要 
 - `pnpm format:check`、`pnpm lint`、根级与前端 typecheck、`pnpm build:packages` 均通过。
 - Runtime：730 通过，17 按原有平台/环境条件跳过；前端：88 通过；runtime-client：25 通过。
 - Rust System Runtime：236 通过；Tauri Host：42 通过；两个 Cargo workspace 的格式检查通过。
-- 默认 CEF、无默认特性的降级构建、`browser-spike` 不带 `cef-browser` 的降级构建均在 macOS 编译检查通过；Windows 编译与 GUI 未在本机执行。
+- 默认 CEF、无默认特性的降级构建均在 macOS 编译检查通过（旧 `browser-spike` 构建选项已删除）；Windows 编译与 GUI 未在本机执行。
 - `pnpm build:desktop` 生成自包含 `.app` 和 `.dmg`，约 492 MB / 199 MB；嵌入前端资源探针通过。
 - `node scripts/smoke-workspace.mjs --packaged` 通过，涵盖包内 Node / Runtime / System Runtime、索引、文件读取、Git diff 与干净退出。
 - 将最终 `.app` 复制到仓库外的 `/private/tmp`，只修改 QA 副本的 bundle 标识以避开已打开的用户应用；产品代码、CEF、helper 和包内资源保持一致。UI 启动、网页导航、脚本执行、网页无 Host IPC、下载保存及完成记录通过。合成下载文件内容核验一致，46/46 字节，跨来源重定向显示明确拒绝提示。

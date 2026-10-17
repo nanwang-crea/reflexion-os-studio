@@ -264,16 +264,10 @@ fn spawn_sidecar(
         // Runtime 是后台 sidecar，不应在 Windows 上弹出独立控制台窗口。
         command.creation_flags(0x08000000);
     }
-    #[cfg(all(
-        feature = "cef-browser",
-        any(target_os = "macos", target_os = "windows")
-    ))]
-    if crate::browser::cef::ready() {
-        command.env("REFLEXION_BROWSER_ENGINE", "cef");
-    }
     for (key, value) in envs {
         command.env(key, value);
     }
+    crate::host::browser::configure_runtime_engine(&mut command);
     #[cfg(unix)]
     {
         // 独立进程组：宿主兜底收割时 kill(-pgid) 连 TS 的子进程（Rust）一起带走。

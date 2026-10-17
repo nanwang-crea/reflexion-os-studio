@@ -48,29 +48,8 @@ pub(crate) fn script(
     Ok(Some(PreparedFill {
         source: format!(
             "({})({values}, {url}, {origin})",
-            include_str!("platform/contact-fill.js")
+            include_str!("contact/fill.js")
         ),
         revision: snapshot.revision,
     }))
-}
-
-#[cfg(any(target_os = "windows", target_os = "linux"))]
-pub(crate) fn completed(app: &AppHandle, id: u32, revision: u64, success: bool) {
-    let snapshot = state::snapshot(app);
-    if snapshot.revision != revision
-        || snapshot.active_tab_id != Some(id)
-        || snapshot.status != "ready"
-    {
-        return;
-    }
-    state::update_tab(app, id, |tab| {
-        tab.notice = Some(
-            if success {
-                "联系信息已填入，请检查后自行提交"
-            } else {
-                "未找到可填充字段，或页面已切换"
-            }
-            .into(),
-        );
-    });
 }

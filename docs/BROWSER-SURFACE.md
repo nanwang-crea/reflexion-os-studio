@@ -1,5 +1,7 @@
 # Browser Surface
 
+> 2026-10-17 更新：本文中的 WKWebView / WebView2 / WebKitGTK 网页实现及 `browser-spike` 构建选项属于历史记录，现已移除。当前实现与构建方式见 [CEF 接入](CEF-BROWSER-INTEGRATION.md)；不能按下文旧命令启用旧引擎。
+
 当前状态（2026-10-13）：macOS 默认开发/发布启用，B4 已接入内置受管 Playwright MCP 首批工具，静态读取已移除，见 [B4 设计](BROWSER-AGENT.md) 与 [本机验收记录](BROWSER-ACCEPTANCE-2026-10-13.md)。
 下文早期 Spike 的 debug-only/发布关闭描述由此更新替代；
 Windows/Linux 用户原生 Surface 保持待验收；Agent 的点击、输入与登录能力仍未开放。

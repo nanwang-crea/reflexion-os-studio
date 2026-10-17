@@ -1,5 +1,7 @@
 # Browser macOS 验收记录（2026-10-13）
 
+> 2026-10-17 更新：本文中的 WKWebView / WebView2 / WebKitGTK 网页实现及 `browser-spike` 构建选项属于历史记录，现已移除。当前实现与构建方式见 [CEF 接入](CEF-BROWSER-INTEGRATION.md)；不能按下文旧命令启用旧引擎。
+
 > 路线调整：本文 B4 静态读取相关测试为历史记录，该实现已按用户决定移除，不能作为当前功能或 Playwright 验收证据。用户 Surface 验收记录继续保留。
 
 环境：macOS 26.7.1 / arm64，独立临时数据目录和独立验收 app，dev Renderer。
@@ -96,7 +98,7 @@ Windows/Linux 原生浏览器及 B4 工具保持不可用、系统浏览器回�
 
 ## 可复现的合成环境
 
-运行 `node scripts/browser-spike-server.mjs`（127.0.0.1:47630），在独立测试
+运行 `node scripts/browser-test-server.mjs`（127.0.0.1:47630），在独立测试
 app/数据目录打开网页；持久标记、慢下载、同/跨来源重定向均来自该 fixture。
 慢下载约五分钟，便于在原生保存流程结束后取消，目标应选临时目录新文件名。
 

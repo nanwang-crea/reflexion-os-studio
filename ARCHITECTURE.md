@@ -180,6 +180,10 @@ Tauri 2 保留应用 Renderer 和宿主。macOS / Windows 默认构建将外部�
 CEF 原生子视图，页面不注册 Tauri IPC、应用协议或宿主脚本处理器。
 Linux 暂不启用嵌入，明确回退系统浏览器；Windows 实现仍须真机验收。
 开发依赖 CMake / Ninja；CEF 引擎、沙箱 helper / bootstrap 和许可随安装包分发。
+产品只保留 CEF 一条网页嵌入路径：旧 WKWebView / WebView2 / WebKitGTK
+网页适配器及其 registry、下载和弹窗实现已移除，旧 `browser-spike` feature
+不再存在。无 CEF 构建明确返回 unavailable，不创建另一个网页引擎。
+Tauri/Wry 的应用 Renderer 和原生密码界面继续保留；它们不承担外部网页浏览。
 
 工作区、浏览器和协作共用右侧 Surface，放大/还原属于公共容器。
 原生网页随测量到的视口、活动标签和弹层显隐；后台 WebView 暂停动画帧时也必须
@@ -200,8 +204,9 @@ MCP 只暴露租约页，禁止跨会话页面及上下文凭据访问。用户�
 关闭、Runtime 重启与应用退出会回收租约和子进程。
 
 实现、构建方法和验收边界见 [CEF 接入](docs/CEF-BROWSER-INTEGRATION.md)。
-旧 [B4 设计](docs/BROWSER-AGENT.md) 的独立 Chromium worker 仅保留为非 CEF
-平台的受控后端，不代表嵌入已在这些平台验收。
+旧 [B4 设计](docs/BROWSER-AGENT.md) 的独立 Chromium worker 保留为无 CEF
+平台或无宿主 Runtime 的受控自动化后端，不承担用户 Browser Surface。
+CEF 构建的 Runtime 固定连接宿主桥，即使 CEF 初始化失败也明确报错，不切换独立 Chromium。
 
 协作 Surface 的成果优先试用边界见 [围绕成果的协作体验试用](docs/COLLABORATION-RESULTS-PILOT-2026-10-16.md)。
 
