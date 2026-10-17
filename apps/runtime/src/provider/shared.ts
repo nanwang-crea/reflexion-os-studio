@@ -47,9 +47,9 @@ export function retryWaitMs(
 
 export { DEFAULT_TIMEOUT_MS, DEFAULT_MAX_RETRIES }
 
-/** 429 限流与 5xx 短暂故障可重试；认证/配置类错误重试无意义。 */
+/** 408/429 限流与 5xx 短暂故障可重试；认证/配置类错误重试无意义。 */
 export function shouldRetryStatus(code: number, detail = ''): boolean {
-  if (code === 429 || code >= 500) return true
+  if (code === 408 || code === 429 || code >= 500) return true
   if (code !== 400) return false
   try {
     const parsed = JSON.parse(detail) as {

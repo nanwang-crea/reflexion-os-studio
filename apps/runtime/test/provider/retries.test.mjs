@@ -93,6 +93,39 @@ test('honors Retry-After header on 429 instead of plain backoff', async () => {
   assert.equal(result.content, 'Hello')
 })
 
+test('retries transient HTTP 408 request timeouts', async () => {
+  let calls = 0
+  const server = await startServer((request, response) => {
+    calls += 1
+    if (calls === 1) {
+      response.writeHead(408, { 'content-type': 'application/json' })
+      response.end('{"error":"request timeout"}')
+      return
+    }
+    response.writeHead(200, { 'content-type': 'text/event-stream' })
+    response.end(sseBody())
+  })
+  const port = server.address().port
+  const retries = []
+  const result = await streamChatCompletion(
+    {
+      baseUrl: `http://127.0.0.1:${port}/v1`,
+      apiKey: 'sk-test',
+      model: 'mock-model',
+      messages: [{ role: 'user', content: 'hi' }],
+      signal: new AbortController().signal,
+      onRetry: (retry) => retries.push(retry),
+    },
+    () => {},
+  )
+  server.close()
+  assert.equal(calls, 2)
+  assert.deepEqual(retries, [
+    { attempt: 1, maxRetries: 5, reason: 'HTTP 408', waitMs: 1000 },
+  ])
+  assert.equal(result.content, 'Hello')
+})
+
 test('retries a stream failure from a fresh attempt', async () => {
   let calls = 0
   const server = await startServer((request, response) => {
