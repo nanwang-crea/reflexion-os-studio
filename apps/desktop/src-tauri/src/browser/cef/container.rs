@@ -39,21 +39,28 @@ pub fn dispose() {
     });
 }
 
-/// Detach Wry's renderer subtree from the embedding root before Tauri destroys
-/// its window: WryWebViewParent must reach dealloc without a superview, or
-/// AppKit raises its over-release assertion during teardown.
-pub fn detach_wry() {
+/// Restore the content view installed by Wry before its normal window teardown.
+/// Merely detaching it leaves AppKit's deferred releases without the window's
+/// owning reference while Tauri still owns the corresponding WebView.
+pub fn restore_wry(app: &tauri::AppHandle) {
     ROOT.with(|root| {
         let binding = root.borrow();
         let Some(root) = binding.as_ref() else {
             return;
         };
-        let subviews = root.subviews();
-        for index in 0..subviews.count() {
-            let view = subviews.objectAtIndex(index);
-            trace("before-detach", &view);
-            view.removeFromSuperview();
-        }
+        let Some(window) = app.get_webview_window("main") else {
+            return;
+        };
+        let Ok(native) = window.ns_window() else {
+            return;
+        };
+        let Some(renderer) = root.subviews().firstObject() else {
+            return;
+        };
+        trace("before-restore", &renderer);
+        renderer.removeFromSuperview();
+        unsafe { (&*(native as *const NSWindow)).setContentView(Some(&renderer)) };
+        trace("after-restore", &renderer);
     });
 }
 

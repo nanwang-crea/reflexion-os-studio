@@ -68,7 +68,7 @@ Windows 原生输入、IME、高 DPI、沙箱 bootstrap、下载与退出需要 
 
 用户报告百度搜索结果打开时整个应用退出。17:17、17:28、17:31 的 macOS 崩溃报告均指向主线程 CEF 消息泵中的 `NSView dealloc` 断言。代码检查发现原生视图关闭、容器释放和父窗口销毁没有统一收敛，且 Tauri `run_on_main_thread` 在主线程会立即执行，不能用于隔离 CEF 回调中的同步创建。
 
-现在由 CEF lifecycle 持有存活 Browser ID 集合，关闭主窗口先停止接收新页面并请求关闭所有子页面；`OnBeforeClose` 立即释放 Browser 引用，退出回调后再释放原生容器。收到全部子页面关闭确认后先脱离外层 Wry 容器，再允许 Tauri 关闭主窗口并释放 Wry 渲染资源；窗口销毁返回后停止消息泵、执行 `CefShutdown`，再进入 Runtime 协议退出。CEF 的全局 Cocoa 集成不早于 Wry 资源销毁。`DoClose` 只销毁 CEF 子视图/子 HWND，不关闭顶层窗口。macOS 原生容器由 input 模块持有，隐藏标签的容器从父视图脱离但保持持有，重新激活时挂回，避免遮挡及切换后黑屏。
+现在由 CEF lifecycle 持有存活 Browser ID 集合，关闭主窗口先停止接收新页面并请求关闭所有子页面；`OnBeforeClose` 立即释放 Browser 引用，退出回调后再释放原生容器。收到全部子页面关闭确认后先把 Wry 容器恢复为原来的 `NSWindow.contentView`，再允许 Tauri 关闭主窗口并释放 Wry 渲染资源；窗口销毁返回后停止消息泵、执行 `CefShutdown`，再进入 Runtime 协议退出。单纯脱离 Wry 容器的旧方案仍会发生 Zombie release，已由恢复窗口持有关系替代，详见回归记录的 23:22 同环境对照。CEF 的全局 Cocoa 集成不早于 Wry 资源销毁。`DoClose` 只销毁 CEF 子视图/子 HWND，不关闭顶层窗口。macOS 原生容器由 input 模块持有，隐藏标签的容器从父视图脱离但保持持有，重新激活时挂回，避免遮挡及切换后黑屏。
 
 统一 dispatcher 在 CEF 消息泵返回后执行原生变更，popup、用户命令、Agent 请求、下载 continuation、凭据确认返回和 Runtime 故障回收均经该队列。调度器合并最早截止时间，以 posted/running 防止重复投递和嵌套模态循环重入；停止后清空待执行任务并拒绝新调度，兜底消息泵有界退出，不常驻轮询。
 

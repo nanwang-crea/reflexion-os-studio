@@ -73,12 +73,10 @@ fn finish(app: tauri::AppHandle) {
         .finishable()
     {
         super::pump::defer(move || {
-            // CEF pages and their containers are gone. Detach Wry's renderer
-            // subtree first so WryWebViewParent deallocs without a superview
-            // during teardown, then let Tauri destroy its own renderer while
-            // Chromium's Cocoa integration is still alive.
+            // CEF children are gone. Return the window to Wry's original view
+            // hierarchy before letting Tauri release its renderer.
             #[cfg(target_os = "macos")]
-            super::container::detach_wry();
+            super::container::restore_wry(&app);
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.close();
             } else {

@@ -2,7 +2,7 @@
 
 ## 实现边界
 
-主窗口关闭 → 停止新页面 → 请求关闭所有 CEF 子页面 → 收齐各 Browser ID 的 `OnBeforeClose` → 回调返回后释放容器 → 脱离外层 Wry 容器 → 允许关闭主窗口 → Tauri/Wry 销毁外层渲染资源 → 停止 dispatcher → `CefShutdown` → Runtime 协议退出。
+主窗口关闭 → 停止新页面 → 请求关闭所有 CEF 子页面 → 收齐各 Browser ID 的 `OnBeforeClose` → 回调返回后释放 CEF 容器 → 将 Wry 渲染容器恢复为 NSWindow.contentView → 允许关闭主窗口 → Tauri/Wry 销毁外层渲染资源 → 停止 dispatcher → `CefShutdown` → Runtime 协议退出。
 
 Registry 在关闭确认前持有 Browser，macOS input 持有 GuardView；CEF 只负责自己的子视图。DoClose 延迟拆除子视图/子 HWND，绝不销毁顶层窗口。重复关闭幂等，普通标签关闭不触发应用退出。隐藏标签的 GuardView 脱离父视图但继续持有，激活后重新挂载，防止遮挡和 compositor 未恢复。
 
@@ -100,3 +100,15 @@ apps/desktop/src-tauri/target/debug/reflexion-desktop
 报告来自本轮 QA 副本 PID 75574，并非用户安装目录的应用。反汇编确认 CEF 模块偏移 0x8c4f074 是 Zombie 消息检测器主动写空地址的失败路径。LLDB 在该检测器写入前截获的诊断为：`Zombie <WryWebViewParent0.55.1> received -release`。保存的首次释放记录和当前释放栈分别落在 autorelease pool 排空与 Wry WebView drop。
 
 独立原生根容器的初次 release 复验仍失败；截至此记录，退出故障尚未解决，安装包不能作为修复完成版本交付。当前正在追踪重挂载、布局和关闭前的引用计数。导航与单测通过不能替代这一项 release 失败。
+
+## 23:22 关窗修复与同环境对照
+
+本节更新前面尚未解决的退出结论。实际点击浏览器面板按钮后直接点击主窗口红色关闭按钮即可复现，页面保持 `about:blank`，无需网页导航或页面焦点。LLDB 在首次 `NSView dealloc` 处确认 Wry 容器在 CEF dispatcher 的 autorelease pool 排空时已经析构；随后 Tauri 的 `WindowWrapper → WebviewWrapper → wry::WebView drop` 再次发送 `release`，CEF Zombie 检测器报告 `WryWebViewParent0.55.1 received -release`。该对象地址与重挂载、关闭前脱离的对象一致。
+
+修复将关闭前的单纯 `removeFromSuperview` 改为：CEF 子页和容器关闭后，把 Wry 原先的容器从嵌入根容器移出，恢复为 `NSWindow.contentView`，再允许 Tauri 正常关闭窗口。这样恢复窗口对 Wry 容器的拥有关系，而不是让它在 Tauri 释放 WebView 前失去窗口持有。没有永久 retain、吞异常、增加关闭延时或跳过 CEF 关闭确认。第一次不平衡引用的全部来源仍未逐个追踪，不能把 pool 排空位置当作最初错误发生点。
+
+使用独立 QA 应用副本、同一个测试数据目录和同一种原生点击方式对照：旧包二进制打开空白浏览器后关窗退出码 139；修复版空白浏览器关窗退出码 0；修复版加载本机合成网页、点击输入框并输入后关窗退出码 0，日志确认执行了 `before-restore` / `after-restore`，没有新增崩溃报告。诊断证据位于 `/private/tmp/reflexion-close-diag.log`、`reflexion-first-release.log`、`reflexion-close-baseline.log` 和 `reflexion-close-fix-run3.log`。临时文件仅作本机证据，不作为持久依赖。
+
+最终构建的 `.app` 也通过本机合成网页加载、原生输入框输入和红色按钮关窗，退出码 0，正常完成 Runtime/System Runtime 协议关闭，最终测试进程与其 sidecar 无残留。`pnpm format:check`、lint、根级/前端 typecheck、`pnpm build:packages`、两个 Rust workspace 的格式检查、System Runtime 236 项测试、宿主 check 与 50 项测试通过。System Runtime 真机测试首次受沙箱的 `sandbox_apply` 限制，正常宿主权限下重跑通过；`pnpm build:desktop` 完成 `.app` 后首次创建 DMG 受磁盘设备访问限制，使用正常宿主权限重跑现有 DMG 脚本成功，生成约 200 MB 的安装包。
+
+本修复只改变 macOS 原生视图恢复步骤。Windows 子 HWND 的关闭流程和 Linux 系统浏览器回退保持既有实现；没有 Windows/Linux 真机验证，也不据短期关闭测试宣称长期稳定。
