@@ -1,0 +1,191 @@
+/* ---------- 分支菜单分区 / 远程分支起点 / 远端管理（Git 远程管理 R4） ---------- */
+
+.git-branch-section {
+  padding: 8px 8px 4px;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+}
+
+.git-branch-start-ref {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.git-branch-start-clear {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.git-branch-start-clear:hover {
+  color: var(--text);
+}
+
+.git-remote-section {
+  display: flex;
+  flex-direction: column;
+  margin-top: 6px;
+  padding-top: 2px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.git-remote-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.git-remote-name {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.git-remote-url {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.git-remote-remove {
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 1px 6px;
+  cursor: pointer;
+}
+
+.git-remote-remove:hover:not(:disabled) {
+  color: var(--danger);
+}
+
+.git-remote-remove-confirm {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.git-remote-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 4px 2px;
+}
+
+.git-commit-box {
+  padding: 8px 14px 0;
+}
+
+.git-commit-input {
+  width: 100%;
+  height: 56px;
+  resize: vertical;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.git-commit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.git-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.git-bar-actions .ghost {
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+.git-groups {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.git-group-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 8px 10px 2px 8px;
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.git-group-label:hover {
+  color: var(--text-secondary);
+}
+
+/* 折叠态 chevron 朝右、展开态朝下（顺时针 90°），复用树折叠约定。 */
+.git-group-label svg {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  transition: transform 0.12s ease;
+  transform: rotate(-90deg);
+}
+
+.git-group-label[aria-expanded='true'] svg {
+  transform: rotate(0deg);
+}
+
+.git-list-item {
+  display: flex;
+  align-items: center;
+  padding-right: 10px;
+}
+
+.git-list-item .git-row {
+  flex: 1;
+  min-width: 0;
+}
+
+.git-row-action {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  opacity: 0.75;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.git-row-action:hover:not(:disabled) {
+  opacity: 1;
+  background: var(--bg-hover);
+  color: var(--text);
+}
+

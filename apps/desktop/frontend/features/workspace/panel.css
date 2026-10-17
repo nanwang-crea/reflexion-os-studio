@@ -1,0 +1,141 @@
+/* Phase 1B Workspace Surface：对话右侧面板（索引状态 + 文件树 + 面板内预览） */
+
+.workspace-panel {
+  width: 340px;
+  /* 按主区实际宽度为聊天保留 360px，窄窗口至少保留一半。 */
+  max-width: min(900px, calc(100% - min(360px, 50%) - 7px));
+  flex: none;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border-left: 1px solid var(--border-subtle);
+}
+
+.workspace-panel-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 13px;
+}
+
+.binary-preview {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  overflow: auto;
+}
+
+.binary-preview-image {
+  flex-direction: column;
+  gap: 12px;
+}
+
+.binary-preview-image img,
+.binary-preview-media video {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.binary-preview-media audio {
+  width: min(520px, 100%);
+}
+
+.binary-preview-pdf {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+}
+
+.workspace-head {
+  padding: 12px 14px 4px;
+}
+
+.workspace-title {
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace-path {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace-index {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.index-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.index-chip.index-scanning {
+  color: var(--info);
+  border-color: rgba(96, 165, 250, 0.4);
+}
+
+.index-chip.index-completed {
+  color: var(--ok);
+  border-color: rgba(52, 211, 153, 0.35);
+}
+
+.index-chip.index-stale,
+.index-chip.index-failed {
+  color: var(--warning-text);
+  border-color: rgba(251, 191, 36, 0.35);
+}
+
+.index-stats {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace-error {
+  margin: 4px 14px 4px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--danger);
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.workspace-degraded {
+  margin: 4px 14px 4px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--warning-text);
+  background: var(--warning-bg);
+}
+

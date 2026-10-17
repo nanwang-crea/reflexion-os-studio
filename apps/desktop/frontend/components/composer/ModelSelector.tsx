@@ -55,43 +55,46 @@ export function ModelSelector(props: {
         </Select>
         <ChevronIcon />
       </label>
-      {props.reasoning && (
-        <label
-          className="composer-select reasoning"
-          title={
-            props.reasoning.error ??
-            (props.reasoning.supported
-              ? '当前对话的思考强度'
-              : '当前模型不支持调整思考强度')
-          }
-        >
-          <Select
-            aria-label="对话思考强度"
-            value={props.reasoning.value ?? ''}
-            disabled={props.reasoning.loading || !props.reasoning.supported}
-            onValueChange={(value) =>
-              props.reasoning?.onChange(
-                value === '' ? null : (value as ReasoningEffort),
-              )
+      {props.reasoning &&
+        (props.reasoning.supported ||
+          props.reasoning.loading ||
+          props.reasoning.error) && (
+          <label
+            className="composer-select reasoning"
+            title={
+              props.reasoning.error ??
+              (props.reasoning.supported
+                ? '当前对话的思考强度'
+                : '当前模型不支持调整思考强度')
             }
           >
-            <option value="">
-              {props.reasoning.loading
-                ? '加载中'
-                : props.reasoning.error
-                  ? '加载失败'
-                  : !props.reasoning.supported
-                    ? '自动（不支持调整）'
-                    : '服务端默认'}
-            </option>
-            {props.reasoning.options.map((option) => (
-              <option key={option.value} value={option.value}>
-                思考：{option.label}
+            <Select
+              aria-label="对话思考强度"
+              value={props.reasoning.value ?? ''}
+              disabled={props.reasoning.loading || !props.reasoning.supported}
+              onValueChange={(value) =>
+                props.reasoning?.onChange(
+                  value === '' ? null : (value as ReasoningEffort),
+                )
+              }
+            >
+              <option value="">
+                {props.reasoning.loading
+                  ? '加载中'
+                  : props.reasoning.error
+                    ? '加载失败'
+                    : !props.reasoning.supported
+                      ? '自动（不支持调整）'
+                      : '服务端默认'}
               </option>
-            ))}
-          </Select>
-        </label>
-      )}
+              {props.reasoning.options.map((option) => (
+                <option key={option.value} value={option.value}>
+                  思考：{option.label}
+                </option>
+              ))}
+            </Select>
+          </label>
+        )}
     </>
   )
 }

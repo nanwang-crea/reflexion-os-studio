@@ -302,117 +302,119 @@ export function Composer(props: ComposerProps): React.JSX.Element {
         }}
       />
       <div className="composer-bar">
-        <div className="composer-plus-menu" ref={plusMenuRef}>
-          <button
-            type="button"
-            className="composer-plus-trigger"
-            aria-label="添加功能"
-            aria-haspopup="menu"
-            aria-expanded={plusOpen}
-            disabled={props.disabled || sending}
-            title="添加附件、上下文或技能"
-            onClick={() => setPlusOpen((value) => !value)}
-          >
-            <PlusIcon size={17} />
-          </button>
-          {plusOpen && (
-            <div className="composer-plus-panel" role="menu">
-              <button
-                type="button"
-                className="composer-plus-item actionable"
-                role="menuitem"
-                disabled={props.disabled || sending}
-                onClick={() => {
-                  setPlusOpen(false)
-                  fileInputRef.current?.click()
-                }}
-              >
-                <span className="composer-plus-symbol">⌕</span>
-                <span>添加图片</span>
-              </button>
-              <div className="composer-plus-item" role="menuitem">
-                <span className="composer-plus-symbol">@</span>
-                <span>使用 @ 添加上下文</span>
+        <div className="composer-controls">
+          <div className="composer-plus-menu" ref={plusMenuRef}>
+            <button
+              type="button"
+              className="composer-plus-trigger"
+              aria-label="添加功能"
+              aria-haspopup="menu"
+              aria-expanded={plusOpen}
+              disabled={props.disabled || sending}
+              title="添加附件、上下文或技能"
+              onClick={() => setPlusOpen((value) => !value)}
+            >
+              <PlusIcon size={17} />
+            </button>
+            {plusOpen && (
+              <div className="composer-plus-panel" role="menu">
+                <button
+                  type="button"
+                  className="composer-plus-item actionable"
+                  role="menuitem"
+                  disabled={props.disabled || sending}
+                  onClick={() => {
+                    setPlusOpen(false)
+                    fileInputRef.current?.click()
+                  }}
+                >
+                  <span className="composer-plus-symbol">⌕</span>
+                  <span>添加图片</span>
+                </button>
+                <div className="composer-plus-item" role="menuitem">
+                  <span className="composer-plus-symbol">@</span>
+                  <span>使用 @ 添加上下文</span>
+                </div>
+                <div className="composer-plus-item" role="menuitem">
+                  <span className="composer-plus-symbol">/</span>
+                  <span>使用 / 选择能力</span>
+                </div>
+                <div className="composer-plus-item" role="menuitem">
+                  <span className="composer-plus-symbol">$</span>
+                  <span>使用 $ 选择技能</span>
+                </div>
+                {(props.advanced || enabledAgentTemplates.length > 0) && (
+                  <>
+                    <div className="composer-plus-divider" />
+                    <ComposerRunConfig
+                      advanced={props.advanced}
+                      agentTemplates={enabledAgentTemplates}
+                      agentTemplateId={agentTemplateId}
+                      onAgentTemplateChange={setAgentTemplateId}
+                    />
+                  </>
+                )}
               </div>
-              <div className="composer-plus-item" role="menuitem">
-                <span className="composer-plus-symbol">/</span>
-                <span>使用 / 选择能力</span>
-              </div>
-              <div className="composer-plus-item" role="menuitem">
-                <span className="composer-plus-symbol">$</span>
-                <span>使用 $ 选择技能</span>
-              </div>
-              {(props.advanced || enabledAgentTemplates.length > 0) && (
-                <>
-                  <div className="composer-plus-divider" />
-                  <ComposerRunConfig
-                    advanced={props.advanced}
-                    agentTemplates={enabledAgentTemplates}
-                    agentTemplateId={agentTemplateId}
-                    onAgentTemplateChange={setAgentTemplateId}
-                  />
-                </>
-              )}
-            </div>
-          )}
-        </div>
-        {props.permissionValue !== undefined && props.onPermissionChange && (
-          <label
-            className="composer-select permission"
-            title={
-              props.permissionValue !== undefined
-                ? PERMISSION_PRESET_HINTS[props.permissionValue]
-                : ''
-            }
-          >
-            <ShieldIcon />
-            <Select
-              aria-label="权限档位"
-              value={props.permissionValue}
-              onValueChange={(value) =>
-                props.onPermissionChange?.(value as PermissionPreset)
+            )}
+          </div>
+          {props.permissionValue !== undefined && props.onPermissionChange && (
+            <label
+              className="composer-select permission"
+              title={
+                props.permissionValue !== undefined
+                  ? PERMISSION_PRESET_HINTS[props.permissionValue]
+                  : ''
               }
             >
-              <option value="workspace-read">
-                {PERMISSION_PRESET_LABELS['workspace-read']}
-              </option>
-              <option value="workspace-write">
-                {PERMISSION_PRESET_LABELS['workspace-write']}
-              </option>
-              <option value="workspace-full">
-                {PERMISSION_PRESET_LABELS['workspace-full']}
-              </option>
-            </Select>
-            <ChevronIcon />
-          </label>
-        )}
-        {agentTemplateId !== '' && (
-          <button
-            type="button"
-            className="composer-delegation-chip"
-            title="清除本次任务的委派模板"
-            onClick={() => setAgentTemplateId('')}
-          >
-            委派：
-            {enabledAgentTemplates.find(
-              (template) => template.id === agentTemplateId,
-            )?.name ?? agentTemplateId}
-            <span aria-hidden>×</span>
-          </button>
-        )}
-        <span className="bar-spacer" />
-        {showModelSelect && (
-          <ModelSelector
-            options={props.modelOptions ?? []}
-            selectedKey={props.selectedModelKey ?? null}
-            onModelChange={(key) => props.onModelChange?.(key)}
-            reasoning={props.reasoningSelection}
-          />
-        )}
-        {props.modelOptions !== undefined &&
-          props.modelOptions.length === 0 && (
-            <span className="composer-no-model">未配置模型</span>
+              <ShieldIcon />
+              <Select
+                aria-label="权限档位"
+                value={props.permissionValue}
+                onValueChange={(value) =>
+                  props.onPermissionChange?.(value as PermissionPreset)
+                }
+              >
+                <option value="workspace-read">
+                  {PERMISSION_PRESET_LABELS['workspace-read']}
+                </option>
+                <option value="workspace-write">
+                  {PERMISSION_PRESET_LABELS['workspace-write']}
+                </option>
+                <option value="workspace-full">
+                  {PERMISSION_PRESET_LABELS['workspace-full']}
+                </option>
+              </Select>
+              <ChevronIcon />
+            </label>
           )}
+          {agentTemplateId !== '' && (
+            <button
+              type="button"
+              className="composer-delegation-chip"
+              title="清除本次任务的委派模板"
+              onClick={() => setAgentTemplateId('')}
+            >
+              委派：
+              {enabledAgentTemplates.find(
+                (template) => template.id === agentTemplateId,
+              )?.name ?? agentTemplateId}
+              <span aria-hidden>×</span>
+            </button>
+          )}
+          <span className="bar-spacer" />
+          {showModelSelect && (
+            <ModelSelector
+              options={props.modelOptions ?? []}
+              selectedKey={props.selectedModelKey ?? null}
+              onModelChange={(key) => props.onModelChange?.(key)}
+              reasoning={props.reasoningSelection}
+            />
+          )}
+          {props.modelOptions !== undefined &&
+            props.modelOptions.length === 0 && (
+              <span className="composer-no-model">未配置模型</span>
+            )}
+        </div>
         {showStop && props.onStop ? (
           <button
             className="composer-stop"

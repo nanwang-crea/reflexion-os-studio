@@ -152,4 +152,17 @@ mod tests {
         assert_eq!(resolved, root.canonicalize().unwrap().join("a/b/c.txt"));
         fs::remove_dir_all(&root).ok();
     }
+    #[cfg(unix)]
+    #[test]
+    fn rejects_dangling_links_in_new_paths() {
+        let root = temp_workspace("dangling-link");
+        let outside = temp_workspace("dangling-outside");
+        std::os::unix::fs::symlink(outside.join("missing.txt"), root.join("file-link")).unwrap();
+        std::os::unix::fs::symlink(outside.join("missing-dir"), root.join("dir-link")).unwrap();
+        assert!(resolve_in_workspace(&root, "file-link").is_err());
+        assert!(resolve_in_workspace(&root, "dir-link/nested/new.txt").is_err());
+        fs::remove_dir_all(root).unwrap();
+        fs::remove_dir_all(outside).unwrap();
+    }
+
 }

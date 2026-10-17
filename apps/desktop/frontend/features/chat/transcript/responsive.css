@@ -1,0 +1,23 @@
+@media (max-width: 760px) {
+  .inline-banner {
+    flex-wrap: wrap;
+  }
+
+  .user-bubble {
+    max-width: 88%;
+  }
+
+  .transcript {
+    padding: 16px 12px 8px;
+    gap: 22px;
+  }
+
+  .composer-wrap {
+    padding: 6px 12px 12px;
+  }
+
+  .work-thinking-text {
+    max-height: 150px;
+  }
+}
+

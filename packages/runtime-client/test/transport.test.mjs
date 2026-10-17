@@ -191,3 +191,47 @@ test('Host acknowledgement and Runtime response share one timeout budget', async
   await rejected
   transport.dispose()
 })
+
+test('concurrent attach calls share one subscription', async () => {
+  const completions = []
+  let subscriptions = 0
+  let removals = 0
+  const transport = new RuntimeTransport({
+    invoke: async () => 1,
+    listen: () => {
+      subscriptions++
+      return new Promise((resolve) => {
+        completions.push(resolve)
+      })
+    },
+  })
+  const first = transport.attach()
+  const second = transport.attach()
+  for (const complete of completions)
+    complete(() => {
+      removals++
+    })
+  await Promise.all([first, second])
+  transport.dispose()
+  assert.equal(subscriptions, 1)
+  assert.equal(removals, 1)
+})
+
+test('disposing during attach removes the late subscription', async () => {
+  let complete
+  let removed = false
+  const transport = new RuntimeTransport({
+    invoke: async () => 1,
+    listen: () =>
+      new Promise((resolve) => {
+        complete = resolve
+      }),
+  })
+  const attached = transport.attach()
+  transport.dispose()
+  complete(() => {
+    removed = true
+  })
+  await attached
+  assert.equal(removed, true)
+})

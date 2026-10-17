@@ -74,7 +74,7 @@ export class LoopGuard {
     const base = baseFingerprint(request)
     // 已成功 mutation 的完全相同重放：freshness 未因其它原因推进 → 拦截。
     const boundEpoch = this.successfulMutations.get(base)
-    if (boundEpoch !== undefined) {
+    if (boundEpoch === this.epoch) {
       if (this.blockedMutations.get(base) ?? 0) {
         // duplicate_side_effect 已回传过一次，模型仍重复 → no_progress。
         return {
@@ -84,12 +84,10 @@ export class LoopGuard {
             '该调用已成功执行过，且模型在收到重复副作用警告后仍发起相同调用，已停止执行。',
         }
       }
-      if (boundEpoch === this.epoch) {
-        return {
-          verdict: 'block',
-          code: 'duplicate_side_effect',
-          message: `该调用已成功执行且环境未发生变化（freshness epoch ${this.epoch}），重复执行可能产生重复副作用。如确需重做，请先修改文件、执行其它变更或调整计划。`,
-        }
+      return {
+        verdict: 'block',
+        code: 'duplicate_side_effect',
+        message: `该调用已成功执行且环境未发生变化（freshness epoch ${this.epoch}），重复执行可能产生重复副作用。如确需重做，请先修改文件、执行其它变更或调整计划。`,
       }
     }
     const fp = this.fingerprint(request)

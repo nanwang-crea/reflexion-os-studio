@@ -1,0 +1,75 @@
+/* ---------- Markdown 文件富预览 ---------- */
+
+/* 预览体：纵向滚动容器，顶部提示条固定不随内容滚动 */
+.md-preview-body {
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.md-preview-body > .content-hint {
+  flex: none;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.md-preview-scroll {
+  flex: 1;
+  min-height: 0;
+  padding: 12px 16px 24px;
+}
+
+/* 文件预览 / 编辑切换：共用于普通文本和 Markdown。 */
+.file-mode-switch {
+  display: flex;
+  gap: 2px;
+  flex: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  padding: 1px;
+  background: var(--bg-inset);
+}
+
+.file-mode-switch button {
+  padding: 2px 10px;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.file-mode-switch button:hover {
+  color: var(--text);
+}
+
+.file-mode-switch button.active {
+  background: var(--bg-active);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+/* 源码视图容器：MonacoSurface（可编辑）填充预览区 */
+.md-source-body {
+  display: flex;
+}
+
+.md-draft-preview::before {
+  content: '未保存内容的预览';
+  display: block;
+  margin-bottom: 10px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+/* 增量加载哨兵 / 提示（触底 600px 预取） */
+.md-preview-more {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.md-preview-scroll > .content-hint {
+  margin: 10px 0;
+  text-align: center;
+}

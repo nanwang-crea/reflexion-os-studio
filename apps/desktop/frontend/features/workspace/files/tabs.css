@@ -1,0 +1,141 @@
+/* ---------- 右侧多文件标签 ---------- */
+
+.file-tabs {
+  flex: none;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 5px 6px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-sidebar);
+}
+
+.file-tabs-scroll {
+  position: relative;
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  /* 隐藏原生滚动条，改用下方自定义可见滑块 */
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  /* 标签文字不可选中，避免拖拽排序时被文本选择干扰 */
+  user-select: none;
+  -webkit-user-select: none;
+  scroll-behavior: smooth;
+}
+
+.file-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.file-tabs-scroll:focus-visible {
+  outline: 1px solid var(--border);
+}
+
+/* 拖拽排序的插入指示线：随指针移动实时预览落点 */
+.file-tabs-drop-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  width: 2px;
+  background: var(--info);
+  pointer-events: none;
+}
+
+/* VS Code 风格标签：无竖向分隔，active 融入内容区（底边上移盖住
+   标签条边框 + 同色背景），顶部圆角。 */
+.file-tab {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  max-width: 210px;
+  color: var(--text-muted);
+  cursor: grab;
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 7px 7px 0 0;
+}
+
+.file-tab:active {
+  cursor: grabbing;
+}
+
+.file-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.file-tab.dragging {
+  opacity: 0.5;
+  background: var(--bg-active);
+  outline: 1px dashed var(--text-muted);
+  outline-offset: -1px;
+}
+
+.file-tab.active {
+  color: var(--text);
+  background: var(--bg-editor);
+  border-color: var(--border-subtle);
+  margin-bottom: -1px;
+}
+
+.file-tab-main {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 6px 8px;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+}
+
+.file-tab-main:hover {
+  background: transparent;
+}
+
+.file-tab-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  line-height: 1;
+}
+
+.file-tab-close:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* 脏圆点替代关闭 ×；hover 或键盘聚焦标签时圆点变回 ×。 */
+.file-tab-dirty {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--warning-text);
+}
+
+.file-tab.dirty .file-tab-close {
+  display: none;
+}
+
+.file-tab.dirty:hover .file-tab-close,
+.file-tab.dirty:focus-within .file-tab-close {
+  display: inline-flex;
+}
+
+.file-tab.dirty:hover .file-tab-dirty,
+.file-tab.dirty:focus-within .file-tab-dirty {
+  display: none;
+}
+

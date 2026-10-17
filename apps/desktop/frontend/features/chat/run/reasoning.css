@@ -1,0 +1,196 @@
+/* ---------- Run 事件卡（失败） ---------- */
+.run-event-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.run-event-failure {
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  color: var(--danger);
+}
+
+/* 失败事件卡的错误信息文本：限高 5 行内部上下滚动，与回复下方错误条
+   行为统一，避免长错误串把卡片撑得过高。
+   7em = 12.5px × 行高 1.4 × 5 行。 */
+.run-event-card-text {
+  min-width: 0;
+  line-height: 1.4;
+  word-break: break-word;
+  max-height: 7em;
+  overflow-y: auto;
+}
+
+/* ---------- Run 过程折叠与思考摘要 ---------- */
+.run-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.run-process-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 3px 12px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.run-process-toggle:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.run-process-label.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--text-muted) 30%,
+    var(--text) 50%,
+    var(--text-muted) 70%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: work-summary-shimmer 1.6s linear infinite;
+}
+
+.run-process-chevron {
+  display: inline-flex;
+  color: var(--text-muted);
+  transition: transform 0.18s ease;
+}
+
+.run-process-chevron.open {
+  transform: rotate(180deg);
+}
+
+.run-process-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 2px;
+  padding-left: 4px;
+}
+
+.run-process-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.run-process-part {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.run-process-text {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.reasoning-block {
+  min-width: 0;
+}
+
+.reasoning-toggle {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  text-align: left;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.reasoning-label {
+  flex: none;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 活动指示点：思考流式输出中显示为脉动圆点，平时透明占位不引起布局位移。 */
+.reasoning-label::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: transparent;
+  flex: none;
+}
+
+.reasoning-toggle.active .reasoning-label::before {
+  background: var(--info);
+  animation: reasoning-pulse 1.4s ease-in-out infinite;
+}
+
+/* 思考进行中：预览文字缓慢呼吸，与静止的历史消息形成区分。 */
+.reasoning-toggle.active .reasoning-preview {
+  animation: reasoning-breathe 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reasoning-toggle.active .reasoning-label::before,
+  .reasoning-toggle.active .reasoning-preview {
+    animation: none;
+  }
+}
+
+@keyframes reasoning-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.7);
+  }
+}
+
+@keyframes reasoning-breathe {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.reasoning-preview {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reasoning-full {
+  margin: 4px 0 0 28px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow-y: auto;
+}
+

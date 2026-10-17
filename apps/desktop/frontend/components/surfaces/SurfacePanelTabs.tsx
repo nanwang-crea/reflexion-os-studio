@@ -1,3 +1,5 @@
+import './surface-panel-tabs.css'
+
 type Surface = 'workspace' | 'browser' | 'collaboration'
 
 /** Shared navigation and sizing controls for the right-hand surfaces. */

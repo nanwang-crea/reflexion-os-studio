@@ -1,0 +1,359 @@
+/* ---------- 子 Agent 委派列表 ---------- */
+.delegation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.delegation-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 3px 12px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.delegation-toggle:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.delegation-label.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--text-muted) 30%,
+    var(--text) 50%,
+    var(--text-muted) 70%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: work-summary-shimmer 1.6s linear infinite;
+}
+
+.delegation-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 2px;
+  padding-left: 4px;
+}
+
+.delegation-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 6px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+}
+
+.delegation-row.needs-attention {
+  border-color: color-mix(in srgb, var(--warning-text) 55%, var(--border));
+  background: color-mix(in srgb, var(--warning-text) 6%, var(--bg-elevated));
+}
+
+.delegation-open {
+  display: grid;
+  grid-template-columns: auto minmax(0, 2fr) minmax(0, 3fr) auto;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.delegation-open .trace-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.delegation-open .trace-status {
+  white-space: nowrap;
+}
+
+.delegation-row > .delegation-error {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding-left: 14px;
+  overflow-wrap: anywhere;
+}
+
+.delegation-open:hover:not(:disabled) .trace-name {
+  color: var(--text);
+}
+
+.delegation-open:disabled {
+  cursor: default;
+}
+
+.delegation-cancel {
+  flex: none;
+  padding: 2px 6px;
+  color: var(--danger);
+  font-size: 11px;
+}
+
+.delegation-status {
+  flex: none;
+  font-size: 11px;
+  line-height: 1.6;
+  padding: 0 8px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+}
+
+.delegation-status.running,
+.delegation-status.pending {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.delegation-status.completed {
+  color: var(--ok, #4ade80);
+  background: color-mix(in srgb, var(--ok) 16%, transparent);
+}
+
+.delegation-status.failed {
+  color: var(--danger, #f87171);
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+.delegation-status.cancelled {
+  color: var(--text-muted);
+}
+
+.trace-status.attention {
+  color: var(--warning-text);
+  font-weight: 600;
+}
+
+.delegation-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.delegation-head,
+.delegation-actions,
+.child-trace-run-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.delegation-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.delegation-actions button {
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
+.delegation-actions .danger {
+  color: var(--danger);
+}
+
+.delegation-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  margin: 6px 0;
+  padding: 8px;
+  border-radius: 7px;
+  background: var(--bg-hover);
+  font-size: 11.5px;
+}
+
+.delegation-details div {
+  min-width: 0;
+}
+
+.delegation-details dt {
+  color: var(--text-muted);
+}
+
+.delegation-details dd {
+  margin: 1px 0 0;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.delegation-details .delegation-tools {
+  grid-column: 1 / -1;
+}
+
+.delegation-agent {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.delegation-task {
+  font-size: 13px;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.delegation-result {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.delegation-error {
+  font-size: 12.5px;
+  color: var(--danger, #f87171);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.child-trace-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.child-trace-panel {
+  width: min(780px, 92vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+  box-shadow: -12px 0 30px rgba(0, 0, 0, 0.18);
+}
+
+.child-trace-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.child-trace-head div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.child-trace-head .child-trace-title {
+  flex-direction: row;
+  align-items: center;
+}
+
+.child-trace-head span {
+  color: var(--text-muted);
+  font-size: 12px;
+  word-break: break-word;
+}
+
+.child-trace-task > div {
+  max-height: 25dvh;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.child-trace-body {
+  min-height: 0;
+  overflow-anchor: none;
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+.child-trace-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: min(100%, var(--chat-col));
+  margin: 0 auto;
+}
+
+.delegation-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.delegation-tree-branch {
+  margin: 0;
+  padding-left: 18px;
+  list-style: none;
+}
+
+.delegation-tree-branch button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  margin: 3px 0;
+  padding: 7px 9px;
+  text-align: left;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+}
+
+.delegation-tree-branch button.selected {
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+}
+
+.delegation-tree-status {
+  align-self: start;
+  padding: 1px 7px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  font-size: 11px;
+}
+
+.delegation-tree-status.running,
+.delegation-tree-status.pending {
+  color: var(--accent);
+}
+
+.delegation-tree-status.completed {
+  color: var(--ok, #4ade80);
+}
+
+.delegation-tree-status.failed {
+  color: var(--danger);
+}
+
+.delegation-tree-branch small {
+  grid-column: 1 / -1;
+  color: var(--text-muted);
+}
+

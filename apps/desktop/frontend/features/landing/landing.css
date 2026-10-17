@@ -1,0 +1,119 @@
+/* ---------- 落地页（新对话） ---------- */
+
+.landing-context-selectors {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  margin: 0 0 -10px 2px;
+  position: relative;
+  z-index: 1;
+}
+
+.landing-context-selectors .composer-select {
+  min-height: 20px;
+  padding: 1px 2px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.landing-context-selectors .composer-select:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.landing-context-selectors .composer-select:has(.ui-select:disabled) {
+  opacity: 0.78;
+}
+
+.landing-context-selectors .composer-select .ui-select {
+  max-width: 180px;
+  color: inherit;
+  font-size: 12px;
+}
+
+.landing-branch-hint {
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 4px 6px;
+}
+
+.landing {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.landing-center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px 16px;
+}
+
+.landing-content {
+  width: 100%;
+  max-width: var(--chat-col);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 24px;
+}
+
+/* 落地页是 flex 列容器：composer 基础样式的 margin: 0 auto 会关闭
+   flex 拉伸、把宽度收缩到内容（控制条约 300px），必须显式铺满。 */
+.landing-content .composer,
+.landing-content .inline-banner {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+.landing-hero,
+.landing-project {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.landing-title {
+  font-size: clamp(26px, 3vw, 32px);
+  font-weight: 600;
+  margin: 0;
+  text-align: center;
+}
+
+.landing-hint {
+  width: 100%;
+  color: var(--text-muted);
+  margin: 8px 0 0;
+  text-align: center;
+  line-height: 1.7;
+  max-width: 38ch;
+}
+
+.landing-path {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-top: 6px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.landing-sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  max-height: 180px;
+  overflow-y: auto;
+  margin-top: 14px;
+}

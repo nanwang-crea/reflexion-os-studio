@@ -1,0 +1,132 @@
+/* ---------- 文件树 ---------- */
+
+.file-tree {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.file-tree-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 32px;
+  padding: 4px 8px 4px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.file-tree-bar .ghost {
+  padding: 3px;
+  border-color: transparent;
+}
+
+.tree-root {
+  list-style: none;
+  margin: 0;
+  padding: 2px 0 12px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.tree-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  width: 100%;
+  padding-block: 3px;
+  padding-right: 8px;
+  background: transparent;
+  border-radius: 0;
+  font-size: 13px;
+  text-align: left;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.tree-row:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.tree-row.active {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.tree-row.active::after {
+  content: '';
+  align-self: stretch;
+  width: 2px;
+  margin-left: auto;
+  border-radius: 2px;
+  background: var(--text-secondary);
+}
+
+.tree-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+  transition: transform 0.12s ease;
+  flex: none;
+}
+
+.tree-chevron.open {
+  transform: rotate(90deg);
+}
+
+.tree-chevron svg {
+  width: 11px;
+  height: 11px;
+}
+
+.tree-file-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 8px;
+  color: var(--text-muted);
+  flex: none;
+}
+
+.tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-hint {
+  padding: 4px 24px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.tree-hint-error {
+  color: var(--danger);
+}
+
+.tree-more-row {
+  padding: 2px 24px 4px;
+}
+
+.tree-more-row .ghost {
+  width: 100%;
+  font-size: 12px;
+}
+

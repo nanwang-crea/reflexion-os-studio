@@ -78,25 +78,40 @@ export class RuntimeTransport {
   private unlisten?: () => void
   private queuedMessages: TransportSidecarMessage[] = []
   private attached = false
+  private attachment?: Promise<void>
+  private generation = 0
 
   constructor(private readonly options: RuntimeTransportOptions) {}
 
   async attach(): Promise<void> {
     if (this.attached) return
-    this.unlisten = await this.options.listen<TransportSidecarMessage>(
-      'bootstrap:message',
-      (event) => {
-        this.handleMessage(event.payload)
-      },
-    )
-    this.attached = true
-    for (const message of this.queuedMessages) {
-      this.handleMessage(message)
-    }
-    this.queuedMessages = []
+    if (this.attachment) return this.attachment
+    const generation = this.generation
+    const attachment = this.options
+      .listen<TransportSidecarMessage>('bootstrap:message', (event) => {
+        if (generation === this.generation) this.handleMessage(event.payload)
+      })
+      .then((unlisten) => {
+        if (generation !== this.generation) {
+          unlisten()
+          return
+        }
+        this.unlisten = unlisten
+        this.attached = true
+        for (const message of this.queuedMessages) this.handleMessage(message)
+        this.queuedMessages = []
+      })
+      .finally(() => {
+        if (this.attachment === attachment) this.attachment = undefined
+      })
+    this.attachment = attachment
+    return attachment
   }
 
   dispose(): void {
+    this.generation++
+    this.attachment = undefined
+    this.queuedMessages = []
     this.unlisten?.()
     this.unlisten = undefined
     this.attached = false

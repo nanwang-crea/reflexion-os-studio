@@ -1,0 +1,140 @@
+/* Composer 运行配置（任务委派 / 高级权限） */
+.composer-run-config {
+  position: relative;
+  display: inline-flex;
+}
+.composer-run-config-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.composer-run-config-trigger:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.composer-run-config-trigger.danger-on {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.composer-run-config-panel {
+  position: fixed;
+  width: min(320px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
+  z-index: 40;
+}
+.run-config-section {
+  display: grid;
+  gap: 7px;
+}
+.run-config-section > strong {
+  color: var(--text);
+  font-size: 13px;
+}
+.run-config-section > small {
+  margin-top: -4px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.run-config-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.run-config-field .ui-select {
+  min-width: 150px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+.composer-delegation-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 220px;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--info) 45%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--info) 9%, transparent);
+  color: var(--info);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer-delegation-chip:hover {
+  background: color-mix(in srgb, var(--info) 15%, transparent);
+}
+.composer-delegation-chip span {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+.advanced-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  padding: 4px 2px;
+}
+.advanced-row input {
+  margin-top: 2px;
+}
+.advanced-row small,
+.advanced-danger small {
+  display: block;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+.advanced-sep {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 6px 0;
+}
+.advanced-danger {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--danger);
+  padding: 8px 10px;
+  border: 1px solid rgba(248, 113, 113, 0.5);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+.advanced-danger:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.12);
+}
+.advanced-danger:disabled {
+  opacity: 0.7;
+  cursor: default;
+}

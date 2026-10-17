@@ -80,17 +80,15 @@ export function LandingView(props: LandingViewProps): React.JSX.Element {
             <div className="landing-hero">
               <h1 className="landing-title">有什么可以帮你？</h1>
               <p className="landing-hint">
-                直接输入开始一段独立对话；或在左侧选择项目，在项目文件夹的上下文中对话。
+                描述你的任务，或选择一个项目后开始协作。
               </p>
             </div>
           )}
           {!props.hasEnabledProvider && (
             <div className="inline-banner">
-              <span>
-                尚未配置模型 Provider：请先在设置中填写 API Key 后再开始对话。
-              </span>
+              <span>连接一个模型，即可开始对话。</span>
               <button className="ghost" onClick={props.onGoSettings}>
-                去配置
+                配置模型
               </button>
             </div>
           )}

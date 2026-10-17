@@ -1,0 +1,12 @@
+/* ---------- 双栏 Diff 预览 ---------- */
+
+.diff-mode {
+  flex: none;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+

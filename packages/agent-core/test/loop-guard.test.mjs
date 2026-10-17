@@ -155,3 +155,22 @@ test('successful write clears failed edits on that resource only', () => {
     'no_progress',
   )
 })
+
+test('blocked mutation becomes eligible again after explicit freshness change', () => {
+  const guard = new LoopGuard()
+  const edit = REQ('file.edit', { path: 'a.ts', content: 'new' })
+  guard.recordExecution(edit, OK('written'), true)
+  guard.recordBlocked(edit)
+  assert.equal(guard.admit(edit).code, 'no_progress')
+  guard.bumpEpoch()
+  assert.equal(guard.admit(edit).verdict, 'allow')
+})
+
+test('another successful mutation invalidates an earlier replay block', () => {
+  const guard = new LoopGuard()
+  const edit = REQ('file.edit', { path: 'a.ts', content: 'new' })
+  guard.recordExecution(edit, OK('written'), true)
+  guard.recordBlocked(edit)
+  guard.recordExecution(REQ('file.edit', { path: 'b.ts' }), OK('written'), true)
+  assert.equal(guard.admit(edit).verdict, 'allow')
+})

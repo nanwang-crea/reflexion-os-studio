@@ -1,0 +1,29 @@
+/* ---------- 可拖拽分栏 ---------- */
+
+.resize-handle {
+  position: relative;
+  width: 7px;
+  flex: 0 0 7px;
+  cursor: col-resize;
+  background: transparent;
+  touch-action: none;
+  outline: none;
+}
+
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  inset: 0 3px;
+  background: var(--border-subtle);
+  transition:
+    inset 0.14s ease,
+    background-color 0.14s ease;
+}
+
+.resize-handle:hover::after,
+.resize-handle:focus-visible::after,
+.resize-handle.dragging::after {
+  inset-inline: 2px;
+  background: var(--text-muted);
+}
+

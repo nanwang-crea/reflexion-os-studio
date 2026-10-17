@@ -1,0 +1,99 @@
+/* ---------- 流式状态指示 ---------- */
+
+.typing-dots {
+  display: inline-flex;
+  gap: 5px;
+  padding: 4px 0;
+}
+
+.typing-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  animation: typing-bounce 1.2s ease-in-out infinite;
+}
+
+.typing-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.typing-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+/* Provider 重试内联状态行：随流断点显示，恢复后随事件自动消失。 */
+.assistant-retrying {
+  font-size: 12.5px;
+  padding: 4px 0 2px;
+  color: var(--text-muted);
+}
+
+.assistant-retrying.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--text-muted) 30%,
+    var(--text) 50%,
+    var(--text-muted) 70%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: work-summary-shimmer 1.6s linear infinite;
+}
+
+@keyframes typing-bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+/* 回到底部：悬浮在输入框上方。 */
+.scroll-bottom {
+  position: absolute;
+  top: -46px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  z-index: 5;
+}
+
+.scroll-bottom:hover:not(:disabled) {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+/* ---------- Provider 提示条 ---------- */
+
+.inline-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: var(--chat-col);
+  margin: 0 auto 8px;
+  padding: 10px 14px;
+  border: 1px solid rgba(251, 191, 36, 0.18);
+  border-radius: 10px;
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  font-size: 13px;
+}
+
