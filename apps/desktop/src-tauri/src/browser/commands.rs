@@ -115,16 +115,32 @@ pub(super) async fn on_main<T: Send + 'static>(
 ) -> Result<T, String> {
     let (tx, rx) = std::sync::mpsc::sync_channel(1);
     let handle = app.clone();
-    app.run_on_main_thread(move || {
+    let task = move || {
         let _ = tx.send(operation(&handle));
-    })
-    .map_err(|_| "browser dispatch failed")?;
+    };
+    dispatch(&app, task)?;
     tauri::async_runtime::spawn_blocking(move || {
         rx.recv()
             .map_err(|_| "browser dispatch cancelled".to_string())?
     })
     .await
     .map_err(|_| "browser task failed")?
+}
+
+pub(crate) fn dispatch(
+    app: &AppHandle,
+    task: impl FnOnce() + Send + 'static,
+) -> Result<(), String> {
+    #[cfg(all(
+        feature = "cef-browser",
+        any(target_os = "macos", target_os = "windows")
+    ))]
+    if super::cef::ready() || super::cef::stopping() {
+        // A late dialog/worker result must not bypass the stopped CEF queue.
+        return super::cef::dispatch(task);
+    }
+    app.run_on_main_thread(task)
+        .map_err(|_| "browser dispatch failed".into())
 }
 
 #[tauri::command]
@@ -140,8 +156,10 @@ pub async fn browser_clear_data(
     }
     let (tx, rx) = std::sync::mpsc::channel();
     let handle = app.clone();
-    app.run_on_main_thread(move || platform::clear_data(&handle, website_data, cache, tx))
-        .map_err(|_| "清理请求未发送")?;
+    dispatch(&app, move || {
+        platform::clear_data(&handle, website_data, cache, tx)
+    })
+    .map_err(|_| "清理请求未发送")?;
     tauri::async_runtime::spawn_blocking(move || {
         rx.recv_timeout(std::time::Duration::from_secs(30))
             .map_err(|_| "数据清理超时；不要立即重试，请重新检查")?

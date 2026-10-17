@@ -47,19 +47,18 @@ pub(crate) fn prepare_async(
         let destination = destination::prepare(&app, &source, &name);
         let stage = destination.as_ref().ok().map(|(_, stage, _)| stage.clone());
         let handle = app.clone();
-        if app
-            .run_on_main_thread(move || {
-                DOWNLOADS.with(|downloads| downloads.borrow_mut().pending -= 1);
-                let result = destination.and_then(|destination| {
-                    if crate::browser::state::snapshot(&handle).revision != revision {
-                        destination::cleanup(&destination.1);
-                        return Err("下载页面已切换，请重试".into());
-                    }
-                    register(&handle, destination)
-                });
-                done(result);
-            })
-            .is_err()
+        if crate::browser::commands::dispatch(&app, move || {
+            DOWNLOADS.with(|downloads| downloads.borrow_mut().pending -= 1);
+            let result = destination.and_then(|destination| {
+                if crate::browser::state::snapshot(&handle).revision != revision {
+                    destination::cleanup(&destination.1);
+                    return Err("下载页面已切换，请重试".into());
+                }
+                register(&handle, destination)
+            });
+            done(result);
+        })
+        .is_err()
         {
             if let Some(stage) = stage {
                 destination::cleanup(&stage);

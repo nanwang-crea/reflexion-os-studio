@@ -50,22 +50,23 @@ wrap_load_handler! {
 wrap_life_span_handler! {
     struct Lifetime { app: tauri::AppHandle, tab: u32, policy: Arc<Policy> }
     impl LifeSpanHandler {
-        fn on_after_created(&self,browser:Option<&mut Browser>) {super::created();if let Some(host)=browser.and_then(|b|b.host()){host.set_accessibility_state(State::ENABLED);}}
-        fn do_close(&self,browser:Option<&mut Browser>)->i32 {
-            // macOS: the container view is released in on_before_close, after CEF
-            // detached its own views; releasing earlier would tear down the
-            // superview under CEF and trip AppKit's dealloc assertions.
-            #[cfg(target_os="windows")]
-            if let Some(browser)=browser {super::viewport::destroy(browser);}
+        fn on_after_created(&self,browser:Option<&mut Browser>) {super::created(self.tab);if let Some(host)=browser.and_then(|b|b.host()){host.set_accessibility_state(State::ENABLED);}}
+        fn do_close(&self,_browser:Option<&mut Browser>)->i32 {
+            // Detach only CEF's child, after this callback; its parent stays owned
+            // until OnBeforeClose and the remaining CEF stack have returned.
+            super::viewport::destroy(self.tab);
             1
         }
-        fn on_before_close(&self,_browser:Option<&mut Browser>) {super::registry::closed(&self.app,self.tab);super::input::remove(self.tab);super::closed();}
+        fn on_before_close(&self,_browser:Option<&mut Browser>) {
+            super::registry::closed(&self.app,self.tab);
+            let app=self.app.clone();let id=self.tab;
+            super::pump::defer(move || {super::input::remove(id);super::closed(app,id);});
+        }
 
         fn on_before_popup(&self,_browser:Option<&mut Browser>,_frame:Option<&mut Frame>,_id:i32,url:Option<&CefString>,_name:Option<&CefString>,_disposition:WindowOpenDisposition,_gesture:i32,_features:Option<&PopupFeatures>,_info:Option<&mut WindowInfo>,_client:Option<&mut Option<Client>>,_settings:Option<&mut BrowserSettings>,_extra:Option<&mut Option<DictionaryValue>>,_access:Option<&mut i32>) -> i32 {
             if self.policy.origin.is_none() {
                 if let Some(url) = url.map(ToString::to_string).filter(|url| crate::browser::policy::guest_url(url,crate::browser::policy::dev_url(&self.app)).is_ok()) {
-                    let app=self.app.clone(); let handle=app.clone();
-                    let _=app.run_on_main_thread(move || {let _=crate::browser::window::control(&handle,state::Action::Newtab{url:Some(url)});});
+                    super::popup::open(self.app.clone(), self.tab, url);
                 }
             }
             1

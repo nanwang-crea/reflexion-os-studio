@@ -1,6 +1,7 @@
 // Only selected by debug + cef-acceptance Cargo feature. Product builds never load this file.
 import '../../../apps/runtime/dist/index.js'
 import assert from 'node:assert/strict'
+import { runRegression } from './regression.mjs'
 import { createInterface } from 'node:readline'
 import { createServer } from 'node:http'
 import { writeFile } from 'node:fs/promises'
@@ -23,10 +24,18 @@ createInterface({ input: process.stdin }).on('line', (line) => {
     /* Runtime handles unrelated input. */
   }
 })
-const fixture = createServer((_request, response) => {
+const fixture = createServer((request, response) => {
+  if (request.url === '/native-download') {
+    response.writeHead(200, {
+      'content-type': 'application/octet-stream',
+      'content-disposition': 'attachment; filename="cef-cancel-test.txt"',
+    })
+    response.end('Synthetic cancel fixture')
+    return
+  }
   response.setHeader('content-type', 'text/html; charset=utf-8')
   response.end(
-    `<!doctype html><title>CEF 接管验收</title><style>body{font:18px system-ui;padding:24px;background:#f7f9fb}input,button{font:inherit;padding:12px;margin:10px}output{display:block;margin:20px}</style><h1>CEF 共用页面验收</h1><label>公开查询<input aria-label="公开查询"></label><button onclick="document.querySelector('output').textContent=document.querySelector('input').value">应用</button><output>等待输入</output><p>仅包含合成测试数据。</p>`,
+    `<!doctype html><title>CEF 接管验收</title><style>body{font:18px system-ui;padding:24px;background:#f7f9fb}input,button{font:inherit;padding:12px;margin:10px}output{display:block;margin:20px}</style><h1>CEF 共用页面验收</h1><label>公开查询<input aria-label="公开查询"></label><button onclick="document.querySelector('output').textContent=document.querySelector('input').value">应用</button><output>等待输入</output><p>仅包含合成测试数据。</p><a id="native-popup" href="/native-result" target="_blank">新窗口结果</a><a id="native-download" href="/native-download">取消下载验收</a>`,
   )
 })
 const progress = async (phase, detail = {}) =>
@@ -107,7 +116,16 @@ async function run() {
   })
   assert.equal(screenshot.error, null)
   assert.equal(screenshot.screenshots.length, 1)
+  let nativeRegression
+  if (process.env.CEF_NATIVE_REGRESSION === '1') {
+    nativeRegression = await runRegression(
+      first.embedded.endpoint,
+      `http://127.0.0.1:${fixture.address().port}/native`,
+      progress,
+    )
+  }
   await progress('passed', {
+    nativeNavigationRounds: nativeRegression?.rounds ?? 0,
     isolation: true,
     agentInput: true,
     takeoverBlocksAgent: true,

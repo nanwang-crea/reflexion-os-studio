@@ -124,6 +124,19 @@ pub fn run() {
         .expect("error while building ReflexionOS Studio")
         .run(|app_handle, event| {
             match event {
+                #[cfg(all(
+                    feature = "cef-browser",
+                    any(target_os = "macos", target_os = "windows")
+                ))]
+                tauri::RunEvent::WindowEvent {
+                    label,
+                    event: tauri::WindowEvent::CloseRequested { api, .. },
+                    ..
+                } if label == "main" => {
+                    if browser::cef::intercept_close() {
+                        api.prevent_close();
+                    }
+                }
                 tauri::RunEvent::ExitRequested { api, .. } => {
                     // tauri-runtime-wry 在最后一个窗口销毁时立即触发 ExitRequested；
                     // 编排必须在此而非 Destroyed，否则 RunEvent::Exit 会在毫秒级
@@ -135,7 +148,10 @@ pub fn run() {
                         feature = "cef-browser",
                         any(target_os = "macos", target_os = "windows")
                     ))]
-                    browser::cef::shutdown();
+                    if browser::cef::ready() {
+                        browser::cef::shutdown();
+                        return;
+                    }
                     if let Some(state) = app_handle.try_state::<Arc<SupervisorState>>() {
                         if !state.stopping.load(std::sync::atomic::Ordering::SeqCst) {
                             shutdown::begin_shutdown(state.inner());
@@ -167,8 +183,12 @@ pub fn run() {
                     event: tauri::WindowEvent::Destroyed,
                     ..
                 } if label == "main" => {
-                    // 窗口真正销毁后才关闭浏览器：CloseRequested 时窗口仍在 teardown，
-                    // 立即 shutdown CEF 会与 AppKit 释放视图竞争导致闪退。
+                    // 页面已确认关闭；等 Wry 的窗口资源释放后才关闭 CEF。
+                    #[cfg(all(
+                        feature = "cef-browser",
+                        any(target_os = "macos", target_os = "windows")
+                    ))]
+                    browser::cef::window_destroyed(app_handle.clone());
                     browser::dispose();
                 }
                 _ => {}

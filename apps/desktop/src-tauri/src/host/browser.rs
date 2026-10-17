@@ -27,7 +27,7 @@ pub fn dispatch(app: &tauri::AppHandle, state: &Arc<SupervisorState>, message: &
     let params = message.get("params").cloned().unwrap_or(Value::Null);
     let handle = app.clone();
     let state = state.clone();
-    let _ = app.run_on_main_thread(move || {
+    let _ = crate::browser::commands::dispatch(app, move || {
         #[cfg(all(
             feature = "cef-browser",
             any(target_os = "macos", target_os = "windows")

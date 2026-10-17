@@ -6,12 +6,16 @@ mod client;
 mod cocoa;
 mod contact;
 pub use contact::fill as fill_contact;
+#[cfg(target_os = "macos")]
+mod container;
 mod contexts;
 #[cfg(target_os = "macos")]
 pub mod credentials;
 mod downloads;
 mod input;
+mod lifecycle;
 mod network;
+mod popup;
 mod pump;
 mod registry;
 mod storage;
@@ -26,8 +30,6 @@ use tauri::Manager;
 
 static LOADED: AtomicBool = AtomicBool::new(false);
 static READY: AtomicBool = AtomicBool::new(false);
-static STOPPING: AtomicBool = AtomicBool::new(false);
-static BROWSERS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static PORT: AtomicU16 = AtomicU16::new(0);
 static APP: OnceLock<tauri::AppHandle> = OnceLock::new();
 #[cfg(target_os = "macos")]
@@ -142,13 +144,29 @@ pub fn initialize(app: &tauri::AppHandle) -> Result<(), String> {
     });
     Ok(())
 }
+pub fn stopping() -> bool {
+    lifecycle::closing()
+}
+pub fn dispatch(task: impl FnOnce() + Send + 'static) -> Result<(), String> {
+    if !accepting() {
+        return Err("browser_closed".into());
+    }
+    pump::defer(task);
+    Ok(())
+}
 pub fn endpoint() -> String {
     format!("http://127.0.0.1:{}", PORT.load(Ordering::Acquire))
 }
 pub fn attach(app: &tauri::AppHandle) -> Result<(), String> {
+    if !accepting() {
+        return Err("browser_closed".into());
+    }
     registry::attach(app, None)
 }
 pub fn control(app: &tauri::AppHandle, action: &super::state::Action) -> Result<(), String> {
+    if !accepting() {
+        return Err("browser_closed".into());
+    }
     registry::control(app, action)
 }
 pub fn close_tab(id: u32) {
@@ -158,27 +176,36 @@ pub fn dispose() {
     crate::browser::downloads::transfers::dispose();
     registry::dispose();
 }
+pub fn accepting() -> bool {
+    ready() && !lifecycle::closing()
+}
 pub fn shutdown() {
-    STOPPING.store(true, Ordering::Release);
-    dispose();
-    maybe_stop();
-}
-pub fn created() {
-    BROWSERS.fetch_add(1, Ordering::AcqRel);
-}
-pub fn closed() {
-    BROWSERS.fetch_sub(1, Ordering::AcqRel);
-    maybe_stop();
-}
-fn maybe_stop() {
-    if STOPPING.load(Ordering::Acquire) && BROWSERS.load(Ordering::Acquire) == 0 {
-        if let Some(app) = APP.get() {
-            let app = app.clone();
-            std::thread::spawn(move || {
-                let _ = app.run_on_main_thread(stop);
-            });
+    if let Some(app) = APP.get() {
+        if lifecycle::parent_close_allowed() && app.get_webview_window("main").is_none() {
+            lifecycle::window_closed(app.clone());
+        } else {
+            lifecycle::request(app.clone());
         }
     }
+}
+pub fn window_destroyed(app: tauri::AppHandle) {
+    if lifecycle::parent_close_allowed() {
+        lifecycle::window_closed(app);
+    }
+}
+pub fn intercept_close() -> bool {
+    if ready() && !lifecycle::parent_close_allowed() {
+        shutdown();
+        true
+    } else {
+        false
+    }
+}
+pub fn created(id: u32) {
+    lifecycle::created(id);
+}
+pub fn closed(app: tauri::AppHandle, id: u32) {
+    lifecycle::closed(app, id);
 }
 pub fn stop() {
     if READY.swap(false, Ordering::AcqRel) {

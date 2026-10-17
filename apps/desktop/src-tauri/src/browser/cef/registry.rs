@@ -24,6 +24,7 @@ pub struct Guest {
     pub browser: Browser,
     pub policy: Arc<Policy>,
     pub lease: Option<String>,
+    pub closing: bool,
 }
 #[derive(Clone, Copy, Default)]
 pub struct Bounds {
@@ -42,7 +43,7 @@ struct Registry {
 thread_local! { static GUESTS:RefCell<Registry>=RefCell::new(Registry::default()); }
 
 pub fn attach(app: &tauri::AppHandle, lease: Option<Lease>) -> Result<(), String> {
-    if !super::ready() {
+    if !super::accepting() {
         return Err("CEF browser unavailable".into());
     }
     let snapshot = state::snapshot(app);
@@ -87,9 +88,13 @@ pub fn attach(app: &tauri::AppHandle, lease: Option<Lease>) -> Result<(), String
                 browser,
                 policy,
                 lease: lease.map(|lease| lease.id),
+                closing: false,
             },
         );
     });
+    if !super::accepting() {
+        close(id);
+    }
     refresh(app)
 }
 pub fn refresh(app: &tauri::AppHandle) -> Result<(), String> {
@@ -100,6 +105,7 @@ pub fn refresh(app: &tauri::AppHandle) -> Result<(), String> {
             r.bounds,
             r.guests
                 .iter()
+                .filter(|(_, g)| !g.closing)
                 .map(|(id, g)| (*id, g.browser.clone(), g.policy.clone()))
                 .collect::<Vec<_>>(),
         )
@@ -116,6 +122,7 @@ pub fn refresh(app: &tauri::AppHandle) -> Result<(), String> {
         super::viewport::layout(
             app,
             &browser,
+            id,
             bounds,
             active == Some(id),
             policy.locked.load(Ordering::Acquire),
@@ -221,7 +228,7 @@ pub fn lease_tab(lease: &str) -> Option<(u32, bool, bool)> {
         r.borrow()
             .guests
             .iter()
-            .find(|(_, g)| g.lease.as_deref() == Some(lease))
+            .find(|(_, g)| !g.closing && g.lease.as_deref() == Some(lease))
             .map(|(id, g)| {
                 (
                     *id,
@@ -231,12 +238,43 @@ pub fn lease_tab(lease: &str) -> Option<(u32, bool, bool)> {
             })
     })
 }
-pub fn close(id: u32) {
-    let guest = GUESTS.with(|r| r.borrow_mut().guests.remove(&id));
-    if let Some(guest) = guest {
-        if let Some(host) = guest.browser.host() {
-            host.close_browser(1);
+pub fn native_handle(id: u32) -> Option<usize> {
+    GUESTS.with(|r| {
+        r.borrow()
+            .guests
+            .get(&id)?
+            .browser
+            .host()
+            .map(|host| host.window_handle() as usize)
+    })
+}
+pub fn mark_closing(id: u32) {
+    GUESTS.with(|r| {
+        if let Some(guest) = r.borrow_mut().guests.get_mut(&id) {
+            guest.closing = true;
         }
+    });
+}
+pub fn popup_allowed(id: u32) -> bool {
+    GUESTS.with(|r| {
+        r.borrow()
+            .guests
+            .get(&id)
+            .is_some_and(|g| !g.closing && g.lease.is_none())
+    })
+}
+pub fn close(id: u32) {
+    let browser = GUESTS.with(|r| {
+        let mut registry = r.borrow_mut();
+        let guest = registry.guests.get_mut(&id)?;
+        if guest.closing {
+            return None;
+        }
+        guest.closing = true;
+        Some(guest.browser.clone())
+    });
+    if let Some(host) = browser.and_then(|browser| browser.host()) {
+        host.close_browser(1);
     }
 }
 pub fn reset_user(app: &tauri::AppHandle) {
@@ -266,7 +304,7 @@ pub fn active_user(app: &tauri::AppHandle) -> Result<Browser, String> {
             r.borrow()
                 .guests
                 .get(&id)
-                .filter(|g| g.lease.is_none())
+                .filter(|g| !g.closing && g.lease.is_none())
                 .map(|g| g.browser.clone())
         })
         .ok_or_else(|| "此操作仅适用于用户浏览标签，不能访问 Agent 标签".into())

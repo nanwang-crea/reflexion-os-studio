@@ -45,6 +45,27 @@ mod macos {
         });
         Ok(pointer)
     }
+    pub fn layout(id: u32, parent: &NSView, frame: NSRect, visible: bool) {
+        let view = CONTAINERS.with(|r| r.borrow().get(&id).cloned());
+        if let Some(view) = view {
+            view.setFrame(frame);
+            view.setHidden(!visible);
+            if visible {
+                if unsafe { view.superview() }.is_none() {
+                    parent.addSubview(&view);
+                }
+            } else {
+                view.removeFromSuperview();
+            }
+        }
+    }
+    pub fn hide(id: u32) {
+        let view = CONTAINERS.with(|r| r.borrow().get(&id).cloned());
+        if let Some(view) = view {
+            view.setHidden(true);
+            view.removeFromSuperview();
+        }
+    }
     pub fn remove(id: u32) {
         if let Some(view) = CONTAINERS.with(|r| r.borrow_mut().remove(&id)) {
             view.removeFromSuperview();
@@ -52,6 +73,6 @@ mod macos {
     }
 }
 #[cfg(target_os = "macos")]
-pub use macos::{create, remove};
+pub use macos::{create, hide, layout, remove};
 #[cfg(not(target_os = "macos"))]
 pub fn remove(_: u32) {}

@@ -29,7 +29,7 @@ fn lease_valid(value: &str) -> bool {
         })
 }
 pub fn execute(app: &tauri::AppHandle, params: Value) -> Result<Value, String> {
-    if !super::ready() {
+    if !super::accepting() {
         return Err("browser_unavailable".into());
     }
     let request: Request = serde_json::from_value(params).map_err(|_| "browser_request_invalid")?;

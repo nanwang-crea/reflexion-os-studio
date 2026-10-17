@@ -191,8 +191,9 @@ fn monitor_exit(app: tauri::AppHandle, state: Arc<SupervisorState>, cfg: Arc<Run
                 ))]
                 {
                     let handle = app.clone();
-                    let _ = app
-                        .run_on_main_thread(move || crate::browser::cef::release_agents(&handle));
+                    let _ = crate::browser::cef::dispatch(move || {
+                        crate::browser::cef::release_agents(&handle)
+                    });
                 }
                 if stopping || status.success() {
                     return;

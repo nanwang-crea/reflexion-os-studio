@@ -68,7 +68,7 @@ pub fn install_cookies(
     }
     let (tx, rx) = mpsc::channel();
     let handle = app.clone();
-    app.run_on_main_thread(move || {
+    super::dispatch(move || {
         let result = (|| {
             if state::snapshot(&handle).active_tab_id != Some(expected_tab) {
                 return Err("导入目标浏览会话已变化".into());
@@ -115,7 +115,7 @@ pub fn install_cookies(
 pub async fn fill(app: &AppHandle, entry: Entry) -> Result<(), String> {
     let handle = app.clone();
     let (tx, rx) = mpsc::channel();
-    app.run_on_main_thread(move || {
+    super::dispatch(move || {
         let result=(|| {
             let snapshot=state::snapshot(&handle);
             if snapshot.status!="ready" {return Err("请等待页面加载完成".into());}

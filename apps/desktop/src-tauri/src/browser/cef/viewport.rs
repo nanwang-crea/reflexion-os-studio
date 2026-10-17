@@ -14,6 +14,7 @@ pub fn window_info(
     #[cfg(target_os = "macos")]
     let parent = unsafe {
         use objc2_app_kit::NSWindow;
+        super::container::ensure(app)?;
         let view = (&*(window
             .ns_window()
             .map_err(|_| "native window unavailable")? as *const NSWindow))
@@ -40,6 +41,7 @@ pub fn window_info(
 pub fn layout(
     app: &tauri::AppHandle,
     browser: &Browser,
+    _id: u32,
     bounds: Bounds,
     active: bool,
     locked: bool,
@@ -55,50 +57,57 @@ pub fn layout(
         use objc2_app_kit::{NSView, NSWindow};
         use objc2_foundation::{NSPoint, NSRect, NSSize};
         // Tauri's renderer rect is the CSS coordinate reference, including titlebar offsets.
-        window
-            .with_webview(move |platform| unsafe {
-                let renderer = &*(platform.inner() as *const NSView);
-                let native = &*(platform.ns_window() as *const NSWindow);
-                if let Some(parent) = native.contentView() {
-                    let view = &*(handle as *const NSView);
-                    if bounds.width <= 0.0 || bounds.height <= 0.0 {
-                        if let Some(container) = view.superview() {
-                            container.setHidden(true);
-                        }
-                        view.setHidden(true);
-                        return;
-                    }
-                    let size = renderer.bounds().size;
-                    #[cfg(feature = "cef-acceptance")]
-                    eprintln!(
-                        "[cef-viewport-native] visible={visible} renderer={}x{} slot={}x{}",
-                        size.width, size.height, bounds.width, bounds.height
-                    );
-                    let x = bounds.x.min(size.width);
-                    let y = bounds.y.min(size.height);
-                    let width = bounds.width.min((size.width - x).max(0.0));
-                    let height = bounds.height.min((size.height - y).max(0.0));
-                    let local = NSRect::new(
-                        NSPoint::new(
-                            x,
-                            if renderer.isFlipped() {
-                                y
-                            } else {
-                                size.height - y - height
-                            },
-                        ),
-                        NSSize::new(width, height),
-                    );
-                    let frame = renderer.convertRect_toView(local, Some(&parent));
-                    if let Some(container) = view.superview() {
-                        container.setFrame(frame);
-                        container.setHidden(!visible);
-                    }
-                    view.setFrame(NSRect::new(NSPoint::new(0.0, 0.0), frame.size));
-                    view.setHidden(!visible);
+        unsafe {
+            use objc2::{runtime::NSObjectProtocol, ClassType};
+            let native = &*(window
+                .ns_window()
+                .map_err(|_| "native window unavailable")?
+                as *const NSWindow);
+            if let Some(parent) = native.contentView() {
+                // Stay in the owned CEF dispatcher. with_webview constructs
+                // separately retained raw WK/manager/window handles on macOS.
+                let children = parent.subviews();
+                let renderer_parent = children.firstObject().ok_or("renderer unavailable")?;
+                super::container::trace("layout-parent", &renderer_parent);
+                let renderer_children = renderer_parent.subviews();
+                let renderer = renderer_children
+                    .iter()
+                    .find(|view| view.isKindOfClass(objc2_web_kit::WKWebView::class()))
+                    .ok_or("renderer unavailable")?;
+                let view = &*(handle as *const NSView);
+                if bounds.width <= 0.0 || bounds.height <= 0.0 {
+                    super::input::hide(_id);
+                    return Ok(());
                 }
-            })
-            .map_err(|_| "CEF viewport unavailable")?;
+                let size = renderer.bounds().size;
+                #[cfg(feature = "cef-acceptance")]
+                eprintln!(
+                    "[cef-viewport-native] visible={visible} renderer={}x{} slot={}x{}",
+                    size.width, size.height, bounds.width, bounds.height
+                );
+                let x = bounds.x.min(size.width);
+                let y = bounds.y.min(size.height);
+                let width = bounds.width.min((size.width - x).max(0.0));
+                let height = bounds.height.min((size.height - y).max(0.0));
+                let local = NSRect::new(
+                    NSPoint::new(
+                        x,
+                        if renderer.isFlipped() {
+                            y
+                        } else {
+                            size.height - y - height
+                        },
+                    ),
+                    NSSize::new(width, height),
+                );
+                let frame = renderer.convertRect_toView(local, Some(&parent));
+                view.setFrame(NSRect::new(NSPoint::new(0.0, 0.0), frame.size));
+                // Only the owned container is detached; Chromium observes its
+                // window transition and restores compositor visibility on reattach.
+                view.setHidden(false);
+                super::input::layout(_id, &parent, frame, visible);
+            }
+        }
     }
     #[cfg(target_os = "windows")]
     unsafe {
@@ -140,15 +149,27 @@ pub fn layout(
     Ok(())
 }
 
-#[cfg(target_os = "windows")]
-pub fn destroy(browser: &Browser) {
-    #[link(name = "user32")]
-    extern "system" {
-        fn DestroyWindow(window: *mut std::ffi::c_void) -> i32;
-    }
-    if let Some(host) = browser.host() {
+/// Complete DoClose by tearing down the CEF child, never its top-level window.
+pub fn destroy(id: u32) {
+    super::registry::mark_closing(id);
+    super::pump::defer(move || {
+        // Resolve at execution time: a page may have closed before this task ran.
+        let Some(handle) = super::registry::native_handle(id) else {
+            return;
+        };
+        #[cfg(target_os = "macos")]
         unsafe {
-            DestroyWindow(host.window_handle() as *mut std::ffi::c_void);
+            super::input::hide(id);
+            let view = &*(handle as *const objc2_app_kit::NSView);
+            view.removeFromSuperview();
         }
-    }
+        #[cfg(target_os = "windows")]
+        unsafe {
+            #[link(name = "user32")]
+            extern "system" {
+                fn DestroyWindow(window: *mut std::ffi::c_void) -> i32;
+            }
+            DestroyWindow(handle as *mut std::ffi::c_void);
+        }
+    });
 }

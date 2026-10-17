@@ -96,14 +96,20 @@ test('Agent page opens and receives native bounds while animation frames are sus
     })
     const page = await browser.newPage()
     await page.goto(`http://127.0.0.1:${server.address().port}`)
-    await page.waitForFunction(() => typeof window.emit === 'function')
+    // The fixture deliberately suspends RAF; the observer must not depend on it.
+    await page.waitForFunction(() => typeof window.emit === 'function', null, {
+      polling: 50,
+    })
     await page.evaluate(() => window.emit())
     await page.locator('[data-open="true"]').waitFor()
-    await page.waitForFunction(() =>
-      window.layouts.some(
-        (layout) =>
-          layout.visible && layout.width === 400 && layout.height === 300,
-      ),
+    await page.waitForFunction(
+      () =>
+        window.layouts.some(
+          (layout) =>
+            layout.visible && layout.width === 400 && layout.height === 300,
+        ),
+      null,
+      { polling: 50 },
     )
     const count = await page.evaluate(() => window.layouts.length)
     await new Promise((resolve) => setTimeout(resolve, 250))
