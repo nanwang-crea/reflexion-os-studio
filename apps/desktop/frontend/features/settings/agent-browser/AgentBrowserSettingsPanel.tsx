@@ -20,6 +20,7 @@ export function AgentBrowserSettingsPanel(): React.JSX.Element {
   const [settings, setSettings] = useState<AgentBrowserSettings>(
     DEFAULT_AGENT_BROWSER_SETTINGS,
   )
+  const [embedded, setEmbedded] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
@@ -77,9 +78,13 @@ export function AgentBrowserSettingsPanel(): React.JSX.Element {
     <section className="settings-panel">
       <div className="settings-panel-head settings-page-heading">
         <h3 className="settings-panel-title">Agent 浏览器</h3>
-        <p className="hint">配置 Agent 使用的独立 Playwright 浏览器。</p>
+        <p className="hint">
+          {embedded
+            ? 'Agent 使用右侧内置浏览器，页面和操作保持一致。'
+            : '配置 Agent 使用的独立 Playwright 浏览器。'}
+        </p>
       </div>
-      <BrowserRuntimePanel />
+      <BrowserRuntimePanel onEmbedded={setEmbedded} />
       {notice && (
         <p className="settings-error" role="alert">
           {notice}
@@ -92,28 +97,32 @@ export function AgentBrowserSettingsPanel(): React.JSX.Element {
       )}
       <fieldset className="browser-settings-card" disabled={!loaded || saving}>
         <legend>浏览器运行</legend>
-        <label className="browser-settings-field">
-          <span>浏览器来源</span>
-          <Select
-            aria-label="Agent 浏览器来源"
-            value={settings.source}
-            onValueChange={(value) =>
-              void save({
-                ...settings,
-                source: AgentBrowserSourceSchema.parse(value),
-              })
-            }
-          >
-            <option value="auto">自动选择（优先本机 Chrome）</option>
-            <option value="system-chrome">仅本机 Chrome</option>
-            <option value="managed">仅受管 Chromium</option>
-          </Select>
-        </label>
-        <p className="hint">
-          复用 Chrome
-          程序，仍使用独立临时会话，不读取日常浏览器登录态。自动模式下本机
-          Chrome 启动失败时，仅在受管版本已安装的情况下回退。
-        </p>
+        {!embedded && (
+          <>
+            <label className="browser-settings-field">
+              <span>浏览器来源</span>
+              <Select
+                aria-label="Agent 浏览器来源"
+                value={settings.source}
+                onValueChange={(value) =>
+                  void save({
+                    ...settings,
+                    source: AgentBrowserSourceSchema.parse(value),
+                  })
+                }
+              >
+                <option value="auto">自动选择（优先本机 Chrome）</option>
+                <option value="system-chrome">仅本机 Chrome</option>
+                <option value="managed">仅受管 Chromium</option>
+              </Select>
+            </label>
+            <p className="hint">
+              复用 Chrome
+              程序，仍使用独立临时会话，不读取日常浏览器登录态。自动模式下本机
+              Chrome 启动失败时，仅在受管版本已安装的情况下回退。
+            </p>
+          </>
+        )}
         <label className="browser-settings-checkbox">
           <input
             type="checkbox"
@@ -126,22 +135,26 @@ export function AgentBrowserSettingsPanel(): React.JSX.Element {
           />
           <span>允许 Agent 请求浏览器工具</span>
         </label>
-        <label className="browser-settings-field">
-          <span>显示模式</span>
-          <Select
-            aria-label="Agent 浏览器显示模式"
-            value={settings.display}
-            onValueChange={(value) =>
-              void save({
-                ...settings,
-                display: AgentBrowserDisplaySchema.parse(value),
-              })
-            }
-          >
-            <option value="headless">无头运行（不显示窗口）</option>
-            <option value="headed">显示浏览器窗口（有头模式）</option>
-          </Select>
-        </label>
+        {!embedded && (
+          <>
+            <label className="browser-settings-field">
+              <span>显示模式</span>
+              <Select
+                aria-label="Agent 浏览器显示模式"
+                value={settings.display}
+                onValueChange={(value) =>
+                  void save({
+                    ...settings,
+                    display: AgentBrowserDisplaySchema.parse(value),
+                  })
+                }
+              >
+                <option value="headless">无头运行（不显示窗口）</option>
+                <option value="headed">显示浏览器窗口（有头模式）</option>
+              </Select>
+            </label>
+          </>
+        )}
         <label className="browser-settings-field">
           <span>回复结束后</span>
           <Select
@@ -159,7 +172,9 @@ export function AgentBrowserSettingsPanel(): React.JSX.Element {
           </Select>
         </label>
         <p className="hint">
-          默认保留。回复结束或切换会话后窗口仍在，可继续查看网页；同一会话的下一次请求复用浏览器，读取仍遵守审批与页面版本检查。显示网页请选择“显示浏览器窗口”。
+          {embedded
+            ? '默认保留同一会话的临时标签。接管后 Agent 不再操作，交还后需要重新读取页面；关闭标签会撤销当前页面身份。'
+            : '默认保留。回复结束或切换会话后窗口仍在，可继续查看网页；同一会话的下一次请求复用浏览器，读取仍遵守审批与页面版本检查。显示网页请选择“显示浏览器窗口”。'}
         </p>
         <button type="button" onClick={() => void closeWindows()}>
           关闭所有 Agent 浏览器窗口

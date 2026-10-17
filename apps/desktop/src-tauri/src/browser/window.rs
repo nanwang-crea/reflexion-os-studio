@@ -20,9 +20,16 @@ pub fn control(app: &AppHandle, action: Action) -> Result<Snapshot, String> {
                 return Err("本平台或系统版本不支持独立持久浏览配置".into());
             }
             let old = state::preferences(app);
-            if old.storage_mode != preferences.storage_mode
-                || old.site_rules != preferences.site_rules
-            {
+            if old.storage_mode != preferences.storage_mode {
+                #[cfg(all(
+                    feature = "cef-browser",
+                    any(target_os = "macos", target_os = "windows")
+                ))]
+                crate::browser::cef::reset_user(app);
+                #[cfg(not(all(
+                    feature = "cef-browser",
+                    any(target_os = "macos", target_os = "windows")
+                )))]
                 control(app, Action::Close)?;
             }
             *app.state::<state::BrowserState>()
@@ -69,6 +76,20 @@ pub fn control(app: &AppHandle, action: Action) -> Result<Snapshot, String> {
             platform::attach(app)?;
         }
         Action::Attach | Action::Status | Action::Layout { .. } if !platform::available() => {}
+        Action::Closeuser => {
+            #[cfg(all(
+                feature = "cef-browser",
+                any(target_os = "macos", target_os = "windows")
+            ))]
+            crate::browser::cef::reset_user(app);
+            #[cfg(not(all(
+                feature = "cef-browser",
+                any(target_os = "macos", target_os = "windows")
+            )))]
+            {
+                return control(app, Action::Close);
+            }
+        }
         Action::Close => {
             // Invalidate tabs before native stop callbacks can report obsolete state.
             state::update(app, |state| {
@@ -88,6 +109,11 @@ pub fn control(app: &AppHandle, action: Action) -> Result<Snapshot, String> {
             });
             platform::dispose();
             super::policy::audit("close", None, "disposed");
+        }
+        Action::Configurekeychain { mock } => {
+            if mock != super::keychain::mock_enabled(app) {
+                super::keychain::set_mock_enabled(app, mock)?;
+            }
         }
         _ => platform::control(app, &action)?,
     }

@@ -15,7 +15,9 @@ ReflexionOS 的下一代桌面 Agent 与可视化工作流平台。它不是现�
 - **Multi-Agent**：Primary 通过 `task` 动态创建受控子 Agent；子 Run 隔离上下文、继承权限交集，可在预算内继续委派；根级 mutation coordinator 串行化兄弟写入，revision 冲突显式失败并记录变更归属；
 - **UI**：项目/会话侧栏、聊天区（含右侧可开合的工作区面板）、落地页、技能页、指令页、Provider 设置页、委派运行卡与 Artifact/Changed Files 展示。
 
-尚未实现（见 `docs/ROADMAP.md`）：只读内嵌 Browser 与 Browser Tool、Provider/Tool 动态插件、更完整的资产检索、对话驱动的多 Agent 协作增强、多模态、激活码许可；Phase 3 的更完整跨层恢复与高级变更治理仍待后续。
+浏览器当前迁移为 CEF 原生嵌入，Agent 与用户在同一右侧标签接管；macOS 已进入产品验收，Windows 待真机，Linux 明确回退。详见 [CEF 接入](docs/CEF-BROWSER-INTEGRATION.md)。
+
+尚未实现（见 `docs/ROADMAP.md`）：Provider/Tool 动态插件、更完整的资产检索、对话驱动的多 Agent 协作增强、多模态、激活码许可；Phase 3 的更完整跨层恢复与高级变更治理仍待后续。
 
 ## 常用命令
 
@@ -26,6 +28,8 @@ pnpm clean        # 清理构建产物
 pnpm test:ts      # TypeScript 类型检查
 pnpm test         # 全量验证（单测、cargo 与冒烟）
 ```
+
+macOS / Windows 开发和打包需安装 CMake、Ninja，以及对应 Rust / 平台编译工具。`pnpm prepare:cef` 下载固定版本 CEF 并准备沙箱 helper；`pnpm dev` 和安装包构建自动执行此步骤。CEF 及 Chromium 许可随包分发。
 
 安装包首次构建需要联网获取官方 Node 发行版和 SHA256 校验清单，二者缓存于
 `.cache/node-dist/`。同版本后续构建可从缓存离线准备 Node，仍会校验压缩包并重新提取。

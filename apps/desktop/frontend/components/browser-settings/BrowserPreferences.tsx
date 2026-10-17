@@ -96,7 +96,7 @@ export function BrowserPreferences({
         </Select>
       </label>
       <p className="hint">
-        切换会话类型会关闭全部标签页。持久配置保留 Cookie
+        切换会话类型会关闭普通浏览标签页。持久配置保留 Cookie
         和网站数据，清理须显式操作。
       </p>
       <label className="browser-settings-checkbox">
@@ -114,7 +114,7 @@ export function BrowserPreferences({
       </label>
       <p className="hint">
         历史记录与联系信息不会自动注入
-        Agent。网站权限默认拒绝；可用的原生能力在下方分别配置。
+        Agent。网站权限由内嵌引擎统一拒绝；可用的原生能力在下方分别配置。
       </p>
     </fieldset>
   )

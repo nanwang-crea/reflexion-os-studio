@@ -113,6 +113,9 @@ fn observe_stdout(
                 );
                 continue;
             };
+            if crate::host::browser::dispatch(&app, &state, &message) {
+                continue;
+            }
             let method = message.get("method").and_then(Value::as_str);
             if method == Some(ready_method.as_str()) {
                 let next = {
@@ -182,6 +185,15 @@ fn monitor_exit(app: tauri::AppHandle, state: Arc<SupervisorState>, cfg: Arc<Run
                 // state.runtime / runtime_ready 导致 UI 误报“Chat 可用”。
                 *guard = None;
                 drop(guard);
+                #[cfg(all(
+                    feature = "cef-browser",
+                    any(target_os = "macos", target_os = "windows")
+                ))]
+                {
+                    let handle = app.clone();
+                    let _ = app
+                        .run_on_main_thread(move || crate::browser::cef::release_agents(&handle));
+                }
                 if stopping || status.success() {
                     return;
                 }
@@ -250,6 +262,13 @@ fn spawn_sidecar(
     {
         // Runtime 是后台 sidecar，不应在 Windows 上弹出独立控制台窗口。
         command.creation_flags(0x08000000);
+    }
+    #[cfg(all(
+        feature = "cef-browser",
+        any(target_os = "macos", target_os = "windows")
+    ))]
+    if crate::browser::cef::ready() {
+        command.env("REFLEXION_BROWSER_ENGINE", "cef");
     }
     for (key, value) in envs {
         command.env(key, value);
@@ -346,6 +365,13 @@ pub(super) fn start_sidecars(app: &tauri::AppHandle, state: Arc<SupervisorState>
             Some("Runtime entry, bundled Node, or resource directory not found".to_string()),
         );
         return;
+    };
+    #[cfg(all(debug_assertions, feature = "cef-acceptance"))]
+    let cfg = {
+        let mut cfg = cfg;
+        *cfg.args.last_mut().expect("Runtime entry") =
+            root.join("scripts/native/acceptance/driver.mjs");
+        cfg
     };
     if cfg.envs.is_empty() {
         update_state(

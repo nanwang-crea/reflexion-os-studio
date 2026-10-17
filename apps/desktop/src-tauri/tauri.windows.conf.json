@@ -1,0 +1,8 @@
+{
+  "bundle": {
+    "resources": {
+      "package-resources/": "pkg",
+      "../../../.cache/cef-native/windows/": "."
+    }
+  }
+}

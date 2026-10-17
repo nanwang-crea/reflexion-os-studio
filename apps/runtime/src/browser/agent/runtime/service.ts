@@ -14,6 +14,10 @@ import { browserRuntimePaths } from './paths.js'
 import { runBrowserInstaller } from './installation/process.js'
 
 export class BrowserRuntimeService {
+  private embedded = false
+  useEmbedded(): void {
+    this.embedded = true
+  }
   private current: AgentBrowserRuntime
   private task: Promise<void> | null = null
   private controller: AbortController | null = null
@@ -39,6 +43,16 @@ export class BrowserRuntimeService {
     }
   }
   get status(): AgentBrowserRuntime {
+    if (this.embedded)
+      return {
+        engine: 'cef',
+        systemChromeAvailable: false,
+        state: 'installed',
+        phase: 'ready',
+        progress: null,
+        version: 'CEF 154',
+        error: null,
+      }
     if (this.current.state !== 'downloading') {
       if (this.isInstalled())
         this.current = {
@@ -88,6 +102,7 @@ export class BrowserRuntimeService {
     }
   }
   install(): AgentBrowserRuntime {
+    if (this.embedded) return this.status
     if (this.task || this.status.state === 'installed') return this.status
     if (!this.paths) {
       this.current = {

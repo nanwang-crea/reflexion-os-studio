@@ -18,7 +18,8 @@
     "format:check": "prettier --check .",
     "test": "bash scripts/test-all.sh",
     "test:ts": "tsc --noEmit",
-    "clean": "rm -rf apps/*/dist apps/*/dist-frontend packages/*/dist"
+    "clean": "rm -rf apps/*/dist apps/*/dist-frontend packages/*/dist",
+    "prepare:cef": "node scripts/native/prepare-cef.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

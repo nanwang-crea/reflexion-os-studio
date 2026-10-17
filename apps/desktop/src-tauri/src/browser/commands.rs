@@ -10,7 +10,7 @@ pub fn browser_capabilities(
     app: AppHandle,
 ) -> Result<super::capabilities::Capabilities, String> {
     crate::host::caller::trusted(&webview, &app, &["main"])?;
-    Ok(super::capabilities::report())
+    Ok(super::capabilities::report(&app))
 }
 
 #[tauri::command]
@@ -49,13 +49,19 @@ pub async fn browser_control(
     if !platform::available()
         && !matches!(
             action,
-            Action::Attach | Action::Status | Action::Close | Action::Layout { .. }
+            Action::Attach
+                | Action::Status
+                | Action::Close
+                | Action::Closeuser
+                | Action::Layout { .. }
+                | Action::Configurekeychain { .. }
         )
     {
         return Err("browser Surface unavailable".into());
     }
     match &action {
         Action::Configure { preferences } => preferences.validate()?,
+        Action::Configurekeychain { .. } => {}
         Action::Fillcontact { contact } => contact.validate()?,
         Action::Find { text, backwards } => {
             let _ = backwards;
@@ -86,6 +92,13 @@ pub async fn browser_control(
     }
     if let Action::Navigate { url } | Action::Newtab { url: Some(url) } = &action {
         super::policy::guest_url(url, crate::browser::policy::dev_url(&app))?;
+    }
+    #[cfg(all(
+        feature = "cef-browser",
+        any(target_os = "macos", target_os = "windows")
+    ))]
+    if let Action::Fillcontact { contact } = action {
+        return super::cef::fill_contact(app, contact).await;
     }
     on_main(app, move |app| {
         if matches!(action, Action::Navigate { .. }) && state::snapshot(app).tabs.is_empty() {

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useBrowserSurface } from './useBrowserSurface'
 import { useLoadingProgress } from './useLoadingProgress'
 import './browser.css'
+import './browser-control.css'
 import { useBrowserViewport } from './useBrowserViewport'
 import { BrowserIcon } from './BrowserIcon'
 import { BrowserPanelHeader } from './BrowserPanelHeader'
@@ -11,6 +12,7 @@ import { browserHomeUrl } from '@reflexion-os-studio/contracts'
 import { BrowserMenu } from './BrowserMenu'
 import { BrowserLoadNotice } from './BrowserLoadNotice'
 import { useBrowserSettings } from '../../api/browser-settings'
+import { getBrowserCapabilities } from '../../api/browser-capabilities'
 
 /** Trusted browser chrome; native webpage content remains a separate view. */
 export function BrowserSurfacePanel({
@@ -29,18 +31,34 @@ export function BrowserSurfacePanel({
   const addressFocus = useRef(false)
   const { state, error, control, navigate, external, externalNotice } =
     useBrowserSurface(visible)
+  const activeTab = state?.tabs.find((tab) => tab.id === state.activeTabId)
+  const agentTab =
+    activeTab?.control === 'agent' || activeTab?.control === 'paused'
   const [findOpen, setFindOpen] = useState(false)
   const [find, setFind] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const [bannerVisible, setBannerVisible] = useState(true)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [credentialsAvailable, setCredentialsAvailable] = useState(false)
+  useEffect(() => {
+    let disposed = false
+    void getBrowserCapabilities()
+      .then((report) => {
+        if (!disposed)
+          setCredentialsAvailable(report.features?.passwordManagement === true)
+      })
+      .catch(() => {})
+    return () => {
+      disposed = true
+    }
+  }, [state?.available])
   const viewport = useRef<HTMLDivElement>(null)
-  useBrowserViewport(
+  const layoutError = useBrowserViewport(
     viewport,
     visible &&
-      settings.mode !== 'system' &&
-      Boolean(state?.url) &&
+      (agentTab || settings.mode !== 'system') &&
+      (agentTab || Boolean(state?.url)) &&
       !menuOpen &&
       !importOpen &&
       !settingsOpen,
@@ -68,6 +86,25 @@ export function BrowserSurfacePanel({
         onWorkspace={onWorkspace}
         onCollapse={onCollapse}
       />
+      {agentTab && (
+        <div className="browser-agent-control" role="status">
+          <span>
+            {activeTab?.control === 'paused'
+              ? '你正在接管，Agent 已暂停操作此页'
+              : 'Agent 正在使用此页'}
+          </span>
+          <button
+            type="button"
+            onClick={() =>
+              void control({
+                kind: activeTab?.control === 'paused' ? 'resume' : 'takeover',
+              })
+            }
+          >
+            {activeTab?.control === 'paused' ? '交还 Agent' : '接管操作'}
+          </button>
+        </div>
+      )}
       {settingsOpen && (
         <BrowserSettingsDialog onClose={() => setSettingsOpen(false)} />
       )}
@@ -81,7 +118,7 @@ export function BrowserSurfacePanel({
             className="browser-icon-button"
             title="后退"
             aria-label="后退"
-            disabled={!state?.canGoBack}
+            disabled={agentTab || !state?.canGoBack}
             onClick={() => void control({ kind: 'back' })}
           >
             <BrowserIcon name="back" />
@@ -91,7 +128,7 @@ export function BrowserSurfacePanel({
             className="browser-icon-button"
             title="前进"
             aria-label="前进"
-            disabled={!state?.canGoForward}
+            disabled={agentTab || !state?.canGoForward}
             onClick={() => void control({ kind: 'forward' })}
           >
             <BrowserIcon name="forward" />
@@ -101,7 +138,7 @@ export function BrowserSurfacePanel({
             className="browser-icon-button"
             title={busy ? '停止' : '刷新或重试'}
             aria-label={busy ? '停止加载' : '刷新'}
-            disabled={!state?.available || !state.url}
+            disabled={agentTab || !state?.available || !state.url}
             onClick={() => {
               if (state?.status === 'failed' && state.url)
                 void navigate(state.url)
@@ -115,7 +152,7 @@ export function BrowserSurfacePanel({
             className="browser-icon-button"
             title="主页"
             aria-label="主页"
-            disabled={!state?.available}
+            disabled={agentTab || !state?.available}
             onClick={() => {
               const url = browserHomeUrl(settings)
               if (url) void navigate(url)
@@ -129,7 +166,7 @@ export function BrowserSurfacePanel({
           className="browser-address"
           onSubmit={(event) => {
             event.preventDefault()
-            if (address.trim()) {
+            if (!agentTab && address.trim()) {
               const input = event.currentTarget.querySelector('input')
               void navigate(address).then(() => input?.blur())
             }
@@ -143,6 +180,7 @@ export function BrowserSurfacePanel({
               </span>
             )}
           <input
+            readOnly={agentTab}
             aria-label="网址"
             value={
               !addressFocused &&
@@ -179,7 +217,8 @@ export function BrowserSurfacePanel({
         <BrowserMenu
           open={menuOpen}
           onOpenChange={setMenuOpen}
-          available={state?.available === true}
+          available={!agentTab && state?.available === true}
+          credentialsAvailable={credentialsAvailable}
           onSettings={() => setSettingsOpen(true)}
           onFind={() => setFindOpen(true)}
           onPrint={() => void control({ kind: 'print' })}
@@ -187,7 +226,7 @@ export function BrowserSurfacePanel({
           onImport={() => setImportOpen(true)}
           onNewTab={() => void control({ kind: 'newtab' })}
           onClear={() =>
-            void control({ kind: 'close' }).then(() =>
+            void control({ kind: 'closeuser' }).then(() =>
               control({ kind: 'attach' }),
             )
           }
@@ -226,33 +265,37 @@ export function BrowserSurfacePanel({
         progress={progress}
         info={externalNotice}
         state={state}
-        error={error}
+        error={error ?? layoutError}
         navigate={navigate}
         external={external}
       />
       <div className="browser-viewport" ref={viewport}>
-        {bannerVisible && state?.available && !state.url && (
-          <div className="browser-import-banner">
-            <BrowserIcon name="globe" />
-            <div>
-              <strong>从系统浏览器导入数据</strong>
-              <span>导入 Chrome / Edge 的密码和 Cookie</span>
+        {!agentTab &&
+          credentialsAvailable &&
+          bannerVisible &&
+          state?.available &&
+          !state.url && (
+            <div className="browser-import-banner">
+              <BrowserIcon name="globe" />
+              <div>
+                <strong>从系统浏览器导入数据</strong>
+                <span>导入 Chrome / Edge 的密码和 Cookie</span>
+              </div>
+              <button type="button" onClick={() => setImportOpen(true)}>
+                导入
+              </button>
+              <button
+                type="button"
+                className="browser-icon-button"
+                aria-label="关闭导入提示"
+                onClick={() => setBannerVisible(false)}
+              >
+                <BrowserIcon name="close" />
+              </button>
             </div>
-            <button type="button" onClick={() => setImportOpen(true)}>
-              导入
-            </button>
-            <button
-              type="button"
-              className="browser-icon-button"
-              aria-label="关闭导入提示"
-              onClick={() => setBannerVisible(false)}
-            >
-              <BrowserIcon name="close" />
-            </button>
-          </div>
-        )}
+          )}
 
-        {!state?.url ? (
+        {!state?.url && !agentTab ? (
           <div className="browser-start-page">
             <p className="browser-mode">
               {state?.available
@@ -282,7 +325,7 @@ export function BrowserSurfacePanel({
           </div>
         ) : (
           <p className="browser-empty">
-            {state.status === 'failed'
+            {state?.status === 'failed'
               ? '网页未能加载，请重试或使用系统浏览器。'
               : ''}
           </p>

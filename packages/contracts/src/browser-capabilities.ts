@@ -7,6 +7,8 @@ export const BrowserCapabilitiesSchema = z.strictObject({
   systemAvailable: z.boolean(),
   status: z.enum(['available', 'degraded', 'unavailable']),
   notice: z.string().nullable(),
+  /** macOS CEF only: website-data encryption key stays in memory, not the login keychain. */
+  mockKeychain: z.boolean().optional(),
   features: z
     .strictObject({
       find: z.boolean(),
@@ -17,16 +19,6 @@ export const BrowserCapabilitiesSchema = z.strictObject({
       downloads: z.boolean(),
       passwordManagement: z.boolean(),
       contactFill: z.boolean(),
-      sitePermissions: z.array(
-        z.enum([
-          'camera',
-          'microphone',
-          'geolocation',
-          'notifications',
-          'clipboard',
-          'upload',
-        ]),
-      ),
     })
     .optional(),
 })

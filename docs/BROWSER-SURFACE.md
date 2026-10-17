@@ -21,6 +21,7 @@ Browser Surface 是用户操作的隔离网页浏览区域，不是 Chat Core �
 Host 负责窗口和原生适配；contracts 定义 Surface 契约，runtime-client 提供 typed facade，前端 api 层调用。Surface 命令不加入 Runtime 的命令或 Agent 工具表。
 
 Spike 仅在显式启用 Cargo `browser-spike` feature 的 debug 构建可用，普通开发/发布构建均使用系统浏览器。macOS 用独立非持久化 WKWebView；Windows 的 WebView2、Linux 的 WebKitGTK 在原生权限与上传边界验收前返回 unavailable，保持 HTTP / HTTPS 系统打开回退。不能把静态检查写成三平台完成。
+（2026-10-17 状态更新：macOS 的 WKWebView spike 适配器已删除，普通与发布构建改用 CEF，见 `docs/CEF-BROWSER-INTEGRATION.md`；本节保留为历史设计记录。）
 
 发布前必须证明程序化剪贴板、定位、通知、拖放上传、子框架与原生权限边界，并完成三平台真机与打包验收。不能用网页内 JavaScript 补丁作为这些能力的安全边界。现阶段不对实验窗口作“所有系统权限均已封锁”的承诺。
 

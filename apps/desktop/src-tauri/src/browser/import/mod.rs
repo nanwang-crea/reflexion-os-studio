@@ -2,7 +2,11 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Webview};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
-#[cfg(all(feature = "browser-spike", target_os = "macos"))]
+#[cfg(all(
+    feature = "browser-spike",
+    feature = "cef-browser",
+    target_os = "macos"
+))]
 pub(crate) mod chromium;
 #[cfg(all(feature = "browser-spike", target_os = "macos"))]
 mod crypto;
@@ -76,9 +80,9 @@ pub async fn browser_import(
             return Ok(Report { cancelled: true, notice: "已取消，未读取浏览器数据".into(), ..Report::default() });
         }
         if expected_tab != crate::browser::state::snapshot(&app).active_tab_id || expected_storage != crate::browser::state::preferences(&app).storage_mode { return Err("导入目标会话已变化，请重新确认".into()); }
-        #[cfg(all(feature = "browser-spike", target_os = "macos"))]
+        #[cfg(all(feature = "browser-spike", feature = "cef-browser", target_os = "macos"))]
         { chromium::import(&app, request) }
-        #[cfg(not(all(feature = "browser-spike", target_os = "macos")))]
+        #[cfg(not(all(feature = "browser-spike", feature = "cef-browser", target_os = "macos")))]
         { Err("本平台尚无直接迁移适配".into()) }
     }).await.map_err(|_| "迁移任务未完成".to_string())?
 }
@@ -132,14 +136,22 @@ pub async fn browser_clear_credentials(webview: Webview, app: AppHandle) -> Resu
 pub async fn browser_fill(webview: Webview, app: AppHandle, id: usize) -> Result<(), String> {
     crate::host::caller::trusted(&webview, &app, &["main"])?;
     supported()?;
-    #[cfg(all(feature = "browser-spike", target_os = "macos"))]
+    #[cfg(all(
+        feature = "browser-spike",
+        feature = "cef-browser",
+        target_os = "macos"
+    ))]
     {
         let entry = tauri::async_runtime::spawn_blocking(move || vault::get(id))
             .await
             .map_err(|_| "密码不可用".to_string())??;
         super::platform::fill(&app, entry).await
     }
-    #[cfg(not(all(feature = "browser-spike", target_os = "macos")))]
+    #[cfg(not(all(
+        feature = "browser-spike",
+        feature = "cef-browser",
+        target_os = "macos"
+    )))]
     {
         let _ = id;
         Err("本平台尚无密码填充适配".into())

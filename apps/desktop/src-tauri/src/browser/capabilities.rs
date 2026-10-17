@@ -1,4 +1,5 @@
 use serde::Serialize;
+use tauri::AppHandle;
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -8,10 +9,15 @@ pub struct Capabilities {
     pub system_available: bool,
     pub status: String,
     pub notice: Option<String>,
+    pub mock_keychain: bool,
     pub features: serde_json::Value,
 }
 
-pub fn report() -> Capabilities {
+pub fn report(app: &AppHandle) -> Capabilities {
+    report_with(super::keychain::mock_enabled(app))
+}
+
+pub fn report_with(mock_keychain: bool) -> Capabilities {
     let embedded_available = super::platform::available();
     let platform = if cfg!(target_os = "macos") {
         "macos"
@@ -38,11 +44,11 @@ pub fn report() -> Capabilities {
         system_available: true,
         status: status.into(),
         notice,
+        mock_keychain,
         features: serde_json::json!({
             "find": embedded_available, "zoom": embedded_available, "print": embedded_available,
             "persistentSession": super::platform::persistent_available(), "dataClearing": embedded_available,
-            "downloads": embedded_available, "passwordManagement": embedded_available, "contactFill": embedded_available,
-            "sitePermissions": if super::platform::media_available() { vec!["camera", "microphone"] } else { vec![] }
+            "downloads": embedded_available, "passwordManagement": embedded_available && cfg!(all(feature="browser-spike",target_os="macos")), "contactFill": embedded_available
         }),
     }
 }
@@ -51,26 +57,19 @@ pub fn report() -> Capabilities {
 mod tests {
     #[test]
     fn capability_report_matches_platform_in_all_build_profiles() {
-        let report = super::report();
+        let report = super::report_with(false);
         assert_eq!(
             report.embedded_available,
             super::super::platform::available()
         );
-        #[cfg(all(feature = "browser-spike", target_os = "macos"))]
-        assert_eq!(
-            report.embedded_available,
-            super::super::platform::persistent_available()
-                || objc2_foundation::NSProcessInfo::processInfo()
-                    .operatingSystemVersion()
-                    .majorVersion
-                    >= 12
-        );
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(
+            target_os = "macos",
+            all(target_os = "windows", feature = "cef-browser")
+        )))]
         {
             assert!(!report.embedded_available);
             assert_eq!(report.features["persistentSession"], false);
             assert_eq!(report.features["passwordManagement"], false);
-            assert_eq!(report.features["sitePermissions"], serde_json::json!([]));
             let snapshot = crate::browser::state::BrowserState::default()
                 .snapshot
                 .into_inner()

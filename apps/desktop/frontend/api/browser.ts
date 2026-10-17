@@ -24,3 +24,8 @@ export const browserSession = createBrowserSessionClient(
 export async function openBrowserUrl(url: string): Promise<void> {
   if (await browserSession.openLink(url)) setBrowserPanelOpen(true)
 }
+
+/** Keychain mode is host-owned state; toggling persists and applies on next launch. */
+export async function configureBrowserKeychain(mock: boolean): Promise<void> {
+  await browserSurface.control({ kind: 'configurekeychain', mock })
+}

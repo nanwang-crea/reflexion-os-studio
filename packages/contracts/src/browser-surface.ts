@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { BrowserSiteRuleSchema, BrowserContactSchema } from './browser/data.js'
+import { BrowserContactSchema } from './browser/data.js'
 
 /** User Surface only; deliberately absent from Runtime/Agent command tables. */
 export const BrowserActionSchema = z.discriminatedUnion('kind', [
@@ -8,7 +8,6 @@ export const BrowserActionSchema = z.discriminatedUnion('kind', [
     storageMode: z.enum(['temporary', 'persistent']),
     askDownloadLocation: z.boolean(),
     downloadDirectory: z.string().min(1).max(4096).nullable(),
-    siteRules: z.array(BrowserSiteRuleSchema).max(500),
     contactAutofill: z.boolean(),
   }),
   z.strictObject({
@@ -24,6 +23,11 @@ export const BrowserActionSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('fillcontact'),
     contact: BrowserContactSchema,
+  }),
+  // Dev-friendly keychain toggle (macOS): mock keychain avoids the login-keychain prompt.
+  z.strictObject({
+    kind: z.literal('configurekeychain'),
+    mock: z.boolean(),
   }),
   z.strictObject({
     kind: z.literal('navigate'),
@@ -54,6 +58,9 @@ export const BrowserActionSchema = z.discriminatedUnion('kind', [
       'reload',
       'stop',
       'close',
+      'closeuser',
+      'takeover',
+      'resume',
     ]),
   }),
 ])
@@ -62,6 +69,7 @@ export type BrowserAction = z.infer<typeof BrowserActionSchema>
 export const BrowserTabSchema = z.strictObject({
   id: z.number().int().positive(),
   title: z.string(),
+  control: z.enum(['user', 'agent', 'paused']).optional(),
   status: z.enum(['idle', 'loading', 'ready', 'failed', 'unavailable']),
   progress: z.number().min(0).max(1).default(0),
   url: z.string().nullable(),

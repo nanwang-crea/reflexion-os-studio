@@ -1,3 +1,4 @@
+import './browser-menu.css'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { BrowserIcon } from './BrowserIcon'
 
@@ -6,6 +7,7 @@ export function BrowserMenu({
   open,
   onOpenChange,
   available,
+  credentialsAvailable,
   onImport,
   onNewTab,
   onClear,
@@ -17,6 +19,7 @@ export function BrowserMenu({
   open: boolean
   onOpenChange: (open: boolean) => void
   available: boolean
+  credentialsAvailable: boolean
   onImport: () => void
   onNewTab: () => void
   onClear: () => void
@@ -79,14 +82,14 @@ export function BrowserMenu({
           <DropdownMenu.Separator className="browser-menu-separator" />
           <DropdownMenu.Item
             className="browser-menu-item"
-            disabled={!available}
+            disabled={!available || !credentialsAvailable}
             onSelect={onImport}
           >
             导入 Cookie 和密码…
           </DropdownMenu.Item>
           <DropdownMenu.Item
             className="browser-menu-item"
-            disabled={!available}
+            disabled={!available || !credentialsAvailable}
             onSelect={onImport}
           >
             密码管理与手动填充…

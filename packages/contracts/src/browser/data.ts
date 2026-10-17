@@ -37,20 +37,6 @@ export const BrowserContactSchema = z.strictObject({
   address: z.string().max(1000),
 })
 export type BrowserContact = z.infer<typeof BrowserContactSchema>
-export const BrowserPermissionKindSchema = z.enum([
-  'camera',
-  'microphone',
-  'geolocation',
-  'notifications',
-  'clipboard',
-  'upload',
-])
-export const BrowserSiteRuleSchema = z.strictObject({
-  origin: BrowserOriginSchema,
-  permission: BrowserPermissionKindSchema,
-  policy: z.enum(['deny', 'ask']),
-})
-export type BrowserSiteRule = z.infer<typeof BrowserSiteRuleSchema>
 export const BrowserDownloadSchema = z.strictObject({
   id: z.number().int().positive(),
   origin: BrowserOriginSchema,

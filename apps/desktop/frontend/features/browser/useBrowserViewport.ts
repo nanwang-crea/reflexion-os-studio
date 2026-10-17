@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { browserSurface } from '../../api/browser'
 
 /** Native overlays cannot be clipped by CSS. Sync the measured slot and hide for dialogs. */
@@ -7,7 +7,8 @@ export function useBrowserViewport(
   visible: boolean,
   available: boolean,
   activeTabId: number | null,
-): void {
+): string | null {
+  const [error, setError] = useState<string | null>(null)
   const latest = useRef({ visible, available, activeTabId })
   latest.current = { visible, available, activeTabId }
   const requestLayout = useRef<() => void>(() => {})
@@ -17,13 +18,13 @@ export function useBrowserViewport(
   useEffect(() => {
     const element = ref.current
     if (!element) return
-    let frame = 0
+    let frame: ReturnType<typeof setTimeout> | null = null
     let previous = ''
     let disposed = false
     let pending = false
     let again = false
     const update = async (): Promise<void> => {
-      frame = 0
+      frame = null
       if (disposed || !latest.current.available) return
       if (pending) {
         again = true
@@ -52,8 +53,11 @@ export function useBrowserViewport(
       pending = true
       try {
         await browserSurface.control(action)
+        if (!disposed) setError(null)
         previous = signature
-      } catch {
+      } catch (caught) {
+        if (!disposed)
+          setError(caught instanceof Error ? caught.message : String(caught))
         previous = ''
       } finally {
         pending = false
@@ -64,8 +68,8 @@ export function useBrowserViewport(
       }
     }
     const schedule = (): void => {
-      if (!frame && !disposed)
-        frame = requestAnimationFrame(() => void update())
+      if (frame === null && !disposed)
+        frame = setTimeout(() => void update(), 16)
     }
     requestLayout.current = schedule
     const resize = new ResizeObserver(schedule)
@@ -83,7 +87,7 @@ export function useBrowserViewport(
     return () => {
       disposed = true
       requestLayout.current = () => {}
-      cancelAnimationFrame(frame)
+      if (frame !== null) clearTimeout(frame)
       resize.disconnect()
       mutation.disconnect()
       window.removeEventListener('resize', schedule)
@@ -100,4 +104,5 @@ export function useBrowserViewport(
         .catch(() => {})
     }
   }, [ref])
+  return error
 }

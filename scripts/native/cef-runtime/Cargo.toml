@@ -1,0 +1,18 @@
+[package]
+name = "reflexion-cef-runtime"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+cef = { version = "=154.5.0", default-features = false, features = ["sandbox", "build-util"] }
+
+[[bin]]
+name = "reflexion-cef-distribution"
+path = "distribution.rs"
+
+[[bin]]
+name = "reflexion-cef-helper"
+path = "../../../apps/desktop/src-tauri/src/bin/cef-helper.rs"

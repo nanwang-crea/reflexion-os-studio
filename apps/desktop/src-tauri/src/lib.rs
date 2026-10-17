@@ -60,6 +60,13 @@ pub fn verify_frontend_assets() -> Result<(), String> {
 }
 
 pub fn run() {
+    #[cfg(all(
+        feature = "cef-browser",
+        any(target_os = "macos", target_os = "windows")
+    ))]
+    if let Err(error) = browser::cef::bootstrap() {
+        logging::write(&error);
+    }
     shutdown::install_terminate_signal_handler();
     let state = Arc::new(SupervisorState {
         snapshot: Mutex::new(initial_snapshot()),
@@ -102,6 +109,14 @@ pub fn run() {
                 std::env::consts::OS,
                 std::env::consts::ARCH
             ));
+            #[cfg(all(
+                feature = "cef-browser",
+                any(target_os = "macos", target_os = "windows")
+            ))]
+            if let Err(error) = browser::cef::initialize(app.handle()) {
+                logging::write(&format!("[host] CEF unavailable: {error}"));
+            }
+            shutdown::install_terminate_signal_handler();
             supervisor::start_sidecars(app.handle(), state_for_setup.clone());
             Ok(())
         })
@@ -114,6 +129,13 @@ pub fn run() {
                     // 编排必须在此而非 Destroyed，否则 RunEvent::Exit 会在毫秒级
                     // SIGKILL sidecar 树，掐断基于协议的优雅关停（AGENTS §8）。
                     api.prevent_exit();
+                    // CefShutdown 必须等所有浏览器 OnBeforeClose 排空（cef::shutdown
+                    // 内部经 pump 延迟），不能与窗口 teardown 同步竞争。
+                    #[cfg(all(
+                        feature = "cef-browser",
+                        any(target_os = "macos", target_os = "windows")
+                    ))]
+                    browser::cef::shutdown();
                     if let Some(state) = app_handle.try_state::<Arc<SupervisorState>>() {
                         if !state.stopping.load(std::sync::atomic::Ordering::SeqCst) {
                             shutdown::begin_shutdown(state.inner());
@@ -142,12 +164,47 @@ pub fn run() {
                 }
                 tauri::RunEvent::WindowEvent {
                     label,
-                    event: tauri::WindowEvent::CloseRequested { .. },
+                    event: tauri::WindowEvent::Destroyed,
                     ..
                 } if label == "main" => {
+                    // 窗口真正销毁后才关闭浏览器：CloseRequested 时窗口仍在 teardown，
+                    // 立即 shutdown CEF 会与 AppKit 释放视图竞争导致闪退。
                     browser::dispose();
                 }
                 _ => {}
             }
         });
+}
+
+#[cfg(all(
+    feature = "cef-browser",
+    any(target_os = "macos", target_os = "windows")
+))]
+pub fn cef_distribution() -> Result<std::path::PathBuf, String> {
+    browser::cef::distribution()
+}
+#[cfg(all(feature = "cef-browser", target_os = "windows"))]
+#[no_mangle]
+pub unsafe extern "C" fn RunWinMain(
+    instance: cef::sys::HINSTANCE,
+    _command: *const u8,
+    _show: i32,
+    sandbox: *mut u8,
+) -> i32 {
+    if std::env::args_os().any(|arg| arg == "--verify-frontend-assets") {
+        return if verify_frontend_assets().is_ok() {
+            0
+        } else {
+            1
+        };
+    }
+    browser::cef::SANDBOX.store(sandbox as usize, std::sync::atomic::Ordering::Release);
+    let _ = browser::cef::bootstrap();
+    let args = cef::MainArgs { instance };
+    let code = cef::execute_process(Some(&args), None::<&mut cef::App>, sandbox);
+    if code >= 0 {
+        return code;
+    }
+    run();
+    0
 }

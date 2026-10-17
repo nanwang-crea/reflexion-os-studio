@@ -7,6 +7,7 @@ use tauri::{AppHandle, Emitter, Manager};
 pub struct Tab {
     pub id: u32,
     pub title: String,
+    pub control: String,
     pub status: String,
     pub progress: f64,
     pub url: Option<String>,
@@ -50,6 +51,9 @@ pub enum Action {
     Fillcontact {
         contact: super::preferences::Contact,
     },
+    Configurekeychain {
+        mock: bool,
+    },
     Newtab {
         url: Option<String>,
     },
@@ -62,6 +66,8 @@ pub enum Action {
         tab_id: u32,
     },
     Attach,
+    Takeover,
+    Resume,
     Status,
     Navigate {
         url: String,
@@ -71,6 +77,7 @@ pub enum Action {
     Reload,
     Stop,
     Close,
+    Closeuser,
     Layout {
         x: f64,
         y: f64,

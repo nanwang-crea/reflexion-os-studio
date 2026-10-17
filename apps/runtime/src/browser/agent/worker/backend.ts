@@ -1,3 +1,4 @@
+import type { EmbeddedConnection } from '../embedded/connection.js'
 import { automationTarget } from './automation/targets.js'
 import { executeBrowserPlan } from './automation/execute.js'
 import { launchAgentBrowser } from './launch.js'
@@ -48,21 +49,26 @@ export class PlaywrightBackend {
       channel: 'chromium',
       fallbackManaged: false,
     },
+    private readonly embedded?: EmbeddedConnection,
   ) {}
 
   async navigate(
     url: string,
     from?: AgentBrowserPage,
   ): Promise<AgentBrowserDocument> {
+    if (this.embedded?.paused) throw new Error('browser_user_control')
     if (!isSafeAgentBrowserUrl(url)) throw new Error('browser_url_denied')
     if (from) await this.assertCurrent(from)
     const origin = new URL(url).origin
+    if (this.origin === origin && this.embedded?.hasPage)
+      await this.syncEmbedded()
     const reusable =
       this.origin === origin &&
-      this.browser?.isConnected() &&
+      (this.embedded?.hasPage || this.browser?.isConnected()) &&
       this.context?.pages().some((page) => !page.isClosed()) &&
       this.client
     if (!reusable) await this.close()
+    if (reusable) await this.embedded?.assertControl()
     const generation = this.generation
     this.origin = origin
     this.document = null
@@ -74,55 +80,49 @@ export class PlaywrightBackend {
         if (generation !== this.generation) throw new Error('browser_closed')
         this.proxy = await this.proxyFactory(origin)
         if (generation !== this.generation) throw new Error('browser_closed')
-        this.browser = await launchAgentBrowser(
-          this.launch,
-          {
-            headless: this.display === 'headless',
-            chromiumSandbox: true,
-            proxy: { server: this.proxy.server, bypass: '<-loopback>' },
-            args: [
-              ...(process.platform === 'linux' &&
-              this.display === 'headed' &&
-              process.env.WAYLAND_DISPLAY &&
-              !process.env.DISPLAY
-                ? ['--ozone-platform=wayland']
-                : []),
-              '--disable-background-networking',
-              '--disable-quic',
-              '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
-            ],
-          },
-          () => generation === this.generation,
-        )
-        if (generation !== this.generation) throw new Error('browser_closed')
-        this.context = await this.browser.newContext({
-          acceptDownloads: false,
-          serviceWorkers: 'block',
-          permissions: [],
-        })
-        const context = this.context
-        await context.route('**/*', async (route) => {
-          const request = route.request()
-          if (!allowedRequest(origin, request.url(), request.method())) {
-            if (this.interacting) this.interactionBlocked = true
-            await route.abort('blockedbyclient')
-          } else await route.continue()
-        })
-        await context.routeWebSocket('**/*', (socket) => socket.close())
-        context.on('page', (page) => {
-          if (context.pages().length > 1) void page.close().catch(() => {})
-          page.on(
-            'download',
-            (download) => void download.cancel().catch(() => {}),
+        if (this.embedded) {
+          const connection = await this.embedded.open(origin, this.proxy.server)
+          this.browser = connection.browser
+          this.context = connection.context
+        } else {
+          this.browser = await launchAgentBrowser(
+            this.launch,
+            {
+              headless: this.display === 'headless',
+              chromiumSandbox: true,
+              proxy: { server: this.proxy.server, bypass: '<-loopback>' },
+              args: [
+                ...(process.platform === 'linux' &&
+                this.display === 'headed' &&
+                process.env.WAYLAND_DISPLAY &&
+                !process.env.DISPLAY
+                  ? ['--ozone-platform=wayland']
+                  : []),
+                '--disable-background-networking',
+                '--disable-quic',
+                '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
+              ],
+            },
+            () => generation === this.generation,
           )
-        })
+          if (generation !== this.generation) throw new Error('browser_closed')
+          this.context = await this.browser.newContext({
+            acceptDownloads: false,
+            serviceWorkers: 'block',
+            permissions: [],
+          })
+        }
+        const context = this.context
+        await this.guardContext(context, origin)
         this.output = await mkdtemp(join(tmpdir(), 'reflexion-playwright-'))
         const connection = await connectBrowserMcp(context, this.output)
         this.server = connection.server
         this.client = connection.client
         if (generation !== this.generation) throw new Error('browser_closed')
       }
-      await this.call('browser_navigate', { url })
+      if (!(this.embedded?.rebound && this.context?.pages()[0]?.url() === url))
+        await this.call('browser_navigate', { url })
+      if (this.embedded) this.embedded.rebound = false
       const observed = await this.observe()
       if (
         generation !== this.generation ||
@@ -143,6 +143,7 @@ export class PlaywrightBackend {
         injectionWarning: this.document.injectionWarning,
       }
     } catch (error) {
+      if (this.embedded?.paused) throw new Error('browser_user_control')
       await this.close()
       throw error
     }
@@ -203,6 +204,7 @@ export class PlaywrightBackend {
       return await executeBrowserPlan(plan, {
         page: () => this.context?.pages()[0],
         capture: async () => {
+          await this.embedded?.assertControl()
           const { digest, ...document } = await this.observe()
           this.document = {
             ...document,
@@ -256,10 +258,55 @@ export class PlaywrightBackend {
       server?.close(),
       browser?.close(),
       proxy?.close(),
+      this.embedded?.close(),
     ])
     if (output) await rm(output, { recursive: true, force: true })
   }
 
+  private async guardContext(
+    context: BrowserContext,
+    origin: string,
+  ): Promise<void> {
+    await context.route('**/*', async (route) => {
+      try {
+        const request = route.request()
+        if (!allowedRequest(origin, request.url(), request.method())) {
+          if (this.interacting) this.interactionBlocked = true
+          await route.abort('blockedbyclient')
+        } else await route.continue()
+      } catch {
+        // A handoff or cancellation can disconnect an intercepted request.
+        await route.abort('blockedbyclient').catch(() => {})
+      }
+    })
+    await context.routeWebSocket('**/*', (socket) => socket.close())
+    const watch = (page: ReturnType<BrowserContext['pages']>[number]) => {
+      page.on('download', (download) => void download.cancel().catch(() => {}))
+    }
+    for (const page of context.pages()) watch(page)
+    context.on('page', (page) => {
+      if (context.pages().length > 1) void page.close().catch(() => {})
+      watch(page)
+    })
+  }
+  private async syncEmbedded(): Promise<void> {
+    if (!this.embedded) return
+    await this.embedded.assertControl()
+    const connection = this.embedded.current
+    if (connection && this.browser !== connection.browser) {
+      await Promise.allSettled([this.client?.close(), this.server?.close()])
+      this.browser = connection.browser
+      this.context = connection.context
+      if (!this.origin) throw new Error('browser_closed')
+      await this.guardContext(this.context, this.origin)
+      if (!this.output)
+        this.output = await mkdtemp(join(tmpdir(), 'reflexion-playwright-'))
+      const mcp = await connectBrowserMcp(this.context, this.output)
+      this.client = mcp.client
+      this.server = mcp.server
+      this.readVersion = null
+    }
+  }
   private assertIdentity(page: AgentBrowserPage): void {
     const parsed = AgentBrowserPageSchema.parse(page)
     if (
@@ -269,6 +316,7 @@ export class PlaywrightBackend {
       throw new Error('browser_page_stale')
   }
   private async assertCurrent(page: AgentBrowserPage): Promise<void> {
+    await this.syncEmbedded()
     this.assertIdentity(page)
     const observed = await this.observe()
     this.assertIdentity(page)

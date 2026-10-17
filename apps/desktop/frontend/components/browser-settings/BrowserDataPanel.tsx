@@ -49,7 +49,8 @@ export function BrowserDataPanel({ supported }: { supported: boolean }) {
     <fieldset className="browser-settings-card" disabled={busy}>
       <legend>浏览数据与历史</legend>
       <p className="hint">
-        清理网站数据会退出登录。清理时关闭全部标签页；未选择的数据保留。密码需在浏览器菜单的密码管理中单独删除。
+        清理网站数据会关闭普通浏览标签并创建全新存储，同时重置这些标签的缓存和登录状态；旧存储在下次启动时删除。Agent
+        标签不受影响。密码需在密码管理中单独删除。
       </p>
       <label>
         <input

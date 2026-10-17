@@ -4,11 +4,11 @@
   "version": "0.1.0",
   "identifier": "com.reflexionos.studio",
   "build": {
-    "beforeDevCommand": "pnpm -w build:system && pnpm dev:frontend",
+    "beforeDevCommand": "pnpm -w prepare:cef && pnpm -w build:system && pnpm dev:frontend",
     "beforeBuildCommand": "pnpm prepare:package && pnpm build:frontend",
     "devUrl": "http://localhost:5173",
     "frontendDist": "../dist-frontend",
-    "beforeBundleCommand": "node ../../scripts/verify-desktop-assets.mjs"
+    "beforeBundleCommand": "node ../../scripts/native/before-bundle.mjs"
   },
   "app": {
     "windows": [

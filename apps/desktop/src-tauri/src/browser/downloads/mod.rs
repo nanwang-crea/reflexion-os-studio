@@ -1,5 +1,6 @@
 pub mod policy;
 pub(crate) mod redirects;
+pub(crate) mod transfers;
 use serde::Serialize;
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

@@ -174,28 +174,34 @@ Agent、Memory、Skill、Context 和 Delegation/Policy 是一等领域，分别�
 
 单次解除 Shell 沙箱：用户显式批准 `require_unsandboxed` 后，Rust 以当前用户身份直接执行命令；精确绑定、过期及一次性消费校验仍生效。该模式解除文件、敏感路径与网络的 OS 隔离，不受 preset、Danger 或会话规则自动授权。三平台执行方式及安全承诺例外见 `docs/PERMISSION-MODEL.md` §7.0。
 
-## 14. Browser Surface 与 Playwright Agent 路线（2026-10-13）
+## 14. CEF Browser Surface 与 Playwright Agent（2026-10-17）
 
-用户 Surface 与 Agent Browser Tool 分开授权。macOS 12+ 默认开发/发布启用
-独立 WKWebView；Windows/Linux 保持 fail-closed 与系统浏览器回退。
-用户网页支持 HTTP/HTTPS、内网及网站脚本；不注册 Tauri IPC、应用脚本消息
-处理器和内部协议。可信工具栏经 contracts/runtime-client Host facade 控制
-右侧原生面板，弹层显示时隐藏网页。工作区、浏览器和协作共用右侧 Surface 标签栏；
-放大/还原属于公共容器，切换标签保持放大，收起面板或切换会话后恢复分栏。
-文件编辑器保持挂载，浏览器按可见性同步原生视口；三平台共用布局，Windows/Linux 继续系统浏览器回退。显式 `--no-default-features` 可关闭。
+Tauri 2 保留应用 Renderer 和宿主。macOS / Windows 默认构建将外部网页放进
+CEF 原生子视图，页面不注册 Tauri IPC、应用协议或宿主脚本处理器。
+Linux 暂不启用嵌入，明确回退系统浏览器；Windows 实现仍须真机验收。
+开发依赖 CMake / Ninja；CEF 引擎、沙箱 helper / bootstrap 和许可随安装包分发。
 
-用户网页默认临时 store，macOS 14+ 可选择独立 UUID 的持久 store，与应用
-Renderer 隔离。引擎数据清理关闭网页、等待完成，本地历史单独清理，未选择的数据保留；下载
-使用临时文件安全发布、禁止覆盖与跨来源重定向。网站权限默认拒绝，HTTPS
-主页面的询问规则仍需逐次原生确认；规则变化关闭标签撤销现有授权。
-媒体确认还复核来源、活动标签和状态 revision，拒绝确认期间变化。
-密码与系统浏览器迁移属于原生用户功能，凭据不经过 Runtime/Agent/IPC。
-Runtime v42 的历史和联系信息不随 Agent 网页权限开放。
+工作区、浏览器和协作共用右侧 Surface，放大/还原属于公共容器。
+原生网页随测量到的视口、活动标签和弹层显隐；后台 WebView 暂停动画帧时也必须
+继续同步页面状态和尺寸。事件合并采用有界一次性定时器，无空闲轮询。
+CEF 消息泵由原生调度回调触发，并有有界延迟任务排空。
 
-B4 采用内置受管官方 Playwright MCP：每 Run 独立 stdio worker 与临时 Chromium 上下文，内存 MCP 调用官方服务。内置工具门面统一执行逐次审批、页面身份与快照摘要绑定、受控公网出口和敏感过滤；首批导航/读取/关闭，不开放任意脚本或用户资料。用户 Surface 独立；三平台分发与验收分别处理。详见 [B4 设计](docs/BROWSER-AGENT.md)。
+普通标签支持临时 / 独立持久存储。清理网站数据关闭普通标签并轮换存储，
+同时重置其缓存；旧存储下次启动清除，Agent 标签不受影响。本地历史单独清理。
+下载使用临时文件安全发布，拒绝覆盖及跨来源重定向。媒体权限当前拒绝；
+旧 WKWebView 适配器已移除，其媒体能力不代表 CEF 已支持。macOS 凭据迁移和手动填充
+仍是原生用户能力，凭据不进入 Runtime、Agent 或应用 IPC。
 
-本机验收及剩余门槛见 [验收报告](docs/BROWSER-ACCEPTANCE-2026-10-13.md)；
-硬件媒体、旧 macOS 和三平台矩阵不能用代码测试代替。
+Agent 继续使用受管官方 Playwright MCP 与既有逐次审批、页面身份/摘要绑定、
+公网来源代理、敏感过滤和受限脚本编译。CEF 可用时 Runtime 通过现有 stdio
+的私有宿主请求取得会话专属临时页面租约；动态本机 CDP 端点不交给前端或模型。
+MCP 只暴露租约页，禁止跨会话页面及上下文凭据访问。用户在同一标签接管时
+断开 Agent 控制；交还后按原 TargetId 重新连接并刷新身份，保留人工修改。
+关闭、Runtime 重启与应用退出会回收租约和子进程。
+
+实现、构建方法和验收边界见 [CEF 接入](docs/CEF-BROWSER-INTEGRATION.md)。
+旧 [B4 设计](docs/BROWSER-AGENT.md) 的独立 Chromium worker 仅保留为非 CEF
+平台的受控后端，不代表嵌入已在这些平台验收。
 
 协作 Surface 的成果优先试用边界见 [围绕成果的协作体验试用](docs/COLLABORATION-RESULTS-PILOT-2026-10-16.md)。
 

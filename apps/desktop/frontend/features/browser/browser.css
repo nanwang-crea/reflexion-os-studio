@@ -391,43 +391,6 @@
   padding: 5px 12px;
   background: var(--bg-elevated);
 }
-.browser-menu {
-  z-index: 1200;
-  width: 240px;
-  max-width: calc(100vw - 16px);
-  padding: 6px;
-  background: var(--bg);
-  color: var(--text);
-  border: 1px solid var(--border-subtle);
-  border-radius: 14px;
-  box-shadow: 0 8px 24px #0002;
-  font-size: 12px;
-}
-.browser-menu-item {
-  padding: 8px 10px;
-  border-radius: 6px;
-  outline: none;
-  cursor: default;
-}
-.browser-menu-item[data-highlighted] {
-  background: var(--bg-hover);
-}
-.browser-menu-item[data-disabled] {
-  color: var(--text-muted);
-  opacity: 0.6;
-}
-.browser-menu-separator {
-  height: 1px;
-  background: var(--border-subtle);
-  margin: 4px 6px;
-}
-.browser-menu-note {
-  color: var(--text-muted);
-  padding: 8px 10px;
-  font-size: 11px;
-  line-height: 1.5;
-}
-
 .browser-settings-dialog {
   width: min(760px, 90vw);
   max-height: 85vh;

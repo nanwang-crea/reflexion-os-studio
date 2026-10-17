@@ -11,6 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 RESOURCES="$ROOT/apps/desktop/src-tauri/package-resources"
 
+node "$SCRIPT_DIR/native/prepare-cef.mjs"
 node "$SCRIPT_DIR/bundle-runtime.mjs"
 node "$SCRIPT_DIR/fetch-node-dist.mjs"
 node "$SCRIPT_DIR/prepare-browser.mjs"

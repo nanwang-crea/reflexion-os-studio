@@ -69,7 +69,7 @@ test('disable waits for an in-flight open; later opens and attaches cannot recre
   await attach
   assert.deepEqual(calls, [
     ['open'],
-    ['control', 'close'],
+    ['control', 'closeuser'],
     ['external', 'https://example.net/'],
     ['control', 'status'],
   ])

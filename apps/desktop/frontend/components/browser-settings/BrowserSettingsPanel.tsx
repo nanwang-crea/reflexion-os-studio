@@ -3,7 +3,6 @@ import './browser-settings.css'
 import { DEFAULT_BROWSER_SETTINGS } from '@reflexion-os-studio/contracts'
 import { BrowserPreferences } from './BrowserPreferences'
 import { BrowserContacts } from './BrowserContacts'
-import { BrowserSitePermissions } from './BrowserSitePermissions'
 import { BrowserDownloads } from './BrowserDownloads'
 import { BrowserDataPanel } from './BrowserDataPanel'
 import { Select } from '../../components/forms/Select'
@@ -15,6 +14,7 @@ import {
   getBrowserSettings,
   updateBrowserSettings,
 } from '../../api/browser-settings'
+import { configureBrowserKeychain } from '../../api/browser'
 import { getBrowserCapabilities } from '../../api/browser-capabilities'
 
 export function BrowserSettingsPanel(): React.JSX.Element {
@@ -27,6 +27,9 @@ export function BrowserSettingsPanel(): React.JSX.Element {
   const [notice, setNotice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const [keychainMock, setKeychainMock] = useState(false)
+  const [keychainNotice, setKeychainNotice] = useState<string | null>(null)
+  const [keychainBusy, setKeychainBusy] = useState(false)
   const savingRef = useRef(false)
 
   useEffect(() => {
@@ -36,6 +39,7 @@ export function BrowserSettingsPanel(): React.JSX.Element {
         if (disposed) return
         setSettings(stored.settings)
         setCapabilities(reported)
+        setKeychainMock(reported.mockKeychain ?? false)
         setLoaded(true)
       })
       .catch((error: unknown) => {
@@ -60,6 +64,26 @@ export function BrowserSettingsPanel(): React.JSX.Element {
     } finally {
       savingRef.current = false
       setSaving(false)
+    }
+  }
+
+  async function saveKeychain(mock: boolean): Promise<void> {
+    if (keychainBusy) return
+    setKeychainBusy(true)
+    setKeychainNotice(null)
+    const previous = keychainMock
+    setKeychainMock(mock)
+    try {
+      await configureBrowserKeychain(mock)
+      const reported = await getBrowserCapabilities()
+      setCapabilities(reported)
+      setKeychainMock(reported.mockKeychain ?? mock)
+      setKeychainNotice('已保存，重启应用后生效')
+    } catch (error) {
+      setKeychainMock(previous)
+      setNotice(error instanceof Error ? error.message : String(error))
+    } finally {
+      setKeychainBusy(false)
     }
   }
 
@@ -162,17 +186,35 @@ export function BrowserSettingsPanel(): React.JSX.Element {
         disabled={!loaded || saving}
         save={save}
       />
+      {capabilities?.platform === 'macos' && (
+        <fieldset className="browser-settings-card" disabled={keychainBusy}>
+          <legend>安全存储（macOS）</legend>
+          <label className="browser-settings-checkbox">
+            <input
+              type="checkbox"
+              className="ui-switch"
+              role="switch"
+              checked={keychainMock}
+              onChange={(event) => void saveKeychain(event.target.checked)}
+            />
+            <span>使用内存密钥存储（不写入系统钥匙串）</span>
+          </label>
+          <p className="hint">
+            开启后网站数据加密密钥只保存在内存中，不访问系统钥匙串，重启后内嵌浏览器的登录状态不会保留；关闭后密钥存入系统钥匙串，首次访问需在系统弹窗中授权。修改在重启应用后生效。
+          </p>
+          {keychainNotice && (
+            <p className="hint" role="status">
+              {keychainNotice}
+            </p>
+          )}
+        </fieldset>
+      )}
       <BrowserDataPanel
         supported={capabilities?.features?.dataClearing === true}
       />
       <BrowserContacts
         settings={settings}
         supported={capabilities?.features?.contactFill === true}
-        save={save}
-      />
-      <BrowserSitePermissions
-        settings={settings}
-        supported={capabilities?.features?.sitePermissions ?? []}
         save={save}
       />
       <BrowserDownloads

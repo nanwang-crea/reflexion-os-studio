@@ -7,7 +7,7 @@ export function browserRuntimePaths(dataDir: string) {
   const { worker } = browserWorkerPaths()
   const packaged = worker.endsWith('.mjs')
   const manifest = packaged
-    ? join(dirname(worker), 'node_modules', 'playwright', 'package.json')
+    ? join(dirname(worker), '..', 'node_modules', 'playwright', 'package.json')
     : createRequire(import.meta.url).resolve('playwright/package.json')
   const version: unknown = JSON.parse(readFileSync(manifest, 'utf8')).version
   if (typeof version !== 'string' || !/^[a-zA-Z0-9.+-]+$/.test(version))

@@ -55,12 +55,6 @@ pub fn sensitive(path: &Path) -> bool {
             || name.ends_with(".token")
     })
 }
-#[cfg(any(
-    test,
-    all(feature = "browser-spike", target_os = "macos"),
-    target_os = "windows",
-    target_os = "linux"
-))]
 pub fn filename(raw: &str) -> String {
     let name: String = raw
         .chars()
@@ -106,12 +100,6 @@ pub fn filename(raw: &str) -> String {
         name.into()
     }
 }
-#[cfg(any(
-    test,
-    all(feature = "browser-spike", target_os = "macos"),
-    target_os = "windows",
-    target_os = "linux"
-))]
 pub fn publish(stage: &Path, target: &Path) -> Result<(), String> {
     let parent = target.parent().ok_or("下载目标无效")?;
     if directory(&parent.to_string_lossy())? != parent || sensitive(target) {

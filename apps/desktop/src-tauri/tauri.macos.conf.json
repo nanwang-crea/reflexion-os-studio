@@ -1,0 +1,17 @@
+{
+  "bundle": {
+    "macOS": {
+      "frameworks": [
+        "../../../.cache/cef-native/ReflexionOS Studio Dev.app/Contents/Frameworks/Chromium Embedded Framework.framework"
+      ],
+      "files": {
+        "Resources/cef-licenses": "../../../.cache/cef-native/ReflexionOS Studio Dev.app/Contents/Resources/cef-licenses",
+        "Frameworks/reflexion-desktop Helper.app": "../../../.cache/cef-native/ReflexionOS Studio Dev.app/Contents/Frameworks/reflexion-desktop Helper.app",
+        "Frameworks/reflexion-desktop Helper (GPU).app": "../../../.cache/cef-native/ReflexionOS Studio Dev.app/Contents/Frameworks/reflexion-desktop Helper (GPU).app",
+        "Frameworks/reflexion-desktop Helper (Renderer).app": "../../../.cache/cef-native/ReflexionOS Studio Dev.app/Contents/Frameworks/reflexion-desktop Helper (Renderer).app",
+        "Frameworks/reflexion-desktop Helper (Plugin).app": "../../../.cache/cef-native/ReflexionOS Studio Dev.app/Contents/Frameworks/reflexion-desktop Helper (Plugin).app",
+        "Frameworks/reflexion-desktop Helper (Alerts).app": "../../../.cache/cef-native/ReflexionOS Studio Dev.app/Contents/Frameworks/reflexion-desktop Helper (Alerts).app"
+      }
+    }
+  }
+}

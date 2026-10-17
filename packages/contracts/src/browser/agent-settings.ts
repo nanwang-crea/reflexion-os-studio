@@ -36,6 +36,7 @@ export const DEFAULT_AGENT_BROWSER_SETTINGS = AgentBrowserSettingsSchema.parse(
 )
 
 export const AgentBrowserRuntimeSchema = z.strictObject({
+  engine: z.enum(['cef', 'chromium']).optional(),
   systemChromeAvailable: z.boolean(),
   state: z.enum(['not-installed', 'downloading', 'installed', 'failed']),
   progress: z.number().min(0).max(100).nullable(),

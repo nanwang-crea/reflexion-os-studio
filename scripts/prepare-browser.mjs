@@ -22,7 +22,9 @@ if (process.argv.includes('--dev')) {
   process.exit(0)
 }
 await rm(output, { recursive: true, force: true })
-await mkdir(join(output, 'node_modules'), { recursive: true })
+const modules = join(output, '..', 'node_modules')
+await rm(modules, { recursive: true, force: true })
+await mkdir(modules, { recursive: true })
 const copied = new Set()
 async function copyPackage(name, from) {
   if (copied.has(name)) return
@@ -32,7 +34,7 @@ async function copyPackage(name, from) {
     await readFile(join(source, 'package.json'), 'utf8'),
   )
   copied.add(name)
-  await cp(source, join(output, 'node_modules', name), {
+  await cp(source, join(modules, name), {
     recursive: true,
     dereference: true,
   })

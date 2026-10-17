@@ -48,7 +48,6 @@ export function createBrowserSessionClient(
       storageMode: next.storageMode,
       askDownloadLocation: next.askDownloadLocation,
       downloadDirectory: next.downloadDirectory,
-      siteRules: next.siteRules,
       contactAutofill: next.contactAutofill,
     }
     const signature = JSON.stringify(action)
@@ -72,7 +71,7 @@ export function createBrowserSessionClient(
         const previous = await read()
         await configure(validated)
         if (validated.mode === 'system')
-          await surface.control({ kind: 'close' })
+          await surface.control({ kind: 'closeuser' })
         try {
           return publish(await settingsClient.update(validated))
         } catch (error) {
@@ -114,10 +113,30 @@ export function createBrowserSessionClient(
     },
     control(action: BrowserAction) {
       return serial(async () => {
-        if (['status', 'close', 'layout'].includes(action.kind))
+        if (
+          [
+            'status',
+            'close',
+            'closeuser',
+            'layout',
+            'takeover',
+            'resume',
+            'selecttab',
+            'closetab',
+          ].includes(action.kind)
+        )
           return surface.control(action)
         if (
-          !['status', 'close', 'layout'].includes(action.kind) &&
+          ![
+            'status',
+            'close',
+            'closeuser',
+            'layout',
+            'takeover',
+            'resume',
+            'selecttab',
+            'closetab',
+          ].includes(action.kind) &&
           (await read()).mode === 'system'
         ) {
           throw new Error('内嵌浏览器已关闭，请在设置中启用')

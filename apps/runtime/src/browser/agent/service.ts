@@ -1,3 +1,6 @@
+import { EmbeddedBrowserClient } from './embedded/client.js'
+import type { HostBrowserTransport } from './embedded/host.js'
+type BrowserClient = Pick<McpClient, 'connect' | 'callTool' | 'disposeAndWait'>
 import { validateExecutionResult } from './automation/validate-result.js'
 import { BrowserRuntimeService } from './runtime/service.js'
 import {
@@ -15,13 +18,13 @@ export class BrowserAgentService {
   readonly runtime: BrowserRuntimeService
   private readonly clients = new Map<
     string,
-    { sessionId: string; client: McpClient; page: AgentBrowserPage | null }
+    { sessionId: string; client: BrowserClient; page: AgentBrowserPage | null }
   >()
   private readonly retained = new Map<
     string,
     {
       sessionId: string
-      client: McpClient
+      client: BrowserClient
       page: AgentBrowserPage | null
     }
   >()
@@ -29,7 +32,11 @@ export class BrowserAgentService {
   private readonly cleanup = new Set<Promise<void>>()
   constructor(
     private readonly store: Store,
-    private readonly createClient = (display: AgentBrowserDisplay) => {
+    private readonly createClient = (
+      display: AgentBrowserDisplay,
+      sessionId: string,
+    ): BrowserClient => {
+      if (this.host) return new EmbeddedBrowserClient(this.host, sessionId)
       const { launch, browsers } = this.runtime.resolveLaunch(
         this.store.browserSettings.get().agentBrowserSource ?? 'auto',
       )
@@ -47,8 +54,10 @@ export class BrowserAgentService {
       })
     },
     runtime?: BrowserRuntimeService,
+    private readonly host?: HostBrowserTransport,
   ) {
     this.runtime = runtime ?? new BrowserRuntimeService(store.dataDir)
+    if (host) this.runtime.useEmbedded()
   }
   get enabled(): boolean {
     return this.store.browserSettings.get().agentBrowserEnabled
@@ -95,6 +104,7 @@ export class BrowserAgentService {
         throw new Error('browser_capacity')
       const client = this.createClient(
         this.store.browserSettings.get().agentBrowserDisplay,
+        sessionId,
       )
       entry = { sessionId, client, page: null }
       this.clients.set(runId, entry)
@@ -186,6 +196,7 @@ export class BrowserAgentService {
         error instanceof Error &&
         ((error.message === 'browser_page_stale' && operation !== 'navigate') ||
           error.message === 'browser_interaction_denied' ||
+          error.message === 'browser_user_control' ||
           error.message === 'browser_interaction_network_denied' ||
           error.message === 'browser_interaction_failed') &&
         !signal.aborted
@@ -235,7 +246,7 @@ export class BrowserAgentService {
     this.clients.delete(runId)
     if (entry) this.disposeClient(entry.client)
   }
-  private disposeClient(client: McpClient): void {
+  private disposeClient(client: BrowserClient): void {
     const promise = client.disposeAndWait().catch(() => {})
     this.cleanup.add(promise)
     void promise.finally(() => this.cleanup.delete(promise))

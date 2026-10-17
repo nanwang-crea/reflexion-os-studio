@@ -1,3 +1,4 @@
+import { setBrowserPanelOpen } from './panel-state'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   BrowserAction,
@@ -14,6 +15,7 @@ export function useBrowserSurface(visible = true) {
   const [externalNotice, setExternalNotice] = useState<string | null>(null)
   const [slowLoad, setSlowLoad] = useState(false)
   const revision = useRef(-1)
+  const agentTabs = useRef(new Set<number>())
   const recorded = useRef(new Map<number, string>())
   useEffect(() => {
     if (
@@ -26,6 +28,7 @@ export function useBrowserSurface(visible = true) {
     }
     for (const tab of state?.tabs ?? []) {
       if (
+        (tab.control && tab.control !== 'user') ||
         tab.status !== 'ready' ||
         !tab.url ||
         recorded.current.get(tab.id) === tab.url
@@ -43,24 +46,30 @@ export function useBrowserSurface(visible = true) {
   const accept = useCallback((next: BrowserSnapshot) => {
     if (next.revision < revision.current) return
     revision.current = next.revision
+    const agents = next.tabs.filter(
+      (tab) => tab.control === 'agent' || tab.control === 'paused',
+    )
+    if (agents.some((tab) => !agentTabs.current.has(tab.id)))
+      setBrowserPanelOpen(true)
+    agentTabs.current = new Set(agents.map((tab) => tab.id))
     setState(next)
   }, [])
   useEffect(() => {
     let disposed = false
     let unlisten: (() => void) | undefined
-    let frame = 0
+    let frame: ReturnType<typeof setTimeout> | null = null
     let buffered: BrowserSnapshot | null = null
     void browserSurface
       .subscribe((next) => {
         if (disposed) return
         if (!buffered || next.revision >= buffered.revision) buffered = next
-        if (!frame)
-          frame = requestAnimationFrame(() => {
-            frame = 0
+        if (frame === null)
+          frame = setTimeout(() => {
+            frame = null
             const current = buffered
             buffered = null
             if (!disposed && current) accept(current)
-          })
+          }, 16)
       })
       .then(async (cleanup) => {
         if (disposed) {
@@ -76,7 +85,7 @@ export function useBrowserSurface(visible = true) {
       })
     return () => {
       disposed = true
-      cancelAnimationFrame(frame)
+      if (frame !== null) clearTimeout(frame)
       buffered = null
       unlisten?.()
     }

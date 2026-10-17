@@ -1,3 +1,4 @@
+import { HostBrowserTransport } from './browser/agent/embedded/host.js'
 import { BrowserAgentService } from './browser/agent/service.js'
 import { OperationRegistry, registerOperations } from './operations/index.js'
 import { cleanupPlanDocuments } from './agent/tools/plan-documents.js'
@@ -144,7 +145,16 @@ registerOperations(
 )
 const skillPlugins = new SkillPluginService(store, resolveDataDir(), notify)
 const mcpManager = new McpManager(store, notify)
-const browser = new BrowserAgentService(store)
+const browserHost =
+  process.env.REFLEXION_BROWSER_ENGINE === 'cef'
+    ? new HostBrowserTransport(write)
+    : undefined
+const browser = new BrowserAgentService(
+  store,
+  undefined,
+  undefined,
+  browserHost,
+)
 const agent = new ChatAgent(
   store,
   notify,
@@ -243,6 +253,7 @@ async function handleRequestAsync(request: JsonRpcRequest): Promise<void> {
         .finally(() => {
           void systemRuntime.shutdown().finally(async () => {
             await browser.shutdown()
+            browserHost?.dispose()
             agent.dispose()
             skillPlugins.dispose()
             workspaceWatch.clear()
@@ -356,6 +367,7 @@ input.on('line', (line) => {
   }
 
   const message = parsed.data
+  if (browserHost?.receive(message)) return
   if ('method' in message && 'id' in message) {
     handleRequest(message)
     return

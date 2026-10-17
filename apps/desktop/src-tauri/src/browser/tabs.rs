@@ -12,6 +12,7 @@ impl Snapshot {
         self.tabs.push(Tab {
             id,
             title: "新标签页".into(),
+            control: "user".into(),
             status: "idle".into(),
             progress: 0.0,
             url,

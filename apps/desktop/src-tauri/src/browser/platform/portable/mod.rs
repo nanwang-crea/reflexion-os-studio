@@ -1,7 +1,7 @@
 //! Shared lifecycle for native WebView2/WebKitGTK guests. No Tauri IPC is installed.
 pub(super) mod clearing;
-pub(super) mod contact;
-pub(super) mod downloads;
+pub(crate) use crate::browser::contact;
+pub(crate) use crate::browser::downloads::transfers as downloads;
 pub(super) mod popup;
 mod registry;
 pub use clearing::clear_data;

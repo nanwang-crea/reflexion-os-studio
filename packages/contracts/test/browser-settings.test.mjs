@@ -57,8 +57,7 @@ test('settings reject unrelated URL and credential fields', () => {
 })
 
 test('address search and fixed homepages cannot smuggle executable schemes', async () => {
-  const { browserAddressUrl, browserHomeUrl, BrowserSiteRuleSchema } =
-    await import('../dist/index.js')
+  const { browserAddressUrl, browserHomeUrl } = await import('../dist/index.js')
   assert.equal(
     new URL(
       browserAddressUrl('cats & dogs', DEFAULT_BROWSER_SETTINGS),
@@ -73,22 +72,6 @@ test('address search and fixed homepages cannot smuggle executable schemes', asy
     browserAddressUrl('javascript:alert(1)', DEFAULT_BROWSER_SETTINGS),
   )
   assert.equal(browserHomeUrl(DEFAULT_BROWSER_SETTINGS), undefined)
-  assert.equal(
-    BrowserSiteRuleSchema.safeParse({
-      origin: 'https://example.com/path',
-      permission: 'camera',
-      policy: 'ask',
-    }).success,
-    false,
-  )
-  assert.equal(
-    BrowserSiteRuleSchema.safeParse({
-      origin: 'https://example.com',
-      permission: 'camera',
-      policy: 'allow',
-    }).success,
-    false,
-  )
 })
 
 test('Agent browser display defaults to headless and only accepts supported modes', async () => {

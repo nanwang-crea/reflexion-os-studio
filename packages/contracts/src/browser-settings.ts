@@ -1,6 +1,5 @@
 import { z } from 'zod'
 import { AgentBrowserSettingsSchema } from './browser/agent-settings.js'
-import { BrowserSiteRuleSchema } from './browser/data.js'
 import { normalizeBrowserUrl } from './browser/url.js'
 
 /** Low-sensitivity preferences only; website data stays in the native adapter. */
@@ -22,7 +21,6 @@ export const BrowserSettingsSchema = z.strictObject({
   contactAutofill: z.boolean().default(false),
   askDownloadLocation: z.boolean().default(true),
   downloadDirectory: z.string().min(1).max(4096).nullable().default(null),
-  siteRules: z.array(BrowserSiteRuleSchema).max(500).default([]),
 })
 export type BrowserSettings = z.infer<typeof BrowserSettingsSchema>
 

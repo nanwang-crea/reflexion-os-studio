@@ -1,0 +1,17 @@
+.browser-agent-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-sidebar);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.browser-agent-control button {
+  flex-shrink: 0;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}

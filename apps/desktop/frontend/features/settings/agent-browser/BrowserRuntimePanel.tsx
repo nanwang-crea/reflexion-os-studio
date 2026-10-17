@@ -1,7 +1,24 @@
+import { useEffect } from 'react'
 import { useBrowserRuntime } from './useBrowserRuntime'
-export function BrowserRuntimePanel(): React.JSX.Element {
+export function BrowserRuntimePanel({
+  onEmbedded,
+}: { onEmbedded?: (value: boolean) => void } = {}): React.JSX.Element {
   const { runtime, busy, error, act, downloading } = useBrowserRuntime()
   const installed = runtime?.state === 'installed'
+  useEffect(() => {
+    onEmbedded?.(runtime?.engine === 'cef')
+  }, [onEmbedded, runtime?.engine])
+  if (runtime?.engine === 'cef')
+    return (
+      <section className="browser-settings-card" aria-label="浏览器组件">
+        <h4>内置 CEF 浏览器</h4>
+        <p className="hint">
+          Agent 与右侧浏览器使用同一个页面。无需另外下载
+          Chromium，可在面板中接管操作并交还 Agent。
+        </p>
+        <p role="status">{runtime.version} · 随应用更新</p>
+      </section>
+    )
   return (
     <section className="browser-settings-card" aria-label="浏览器组件">
       <h4>受管 Chromium（可选）</h4>
