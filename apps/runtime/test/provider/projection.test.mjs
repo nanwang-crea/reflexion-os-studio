@@ -342,3 +342,70 @@ test('switching from native thinking to Chat does not replay foreign reasoning o
   assert.equal(Object.hasOwn(body.messages[1], 'reasoning_content'), false)
   assert.equal(body.messages[2].reasoning_content, 'chat thought')
 })
+
+const finishWithToolCalls = (toolCallsLine) =>
+  [
+    `data: {"choices":[{"delta":{"tool_calls":[${toolCallsLine}]}}]}`,
+    '',
+    'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}',
+    '',
+    'data: [DONE]',
+    '',
+  ].join('\n')
+
+test('missing tool_call ids fall back to index-based unique ids', async () => {
+  // 部分聚合/中转服务不回传 tool call id；Run 层按 call.id 建索引，
+  // 空 id 会让多个调用互相覆盖，必须兜底为轮次内唯一 id。
+  const server = await startServer((request, response) => {
+    response.writeHead(200, { 'content-type': 'text/event-stream' })
+    response.end(
+      finishWithToolCalls(
+        '{"index":0,"function":{"name":"file.read","arguments":"{}"}},{"index":1,"function":{"name":"shell.execute","arguments":"{}"}}',
+      ),
+    )
+  })
+  const port = server.address().port
+  const result = await streamChatCompletion(
+    {
+      baseUrl: `http://127.0.0.1:${port}/v1`,
+      apiKey: 'sk-test',
+      model: 'mock-model',
+      messages: [{ role: 'user', content: 'hi' }],
+      signal: new AbortController().signal,
+    },
+    () => {},
+  )
+  server.close()
+  assert.equal(result.finishReason, 'tool_calls')
+  assert.deepEqual(
+    result.toolCalls.map((call) => call.id),
+    ['index-0', 'index-1'],
+  )
+})
+
+test('duplicate tool_call ids are deduplicated with suffixes', async () => {
+  const server = await startServer((request, response) => {
+    response.writeHead(200, { 'content-type': 'text/event-stream' })
+    response.end(
+      finishWithToolCalls(
+        '{"index":0,"id":"call-x","function":{"name":"file.read","arguments":"{}"}},{"index":1,"id":"call-x","function":{"name":"shell.execute","arguments":"{}"}}',
+      ),
+    )
+  })
+  const port = server.address().port
+  const result = await streamChatCompletion(
+    {
+      baseUrl: `http://127.0.0.1:${port}/v1`,
+      apiKey: 'sk-test',
+      model: 'mock-model',
+      messages: [{ role: 'user', content: 'hi' }],
+      signal: new AbortController().signal,
+    },
+    () => {},
+  )
+  server.close()
+  assert.deepEqual(
+    result.toolCalls.map((call) => call.id),
+    ['call-x', 'call-x_2'],
+  )
+})

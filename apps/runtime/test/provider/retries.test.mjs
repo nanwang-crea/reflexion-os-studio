@@ -1,7 +1,28 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { ProviderError, streamChatCompletion } from '../../dist/provider.js'
+import { parseRetryAfterMs, retryWaitMs } from '../../dist/provider/shared.js'
 import { startServer, sseBody } from '../fixtures/provider-server.mjs'
+
+test('parseRetryAfterMs accepts seconds, HTTP dates and rejects junk', () => {
+  assert.equal(parseRetryAfterMs(null), null)
+  assert.equal(parseRetryAfterMs(''), null)
+  assert.equal(parseRetryAfterMs('soon'), null)
+  assert.equal(parseRetryAfterMs('120'), 120_000)
+  assert.equal(parseRetryAfterMs(' 30 '), 30_000)
+  const past = new Date(Date.now() - 60_000).toUTCString()
+  assert.equal(parseRetryAfterMs(past), 0)
+  const future = new Date(Date.now() + 30_000).toUTCString()
+  const futureMs = parseRetryAfterMs(future)
+  assert.ok(futureMs !== null && futureMs > 0 && futureMs <= 30_000)
+})
+
+test('retryWaitMs takes the larger of backoff and Retry-After, capped', () => {
+  assert.equal(retryWaitMs(1, null), 1000)
+  assert.equal(retryWaitMs(1, 30_000), 30_000)
+  assert.equal(retryWaitMs(5, 100), 16_000)
+  assert.equal(retryWaitMs(1, 999_999), 120_000)
+})
 
 test('retries request establishment on 429 then succeeds', async () => {
   let calls = 0
@@ -32,6 +53,42 @@ test('retries request establishment on 429 then succeeds', async () => {
   assert.equal(calls, 2)
   assert.deepEqual(retries, [
     { attempt: 1, maxRetries: 5, reason: 'HTTP 429', waitMs: 1000 },
+  ])
+  assert.equal(result.content, 'Hello')
+})
+
+test('honors Retry-After header on 429 instead of plain backoff', async () => {
+  let calls = 0
+  const server = await startServer((request, response) => {
+    calls += 1
+    if (calls === 1) {
+      response.writeHead(429, {
+        'content-type': 'application/json',
+        'retry-after': '2',
+      })
+      response.end('{"error":"rate limited"}')
+      return
+    }
+    response.writeHead(200, { 'content-type': 'text/event-stream' })
+    response.end(sseBody())
+  })
+  const port = server.address().port
+  const retries = []
+  const result = await streamChatCompletion(
+    {
+      baseUrl: `http://127.0.0.1:${port}/v1`,
+      apiKey: 'sk-test',
+      model: 'mock-model',
+      messages: [{ role: 'user', content: 'hi' }],
+      signal: new AbortController().signal,
+      onRetry: (retry) => retries.push(retry),
+    },
+    () => {},
+  )
+  server.close()
+  assert.equal(calls, 2)
+  assert.deepEqual(retries, [
+    { attempt: 1, maxRetries: 5, reason: 'HTTP 429', waitMs: 2000 },
   ])
   assert.equal(result.content, 'Hello')
 })

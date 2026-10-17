@@ -15,6 +15,36 @@ export function retryBackoffMs(attempt: number): number {
   )
 }
 
+/** Retry-After 等待封顶，防止异常服务端声明导致 Run 长时间挂起。 */
+const RETRY_AFTER_CAP_MS = 120_000
+
+/**
+ * 解析 Retry-After 头：延迟秒数或 HTTP 日期两种格式；
+ * 缺失或无法解析返回 null，由调用方落回指数退避。
+ */
+export function parseRetryAfterMs(
+  value: string | null | undefined,
+  now = Date.now(),
+): number | null {
+  if (value === null || value === undefined) return null
+  const trimmed = value.trim()
+  if (trimmed === '') return null
+  if (/^\d+$/.test(trimmed)) return Number(trimmed) * 1000
+  const dateMs = Date.parse(trimmed)
+  if (Number.isNaN(dateMs)) return null
+  return Math.max(0, dateMs - now)
+}
+
+/** 退避等待取指数退避与 Retry-After 的较大者，并统一封顶。 */
+export function retryWaitMs(
+  attempt: number,
+  retryAfterMs: number | null,
+): number {
+  const backoff = retryBackoffMs(attempt)
+  if (retryAfterMs === null) return backoff
+  return Math.min(Math.max(backoff, retryAfterMs), RETRY_AFTER_CAP_MS)
+}
+
 export { DEFAULT_TIMEOUT_MS, DEFAULT_MAX_RETRIES }
 
 /** 429 限流与 5xx 短暂故障可重试；认证/配置类错误重试无意义。 */

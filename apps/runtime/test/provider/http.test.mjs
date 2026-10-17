@@ -157,6 +157,41 @@ test('does not retry authentication errors', async () => {
   assert.equal(calls, 1)
 })
 
+test('openai-responses surfaces response.failed error details', async (t) => {
+  const { streamChat } = await import('../../dist/provider.js')
+  const fetch = globalThis.fetch
+  globalThis.fetch = async () =>
+    new Response(
+      'data: {"type":"response.failed","response":{"error":{"code":"server_error","message":"upstream exploded"}}}\n\n',
+      { headers: { 'content-type': 'text/event-stream' } },
+    )
+  t.after(() => {
+    globalThis.fetch = fetch
+  })
+  await assert.rejects(
+    streamChat(
+      {
+        baseUrl: 'https://mock.invalid',
+        apiKey: 'test',
+        model: 'm',
+        messages: [],
+        maxRetries: 0,
+        signal: new AbortController().signal,
+      },
+      'openai-responses',
+      () => {},
+    ),
+    (error) => {
+      assert.equal(error.code, 'provider')
+      assert.match(
+        error.message,
+        /responses api failed \(server_error\): upstream exploded/,
+      )
+      return true
+    },
+  )
+})
+
 for (const format of ['openai-chat', 'openai-responses', 'anthropic']) {
   test(`${format} redacts a returned credential before truncating HTTP diagnostics`, async (t) => {
     const { streamChat } = await import('../../dist/provider.js')

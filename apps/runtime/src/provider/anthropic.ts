@@ -12,7 +12,8 @@ import {
   isAbort,
   isTimeout,
   mapHttpStatus,
-  retryBackoffMs,
+  parseRetryAfterMs,
+  retryWaitMs,
   shouldRetryStatus,
   sleep,
 } from './shared.js'
@@ -34,9 +35,16 @@ export async function streamAnthropic(
     attempt: number
     maxRetries: number
     reason: string
+    /** 服务端 Retry-After 指示的等待毫秒数；缺省时用指数退避。 */
+    retryAfterMs?: number | null
   }): Promise<void> => {
-    const waitMs = retryBackoffMs(input.attempt)
-    options.onRetry?.({ ...input, waitMs })
+    const waitMs = retryWaitMs(input.attempt, input.retryAfterMs ?? null)
+    options.onRetry?.({
+      attempt: input.attempt,
+      maxRetries: input.maxRetries,
+      reason: input.reason,
+      waitMs,
+    })
     await sleep(waitMs, options.signal)
   }
 
@@ -123,6 +131,7 @@ export async function streamAnthropic(
           attempt,
           maxRetries,
           reason: `HTTP ${response.status}`,
+          retryAfterMs: parseRetryAfterMs(response.headers.get('retry-after')),
         })
         continue
       }

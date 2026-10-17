@@ -10,7 +10,8 @@ import {
   isTimeout,
   mapFinishReason,
   mapHttpStatus,
-  retryBackoffMs,
+  parseRetryAfterMs,
+  retryWaitMs,
   shouldRetryStatus,
   sleep,
 } from './shared.js'
@@ -32,9 +33,16 @@ export async function streamOpenAIChat(
     attempt: number
     maxRetries: number
     reason: string
+    /** 服务端 Retry-After 指示的等待毫秒数；缺省时用指数退避。 */
+    retryAfterMs?: number | null
   }): Promise<void> => {
-    const waitMs = retryBackoffMs(input.attempt)
-    options.onRetry?.({ ...input, waitMs })
+    const waitMs = retryWaitMs(input.attempt, input.retryAfterMs ?? null)
+    options.onRetry?.({
+      attempt: input.attempt,
+      maxRetries: input.maxRetries,
+      reason: input.reason,
+      waitMs,
+    })
     await sleep(waitMs, options.signal)
   }
 
@@ -103,6 +111,7 @@ export async function streamOpenAIChat(
           attempt,
           maxRetries,
           reason: `HTTP ${response.status}`,
+          retryAfterMs: parseRetryAfterMs(response.headers.get('retry-after')),
         })
         continue
       }
@@ -302,12 +311,25 @@ export async function streamOpenAIChat(
       cleanupReader()
     }
 
+    // 空/重复 id 会让 Run 层按 call.id 建索引时互相覆盖；兜底为轮次内唯一 id。
+    const seenIds = new Set<string>()
     const toolCalls = [...toolCallByIndex.entries()]
       .sort(([a], [b]) => a - b)
-      .map(([, toolCall]) => ({
-        ...toolCall,
-        name: providerToCanonical.get(toolCall.name) ?? toolCall.name,
-      }))
+      .map(([index, toolCall]) => {
+        const base = toolCall.id !== '' ? toolCall.id : `index-${index}`
+        let id = base
+        let suffix = 2
+        while (seenIds.has(id)) {
+          id = `${base}_${suffix}`
+          suffix += 1
+        }
+        seenIds.add(id)
+        return {
+          ...toolCall,
+          id,
+          name: providerToCanonical.get(toolCall.name) ?? toolCall.name,
+        }
+      })
 
     if (finishReason === null) {
       throw new ProviderError(
