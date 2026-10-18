@@ -28,6 +28,18 @@ export const AGENT_RUNTIME_FIELDS: AgentRuntimeField[] = [
     'Provider 请求建立阶段失败自动重试次数；0 表示不重试。保留有限重试，避免请求失败后无限重试。',
   ],
   [
+    'requestBackoffInitialSec',
+    '初始退避时间（秒）',
+    '1（默认）',
+    '首次重试前等待的时间，1–120 秒；之后每次翻倍，受最大退避时间限制。',
+  ],
+  [
+    'requestBackoffMaxSec',
+    '最大退避时间（秒）',
+    '60（默认）',
+    '指数退避上限，1–120 秒；不得小于初始退避时间。服务端 Retry-After 可延长等待，最终不超过 120 秒。',
+  ],
+  [
     'requestTimeoutSec',
     '请求超时（秒）',
     '120（默认）',
@@ -115,7 +127,12 @@ export const AGENT_RUNTIME_GROUPS: {
   {
     id: 'network',
     title: '网络',
-    keys: ['requestRetries', 'requestTimeoutSec'],
+    keys: [
+      'requestRetries',
+      'requestBackoffInitialSec',
+      'requestBackoffMaxSec',
+      'requestTimeoutSec',
+    ],
   },
   {
     id: 'delegation',

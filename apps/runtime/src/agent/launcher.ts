@@ -169,6 +169,12 @@ export class RunLauncher {
       ...(profile.contextBudget !== null
         ? { contextBudget: profile.contextBudget }
         : {}),
+      ...(settings.requestBackoffInitialSec != null
+        ? { retryBackoffInitialMs: settings.requestBackoffInitialSec * 1000 }
+        : {}),
+      ...(settings.requestBackoffMaxSec != null
+        ? { retryBackoffMaxMs: settings.requestBackoffMaxSec * 1000 }
+        : {}),
       ...(settings.requestRetries !== null
         ? { maxRetries: settings.requestRetries }
         : {}),

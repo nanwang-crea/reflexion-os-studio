@@ -130,6 +130,8 @@ export async function executeModelTurn(
       ...(outputBudget.requestMaxTokens !== undefined
         ? { maxTokens: outputBudget.requestMaxTokens }
         : {}),
+      retryBackoffInitialMs: provider.retryBackoffInitialMs,
+      retryBackoffMaxMs: provider.retryBackoffMaxMs,
       ...(provider.maxRetries !== undefined
         ? { maxRetries: provider.maxRetries }
         : {}),

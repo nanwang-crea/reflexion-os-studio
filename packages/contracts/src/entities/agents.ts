@@ -220,38 +220,63 @@ export const AgentUnlimitedLimitSchema = z.enum([
 export type AgentUnlimitedLimit = z.infer<typeof AgentUnlimitedLimitSchema>
 
 /** null 保持历史默认语义；unlimitedLimits 显式取消指定应用级上限。 */
-export const AgentSettingsSchema = z.object({
-  unlimitedLimits: z.array(AgentUnlimitedLimitSchema).max(8).optional(),
-  // 单次 Run 的最大模型调用轮次；超限如实失败。
-  maxTurns: z.number().int().positive().max(256).nullable(),
-  // 工具失败累计次数达到该值注入反思消息；0=禁用反思。
-  reflectionThreshold: z.number().int().min(0).max(10).nullable(),
-  // Provider 请求建立阶段失败(可恢复 400/429/5xx/网络)自动重试次数。
-  requestRetries: z.number().int().min(0).max(15).nullable(),
-  // Provider 响应头等待与流式数据空闲超时（秒），不限制持续输出总时长。
-  requestTimeoutSec: z.number().int().min(10).max(600).nullable(),
-  // —— W4 Run 预算：null 表示使用内置默认，而不是无限制 ——
-  // Run 总时长上限（秒）。
-  maxRunTimeoutSec: z.number().int().min(10).max(7200).nullable(),
-  // Run 累计 token 总量上限（prompt+completion，来自 Provider usage）。
-  maxRunTotalTokens: z.number().int().min(1000).max(1_000_000_000).nullable(),
-  // Run 全程工具调用次数上限。
-  maxToolCalls: z.number().int().min(1).max(4096).nullable(),
-  // length 续写最大连续轮次。
-  maxContinuationTurns: z.number().int().min(0).max(8).nullable(),
-  // 子 Agent 最大委派深度。
-  maxDepth: z.number().int().min(1).max(4).nullable(),
-  // 单个顶层 Run 的整棵委派树中未结束的子 Agent 数量上限，终态释放名额。
-  maxChildRuns: z.number().int().min(1).max(32).nullable(),
-  // 单个顶层 Run 的整棵委派树最大并行数。
-  maxParallelChildren: z.number().int().min(1).max(8).nullable(),
-  // 单个子 Agent 最大运行时间(秒)。
-  maxChildTimeoutSec: z.number().int().min(10).max(3600).nullable(),
-  // 单次子 Agent 最大输出 token 数。
-  maxChildTotalTokens: z.number().int().min(1000).max(1000000).nullable(),
-  // Phase 3A 子 Run 总开关；默认启用，false 是运行时逃生开关。
-  enableChildRuns: z.boolean().default(true),
-})
+export const AgentSettingsSchema = z
+  .object({
+    unlimitedLimits: z.array(AgentUnlimitedLimitSchema).max(8).optional(),
+    // 单次 Run 的最大模型调用轮次；超限如实失败。
+    maxTurns: z.number().int().positive().max(256).nullable(),
+    // 工具失败累计次数达到该值注入反思消息；0=禁用反思。
+    reflectionThreshold: z.number().int().min(0).max(10).nullable(),
+    // Provider 请求建立阶段失败(可恢复 400/429/5xx/网络)自动重试次数。
+    requestRetries: z.number().int().min(0).max(15).nullable(),
+    // Provider 响应头等待与流式数据空闲超时（秒），不限制持续输出总时长。
+    requestTimeoutSec: z.number().int().min(10).max(600).nullable(),
+    requestBackoffInitialSec: z
+      .number()
+      .int()
+      .min(1)
+      .max(120)
+      .nullable()
+      .default(null),
+    requestBackoffMaxSec: z
+      .number()
+      .int()
+      .min(1)
+      .max(120)
+      .nullable()
+      .default(null),
+    // —— W4 Run 预算：null 表示使用内置默认，而不是无限制 ——
+    // Run 总时长上限（秒）。
+    maxRunTimeoutSec: z.number().int().min(10).max(7200).nullable(),
+    // Run 累计 token 总量上限（prompt+completion，来自 Provider usage）。
+    maxRunTotalTokens: z.number().int().min(1000).max(1_000_000_000).nullable(),
+    // Run 全程工具调用次数上限。
+    maxToolCalls: z.number().int().min(1).max(4096).nullable(),
+    // length 续写最大连续轮次。
+    maxContinuationTurns: z.number().int().min(0).max(8).nullable(),
+    // 子 Agent 最大委派深度。
+    maxDepth: z.number().int().min(1).max(4).nullable(),
+    // 单个顶层 Run 的整棵委派树中未结束的子 Agent 数量上限，终态释放名额。
+    maxChildRuns: z.number().int().min(1).max(32).nullable(),
+    // 单个顶层 Run 的整棵委派树最大并行数。
+    maxParallelChildren: z.number().int().min(1).max(8).nullable(),
+    // 单个子 Agent 最大运行时间(秒)。
+    maxChildTimeoutSec: z.number().int().min(10).max(3600).nullable(),
+    // 单次子 Agent 最大输出 token 数。
+    maxChildTotalTokens: z.number().int().min(1000).max(1000000).nullable(),
+    // Phase 3A 子 Run 总开关；默认启用，false 是运行时逃生开关。
+    enableChildRuns: z.boolean().default(true),
+  })
+  .refine(
+    (settings) =>
+      (settings.requestBackoffMaxSec ?? 60) >=
+      (settings.requestBackoffInitialSec ?? 1),
+    {
+      path: ['requestBackoffMaxSec'],
+      message:
+        '最大退避时间不得小于初始退避时间（默认初始值为 1 秒，最大值为 60 秒）',
+    },
+  )
 export type AgentSettings = z.infer<typeof AgentSettingsSchema>
 
 /**

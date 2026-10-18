@@ -103,6 +103,8 @@ export function AgentRuntimePanel(): React.JSX.Element {
       maxTurns: numeric('maxTurns'),
       reflectionThreshold: numeric('reflectionThreshold'),
       requestRetries: numeric('requestRetries'),
+      requestBackoffInitialSec: numeric('requestBackoffInitialSec'),
+      requestBackoffMaxSec: numeric('requestBackoffMaxSec'),
       requestTimeoutSec: numeric('requestTimeoutSec'),
       maxRunTimeoutSec: numeric('maxRunTimeoutSec'),
       maxRunTotalTokens: numeric('maxRunTotalTokens'),

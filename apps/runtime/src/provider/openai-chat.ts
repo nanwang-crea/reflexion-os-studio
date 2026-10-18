@@ -40,7 +40,11 @@ export async function streamOpenAIChat(
     /** 服务端 Retry-After 指示的等待毫秒数；缺省时用指数退避。 */
     retryAfterMs?: number | null
   }): Promise<void> => {
-    const waitMs = retryWaitMs(input.attempt, input.retryAfterMs ?? null)
+    const waitMs = retryWaitMs(
+      input.attempt,
+      input.retryAfterMs ?? null,
+      options,
+    )
     options.onRetry?.({
       attempt: input.attempt,
       maxRetries: input.maxRetries,

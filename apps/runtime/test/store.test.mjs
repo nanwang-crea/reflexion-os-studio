@@ -1342,6 +1342,8 @@ test('agent settings default and round-trip', () => {
     reflectionThreshold: null,
     requestRetries: null,
     requestTimeoutSec: null,
+    requestBackoffInitialSec: null,
+    requestBackoffMaxSec: null,
     maxRunTimeoutSec: null,
     maxRunTotalTokens: null,
     maxToolCalls: null,
@@ -1358,6 +1360,8 @@ test('agent settings default and round-trip', () => {
     reflectionThreshold: 3,
     requestRetries: 0,
     requestTimeoutSec: 60,
+    requestBackoffInitialSec: 3,
+    requestBackoffMaxSec: 12,
     maxRunTimeoutSec: null,
     maxRunTotalTokens: null,
     maxToolCalls: null,
@@ -1370,6 +1374,8 @@ test('agent settings default and round-trip', () => {
     enableChildRuns: true,
   })
   assert.deepEqual(store.agentSettings.get(), updated)
+  assert.equal(updated.requestBackoffInitialSec, 3)
+  assert.equal(updated.requestBackoffMaxSec, 12)
   assert.equal(updated.maxTurns, 32)
   assert.equal(updated.enableChildRuns, true)
   assert.equal(updated.maxChildTimeoutSec, 120)

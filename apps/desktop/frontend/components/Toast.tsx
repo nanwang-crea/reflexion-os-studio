@@ -66,7 +66,12 @@ export function ToastHost(): React.JSX.Element | null {
   if (items.length === 0) return null
 
   return (
-    <div className="toast-host" role="status" aria-live="polite">
+    <div
+      className="toast-host"
+      role="status"
+      aria-live="polite"
+      data-browser-occluder
+    >
       {items.map((item) => (
         <div key={item.id} className={`toast toast-${item.kind}`}>
           {item.kind === 'error' ? (

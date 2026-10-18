@@ -311,6 +311,8 @@ async function summarizeCheckpointFrames(
       signal: input.signal,
       timeoutMs: provider.timeoutMs ?? 60_000,
       maxRetries: provider.maxRetries,
+      retryBackoffInitialMs: provider.retryBackoffInitialMs,
+      retryBackoffMaxMs: provider.retryBackoffMaxMs,
     },
     () => {},
   )

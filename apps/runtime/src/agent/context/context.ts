@@ -94,6 +94,8 @@ export interface ProviderRuntimeConfig {
   contextBudget?: number
   /** 请求建立阶段重试次数；缺省 provider 内置(5)。 */
   maxRetries?: number
+  retryBackoffInitialMs?: number
+  retryBackoffMaxMs?: number
   /** 请求超时(毫秒)；缺省 provider 内置(120s)。 */
   timeoutMs?: number
 }

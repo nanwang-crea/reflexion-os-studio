@@ -65,7 +65,11 @@ export function OperationHost(): React.JSX.Element | null {
         onConfirm={dialog.handleConfirm}
         onCancel={dialog.handleCancel}
       />
-      <aside className="operation-host" aria-label="待确认的操作">
+      <aside
+        className="operation-host"
+        aria-label="待确认的操作"
+        data-browser-occluder
+      >
         {visible.map((item) => (
           <section
             key={item.requestId}

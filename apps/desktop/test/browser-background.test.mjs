@@ -35,6 +35,8 @@ test('Agent page opens and receives native bounds while animation frames are sus
           import { useBrowserPanelOpen } from './frontend/features/browser/panel-state';
           window.requestAnimationFrame = () => 1;
           function Fixture() {
+            const [slot, setSlot] = useState(true);
+            window.replaceSlot = setSlot;
             const [session, setSession] = useState('active');
             const navigation = useBrowserNavigationFailure(session);
             window.switchSession = setSession;
@@ -43,7 +45,7 @@ test('Agent page opens and receives native bounds while animation frames are sus
             const { state } = useBrowserSurface(open);
             const ref = useRef(null);
             useBrowserViewport(ref, open && !navigation.failure, state?.available === true, state?.activeTabId ?? null);
-            return <div ref={ref} style={{width: 400, height: 300}} data-session={session} data-open={open}>{navigation.failure && <BrowserNavigationFailure failure={navigation.failure} onDismiss={navigation.dismiss} />}</div>;
+            return <div data-session={session} data-open={open}>{slot && <div ref={ref} style={{width: 400, height: 300}} />}{navigation.failure && <BrowserNavigationFailure failure={navigation.failure} onDismiss={navigation.dismiss} />}</div>;
           }
           const root = createRoot(document.getElementById('root'));
           root.render(<Fixture />);
@@ -125,6 +127,104 @@ test('Agent page opens and receives native bounds while animation frames are sus
     const count = await page.evaluate(() => window.layouts.length)
     await new Promise((resolve) => setTimeout(resolve, 250))
     assert.equal(await page.evaluate(() => window.layouts.length), count)
+    // Native dialogs have an implicit role; opening an already mounted dialog
+    // must hide the native webpage, and closing it must restore the viewport.
+    await page.evaluate(() => {
+      const dialog = document.createElement('dialog')
+      dialog.id = 'task-details'
+      document.body.append(dialog)
+    })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    assert.equal(await page.evaluate(() => window.layouts.length), count)
+    await page.evaluate(() =>
+      document.getElementById('task-details').showModal(),
+    )
+    await page.waitForFunction(() => !window.layouts.at(-1).visible, null, {
+      polling: 50,
+    })
+    await page.evaluate(() => document.getElementById('task-details').close())
+    await page.waitForFunction(() => window.layouts.at(-1).visible, null, {
+      polling: 50,
+    })
+    await page.evaluate(() => document.getElementById('task-details').remove())
+    // Retained hidden dialog content must not keep the browser hidden.
+    await page.evaluate(() => {
+      const dialog = document.createElement('dialog')
+      dialog.id = 'retained'
+      dialog.innerHTML = '<section role="alertdialog">confirmation</section>'
+      document.body.append(dialog)
+    })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    assert.equal(await page.evaluate(() => window.layouts.at(-1).visible), true)
+    await page.evaluate(() => document.getElementById('retained').remove())
+    for (const selector of [
+      'role="dialog"',
+      'role="alertdialog"',
+      'aria-modal="true"',
+      'data-radix-popper-content-wrapper',
+      'data-browser-occluder',
+      'role="menu"',
+      'role="listbox"',
+      'role="tooltip"',
+    ]) {
+      await page.evaluate((attribute) => {
+        const holder = document.createElement('div')
+        holder.id = 'overlay-holder'
+        holder.hidden = true
+        holder.innerHTML = `<div ${attribute} style="position:fixed;left:20px;top:20px;width:100px;height:100px">overlay</div>`
+        document.body.append(holder)
+      }, selector)
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      assert.equal(
+        await page.evaluate(() => window.layouts.at(-1).visible),
+        true,
+      )
+      await page.evaluate(() => {
+        document.getElementById('overlay-holder').hidden = false
+      })
+      await page.waitForFunction(() => !window.layouts.at(-1).visible, null, {
+        polling: 50,
+      })
+      await page.evaluate(() => {
+        document.getElementById('overlay-holder').style.display = 'none'
+      })
+      await page.waitForFunction(() => window.layouts.at(-1).visible, null, {
+        polling: 50,
+      })
+      await page.evaluate(() =>
+        document.getElementById('overlay-holder').remove(),
+      )
+    }
+    await page.evaluate(() => window.replaceSlot(false))
+    await page.waitForFunction(() => !window.layouts.at(-1).visible, null, {
+      polling: 50,
+    })
+    await page.evaluate(() => window.replaceSlot(true))
+    await page.waitForFunction(() => window.layouts.at(-1).visible, null, {
+      polling: 50,
+    })
+    await page.evaluate(() => {
+      const slot = document.querySelector('[data-session] > div')
+      slot.style.width = '350px'
+    })
+    await page.waitForFunction(
+      () => window.layouts.at(-1).width === 350,
+      null,
+      {
+        polling: 50,
+      },
+    )
+    await page.evaluate(() => {
+      const notice = document.createElement('div')
+      notice.id = 'notice'
+      notice.dataset.browserOccluder = ''
+      notice.style.cssText =
+        'position:fixed;left:800px;top:20px;width:100px;height:100px'
+      document.body.append(notice)
+    })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    assert.equal(await page.evaluate(() => window.layouts.at(-1).visible), true)
+    await page.evaluate(() => document.getElementById('notice').remove())
     const failure = {
       toolCallId: 'denied-1',
       status: 'failed',

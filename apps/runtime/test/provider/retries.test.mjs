@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { streamChat } from '../../dist/provider/index.js'
 import { ProviderError, streamChatCompletion } from '../../dist/provider.js'
 import { parseRetryAfterMs, retryWaitMs } from '../../dist/provider/shared.js'
 import { startServer, sseBody } from '../fixtures/provider-server.mjs'
@@ -313,3 +314,51 @@ test('retries a successful response without a body', async () => {
   assert.equal(result.content, '')
   assert.match(retries[0].reason, /stream failure:/)
 })
+
+test('custom backoff doubles to the configured cap and preserves Retry-After', () => {
+  const options = { retryBackoffInitialMs: 3000, retryBackoffMaxMs: 10000 }
+  assert.deepEqual(
+    [1, 2, 3, 4].map((n) => retryWaitMs(n, null, options)),
+    [3000, 6000, 10000, 10000],
+  )
+  assert.equal(retryWaitMs(1, 20000, options), 20000)
+  assert.equal(retryWaitMs(1, 999999, options), 120000)
+  assert.equal(retryWaitMs(1, null, { retryBackoffInitialMs: 5000 }), 5000)
+  assert.equal(retryWaitMs(4, null, { retryBackoffMaxMs: 2000 }), 2000)
+})
+
+for (const format of ['openai-chat', 'openai-responses', 'anthropic']) {
+  test(`${format} uses configured backoff and cancellation interrupts the wait`, async () => {
+    const server = await startServer((_request, response) => {
+      response.writeHead(429, { 'content-type': 'application/json' })
+      response.end('{"error":"rate limited"}')
+    })
+    const controller = new AbortController()
+    const retries = []
+    try {
+      await assert.rejects(
+        streamChat(
+          {
+            baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
+            apiKey: 'sk-test',
+            model: 'mock-model',
+            messages: [{ role: 'user', content: 'hi' }],
+            signal: controller.signal,
+            retryBackoffInitialMs: 3000,
+            retryBackoffMaxMs: 9000,
+            onRetry: (retry) => {
+              retries.push(retry)
+              controller.abort()
+            },
+          },
+          format,
+          () => {},
+        ),
+      )
+      assert.equal(retries.length, 1)
+      assert.equal(retries[0].waitMs, 3000)
+    } finally {
+      server.close()
+    }
+  })
+}

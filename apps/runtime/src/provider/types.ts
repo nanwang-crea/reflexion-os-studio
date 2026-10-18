@@ -35,6 +35,8 @@ export interface StreamChatOptions {
   reasoningEffort?: ReasoningEffort
   /** 当前模型调用的请求/断流共享重试次数；传 0 禁用重试。 */
   maxRetries?: number
+  retryBackoffInitialMs?: number
+  retryBackoffMaxMs?: number
   /** 每次请求即将重试时调用；attempt 从 1 开始。 */
   onRetry?: (input: {
     attempt: number

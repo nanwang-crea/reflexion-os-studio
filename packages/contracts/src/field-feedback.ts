@@ -53,6 +53,8 @@ export const FIELD_LABELS: Readonly<Record<string, string>> = Object.freeze({
   maxTurns: '最大轮次',
   reflectionThreshold: '反思触发阈值',
   requestRetries: '请求重试次数',
+  requestBackoffInitialSec: '初始退避时间（秒）',
+  requestBackoffMaxSec: '最大退避时间（秒）',
   requestTimeoutSec: '请求超时（秒）',
   maxRunTimeoutSec: '单次运行上限（秒）',
   maxRunTotalTokens: '单次运行 Token 上限',

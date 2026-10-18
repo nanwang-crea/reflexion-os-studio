@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { browserSurface } from '../../api/browser'
+import { isBrowserViewportBlocked } from './viewport-obstruction'
 
 /** Native overlays cannot be clipped by CSS. Sync the measured slot and hide for dialogs. */
 export function useBrowserViewport(
@@ -16,8 +17,7 @@ export function useBrowserViewport(
     requestLayout.current()
   }, [visible, available, activeTabId])
   useEffect(() => {
-    const element = ref.current
-    if (!element) return
+    let observedElement: HTMLDivElement | null = null
     let frame: ReturnType<typeof setTimeout> | null = null
     let previous = ''
     let disposed = false
@@ -30,11 +30,14 @@ export function useBrowserViewport(
         again = true
         return
       }
-      const rect = element.getBoundingClientRect()
-      const blocked =
-        document.querySelector(
-          '[aria-modal="true"], [role="dialog"], [role="alertdialog"], [data-radix-popper-content-wrapper]',
-        ) !== null
+      const element = ref.current
+      if (element !== observedElement) {
+        resize.disconnect()
+        if (element) resize.observe(element)
+        observedElement = element
+      }
+      const rect = element?.getBoundingClientRect() ?? new DOMRect()
+      const blocked = isBrowserViewportBlocked(rect)
       const action = {
         kind: 'layout' as const,
         x: Math.max(0, rect.left),
@@ -73,13 +76,20 @@ export function useBrowserViewport(
     }
     requestLayout.current = schedule
     const resize = new ResizeObserver(schedule)
-    resize.observe(element)
     const mutation = new MutationObserver(schedule)
     mutation.observe(document.body, {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['aria-modal', 'style', 'class'],
+      attributeFilter: [
+        'open',
+        'role',
+        'aria-modal',
+        'hidden',
+        'style',
+        'class',
+        'data-browser-occluder',
+      ],
     })
     window.addEventListener('resize', schedule)
     window.addEventListener('scroll', schedule, true)

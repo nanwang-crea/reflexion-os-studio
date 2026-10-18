@@ -10,6 +10,8 @@ export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   reflectionThreshold: null,
   requestRetries: null,
   requestTimeoutSec: null,
+  requestBackoffInitialSec: null,
+  requestBackoffMaxSec: null,
   maxRunTimeoutSec: null,
   maxRunTotalTokens: null,
   maxToolCalls: null,
@@ -75,6 +77,14 @@ export class AgentSettingsStore {
         requestTimeoutSec:
           typeof parsed.requestTimeoutSec === 'number'
             ? parsed.requestTimeoutSec
+            : null,
+        requestBackoffInitialSec:
+          typeof parsed.requestBackoffInitialSec === 'number'
+            ? parsed.requestBackoffInitialSec
+            : null,
+        requestBackoffMaxSec:
+          typeof parsed.requestBackoffMaxSec === 'number'
+            ? parsed.requestBackoffMaxSec
             : null,
         maxRunTimeoutSec:
           typeof parsed.maxRunTimeoutSec === 'number'

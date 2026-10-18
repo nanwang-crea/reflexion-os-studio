@@ -55,6 +55,8 @@ test('AgentSettings caps delegation depth at four', () => {
     reflectionThreshold: null,
     requestRetries: null,
     requestTimeoutSec: null,
+    requestBackoffInitialSec: null,
+    requestBackoffMaxSec: null,
     maxRunTimeoutSec: null,
     maxRunTotalTokens: null,
     maxToolCalls: null,
@@ -1659,5 +1661,42 @@ test('escalation requires explicit nonempty bounded scope and rejects implicit s
       additional_write_roots: ['/tmp/cache'],
     }).success,
     false,
+  )
+})
+
+test('retry backoff settings validate ranges, defaults and ordering', () => {
+  const base = {
+    maxTurns: null,
+    reflectionThreshold: null,
+    requestRetries: null,
+    requestTimeoutSec: null,
+    maxRunTimeoutSec: null,
+    maxRunTotalTokens: null,
+    maxToolCalls: null,
+    maxContinuationTurns: null,
+    maxDepth: null,
+    maxChildRuns: null,
+    maxParallelChildren: null,
+    maxChildTimeoutSec: null,
+    maxChildTotalTokens: null,
+  }
+  assert.equal(AgentSettingsSchema.parse(base).requestBackoffInitialSec, null)
+  for (const overrides of [
+    { requestBackoffInitialSec: 0 },
+    { requestBackoffMaxSec: 121 },
+    { requestBackoffInitialSec: 3, requestBackoffMaxSec: 2 },
+    { requestBackoffInitialSec: 61 },
+  ])
+    assert.equal(
+      AgentSettingsSchema.safeParse({ ...base, ...overrides }).success,
+      false,
+    )
+  assert.equal(
+    AgentSettingsSchema.safeParse({
+      ...base,
+      requestBackoffInitialSec: 120,
+      requestBackoffMaxSec: 120,
+    }).success,
+    true,
   )
 })

@@ -1,17 +1,27 @@
+import type { StreamChatOptions } from './types.js'
 import { ProviderError } from './provider-error.js'
 import type { RuntimeErrorCode } from '@reflexion-os-studio/contracts'
 
 const DEFAULT_TIMEOUT_MS = 120_000
 /** 请求建立阶段失败(网络/限流/服务端短暂故障)的自动重试次数与退避。 */
 const DEFAULT_MAX_RETRIES = 5
-/** 重试退避公式：1s 起步 ×2 递增，封顶 60s；适配任意 maxRetries（设置范围 0–15）。 */
+/** 默认退避：1s 起步 ×2 递增，封顶 60s；可由运行设置覆盖。 */
 const RETRY_BACKOFF_BASE_MS = 1_000
 const RETRY_BACKOFF_CAP_MS = 60_000
 
-export function retryBackoffMs(attempt: number): number {
+type RetryBackoffOptions = Pick<
+  StreamChatOptions,
+  'retryBackoffInitialMs' | 'retryBackoffMaxMs'
+>
+
+export function retryBackoffMs(
+  attempt: number,
+  options: RetryBackoffOptions = {},
+): number {
   return Math.min(
-    RETRY_BACKOFF_CAP_MS,
-    RETRY_BACKOFF_BASE_MS * 2 ** (attempt - 1),
+    options.retryBackoffMaxMs ?? RETRY_BACKOFF_CAP_MS,
+    (options.retryBackoffInitialMs ?? RETRY_BACKOFF_BASE_MS) *
+      2 ** (attempt - 1),
   )
 }
 
@@ -39,8 +49,9 @@ export function parseRetryAfterMs(
 export function retryWaitMs(
   attempt: number,
   retryAfterMs: number | null,
+  options: RetryBackoffOptions = {},
 ): number {
-  const backoff = retryBackoffMs(attempt)
+  const backoff = retryBackoffMs(attempt, options)
   if (retryAfterMs === null) return backoff
   return Math.min(Math.max(backoff, retryAfterMs), RETRY_AFTER_CAP_MS)
 }

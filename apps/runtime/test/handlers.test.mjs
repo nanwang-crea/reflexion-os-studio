@@ -757,6 +757,8 @@ test('phase 3A child-run setting round-trips and remains an escape hatch', () =>
     reflectionThreshold: null,
     requestRetries: null,
     requestTimeoutSec: null,
+    requestBackoffInitialSec: null,
+    requestBackoffMaxSec: null,
     maxDepth: 2,
     maxChildRuns: 2,
     maxParallelChildren: 1,
