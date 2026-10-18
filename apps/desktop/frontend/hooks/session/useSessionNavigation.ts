@@ -17,7 +17,7 @@ export interface SessionNavigationDeps {
   setSidebarOpen: Dispatch<SetStateAction<boolean>>
   resetStreaming: () => void
   refreshSessionData: (sessionId: string) => Promise<void>
-  refreshProjectSessions: (projectId: string) => Promise<void>
+  refreshSessions: () => Promise<void>
   refreshDelegations: (sessionId: string) => Promise<void>
   /** 确认并清空工作区文件（可能弹窗）；返回 false 表示用户取消切换。 */
   resetWorkspaceFiles: () => boolean | Promise<boolean>
@@ -30,6 +30,8 @@ export interface SessionNavigation {
   /** 落地页切换上下文项目；null 表示独立会话上下文。 */
   selectLandingProject: (projectId: string | null) => void
   selectStandaloneSession: (sessionId: string) => void
+  /** 打开项目内会话：跨项目时按守卫切换项目上下文。 */
+  selectProjectSession: (projectId: string, sessionId: string) => void
   newStandaloneChat: () => void
   /** 点击项目行文件图标：切到对应项目并让侧栏进入文件工作区。 */
   enterProjectFiles: (projectId: string) => void
@@ -65,7 +67,7 @@ export function useSessionNavigation(
       deps.setSessionData(null)
       deps.setDelegations([])
       deps.setView('chat')
-      void deps.refreshProjectSessions(projectId)
+      void deps.refreshSessions()
     })()
   }
 
@@ -77,9 +79,7 @@ export function useSessionNavigation(
       deps.setActiveSessionId(null)
       deps.setSessionData(null)
       deps.setDelegations([])
-      if (projectId !== null) {
-        void deps.refreshProjectSessions(projectId)
-      }
+      void deps.refreshSessions()
     })()
   }
 
@@ -87,6 +87,22 @@ export function useSessionNavigation(
     void (async () => {
       if (!(await deps.resetWorkspaceFiles())) return
       deps.setActiveProjectId(null)
+      openSession(sessionId)
+    })()
+  }
+
+  /**
+   * 打开某个项目下的会话：跨项目时先过脏编辑器守卫再切换项目上下文，
+   * 保证激活项目与会话归属一致（侧栏多项目展开后可从任意项目下点击）。
+   */
+  const selectProjectSession = (projectId: string, sessionId: string): void => {
+    void (async () => {
+      if (
+        deps.activeProjectId !== projectId &&
+        !(await deps.resetWorkspaceFiles())
+      )
+        return
+      deps.setActiveProjectId(projectId)
       openSession(sessionId)
     })()
   }
@@ -110,7 +126,7 @@ export function useSessionNavigation(
       deps.setView('chat')
       deps.setSidebarMode('files')
       deps.setSidebarOpen(true)
-      void deps.refreshProjectSessions(projectId)
+      void deps.refreshSessions()
     })()
   }
 
@@ -123,6 +139,7 @@ export function useSessionNavigation(
     selectProject,
     selectLandingProject,
     selectStandaloneSession,
+    selectProjectSession,
     newStandaloneChat,
     enterProjectFiles,
     backToChat,

@@ -18,7 +18,7 @@ Runtime 在打开业务数据库、迁移及启动恢复之前，必须持有数
 
 ## Agent Loop Hardening 与 Atomic Finalizer（2026-09）
 
-- **完成状态机**：只有 `finish_reason=stop` 且无工具调用的轮次才能完成 Run；`length` 在续写预算内（默认 2 轮）继续，耗尽为 `output_truncated`；`content_filter` 失败且草稿落 failed（不伪造 completed）；finish reason 缺失/未知或与 toolCalls 不一致失败为 `provider_protocol`。稳定错误码：`max_turns` / `output_truncated` / `content_filtered` / `provider_protocol` / `no_progress` / `run_timeout` / `run_token_budget` / `tool_call_budget`。
+- **完成状态机**：只有 `finish_reason=stop` 且无工具调用的轮次才能完成 Run；`length` 在续写预算内（默认 2 轮）继续，耗尽为 `output_truncated`；`content_filter` 失败且草稿落 failed（不伪造 completed）；finish reason 缺失/未知或与 toolCalls 不一致失败为 `provider_protocol`；其中流已收尾但从未出现合法终止原因（缺 finish_reason / 缺 stop_reason / 缺 response.completed）视为可重试的流异常，复用传输层重试预算，重试耗尽才失败，错误消息附带 done/已收数据/内容长度/工具调用数诊断；出现未知非空终止值属于方言不匹配，立即失败。稳定错误码：`max_turns` / `output_truncated` / `content_filtered` / `provider_protocol` / `no_progress` / `run_timeout` / `run_token_budget` / `tool_call_budget`。
 - **Atomic Run Finalizer**：全部 Run 终态唯一生产入口，单个 SQLite 事务内收尾 pending 消息（含首轮失败悬挂的草稿清扫）、取消未终态 ToolCall（预建行一并收敛）、收敛活动 Plan（含未完成步骤）、写 Run 终态与失败事件；提交后按序发事件并执行回调（回调最多一次，通知器抛错不吞回调）。事务失败受控重试一次。终态不再创建自动记忆任务，Memory V2 以文件即记忆为准。
 - **ToolCall 批量预建**：Provider 返回合法 tool_calls 后，模型轮事务内按声明顺序创建全部行（初始 pending），提交后发 `tool.requested`；进程在工具执行前退出时全部调用可审计，启动恢复统一 cancelled。
 - **副作用调度**：相邻 pure/read 且资源不冲突的调用并行成批；write/shell/state 串行独占批，mutation 完成前后续 read 不交叉；结果按声明顺序回填；审批按声明顺序弹出，不允许后批准操作越过前一操作。

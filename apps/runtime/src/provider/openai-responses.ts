@@ -328,6 +328,16 @@ export async function streamOpenAIResponses(
         if (finishReason !== null) break
       }
       handleLine(buffer)
+      if (finishReason === null) {
+        // 流结束但从未收到完成状态（response.completed/incomplete；未知终态
+        // 在 responsesStopReason 解析处已即时失败）：多见于网关提前收尾的
+        // 瞬时截断，按可重试的流失败处理，复用传输层重试预算。附带诊断。
+        throw new ProviderError(
+          'provider_protocol',
+          `stream ended without a completion status (receivedData: ${receivedData}, contentChars: ${content.length}, reasoningChars: ${reasoning.length})`,
+          true,
+        )
+      }
     } catch (error) {
       requestTimeout.dispose()
       cleanupReader()
@@ -383,12 +393,6 @@ export async function streamOpenAIResponses(
 
     if (finishReason === 'stop' && toolCalls.length > 0)
       finishReason = 'tool_calls'
-    if (finishReason === null) {
-      throw new ProviderError(
-        'provider_protocol',
-        'stream ended without a completion status',
-      )
-    }
 
     return {
       content,

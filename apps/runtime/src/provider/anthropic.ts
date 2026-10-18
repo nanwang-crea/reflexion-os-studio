@@ -345,6 +345,16 @@ export async function streamAnthropic(
         if (sawStop) break
       }
       handleLine(buffer)
+      if (finishReason === null) {
+        // 流已结束但从未收到合法 stop_reason（未知 stop_reason 在解析处已即时
+        // 失败）：多见于网关提前收尾的瞬时截断，按可重试的流失败处理，复用
+        // 传输层重试预算。附带诊断便于定位方言差异。
+        throw new ProviderError(
+          'provider_protocol',
+          `stream ended without a valid stop_reason (raw: ${rawStopReason ?? 'null'}, stopEvent: ${sawStop}, receivedData: ${receivedData}, contentChars: ${content.length}, toolCalls: ${toolCallById.size})`,
+          true,
+        )
+      }
     } catch (error) {
       requestTimeout.dispose()
       cleanupReader()
@@ -396,13 +406,6 @@ export async function streamAnthropic(
         arguments: toolCall.arguments || '{}',
         name: providerToCanonical.get(toolCall.name) ?? toolCall.name,
       })
-    }
-
-    if (finishReason === null) {
-      throw new ProviderError(
-        'provider_protocol',
-        'stream ended without a valid stop_reason',
-      )
     }
 
     return {

@@ -27,6 +27,9 @@ export interface ReadyAppProps {
   sidebarWidth: number
   setSidebarWidth: Dispatch<SetStateAction<number>>
   projects: Project[]
+  /** 全量会话（侧栏多项目同时展开的分组来源）。 */
+  allSessions: Session[]
+  /** 当前激活项目的会话（落地页列表）。 */
   projectSessions: Session[]
   standaloneSessions: Session[]
   activeProject: Project | null
@@ -108,8 +111,7 @@ export interface ReadyAppProps {
   ) => Promise<void>
   refreshSessionData: (sessionId: string) => Promise<void>
   refreshProjects: () => Promise<void>
-  refreshProjectSessions: (projectId: string) => Promise<void>
-  refreshStandaloneSessions: () => Promise<void>
+  refreshSessions: () => Promise<void>
   refreshProfiles: () => Promise<void>
   enterProjectFiles: (projectId: string) => void
   backToChat: () => void
@@ -121,7 +123,7 @@ export interface ReadyAppProps {
   deleteProject: (projectId: string) => Promise<void>
   renameSession: (sessionId: string, title: string) => Promise<void>
   deleteSession: (sessionId: string) => Promise<void>
-  handleSelectSession: (sessionId: string) => void
+  handleSelectProjectSession: (projectId: string, sessionId: string) => void
   handleSelectStandaloneSession: (sessionId: string) => void
   sendMessage: MainProps['chat']['onSend']
   editResendMessage: MainProps['chat']['onEditResend']

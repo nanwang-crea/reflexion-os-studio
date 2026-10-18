@@ -113,42 +113,41 @@ test('脏文件行号跳转保持挂载 key，只有显式重载更新 key', () 
   assert.notEqual(key(state), originalKey)
 })
 
-test('项目和委派乱序响应、清空会话后的旧响应不会覆盖当前状态', async () => {
+test('会话列表和委派乱序响应、清空会话后的旧响应不会覆盖当前状态', async () => {
   const h = harness()
   const shown = {}
   const noop = () => {}
   const deps = {
-    activeProjectId: 'A',
     activeSessionId: 'a',
     sessionRequestRef: { current: 0 },
     setSessionData: (v) => {
       shown.session = v
     },
-    setProjectSessions: (v) => {
-      shown.project = v
+    setAllSessions: (v) => {
+      shown.sessions = v
     },
     setDelegations: (v) => {
       shown.delegation = v
     },
     setProfiles: noop,
     setProjects: noop,
-    setStandaloneSessions: noop,
   }
   let refresh = h.render(() => useDataRefreshers(deps))
-  const oldProject = refresh.refreshProjectSessions('A')
+  const oldSessions = refresh.refreshSessions()
   const oldDelegation = refresh.refreshDelegations('a')
-  deps.activeProjectId = 'B'
   deps.activeSessionId = 'b'
   refresh = h.render(() => useDataRefreshers(deps))
-  const newProject = refresh.refreshProjectSessions('B')
+  const newSessions = refresh.refreshSessions()
   const newDelegation = refresh.refreshDelegations('b')
-  h.pending.find((p) => p.id === 'B').resolve({ sessions: ['B'] })
-  h.pending.find((p) => p.id === 'b').resolve(['b'])
-  await Promise.all([newProject, newDelegation])
-  h.pending.find((p) => p.id === 'A').resolve({ sessions: ['A'] })
-  h.pending.find((p) => p.id === 'a').resolve(['a'])
-  await Promise.all([oldProject, oldDelegation])
-  assert.deepEqual(shown.project, ['B'])
+  // listSessions 不带参数，两次并发的会话列表请求按发出顺序排列。
+  const sessionListRequests = h.pending.filter((p) => p.kind === 'project')
+  sessionListRequests[1].resolve({ sessions: ['B'] })
+  h.pending.find((p) => p.kind === 'delegation' && p.id === 'b').resolve(['b'])
+  await Promise.all([newSessions, newDelegation])
+  sessionListRequests[0].resolve({ sessions: ['A'] })
+  h.pending.find((p) => p.kind === 'delegation' && p.id === 'a').resolve(['a'])
+  await Promise.all([oldSessions, oldDelegation])
+  assert.deepEqual(shown.sessions, ['B'])
   assert.deepEqual(shown.delegation, ['b'])
   const oldSession = refresh.refreshSessionData('b')
   deps.activeSessionId = null
@@ -174,17 +173,15 @@ test('旧历史页不会写入其他会话或覆盖已移动的分页游标', as
   let data = page('a', 2)
   const noop = () => {}
   const deps = {
-    activeProjectId: null,
     activeSessionId: 'a',
     sessionRequestRef: { current: 0 },
     setSessionData: (value) => {
       data = typeof value === 'function' ? value(data) : value
     },
-    setProjectSessions: noop,
+    setAllSessions: noop,
     setDelegations: noop,
     setProfiles: noop,
     setProjects: noop,
-    setStandaloneSessions: noop,
   }
   let refresh = h.render(() => useDataRefreshers(deps))
   const old = refresh.loadOlderHistory('a', cursor(2))

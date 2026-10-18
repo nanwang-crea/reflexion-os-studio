@@ -27,8 +27,8 @@ interface SidebarProps {
   /** 侧栏内容模式：chat=会话列表；files=当前项目文件工作区。 */
   mode: 'chat' | 'files'
   projects: Project[]
-  /** 激活项目下的会话；仅当项目展开时展示。 */
-  projectSessions: Session[]
+  /** 全量会话：项目分组按 projectId 过滤，多项目可同时展开。 */
+  allSessions: Session[]
   /** 不关联任何项目的独立会话。 */
   standaloneSessions: Session[]
   activeProjectId: string | null
@@ -59,7 +59,8 @@ interface SidebarProps {
   /** 底部导航切换；点击已激活页回到聊天。 */
   onSelectView: (view: OtherView) => void
   onSelectProject: (projectId: string) => void
-  onSelectSession: (sessionId: string) => void
+  /** 打开项目内会话：跨项目时切换项目上下文。 */
+  onSelectProjectSession: (projectId: string, sessionId: string) => void
   onSelectStandaloneSession: (sessionId: string) => void
   /** 在指定项目内新建会话（进入项目落地页）。 */
   onNewSessionInProject: (projectId: string) => void
@@ -166,7 +167,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
 
       <ChatsPanel
         projects={props.projects}
-        projectSessions={props.projectSessions}
+        allSessions={props.allSessions}
         standaloneSessions={props.standaloneSessions}
         activeProjectId={props.activeProjectId}
         activeSessionId={props.activeSessionId}
@@ -176,7 +177,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
         approvalSessionIds={props.approvalSessionIds}
         creatingProject={props.creatingProject}
         onSelectProject={props.onSelectProject}
-        onSelectSession={props.onSelectSession}
+        onSelectProjectSession={props.onSelectProjectSession}
         onSelectStandaloneSession={props.onSelectStandaloneSession}
         onNewSessionInProject={props.onNewSessionInProject}
         onEnterProjectFiles={props.onEnterProjectFiles}

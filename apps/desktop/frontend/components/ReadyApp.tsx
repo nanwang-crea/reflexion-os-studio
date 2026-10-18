@@ -15,7 +15,7 @@ export function ReadyApp(props: ReadyAppProps): React.JSX.Element {
         open: props.sidebarOpen,
         mode: props.sidebarMode,
         projects: props.projects,
-        projectSessions: props.projectSessions,
+        allSessions: props.allSessions,
         standaloneSessions: props.standaloneSessions,
         activeProjectId: props.activeProjectId,
         activeSessionId: props.activeSessionId,
@@ -36,7 +36,7 @@ export function ReadyApp(props: ReadyAppProps): React.JSX.Element {
         onEnterProjectFiles: props.enterProjectFiles,
         onBackToChat: props.backToChat,
         onSelectProject: props.selectProject,
-        onSelectSession: props.handleSelectSession,
+        onSelectProjectSession: props.handleSelectProjectSession,
         onSelectStandaloneSession: props.handleSelectStandaloneSession,
         onNewSessionInProject: props.selectProject,
         onNewChat: props.newStandaloneChat,
@@ -130,7 +130,7 @@ export function ReadyApp(props: ReadyAppProps): React.JSX.Element {
           projects: props.projects,
           selectedProjectId: props.activeProjectId,
           onProjectChange: props.selectLandingProject,
-          sessions: props.activeProject ? props.projectSessions : [],
+          sessions: props.projectSessions,
           hasEnabledProvider: props.hasEnabledProvider,
           permissionValue: props.permissionPreset,
           onPermissionChange: props.changePermissionPreset,
@@ -160,7 +160,7 @@ export function ReadyApp(props: ReadyAppProps): React.JSX.Element {
           props.setActiveProjectId(null)
           props.setActiveSessionId(sessionId)
           void props.refreshSessionData(sessionId)
-          void props.refreshStandaloneSessions()
+          void props.refreshSessions()
           props.setComposerPrefill({ skillId, nonce: Date.now() })
           props.setView('chat')
         },

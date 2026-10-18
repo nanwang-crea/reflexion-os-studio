@@ -15,8 +15,7 @@ export function useChatArchiveActions(props: ReadyAppProps) {
     setNotice,
     guardedResetWorkspaceFiles,
     refreshProjects,
-    refreshStandaloneSessions,
-    refreshProjectSessions,
+    refreshSessions,
     setActiveProjectId,
     openSession,
   } = props
@@ -64,9 +63,7 @@ export function useChatArchiveActions(props: ReadyAppProps) {
         openSession(result.session.id)
         try {
           await refreshProjects()
-          if (result.session.projectId)
-            await refreshProjectSessions(result.session.projectId)
-          await refreshStandaloneSessions()
+          await refreshSessions()
           setNotice(`已导入 ${result.messageCount} 条消息，已打开新会话。`)
         } catch {
           setNotice('聊天记录已导入；列表刷新失败，请切换项目查看新会话。')
@@ -82,8 +79,7 @@ export function useChatArchiveActions(props: ReadyAppProps) {
       guardedResetWorkspaceFiles,
       openSession,
       refreshProjects,
-      refreshProjectSessions,
-      refreshStandaloneSessions,
+      refreshSessions,
       setActiveProjectId,
       setNotice,
     ],

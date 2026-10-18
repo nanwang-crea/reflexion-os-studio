@@ -52,7 +52,7 @@ test('changing composer selection immediately changes retry and edit resend requ
       runs: [{ id: 'original', status: 'failed', supersededByRunId: null }],
     },
     refreshSessionData: async () => {},
-    refreshStandaloneSessions: async () => {},
+    refreshSessions: async () => {},
     setNotice: (notice) => {
       if (notice) throw new Error(notice)
     },
@@ -88,7 +88,7 @@ function sendDeps(overrides = {}) {
     setNotice: () => {},
     setActiveSessionId: () => {},
     refreshSessionData: async () => {},
-    refreshStandaloneSessions: async () => {},
+    refreshSessions: async () => {},
     ...overrides,
   }
 }

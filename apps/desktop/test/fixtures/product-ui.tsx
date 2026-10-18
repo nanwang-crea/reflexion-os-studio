@@ -37,7 +37,7 @@ function Fixture() {
         width={224}
         mode="chat"
         projects={[]}
-        projectSessions={[]}
+        allSessions={[]}
         standaloneSessions={[]}
         activeProjectId={null}
         activeSessionId={null}
@@ -49,7 +49,7 @@ function Fixture() {
         guardDirtyBuffersThen={async () => true}
         onSelectView={() => setSettings(true)}
         onSelectProject={noop}
-        onSelectSession={noop}
+        onSelectProjectSession={noop}
         onSelectStandaloneSession={noop}
         onNewSessionInProject={noop}
         onEnterProjectFiles={noop}

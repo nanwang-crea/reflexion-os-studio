@@ -4,7 +4,6 @@ import type { Dispatch, RefObject, SetStateAction } from 'react'
 import { open } from '@tauri-apps/plugin-dialog'
 import type {
   Project,
-  Session,
   ReasoningEffort,
 } from '@reflexion-os-studio/runtime-client'
 import type { ConfirmDialogState } from '../../components/ConfirmDialog'
@@ -32,14 +31,12 @@ interface SessionActionsDeps {
   activeProjectRef: RefObject<string | null>
   // 刷新函数
   refreshSessionData: (sessionId: string) => Promise<void>
-  refreshStandaloneSessions: () => Promise<void>
-  refreshProjectSessions: (projectId: string) => Promise<void>
+  refreshSessions: () => Promise<void>
   refreshProjects: () => Promise<void>
   // 状态写入
   setActiveSessionId: (sessionId: string | null) => void
   setActiveProjectId: (projectId: string | null) => void
   setSessionData: Dispatch<SetStateAction<SessionData | null>>
-  setProjectSessions: (sessions: Session[]) => void
   setCreatingProject: (creating: boolean) => void
   setNotice: (notice: string | null) => void
   // 应用内确认弹窗（替代系统原生 ask）
@@ -87,10 +84,7 @@ export function useSessionActions(deps: SessionActionsDeps): {
       if (deps.activeSessionRef.current === sessionId) {
         await deps.refreshSessionData(sessionId)
       }
-      await deps.refreshStandaloneSessions()
-      if (deps.activeProjectRef.current) {
-        await deps.refreshProjectSessions(deps.activeProjectRef.current)
-      }
+      await deps.refreshSessions()
     } catch (error) {
       fail(error)
     }
@@ -111,10 +105,7 @@ export function useSessionActions(deps: SessionActionsDeps): {
         deps.setActiveSessionId(null)
         deps.setSessionData(null)
       }
-      await deps.refreshStandaloneSessions()
-      if (deps.activeProjectRef.current) {
-        await deps.refreshProjectSessions(deps.activeProjectRef.current)
-      }
+      await deps.refreshSessions()
     } catch (error) {
       fail(error)
     }
@@ -153,9 +144,9 @@ export function useSessionActions(deps: SessionActionsDeps): {
         deps.setActiveProjectId(null)
         deps.setActiveSessionId(null)
         deps.setSessionData(null)
-        deps.setProjectSessions([])
       }
       await deps.refreshProjects()
+      await deps.refreshSessions()
     } catch (error) {
       fail(error)
     }
@@ -229,10 +220,7 @@ export function useSessionActions(deps: SessionActionsDeps): {
         deps.setActiveSessionId(sessionId)
         await deps.refreshSessionData(sessionId)
       }
-      await deps.refreshStandaloneSessions()
-      if (deps.activeProjectId) {
-        await deps.refreshProjectSessions(deps.activeProjectId)
-      }
+      await deps.refreshSessions()
     } catch (error) {
       fail(error)
       // An accepted message must clear the draft even if refreshing fails.
@@ -301,10 +289,7 @@ export function useSessionActions(deps: SessionActionsDeps): {
         throw error
       }
       await deps.refreshSessionData(sessionId)
-      await deps.refreshStandaloneSessions()
-      if (deps.activeProjectId) {
-        await deps.refreshProjectSessions(deps.activeProjectId)
-      }
+      await deps.refreshSessions()
     } catch (error) {
       await Promise.allSettled(uploadedImageIds.map(deleteAsset))
       fail(error)

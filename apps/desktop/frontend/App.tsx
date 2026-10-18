@@ -36,6 +36,9 @@ import {
 import { BootstrapScreen } from './components/BootstrapScreen'
 import { respondToInteraction } from './api/chat'
 
+/** 无激活项目时落地页会话列表的稳定空引用。 */
+const EMPTY_SESSIONS: Session[] = []
+
 export default function App() {
   const [view, setView] = useState<ViewName>('chat')
   const [profiles, setProfiles] = useState<ProviderProfile[]>([])
@@ -44,8 +47,8 @@ export default function App() {
     nonce: number
   } | null>(null)
   const [projects, setProjects] = useState<Project[]>([])
-  const [projectSessions, setProjectSessions] = useState<Session[]>([])
-  const [standaloneSessions, setStandaloneSessions] = useState<Session[]>([])
+  // 全量会话列表：一次加载同时驱动侧栏各项目分组与独立会话分组。
+  const [allSessions, setAllSessions] = useState<Session[]>([])
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null)
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [sessionData, setSessionData] = useState<SessionData | null>(null)
@@ -117,18 +120,15 @@ export default function App() {
     loadOlderHistory,
     refreshProfiles,
     refreshProjects,
-    refreshProjectSessions,
-    refreshStandaloneSessions,
+    refreshSessions,
     refreshDelegations,
   } = useDataRefreshers({
-    activeProjectId,
     activeSessionId,
     sessionRequestRef,
     setSessionData,
     setProfiles,
     setProjects,
-    setProjectSessions,
-    setStandaloneSessions,
+    setAllSessions,
     setDelegations,
   })
 
@@ -139,8 +139,7 @@ export default function App() {
       refreshProfiles,
       refreshProjects,
       refreshSessionData,
-      refreshStandaloneSessions,
-      refreshProjectSessions,
+      refreshSessions,
       refreshDelegations,
       setNotice,
       onDangerChanged,
@@ -148,11 +147,10 @@ export default function App() {
     [
       activeProjectRef,
       activeSessionRef,
-      refreshProjectSessions,
+      refreshSessions,
       refreshProfiles,
       refreshProjects,
       refreshSessionData,
-      refreshStandaloneSessions,
       refreshDelegations,
       setNotice,
       onDangerChanged,
@@ -207,6 +205,7 @@ export default function App() {
     selectProject,
     selectLandingProject,
     selectStandaloneSession,
+    selectProjectSession,
     newStandaloneChat,
     enterProjectFiles,
     backToChat,
@@ -221,7 +220,7 @@ export default function App() {
     setSidebarOpen,
     resetStreaming,
     refreshSessionData,
-    refreshProjectSessions,
+    refreshSessions,
     refreshDelegations,
     resetWorkspaceFiles: guardedResetWorkspaceFiles,
   })
@@ -273,13 +272,11 @@ export default function App() {
     activeSessionRef,
     activeProjectRef,
     refreshSessionData,
-    refreshStandaloneSessions,
-    refreshProjectSessions,
+    refreshSessions,
     refreshProjects,
     setActiveSessionId,
     setActiveProjectId,
     setSessionData,
-    setProjectSessions,
     setCreatingProject,
     setNotice,
     confirm,
@@ -300,13 +297,27 @@ export default function App() {
   )
   const activeProject =
     projects.find((project) => project.id === activeProjectId) ?? null
+  const standaloneSessions = useMemo(
+    () => allSessions.filter((session) => session.projectId === null),
+    [allSessions],
+  )
+  // 落地页展示当前项目会话；无激活项目时固定空数组引用避免无谓重渲染。
+  const activeProjectSessions = useMemo(
+    () =>
+      activeProjectId === null
+        ? EMPTY_SESSIONS
+        : allSessions.filter(
+            (session) => session.projectId === activeProjectId,
+          ),
+    [allSessions, activeProjectId],
+  )
 
-  const handleSelectSession = useCallback(
-    (sessionId: string): void => {
+  const handleSelectProjectSession = useCallback(
+    (projectId: string, sessionId: string): void => {
       clearSessionStatus(sessionId)
-      openSession(sessionId)
+      selectProjectSession(projectId, sessionId)
     },
-    [clearSessionStatus, openSession],
+    [clearSessionStatus, selectProjectSession],
   )
   const handleSelectStandaloneSession = useCallback(
     (sessionId: string): void => {
@@ -359,7 +370,8 @@ export default function App() {
       sidebarWidth={sidebarWidth}
       setSidebarWidth={setSidebarWidth}
       projects={projects}
-      projectSessions={projectSessions}
+      allSessions={allSessions}
+      projectSessions={activeProjectSessions}
       standaloneSessions={standaloneSessions}
       activeProject={activeProject}
       activeProjectId={activeProjectId}
@@ -433,8 +445,7 @@ export default function App() {
       loadOlderHistory={loadOlderHistory}
       refreshSessionData={refreshSessionData}
       refreshProjects={refreshProjects}
-      refreshProjectSessions={refreshProjectSessions}
-      refreshStandaloneSessions={refreshStandaloneSessions}
+      refreshSessions={refreshSessions}
       refreshProfiles={refreshProfiles}
       enterProjectFiles={enterProjectFiles}
       backToChat={backToChat}
@@ -446,7 +457,7 @@ export default function App() {
       deleteProject={deleteProject}
       renameSession={renameSession}
       deleteSession={deleteSession}
-      handleSelectSession={handleSelectSession}
+      handleSelectProjectSession={handleSelectProjectSession}
       handleSelectStandaloneSession={handleSelectStandaloneSession}
       sendMessage={sendMessage}
       editResendMessage={editResendMessage}

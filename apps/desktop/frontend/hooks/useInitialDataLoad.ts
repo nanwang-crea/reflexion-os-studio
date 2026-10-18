@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef } from 'react'
 interface InitialDataDeps {
   refreshProfiles: () => Promise<void>
   refreshProjects: () => Promise<void>
-  refreshStandaloneSessions: () => Promise<void>
+  refreshSessions: () => Promise<void>
   setNotice: (notice: string | null) => void
 }
 
@@ -28,7 +28,7 @@ export function useInitialDataLoad(deps: InitialDataDeps): () => void {
         Promise.allSettled([
           deps.refreshProfiles(),
           deps.refreshProjects(),
-          deps.refreshStandaloneSessions(),
+          deps.refreshSessions(),
         ])
       const findFailure = (
         settled: PromiseSettledResult<void>[],

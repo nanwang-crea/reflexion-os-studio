@@ -311,6 +311,23 @@ export async function streamOpenAIChat(
       if (!sawDone) {
         throw new Error('stream ended before [DONE]')
       }
+      if (finishReason === null) {
+        // [DONE] 已到但从未出现合法 finish_reason：多见于网关提前收尾的瞬时
+        // 截断，按可重试的流失败处理（复用传输层重试预算）；出现过未知非空
+        // 值属于方言不匹配，重试无意义，立即失败。附带诊断便于定位方言差异。
+        const missing =
+          rawFinishReason === undefined || rawFinishReason === null
+        const raw = redactProviderError(
+          rawFinishReason,
+          options.apiKey,
+          options.headers,
+        ).slice(0, 40)
+        throw new ProviderError(
+          'provider_protocol',
+          `stream ended without a valid finish_reason (raw: ${raw}, done: ${sawDone}, receivedData: ${receivedData}, contentChars: ${content.length}, toolCalls: ${toolCallByIndex.size})`,
+          missing,
+        )
+      }
     } catch (error) {
       requestTimeout.dispose()
       cleanupReader()
@@ -364,13 +381,6 @@ export async function streamOpenAIChat(
           name: providerToCanonical.get(toolCall.name) ?? toolCall.name,
         }
       })
-
-    if (finishReason === null) {
-      throw new ProviderError(
-        'provider_protocol',
-        `stream ended without a valid finish_reason (raw: ${redactProviderError(rawFinishReason, options.apiKey, options.headers).slice(0, 40)})`,
-      )
-    }
 
     return {
       content,

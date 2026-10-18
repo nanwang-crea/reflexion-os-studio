@@ -14,15 +14,13 @@ import { listDelegations } from '../api/agents'
 import { getSessionData, listSessions, type SessionData } from '../api/sessions'
 
 export interface DataRefresherDeps {
-  activeProjectId: string | null
   activeSessionId: string | null
   /** 会话数据请求序号：刷新期间切会话时丢弃过期响应。 */
   sessionRequestRef: MutableRefObject<number>
   setSessionData: Dispatch<SetStateAction<SessionData | null>>
   setProfiles: Dispatch<SetStateAction<ProviderProfile[]>>
   setProjects: Dispatch<SetStateAction<Project[]>>
-  setProjectSessions: Dispatch<SetStateAction<Session[]>>
-  setStandaloneSessions: Dispatch<SetStateAction<Session[]>>
+  setAllSessions: Dispatch<SetStateAction<Session[]>>
   setDelegations: Dispatch<SetStateAction<Delegation[]>>
 }
 
@@ -31,8 +29,8 @@ export interface DataRefreshers {
   loadOlderHistory: (sessionId: string, before: HistoryCursor) => Promise<void>
   refreshProfiles: () => Promise<void>
   refreshProjects: () => Promise<void>
-  refreshProjectSessions: (projectId: string) => Promise<void>
-  refreshStandaloneSessions: () => Promise<void>
+  /** 一次性刷新全部会话（含项目会话与独立会话），驱动侧栏全部分组。 */
+  refreshSessions: () => Promise<void>
   refreshDelegations: (sessionId: string) => Promise<void>
 }
 
@@ -46,20 +44,13 @@ export function useDataRefreshers(deps: DataRefresherDeps): DataRefreshers {
     setSessionData,
     setProfiles,
     setProjects,
-    setProjectSessions,
-    setStandaloneSessions,
+    setAllSessions,
     setDelegations,
   } = deps
 
-  const active = useRef({
-    projectId: deps.activeProjectId,
-    sessionId: deps.activeSessionId,
-  })
-  active.current = {
-    projectId: deps.activeProjectId,
-    sessionId: deps.activeSessionId,
-  }
-  const projectRequestRef = useRef(0)
+  const active = useRef({ sessionId: deps.activeSessionId })
+  active.current = { sessionId: deps.activeSessionId }
+  const sessionsListRequestRef = useRef(0)
   const delegationRequestRef = useRef(0)
 
   const refreshSessionData = useCallback(
@@ -103,23 +94,14 @@ export function useDataRefreshers(deps: DataRefresherDeps): DataRefreshers {
     setProjects(result.projects)
   }, [setProjects])
 
-  const refreshProjectSessions = useCallback(
-    async (projectId: string) => {
-      const requestId = ++projectRequestRef.current
-      const result = await listSessions(projectId)
-      if (
-        requestId === projectRequestRef.current &&
-        active.current.projectId === projectId
-      )
-        setProjectSessions(result.sessions)
-    },
-    [setProjectSessions],
-  )
-
-  const refreshStandaloneSessions = useCallback(async () => {
-    const result = await listSessions(null)
-    setStandaloneSessions(result.sessions)
-  }, [setStandaloneSessions])
+  const refreshSessions = useCallback(async () => {
+    // session.list 不带 projectId 即返回全部会话：一次请求同时覆盖
+    // 侧栏的各项目分组与独立会话分组（多项目可同时展开，无需逐项目刷新）。
+    const requestId = ++sessionsListRequestRef.current
+    const result = await listSessions()
+    if (requestId === sessionsListRequestRef.current)
+      setAllSessions(result.sessions)
+  }, [setAllSessions])
 
   const refreshDelegations = useCallback(
     async (sessionId: string) => {
@@ -139,8 +121,7 @@ export function useDataRefreshers(deps: DataRefresherDeps): DataRefreshers {
     loadOlderHistory,
     refreshProfiles,
     refreshProjects,
-    refreshProjectSessions,
-    refreshStandaloneSessions,
+    refreshSessions,
     refreshDelegations,
   }
 }

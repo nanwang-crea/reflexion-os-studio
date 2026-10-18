@@ -46,8 +46,7 @@ interface AppBootstrapDeps {
   refreshProfiles: () => Promise<void>
   refreshProjects: () => Promise<void>
   refreshSessionData: (sessionId: string) => Promise<void>
-  refreshStandaloneSessions: () => Promise<void>
-  refreshProjectSessions: (projectId: string) => Promise<void>
+  refreshSessions: () => Promise<void>
   refreshDelegations: (sessionId: string) => Promise<void>
   setNotice: (notice: string | null) => void
   /** danger.changed 事件转发（Danger 租约 UI 投影；App 持有状态）。 */
@@ -108,7 +107,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
   const loadInitialData = useInitialDataLoad({
     refreshProfiles: deps.refreshProfiles,
     refreshProjects: deps.refreshProjects,
-    refreshStandaloneSessions: deps.refreshStandaloneSessions,
+    refreshSessions: deps.refreshSessions,
     setNotice: deps.setNotice,
   })
   const approvals = usePendingApprovals()
@@ -345,9 +344,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           return
         }
         if (event.type === 'session.updated') {
-          void deps.refreshStandaloneSessions()
-          const projectId = deps.activeProjectRef.current
-          if (projectId) void deps.refreshProjectSessions(projectId)
+          void deps.refreshSessions()
           if (event.sessionId === deps.activeSessionRef.current) {
             void deps.refreshSessionData(event.sessionId)
           }
@@ -385,9 +382,7 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           }
           // run.failed 已在上方完成状态更新；这里仅负责刷新会话数据。
           // Run 结束后标题可能已被自动命名，会话列表一并刷新。
-          void deps.refreshStandaloneSessions()
-          const projectId = deps.activeProjectRef.current
-          if (projectId) void deps.refreshProjectSessions(projectId)
+          void deps.refreshSessions()
           approvals.clearForRun(event.runId)
           interactions.clearForRun(event.runId)
           refreshAndPrune(

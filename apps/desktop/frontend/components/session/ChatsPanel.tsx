@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Project, Session } from '@reflexion-os-studio/runtime-client'
 import { SessionRow } from '../SessionRow'
 import { FolderIcon, PlusIcon, SearchIcon, TrashIcon } from '../../ui/icons'
@@ -33,13 +33,24 @@ function groupByTime(sessions: Session[]): [string, Session[]][] {
     groups.get(bucket) as Session[],
   ])
 }
+/** 运行中的会话排前，保证侧栏可见性。 */
+function sortByRunningFirst(
+  sessions: Session[],
+  runningSessionIds: string[] | undefined,
+): Session[] {
+  const running = new Set(runningSessionIds ?? [])
+  return [...sessions].sort(
+    (a, b) => Number(running.has(b.id)) - Number(running.has(a.id)),
+  )
+}
 
 interface ChatsPanelProps {
   onImportChat?: (projectId: string | null) => void
   onExportChat?: (sessionId: string) => void
   archiveBusy?: boolean
   projects: Project[]
-  projectSessions: Session[]
+  /** 全量会话：项目分组按 projectId 过滤展示，多项目可同时展开。 */
+  allSessions: Session[]
   standaloneSessions: Session[]
   activeProjectId: string | null
   activeSessionId: string | null
@@ -49,7 +60,8 @@ interface ChatsPanelProps {
   approvalSessionIds?: string[]
   creatingProject: boolean
   onSelectProject: (projectId: string) => void
-  onSelectSession: (sessionId: string) => void
+  /** 打开项目内会话：跨项目时切换项目上下文。 */
+  onSelectProjectSession: (projectId: string, sessionId: string) => void
   onSelectStandaloneSession: (sessionId: string) => void
   onNewSessionInProject: (projectId: string) => void
   /** 点击项目行文件图标：切到该项目并让侧栏进入文件工作区。 */
@@ -61,7 +73,11 @@ interface ChatsPanelProps {
   onDeleteSession: (sessionId: string) => Promise<void>
 }
 
-/** 侧栏主体：过滤框 + 项目折叠区 + 独立会话时间分组。 */
+/**
+ * 侧栏主体：过滤框 + 项目多展开分组 + 独立会话时间分组。
+ * 项目行本身即展开开关（Codex 式，无折叠按钮）：点击展开并进入该项目，
+ * 再点击收起；多个项目可同时展开。
+ */
 export function ChatsPanel(props: ChatsPanelProps): React.JSX.Element {
   const [filter, setFilter] = useState('')
   const keyword = filter.trim().toLowerCase()
@@ -70,11 +86,70 @@ export function ChatsPanel(props: ChatsPanelProps): React.JSX.Element {
       keyword === '' || text.toLowerCase().includes(keyword)
     return props.projects.filter((project) => match(project.name))
   }, [props.projects, keyword])
+  // 项目名下的会话分组（多项目同时展开时各自过滤展示）。
+  const sessionsByProject = useMemo(() => {
+    const groups = new Map<string, Session[]>()
+    for (const session of props.allSessions) {
+      if (session.projectId === null) continue
+      const list = groups.get(session.projectId)
+      if (list) list.push(session)
+      else groups.set(session.projectId, [session])
+    }
+    return groups
+  }, [props.allSessions])
   const standalone = useMemo(() => {
     const match = (text: string): boolean =>
       keyword === '' || text.toLowerCase().includes(keyword)
     return props.standaloneSessions.filter((session) => match(session.title))
   }, [props.standaloneSessions, keyword])
+  // 用户主动展开的项目集合；激活项目与搜索命中在此之上自动展开。
+  const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  )
+
+  // 激活项目变化（新建/导入/启动恢复）时自动展开对应分组。
+  useEffect(() => {
+    const projectId = props.activeProjectId
+    if (projectId === null) return
+    setExpandedIds((current) =>
+      current.has(projectId) ? current : new Set(current).add(projectId),
+    )
+  }, [props.activeProjectId])
+
+  // 搜索时自动展开存在命中的项目（项目名或其下会话标题命中）。
+  const expandedProjects = useMemo(() => {
+    if (keyword === '') return expandedIds
+    const result = new Set<string>()
+    for (const project of projects) {
+      const hasMatch =
+        project.name.toLowerCase().includes(keyword) ||
+        (sessionsByProject.get(project.id) ?? []).some((session) =>
+          session.title.toLowerCase().includes(keyword),
+        )
+      if (hasMatch) result.add(project.id)
+    }
+    return result
+  }, [keyword, expandedIds, projects, sessionsByProject])
+
+  const matchesKeyword = (text: string): boolean =>
+    keyword === '' || text.toLowerCase().includes(keyword)
+
+  /**
+   * 点击项目行：折叠时展开并进入该项目；已展开（含激活项目）时收起，
+   * 收起不改变当前上下文。
+   */
+  const handleProjectRowClick = (projectId: string): void => {
+    const willExpand = !expandedProjects.has(projectId)
+    setExpandedIds((current) => {
+      const next = new Set(current)
+      if (willExpand) next.add(projectId)
+      else next.delete(projectId)
+      return next
+    })
+    if (willExpand && projectId !== props.activeProjectId) {
+      props.onSelectProject(projectId)
+    }
+  }
 
   return (
     <div className="chats-panel">
@@ -104,13 +179,21 @@ export function ChatsPanel(props: ChatsPanelProps): React.JSX.Element {
         <ul className="section-list">
           {projects.map((project) => {
             const active = project.id === props.activeProjectId
+            const expanded = expandedProjects.has(project.id)
+            const projectSessions = sortByRunningFirst(
+              (sessionsByProject.get(project.id) ?? []).filter((session) =>
+                matchesKeyword(session.title),
+              ),
+              props.runningSessionIds,
+            )
             return (
               <li key={project.id}>
                 <div className={`project-row${active ? ' active' : ''}`}>
                   <button
                     className="row project-select"
                     title={project.folderPath || '未关联文件夹'}
-                    onClick={() => props.onSelectProject(project.id)}
+                    aria-expanded={expanded}
+                    onClick={() => handleProjectRowClick(project.id)}
                   >
                     <span className="row-label">{project.name}</span>
                   </button>
@@ -139,55 +222,45 @@ export function ChatsPanel(props: ChatsPanelProps): React.JSX.Element {
                     <TrashIcon />
                   </button>
                 </div>
-                {active && (
+                {expanded && (
                   <ul className="nested-list">
-                    {[...props.projectSessions]
-                      .sort(
-                        (a, b) =>
-                          Number(
-                            props.runningSessionIds?.includes(b.id) ?? false,
-                          ) -
-                          Number(
-                            props.runningSessionIds?.includes(a.id) ?? false,
-                          ),
-                      )
-                      .map((session) => (
-                        <li key={session.id}>
-                          <SessionRow
-                            session={session}
-                            archiveBusy={props.archiveBusy}
-                            onImport={
-                              props.onImportChat
-                                ? () => props.onImportChat?.(session.projectId)
-                                : undefined
-                            }
-                            onExport={
-                              props.onExportChat
-                                ? () => props.onExportChat?.(session.id)
-                                : undefined
-                            }
-                            active={session.id === props.activeSessionId}
-                            running={props.runningSessionIds?.includes(
-                              session.id,
-                            )}
-                            completed={props.completedSessionIds?.includes(
-                              session.id,
-                            )}
-                            failed={props.failedSessionIds?.includes(
-                              session.id,
-                            )}
-                            pendingApproval={props.approvalSessionIds?.includes(
-                              session.id,
-                            )}
-                            onSelect={() => props.onSelectSession(session.id)}
-                            onRename={(title) =>
-                              props.onRenameSession(session.id, title)
-                            }
-                            onDelete={() => props.onDeleteSession(session.id)}
-                          />
-                        </li>
-                      ))}
-                    {props.projectSessions.length === 0 && (
+                    {projectSessions.map((session) => (
+                      <li key={session.id}>
+                        <SessionRow
+                          session={session}
+                          archiveBusy={props.archiveBusy}
+                          onImport={
+                            props.onImportChat
+                              ? () => props.onImportChat?.(session.projectId)
+                              : undefined
+                          }
+                          onExport={
+                            props.onExportChat
+                              ? () => props.onExportChat?.(session.id)
+                              : undefined
+                          }
+                          active={session.id === props.activeSessionId}
+                          running={props.runningSessionIds?.includes(
+                            session.id,
+                          )}
+                          completed={props.completedSessionIds?.includes(
+                            session.id,
+                          )}
+                          failed={props.failedSessionIds?.includes(session.id)}
+                          pendingApproval={props.approvalSessionIds?.includes(
+                            session.id,
+                          )}
+                          onSelect={() =>
+                            props.onSelectProjectSession(project.id, session.id)
+                          }
+                          onRename={(title) =>
+                            props.onRenameSession(session.id, title)
+                          }
+                          onDelete={() => props.onDeleteSession(session.id)}
+                        />
+                      </li>
+                    ))}
+                    {projectSessions.length === 0 && (
                       <li className="empty">在右侧输入，开始项目内会话</li>
                     )}
                   </ul>
@@ -222,13 +295,8 @@ export function ChatsPanel(props: ChatsPanelProps): React.JSX.Element {
           <div key={bucket} className="time-group">
             <div className="time-group-label">{bucket}</div>
             <ul className="section-list">
-              {[...sessions]
-                .sort(
-                  (a, b) =>
-                    Number(props.runningSessionIds?.includes(b.id) ?? false) -
-                    Number(props.runningSessionIds?.includes(a.id) ?? false),
-                )
-                .map((session) => (
+              {sortByRunningFirst(sessions, props.runningSessionIds).map(
+                (session) => (
                   <li key={session.id}>
                     <SessionRow
                       session={session}
@@ -261,13 +329,14 @@ export function ChatsPanel(props: ChatsPanelProps): React.JSX.Element {
                       onDelete={() => props.onDeleteSession(session.id)}
                     />
                   </li>
-                ))}
+                ),
+              )}
             </ul>
           </div>
         ))}
       </div>
       {props.onImportChat &&
-        !props.projectSessions.length &&
+        !props.allSessions.length &&
         !props.standaloneSessions.length && (
           <button
             type="button"
