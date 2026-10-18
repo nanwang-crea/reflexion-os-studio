@@ -195,6 +195,63 @@ test('Agent page opens and receives native bounds while animation frames are sus
         document.getElementById('overlay-holder').remove(),
       )
     }
+    // Nonmodal accessibility roles and Radix wrappers outside the page must
+    // preserve visibility. Moving them over the page must hide it and recover.
+    for (const attributes of [
+      'role="alertdialog" aria-modal="false"',
+      'role="dialog" aria-modal="false"',
+      'role="dialog"',
+      'data-radix-popper-content-wrapper',
+    ]) {
+      await page.evaluate((attributes) => {
+        const overlay = document.createElement('div')
+        overlay.id = 'nonmodal'
+        overlay.innerHTML = `<section ${attributes} style="position:fixed;left:800px;top:20px;width:100px;height:100px">panel</section>`
+        document.body.append(overlay)
+      }, attributes)
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      assert.equal(
+        await page.evaluate(() => window.layouts.at(-1).visible),
+        true,
+      )
+      await page.evaluate(() => {
+        document.querySelector('#nonmodal > section').style.left = '20px'
+      })
+      await page.waitForFunction(() => !window.layouts.at(-1).visible, null, {
+        polling: 50,
+      })
+      await page.evaluate(() => document.getElementById('nonmodal').remove())
+      await page.waitForFunction(() => window.layouts.at(-1).visible, null, {
+        polling: 50,
+      })
+    }
+    // A modal outside the page still isolates it. An inline approval must not
+    // restore the page until every actual modal has closed.
+    await page.evaluate(() => {
+      const holder = document.createElement('div')
+      holder.id = 'stacked'
+      holder.innerHTML = `
+        <section role="alertdialog" aria-modal="false" style="position:fixed;left:800px;top:20px;width:100px;height:100px">approval</section>
+        <dialog id="modal-one">first</dialog>
+        <dialog id="modal-two">second</dialog>`
+      document.body.append(holder)
+      document.getElementById('modal-one').showModal()
+      document.getElementById('modal-two').showModal()
+    })
+    await page.waitForFunction(() => !window.layouts.at(-1).visible, null, {
+      polling: 50,
+    })
+    await page.evaluate(() => document.getElementById('modal-two').close())
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    assert.equal(
+      await page.evaluate(() => window.layouts.at(-1).visible),
+      false,
+    )
+    await page.evaluate(() => document.getElementById('modal-one').close())
+    await page.waitForFunction(() => window.layouts.at(-1).visible, null, {
+      polling: 50,
+    })
+    await page.evaluate(() => document.getElementById('stacked').remove())
     await page.evaluate(() => window.replaceSlot(false))
     await page.waitForFunction(() => !window.layouts.at(-1).visible, null, {
       polling: 50,

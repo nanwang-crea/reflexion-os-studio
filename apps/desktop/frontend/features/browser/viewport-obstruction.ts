@@ -18,19 +18,15 @@ export function isBrowserViewportBlocked(viewport: DOMRect): boolean {
       }
       const rect = element.getBoundingClientRect()
       if (rect.width <= 0 || rect.height <= 0) return false
-      // Nonmodal menus and global notices only block overlapping webpage bounds.
-      if (
-        element.matches(
-          '[data-browser-occluder], [role="menu"], [role="listbox"], [role="tooltip"]',
-        )
+      // Accessibility roles do not imply modality. Only actual modal dialogs
+      // isolate the entire window; other surfaces block overlapping bounds.
+      if (element.matches(':modal, [aria-modal="true"]')) return true
+      return (
+        rect.left < viewport.right &&
+        rect.right > viewport.left &&
+        rect.top < viewport.bottom &&
+        rect.bottom > viewport.top
       )
-        return (
-          rect.left < viewport.right &&
-          rect.right > viewport.left &&
-          rect.top < viewport.bottom &&
-          rect.bottom > viewport.top
-        )
-      return true
     },
   )
 }

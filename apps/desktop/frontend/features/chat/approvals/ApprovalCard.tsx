@@ -42,6 +42,7 @@ export function ApprovalCard({
       tabIndex={-1}
       className={`approval-card risk-${display.risk}`}
       role="alertdialog"
+      aria-modal="false"
       aria-labelledby={titleId}
       aria-describedby={descId}
     >

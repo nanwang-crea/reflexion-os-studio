@@ -96,6 +96,7 @@ export function ComposerRunConfig(
             }}
             className="composer-run-config-panel"
             role="dialog"
+            aria-modal="false"
             aria-label="运行配置"
           >
             {enabledTemplates.length > 0 && (
