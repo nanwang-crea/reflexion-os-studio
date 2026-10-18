@@ -446,6 +446,15 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
     ) {
       db.exec('ALTER TABLE messages ADD COLUMN provider_continuation_json TEXT')
     }
+    if (
+      version < 50 &&
+      !tableColumns(db, 'messages').some(
+        (column) => column.name === 'request_attempts_json',
+      )
+    )
+      db.exec(
+        "ALTER TABLE messages ADD COLUMN request_attempts_json TEXT NOT NULL DEFAULT '[]'",
+      )
     db.exec('COMMIT')
     // 迁移全部执行完毕才推进版本号；否则下次启动会重复进入迁移分支。
     version = LATEST_SCHEMA_VERSION

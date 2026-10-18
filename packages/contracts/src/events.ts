@@ -127,6 +127,10 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
     delta: z.string(),
   }),
   RunEnvelopeSchema.extend({
+    type: z.literal('message.attempt'),
+    messageId: z.string().min(1),
+  }),
+  RunEnvelopeSchema.extend({
     type: z.literal('message.reset'),
     messageId: z.string().min(1),
   }),

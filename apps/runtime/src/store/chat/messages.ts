@@ -1,7 +1,12 @@
+import {
+  MessageAttemptStore,
+  parseRequestAttempts,
+} from './message-attempts.js'
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import {
   ContentPartSchema,
+  type ProviderRequestAttempt,
   ProviderContinuationSchema,
   type ProviderContinuation,
   type ContentPart,
@@ -19,7 +24,10 @@ function textParts(content: string): ContentPart[] {
 
 /** 消息领域：会话内的 user/assistant/system 消息。 */
 export class MessageStore {
-  constructor(private readonly db: DatabaseSync) {}
+  private readonly attempts: MessageAttemptStore
+  constructor(private readonly db: DatabaseSync) {
+    this.attempts = new MessageAttemptStore(db)
+  }
 
   listBySession(sessionId: string, includeSuperseded = false): Message[] {
     // 同毫秒创建的两条消息（user+assistant）created_at 相同，id 是随机 UUID
@@ -134,7 +142,7 @@ export class MessageStore {
   ): void {
     this.db
       .prepare(
-        'UPDATE messages SET content = ?, parts_json = ?, reasoning = ?, provider_continuation_json = ?, status = ?, completed_at = ? WHERE id = ?',
+        'UPDATE messages SET content = ?, parts_json = ?, reasoning = ?, provider_continuation_json = ?, request_attempts_json = ?, status = ?, completed_at = ? WHERE id = ?',
       )
       .run(
         content,
@@ -145,6 +153,7 @@ export class MessageStore {
               ProviderContinuationSchema.parse(providerContinuation),
             )
           : null,
+        this.attempts.finalizedJson(id),
         status,
         nowIso(),
         id,
@@ -177,8 +186,13 @@ export class MessageStore {
       .run(id)
   }
 
-  /** 启动恢复：未完成的消息标记为 interrupted。 */
+  recordAttempt(id: string, attempt: ProviderRequestAttempt): void {
+    this.attempts.record(id, attempt)
+  }
+
+  /** 启动恢复：保留最后检查点，未完成消息及请求均标为中断。 */
   recoverInterrupted(): void {
+    this.attempts.recoverInterrupted()
     this.db
       .prepare(
         `UPDATE messages SET status = 'interrupted', completed_at = ?
@@ -222,6 +236,11 @@ export class MessageStore {
             providerContinuation: ProviderContinuationSchema.parse(
               JSON.parse(String(row.provider_continuation_json)),
             ),
+          }
+        : {}),
+      ...(String(row.request_attempts_json ?? '[]') !== '[]'
+        ? {
+            requestAttempts: parseRequestAttempts(row.request_attempts_json),
           }
         : {}),
       status: String(row.status) as MessageStatus,

@@ -183,10 +183,7 @@ test('openai-responses surfaces response.failed error details', async (t) => {
     ),
     (error) => {
       assert.equal(error.code, 'provider')
-      assert.match(
-        error.message,
-        /responses api failed \(server_error\): upstream exploded/,
-      )
+      assert.match(error.message, /provider stream error: upstream exploded/)
       return true
     },
   )

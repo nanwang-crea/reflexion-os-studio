@@ -107,7 +107,7 @@ test('chat stream exposes sanitized provider errors instead of a misleading miss
           model: 'test',
           messages: [{ role: 'user', content: 'hi' }],
           signal: new AbortController().signal,
-          maxRetries: 1,
+          maxRetries: 0,
         },
         'openai-chat',
         () => {},

@@ -1,0 +1,23 @@
+.request-attempts {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.request-attempts summary {
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.request-attempts > details {
+  margin: 6px 0;
+  padding-left: 8px;
+  border-left: 2px solid var(--border);
+}
+
+.request-attempts p {
+  margin: 6px 0;
+}

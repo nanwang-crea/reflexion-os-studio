@@ -16,3 +16,6 @@ import './provider/stream-liveness.test.mjs'
 import './provider/tool-progress.test.mjs'
 
 import './provider/transport-errors.test.mjs'
+
+import './provider/request-attempts.test.mjs'
+import './provider/attempt-persistence.test.mjs'

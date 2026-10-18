@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS messages (
   parts_json TEXT NOT NULL DEFAULT '[]',
   reasoning TEXT NOT NULL DEFAULT '',
   provider_continuation_json TEXT,
+  request_attempts_json TEXT NOT NULL DEFAULT '[]',
   status TEXT NOT NULL,
   created_at TEXT NOT NULL,
   completed_at TEXT
@@ -332,4 +333,4 @@ CREATE INDEX IF NOT EXISTS idx_run_events_run ON run_events(run_id, created_at);
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 49
+export const LATEST_SCHEMA_VERSION = 50

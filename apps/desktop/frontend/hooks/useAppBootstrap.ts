@@ -236,6 +236,10 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           })
           return
         }
+        if (event.type === 'message.attempt') {
+          scheduleToolRefresh()
+          return
+        }
         if (event.type === 'message.reset') {
           cache.applyReset(event.messageId)
           return

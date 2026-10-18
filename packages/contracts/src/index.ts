@@ -61,3 +61,5 @@ export type { ChatArchiveImportParams } from './commands/chat-archive.js'
 export * from './agent-role-share.js'
 
 export * from './browser/host.js'
+
+export * from './providers/request-attempt.js'

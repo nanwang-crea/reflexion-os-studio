@@ -1,3 +1,4 @@
+import { persistRequestAttempt } from './request-attempts.js'
 import { limitSettingsHint } from './budgets.js'
 import { createModelActivityReporter } from './model-activity.js'
 import { redactBrowserCalls } from './browser-admission.js'
@@ -135,6 +136,8 @@ export async function executeModelTurn(
       ...(provider.timeoutMs !== undefined
         ? { timeoutMs: provider.timeoutMs }
         : {}),
+      onAttempt: (attempt) =>
+        persistRequestAttempt(store, emitter, draft, provider, attempt),
       onRetry: ({ attempt, maxRetries, reason, waitMs }) => {
         activity.reset()
         draft.content = ''

@@ -1,3 +1,5 @@
+import { createRequestAttemptTracker } from './request-attempt.js'
+import { StreamCallbackError } from './shared.js'
 import type { ApiFormat } from '@reflexion-os-studio/contracts'
 import { streamOpenAIChat } from './openai-chat.js'
 import { streamOpenAIResponses } from './openai-responses.js'
@@ -21,15 +23,30 @@ export async function streamChat(
   onDelta: (delta: string) => void,
   onReasoningDelta?: (delta: string) => void,
 ): Promise<StreamChatResult> {
-  const format = apiFormat ?? 'openai-chat'
-  switch (format) {
-    case 'openai-chat':
-      return streamOpenAIChat(options, onDelta, onReasoningDelta)
-    case 'openai-responses':
-      return streamOpenAIResponses(options, onDelta, onReasoningDelta)
-    case 'anthropic':
-      return streamAnthropic(options, onDelta, onReasoningDelta)
-    default:
-      return streamOpenAIChat(options, onDelta, onReasoningDelta)
+  const tracker = createRequestAttemptTracker(options)
+  const instrumented = { ...options, attemptTracker: tracker }
+  try {
+    const adapter =
+      apiFormat === 'anthropic'
+        ? streamAnthropic
+        : apiFormat === 'openai-responses'
+          ? streamOpenAIResponses
+          : streamOpenAIChat
+    const result = await adapter(
+      instrumented,
+      (delta) => {
+        if (delta) tracker.content('text')
+        onDelta(delta)
+      },
+      (delta) => {
+        if (delta) tracker.content('reasoning')
+        onReasoningDelta?.(delta)
+      },
+    )
+    tracker.finish('completed')
+    return result
+  } catch (error) {
+    tracker.finish('failed', error)
+    throw error instanceof StreamCallbackError ? error.cause : error
   }
 }

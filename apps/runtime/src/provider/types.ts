@@ -1,3 +1,5 @@
+import type { ProviderRequestAttempt } from '@reflexion-os-studio/contracts'
+import type { RequestAttemptTracker } from './request-attempt.js'
 import type { ProviderContinuation } from '@reflexion-os-studio/contracts'
 import type {
   ProviderHeader,
@@ -31,7 +33,7 @@ export interface StreamChatOptions {
   /** 采样温度；缺省由服务端决定。 */
   temperature?: number
   reasoningEffort?: ReasoningEffort
-  /** 请求建立阶段失败自动重试次数；连接测试等场景传 0 快速失败。 */
+  /** 当前模型调用的请求/断流共享重试次数；传 0 禁用重试。 */
   maxRetries?: number
   /** 每次请求即将重试时调用；attempt 从 1 开始。 */
   onRetry?: (input: {
@@ -43,6 +45,10 @@ export interface StreamChatOptions {
   }) => void
   /** Agent 侧 canonical 工具声明；适配层投影为各 API 方言格式。 */
   tools?: ToolSpec[]
+  /** Physical request lifecycle; diagnostics contain no request payload. */
+  onAttempt?: (attempt: ProviderRequestAttempt) => void
+  /** Internal transport instrumentation, created once by streamChat. */
+  attemptTracker?: RequestAttemptTracker
   /** Progress only; incomplete arguments must never execute. */
   onToolCallProgress?: (call: StreamedToolCall) => void
 }

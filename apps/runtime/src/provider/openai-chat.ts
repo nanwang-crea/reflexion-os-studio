@@ -15,7 +15,11 @@ import {
   shouldRetryStatus,
   sleep,
 } from './shared.js'
-import { ProviderError, redactProviderError } from './provider-error.js'
+import {
+  ProviderError,
+  redactProviderError,
+  providerStreamError,
+} from './provider-error.js'
 import type {
   StreamChatOptions,
   StreamChatResult,
@@ -79,7 +83,7 @@ export async function streamOpenAIChat(
         options.timeoutMs,
       )
       try {
-        response = await fetch(
+        response = await (options.attemptTracker?.fetch ?? fetch)(
           `${options.baseUrl.replace(/\/$/, '')}/chat/completions`,
           {
             method: 'POST',
@@ -96,10 +100,15 @@ export async function streamOpenAIChat(
         )
       } catch (error) {
         requestTimeout.dispose()
+        if (error instanceof StreamCallbackError) throw error
         if (options.signal.aborted) throw error
         const failure = describeFailure(error, 'request')
+        options.attemptTracker?.finish(
+          'failed',
+          new ProviderError(failure.code, failure.message),
+        )
         if (isAbort(error) && failure.code !== 'timeout') throw error
-        if (attempt < maxRetries) {
+        if (failure.retryable && attempt < maxRetries) {
           attempt += 1
           await backoffAfterRetry({
             attempt,
@@ -117,6 +126,13 @@ export async function streamOpenAIChat(
       }
       const detail = await response.text().catch(() => '')
       requestTimeout.dispose()
+      options.attemptTracker?.finish(
+        'failed',
+        new ProviderError(
+          mapHttpStatus(response.status),
+          `provider responded ${response.status}${detail ? `: ${redactProviderError(detail, options.apiKey, options.headers).slice(0, 200)}` : ''}`,
+        ),
+      )
       if (shouldRetryStatus(response.status, detail) && attempt < maxRetries) {
         attempt += 1
         await backoffAfterRetry({
@@ -129,13 +145,17 @@ export async function streamOpenAIChat(
       }
       throw new ProviderError(
         mapHttpStatus(response.status),
-        `provider responded ${response.status}${detail ? `: ${redactProviderError(detail, options.apiKey).slice(0, 200)}` : ''}`,
+        `provider responded ${response.status}${detail ? `: ${redactProviderError(detail, options.apiKey, options.headers).slice(0, 200)}` : ''}`,
       )
     }
     if (!response.body) {
       requestTimeout.dispose()
       const error = new Error('provider response has no body')
       const failure = describeFailure(error, 'stream')
+      options.attemptTracker?.finish(
+        'failed',
+        new ProviderError(failure.code, failure.message),
+      )
       if (attempt < maxRetries) {
         attempt += 1
         await backoffAfterRetry({
@@ -206,17 +226,7 @@ export async function streamOpenAIChat(
         throw new Error('malformed SSE data payload')
       }
       if (parsed.error) {
-        const detail =
-          typeof parsed.error === 'string' ? parsed.error : parsed.error.message
-        const code =
-          typeof parsed.error === 'object' &&
-          typeof parsed.error.code === 'number'
-            ? mapHttpStatus(parsed.error.code)
-            : 'provider'
-        throw new ProviderError(
-          code,
-          `provider stream error: ${redactProviderError(detail, options.apiKey).slice(0, 200)}`,
-        )
+        throw providerStreamError(parsed.error, options)
       }
       const delta = parsed.choices?.[0]?.delta
       const reasoningDelta = delta?.reasoning_content ?? delta?.reasoning
@@ -282,6 +292,7 @@ export async function streamOpenAIChat(
         const { done, value } = await reader.read()
         if (done) break
         receivedData ||= value.byteLength > 0
+        options.attemptTracker?.received(value.byteLength)
         requestTimeout.refresh()
         buffer += decoder.decode(value, { stream: true })
         let newlineIndex = buffer.indexOf('\n')
@@ -301,10 +312,21 @@ export async function streamOpenAIChat(
       cleanupReader()
       if (options.signal.aborted) throw error
       if (error instanceof StreamCallbackError) throw error.cause
-      if (error instanceof ProviderError) throw error
-      const failure = describeFailure(error, 'stream', receivedData)
+      const failure =
+        error instanceof ProviderError
+          ? {
+              code: error.code,
+              message: error.message,
+              reason: error.message,
+              retryable: error.retryable,
+            }
+          : describeFailure(error, 'stream', receivedData)
+      options.attemptTracker?.finish(
+        'failed',
+        new ProviderError(failure.code, failure.message),
+      )
       if (isAbort(error) && failure.code !== 'timeout') throw error
-      if (attempt < maxRetries) {
+      if (failure.retryable && attempt < maxRetries) {
         attempt += 1
         await backoffAfterRetry({
           attempt,
@@ -342,7 +364,7 @@ export async function streamOpenAIChat(
     if (finishReason === null) {
       throw new ProviderError(
         'provider_protocol',
-        `stream ended without a valid finish_reason (raw: ${redactProviderError(rawFinishReason, options.apiKey).slice(0, 40)})`,
+        `stream ended without a valid finish_reason (raw: ${redactProviderError(rawFinishReason, options.apiKey, options.headers).slice(0, 40)})`,
       )
     }
 

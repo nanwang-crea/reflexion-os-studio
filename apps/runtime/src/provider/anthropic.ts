@@ -17,7 +17,11 @@ import {
   shouldRetryStatus,
   sleep,
 } from './shared.js'
-import { ProviderError, redactProviderError } from './provider-error.js'
+import {
+  ProviderError,
+  redactProviderError,
+  providerStreamError,
+} from './provider-error.js'
 import type {
   StreamChatOptions,
   StreamChatResult,
@@ -85,7 +89,7 @@ export async function streamAnthropic(
                 input_schema: tool.parameters,
               }))
             : undefined
-        response = await fetch(
+        response = await (options.attemptTracker?.fetch ?? fetch)(
           `${options.baseUrl.replace(/\/$/, '')}/v1/messages`,
           {
             method: 'POST',
@@ -116,10 +120,15 @@ export async function streamAnthropic(
         )
       } catch (error) {
         requestTimeout.dispose()
+        if (error instanceof StreamCallbackError) throw error
         if (options.signal.aborted) throw error
         const failure = describeFailure(error, 'request')
+        options.attemptTracker?.finish(
+          'failed',
+          new ProviderError(failure.code, failure.message),
+        )
         if (isAbort(error) && failure.code !== 'timeout') throw error
-        if (attempt < maxRetries) {
+        if (failure.retryable && attempt < maxRetries) {
           attempt += 1
           await backoffAfterRetry({
             attempt,
@@ -137,6 +146,13 @@ export async function streamAnthropic(
       }
       const detail = await response.text().catch(() => '')
       requestTimeout.dispose()
+      options.attemptTracker?.finish(
+        'failed',
+        new ProviderError(
+          mapHttpStatus(response.status),
+          `provider responded ${response.status}${detail ? `: ${redactProviderError(detail, options.apiKey, options.headers).slice(0, 200)}` : ''}`,
+        ),
+      )
       if (shouldRetryStatus(response.status, detail) && attempt < maxRetries) {
         attempt += 1
         await backoffAfterRetry({
@@ -149,13 +165,17 @@ export async function streamAnthropic(
       }
       throw new ProviderError(
         mapHttpStatus(response.status),
-        `provider responded ${response.status}${detail ? `: ${redactProviderError(detail, options.apiKey).slice(0, 200)}` : ''}`,
+        `provider responded ${response.status}${detail ? `: ${redactProviderError(detail, options.apiKey, options.headers).slice(0, 200)}` : ''}`,
       )
     }
     if (!response.body) {
       requestTimeout.dispose()
       const error = new Error('provider response has no body')
       const failure = describeFailure(error, 'stream')
+      options.attemptTracker?.finish(
+        'failed',
+        new ProviderError(failure.code, failure.message),
+      )
       if (attempt < maxRetries) {
         attempt += 1
         await backoffAfterRetry({
@@ -300,11 +320,7 @@ export async function streamAnthropic(
       }
 
       if (eventType === 'error') {
-        const err = parsed.error as Record<string, unknown> | undefined
-        throw new ProviderError(
-          'provider',
-          `anthropic error: ${String(err?.message ?? 'unknown')}`,
-        )
+        throw providerStreamError(parsed.error, options)
       }
     }
 
@@ -313,6 +329,7 @@ export async function streamAnthropic(
         const { done, value } = await reader.read()
         if (done) break
         receivedData ||= value.byteLength > 0
+        options.attemptTracker?.received(value.byteLength)
         requestTimeout.refresh()
         buffer += decoder.decode(value, { stream: true })
         let newlineIndex = buffer.indexOf('\n')
@@ -329,10 +346,21 @@ export async function streamAnthropic(
       cleanupReader()
       if (options.signal.aborted) throw error
       if (error instanceof StreamCallbackError) throw error.cause
-      if (error instanceof ProviderError) throw error
-      const failure = describeFailure(error, 'stream', receivedData)
+      const failure =
+        error instanceof ProviderError
+          ? {
+              code: error.code,
+              message: error.message,
+              reason: error.message,
+              retryable: error.retryable,
+            }
+          : describeFailure(error, 'stream', receivedData)
+      options.attemptTracker?.finish(
+        'failed',
+        new ProviderError(failure.code, failure.message),
+      )
       if (isAbort(error) && failure.code !== 'timeout') throw error
-      if (attempt < maxRetries) {
+      if (failure.retryable && attempt < maxRetries) {
         attempt += 1
         await backoffAfterRetry({
           attempt,

@@ -17,7 +17,11 @@ import {
   shouldRetryStatus,
   sleep,
 } from './shared.js'
-import { ProviderError, redactProviderError } from './provider-error.js'
+import {
+  ProviderError,
+  redactProviderError,
+  providerStreamError,
+} from './provider-error.js'
 import type {
   StreamChatOptions,
   StreamChatResult,
@@ -86,7 +90,7 @@ export async function streamOpenAIResponses(
                 parameters: tool.parameters,
               }))
             : undefined
-        response = await fetch(
+        response = await (options.attemptTracker?.fetch ?? fetch)(
           `${options.baseUrl.replace(/\/$/, '')}/v1/responses`,
           {
             method: 'POST',
@@ -119,10 +123,15 @@ export async function streamOpenAIResponses(
         )
       } catch (error) {
         requestTimeout.dispose()
+        if (error instanceof StreamCallbackError) throw error
         if (options.signal.aborted) throw error
         const failure = describeFailure(error, 'request')
+        options.attemptTracker?.finish(
+          'failed',
+          new ProviderError(failure.code, failure.message),
+        )
         if (isAbort(error) && failure.code !== 'timeout') throw error
-        if (attempt < maxRetries) {
+        if (failure.retryable && attempt < maxRetries) {
           attempt += 1
           await backoffAfterRetry({
             attempt,
@@ -140,6 +149,13 @@ export async function streamOpenAIResponses(
       }
       const detail = await response.text().catch(() => '')
       requestTimeout.dispose()
+      options.attemptTracker?.finish(
+        'failed',
+        new ProviderError(
+          mapHttpStatus(response.status),
+          `provider responded ${response.status}${detail ? `: ${redactProviderError(detail, options.apiKey, options.headers).slice(0, 200)}` : ''}`,
+        ),
+      )
       if (shouldRetryStatus(response.status, detail) && attempt < maxRetries) {
         attempt += 1
         await backoffAfterRetry({
@@ -152,13 +168,17 @@ export async function streamOpenAIResponses(
       }
       throw new ProviderError(
         mapHttpStatus(response.status),
-        `provider responded ${response.status}${detail ? `: ${redactProviderError(detail, options.apiKey).slice(0, 200)}` : ''}`,
+        `provider responded ${response.status}${detail ? `: ${redactProviderError(detail, options.apiKey, options.headers).slice(0, 200)}` : ''}`,
       )
     }
     if (!response.body) {
       requestTimeout.dispose()
       const error = new Error('provider response has no body')
       const failure = describeFailure(error, 'stream')
+      options.attemptTracker?.finish(
+        'failed',
+        new ProviderError(failure.code, failure.message),
+      )
       if (attempt < maxRetries) {
         attempt += 1
         await backoffAfterRetry({
@@ -241,12 +261,7 @@ export async function streamOpenAIResponses(
         const item = (parsed.response ?? parsed.item) as
           Record<string, unknown> | undefined
         const error = item?.error as Record<string, unknown> | undefined
-        const code = typeof error?.code === 'string' ? error.code : ''
-        const message = String(error?.message ?? 'unknown')
-        throw new ProviderError(
-          'provider',
-          `responses api failed${code ? ` (${code})` : ''}: ${redactProviderError(message, options.apiKey).slice(0, 200)}`,
-        )
+        throw providerStreamError(error, options)
       }
 
       if (
@@ -288,10 +303,7 @@ export async function streamOpenAIResponses(
       }
 
       if (eventType === 'error') {
-        throw new ProviderError(
-          'provider',
-          `responses api error: ${JSON.stringify(parsed.error ?? 'unknown')}`,
-        )
+        throw providerStreamError(parsed.error, options)
       }
     }
 
@@ -300,6 +312,7 @@ export async function streamOpenAIResponses(
         const { done, value } = await reader.read()
         if (done) break
         receivedData ||= value.byteLength > 0
+        options.attemptTracker?.received(value.byteLength)
         requestTimeout.refresh()
         buffer += decoder.decode(value, { stream: true })
         let newlineIndex = buffer.indexOf('\n')
@@ -316,10 +329,21 @@ export async function streamOpenAIResponses(
       cleanupReader()
       if (options.signal.aborted) throw error
       if (error instanceof StreamCallbackError) throw error.cause
-      if (error instanceof ProviderError) throw error
-      const failure = describeFailure(error, 'stream', receivedData)
+      const failure =
+        error instanceof ProviderError
+          ? {
+              code: error.code,
+              message: error.message,
+              reason: error.message,
+              retryable: error.retryable,
+            }
+          : describeFailure(error, 'stream', receivedData)
+      options.attemptTracker?.finish(
+        'failed',
+        new ProviderError(failure.code, failure.message),
+      )
       if (isAbort(error) && failure.code !== 'timeout') throw error
-      if (attempt < maxRetries) {
+      if (failure.retryable && attempt < maxRetries) {
         attempt += 1
         await backoffAfterRetry({
           attempt,

@@ -1,6 +1,7 @@
 import { DEFAULT_TIMEOUT_MS } from './shared.js'
 
 const causes: Record<string, string> = {
+  ERR_INVALID_URL: '服务地址格式无效',
   UND_ERR_SOCKET: '连接在传输期间关闭',
   ECONNRESET: '连接被重置',
   EPIPE: '写入时连接已关闭',
@@ -11,6 +12,10 @@ const causes: Record<string, string> = {
   UND_ERR_CONNECT_TIMEOUT: '建立连接超时',
   UND_ERR_HEADERS_TIMEOUT: '等待响应头超时',
   UND_ERR_BODY_TIMEOUT: '等待响应数据超时',
+  SELF_SIGNED_CERT_IN_CHAIN: 'TLS 证书链包含不受信任的自签名证书',
+  UNABLE_TO_GET_ISSUER_CERT_LOCALLY: '本地无法验证 TLS 证书颁发者',
+  CERT_NOT_YET_VALID: 'TLS 证书尚未生效',
+  ERR_SSL_WRONG_VERSION_NUMBER: 'TLS 协议不匹配，请检查服务地址和代理',
   CERT_HAS_EXPIRED: 'TLS 证书已过期',
   DEPTH_ZERO_SELF_SIGNED_CERT: 'TLS 证书不受信任',
   UNABLE_TO_VERIFY_LEAF_SIGNATURE: '无法验证 TLS 证书链',
@@ -79,6 +84,9 @@ export function describeTransportFailure(
   const detail = `${phase}：${explanation}${details.length ? `；${details.join('；')}` : ''}${redacted ? ' [redacted]' : ''}`
   return {
     code,
+    retryable: ![...codes].some((value) =>
+      /CERT|TLS|SSL|INVALID_URL/.test(value),
+    ),
     reason: `${timeout ? 'timeout' : context.phase === 'stream' ? 'stream failure' : 'network'}: ${detail}`,
     message: `${detail}。已重试 ${context.retries}/${context.maxRetries} 次（共 ${context.retries + 1} 次请求）。${idleTimedOut ? '' : '仅凭此错误无法确定是供应商、网关还是本地网络导致。'}`,
   } as const
