@@ -7,8 +7,8 @@ $directory = Join-Path $env:RUNNER_TEMP 'studio-installed'
 $logs = Join-Path $env:RUNNER_TEMP 'studio-installed-logs'
 $install = Start-Process -FilePath $installer[0].FullName -ArgumentList @('/S', "/D=$directory") -Wait -PassThru
 if ($install.ExitCode -ne 0) { throw "Installer failed: $($install.ExitCode)" }
-$executables = @(Get-ChildItem "$directory/*.exe" | Where-Object { $_.Name -notmatch 'uninstall' })
-if ($executables.Count -ne 1) { throw 'Installed desktop executable not found' }
+$executable = Join-Path $directory 'reflexion-desktop.exe'
+if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) { throw 'Installed desktop executable not found' }
 $oldLog = $env:REFLEXION_LOG_DIR
 $oldData = $env:REFLEXION_DATA_DIR
 $oldPath = $env:PATH
@@ -20,7 +20,7 @@ try {
     # Remove build tools and system Node from PATH; the installed host must be self-contained.
     $env:PATH = "$env:SystemRoot/System32;$env:SystemRoot"
     $env:REFLEXION_SYSTEM_RUNTIME_BIN = $null
-    $hostProcess = Start-Process -FilePath $executables[0].FullName -WorkingDirectory $env:RUNNER_TEMP -PassThru
+    $hostProcess = Start-Process -FilePath $executable -WorkingDirectory $env:RUNNER_TEMP -PassThru
     $deadline = [DateTime]::UtcNow.AddSeconds(45)
     $logFile = Join-Path $logs 'studio.log'
     do {

@@ -33,7 +33,7 @@ test('composer actions remain aligned in both themes and narrow split layouts', 
         {
           name: 'isolated-project-files',
           setup(build) {
-            build.onLoad({ filter: /\/ProjectFiles\.tsx$/ }, () => ({
+            build.onLoad({ filter: /[\\/]ProjectFiles\.tsx$/ }, () => ({
               contents: 'export function ProjectFiles(){return null}',
               loader: 'tsx',
             }))
@@ -80,8 +80,10 @@ test('composer actions remain aligned in both themes and narrow split layouts', 
         assert.ok(boxes.send.right >= boxes.composer.right - 18)
         assert.ok(boxes.controls.right <= boxes.send.left)
         assert.equal(
-          await page.getByRole('combobox', { name: '对话思考强度' }).count(),
-          0,
+          await page
+            .getByRole('combobox', { name: '对话思考强度' })
+            .isDisabled(),
+          true,
         )
         await page
           .getByRole('combobox', { name: '对话模型', exact: true })
@@ -103,6 +105,23 @@ test('composer actions remain aligned in both themes and narrow split layouts', 
           })
         }
       }
+    await page.goto(`${url}?theme=light&reasoning=supported`)
+    const reasoning = page.getByRole('combobox', { name: '对话思考强度' })
+    await reasoning.waitFor()
+    assert.equal(await reasoning.isEnabled(), true)
+    assert.match(await reasoning.innerText(), /思考：高/)
+    await reasoning.click()
+    await page.getByRole('option', { name: '思考：低', exact: true }).click()
+    assert.match(await reasoning.innerText(), /思考：低/)
+    for (const state of ['loading', 'error']) {
+      await page.goto(`${url}?theme=dark&reasoning=${state}`)
+      await reasoning.waitFor()
+      assert.equal(await reasoning.isDisabled(), true)
+      assert.match(
+        await reasoning.innerText(),
+        state === 'loading' ? /加载中/ : /加载失败/,
+      )
+    }
     await page.getByRole('button', { name: '设置', exact: true }).click()
     await page.getByRole('navigation', { name: '设置分类' }).waitFor()
     await page.getByRole('radio', { name: /^浅色/ }).check()

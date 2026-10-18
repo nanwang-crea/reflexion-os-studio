@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ReasoningEffort } from '@reflexion-os-studio/runtime-client'
 import { createRoot } from 'react-dom/client'
 import { Sidebar } from '../../frontend/components/Sidebar'
 import { TopBar } from '../../frontend/components/TopBar'
@@ -24,6 +25,8 @@ initializeTheme()
 setThemePreference(query.get('theme') === 'light' ? 'light' : 'dark')
 
 function Fixture() {
+  const [effort, setEffort] = useState<ReasoningEffort | null>('high')
+  const reasoning = query.get('reasoning')
   const [settings, setSettings] = useState(false)
   const [panel, setPanel] = useState(true)
   return (
@@ -109,12 +112,15 @@ function Fixture() {
                 selectedModelKey="demo"
                 onModelChange={noop}
                 reasoningSelection={{
-                  value: null,
-                  options: [],
-                  supported: false,
-                  loading: false,
-                  error: null,
-                  onChange: noop,
+                  value: reasoning === 'supported' ? effort : null,
+                  options: [
+                    { value: 'low', label: '低' },
+                    { value: 'high', label: '高' },
+                  ],
+                  supported: reasoning === 'supported',
+                  loading: reasoning === 'loading',
+                  error: reasoning === 'error' ? '能力加载失败' : null,
+                  onChange: setEffort,
                 }}
                 skills={[]}
                 agentTemplates={[]}

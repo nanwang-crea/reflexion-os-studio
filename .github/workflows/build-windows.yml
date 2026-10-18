@@ -2,15 +2,20 @@ name: Build desktop installers
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main, master]
   push:
     branches:
-      - main
-      - master
+      - '**'
     tags:
       - 'v*'
 
 permissions:
   contents: read
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   build-desktop:
@@ -20,6 +25,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - platform: linux
+            os: ubuntu-22.04
+            artifact_name: reflexion-os-studio-linux
           - platform: windows
             os: windows-latest
             artifact_name: reflexion-os-studio-windows
@@ -57,7 +65,6 @@ jobs:
 
       - name: Install Windows CEF build dependencies
         if: matrix.platform == 'windows'
-        shell: pwsh
         run: |
           choco install ninja --yes --no-progress
           cmake --version
@@ -77,14 +84,25 @@ jobs:
       - name: Install JavaScript dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify formatting and lint
+        run: |
+          pnpm format:check
+          pnpm lint
+
       - name: Build workspace packages
         run: pnpm build:packages
+
+      - name: Verify TypeScript
+        run: |
+          pnpm typecheck
+          pnpm --filter @reflexion-os-studio/desktop typecheck
 
       - name: Verify cross-platform path regressions
         run: |
           cargo test --manifest-path crates/Cargo.toml list_native_nested_paths
           cargo test --manifest-path crates/Cargo.toml canonical_root_matches_created_and_deleted_paths
           cargo test --manifest-path crates/Cargo.toml path_lookup_finds_windows_exe
+          cargo test --manifest-path crates/Cargo.toml filesystem::paths::tests
           pnpm --filter @reflexion-os-studio/runtime exec node --disable-warning=ExperimentalWarning --import ./test/set-test-data-dir.mjs --test test/handlers.test.mjs test/workspace-indexer.test.mjs
 
       - name: Verify terminal shell startup regressions
@@ -107,8 +125,8 @@ jobs:
         env:
           PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/agent-browser
 
-      - name: Verify Agent roles and collaboration UI
-        run: pnpm --filter @reflexion-os-studio/desktop exec node --test test/agent-collaboration.test.mjs
+      - name: Verify Agent roles, collaboration and product UI
+        run: pnpm --filter @reflexion-os-studio/desktop exec node --test --test-concurrency=1 test/agent-collaboration.test.mjs test/product-ui.test.mjs test/model-selection.test.mjs
 
       - name: Verify embedded browser isolation and background layout
         run: |
@@ -120,6 +138,7 @@ jobs:
         run: pnpm build:desktop
         env:
           CI: true
+          APPIMAGE_EXTRACT_AND_RUN: 1
       - name: Verify native browser adapters and release gates
         run: |
           cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --lib browser::

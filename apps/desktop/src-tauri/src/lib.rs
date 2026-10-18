@@ -207,9 +207,10 @@ pub fn cef_distribution() -> Result<std::path::PathBuf, String> {
 #[no_mangle]
 pub unsafe extern "C" fn RunWinMain(
     instance: cef::sys::HINSTANCE,
-    _command: *const u8,
+    _command: *const u16,
     _show: i32,
     sandbox: *mut u8,
+    _version_info: *mut std::ffi::c_void,
 ) -> i32 {
     if std::env::args_os().any(|arg| arg == "--verify-frontend-assets") {
         return if verify_frontend_assets().is_ok() {
