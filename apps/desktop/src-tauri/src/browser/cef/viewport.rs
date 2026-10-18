@@ -101,11 +101,14 @@ pub fn layout(
                     NSSize::new(width, height),
                 );
                 let frame = renderer.convertRect_toView(local, Some(&parent));
-                view.setFrame(NSRect::new(NSPoint::new(0.0, 0.0), frame.size));
+                // Resize the parent first: Chromium's child autoresizes with it.
+                // Setting the child first would apply the parent's size delta
+                // twice, moving the page edges and scrollbars outside the slot.
                 // Only the owned container is detached; Chromium observes its
                 // window transition and restores compositor visibility on reattach.
-                view.setHidden(false);
                 super::input::layout(_id, &parent, frame, visible);
+                view.setFrame(NSRect::new(NSPoint::new(0.0, 0.0), frame.size));
+                view.setHidden(false);
             }
         }
     }
