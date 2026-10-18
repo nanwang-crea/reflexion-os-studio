@@ -73,10 +73,10 @@ fn finish(app: tauri::AppHandle) {
         .finishable()
     {
         super::pump::defer(move || {
-            // CEF children are gone. Return the window to Wry's original view
-            // hierarchy before letting Tauri release its renderer.
+            // CEF children are gone; release our bounded references. Wry's
+            // original view hierarchy has never been replaced or detached.
             #[cfg(target_os = "macos")]
-            super::container::restore_wry(&app);
+            super::container::dispose();
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.close();
             } else {

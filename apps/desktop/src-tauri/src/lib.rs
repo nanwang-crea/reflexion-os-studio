@@ -116,6 +116,11 @@ pub fn run() {
             if let Err(error) = browser::cef::initialize(app.handle()) {
                 logging::write(&format!("[host] CEF unavailable: {error}"));
             }
+            #[cfg(all(
+                feature = "cef-acceptance",
+                any(target_os = "macos", target_os = "windows")
+            ))]
+            browser::cef::ownership_probe::start(app.handle());
             shutdown::install_terminate_signal_handler();
             supervisor::start_sidecars(app.handle(), state_for_setup.clone());
             Ok(())

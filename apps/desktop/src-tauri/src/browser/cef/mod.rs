@@ -15,6 +15,8 @@ mod downloads;
 mod input;
 mod lifecycle;
 mod network;
+#[cfg(feature = "cef-acceptance")]
+pub mod ownership_probe;
 mod popup;
 mod pump;
 mod registry;
