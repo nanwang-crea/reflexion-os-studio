@@ -20,20 +20,22 @@ export function validateExecutionResult(
     (result.error === null &&
       (result.completed !== plan.steps.length || !result.document?.snapshot)) ||
     (result.error !== null &&
-      (result.failedStep !== result.completed || result.document !== null))
+      (result.failedStep !==
+        result.completed - (result.failurePhase === 'after-action' ? 1 : 0) ||
+        result.document !== null))
   )
     invalid()
   if (
     result.document &&
-    (result.document.page.origin !== current!.origin ||
-      new URL(result.document.sourceUrl).origin !== current!.origin)
+    (result.document.page.tabId !== current!.tabId ||
+      new URL(result.document.sourceUrl).origin !== result.document.page.origin)
   )
     invalid()
   const seen = new Set<number>()
   for (const screenshot of result.screenshots) {
     if (
-      screenshot.page.origin !== current!.origin ||
-      new URL(screenshot.sourceUrl).origin !== current!.origin ||
+      screenshot.page.tabId !== current!.tabId ||
+      new URL(screenshot.sourceUrl).origin !== screenshot.page.origin ||
       screenshot.step >= result.completed ||
       plan.steps[screenshot.step]?.action !== 'screenshot' ||
       seen.has(screenshot.step)

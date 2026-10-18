@@ -16,7 +16,7 @@ function target(document, name) {
 const fixtureHtml = `<title>Public interaction fixture</title>
 <form action="/results" method="get"><label>Search query<input name="q"></label><button>Search</button></form>
 <button onclick="document.querySelector('#detail').textContent='Expanded public detail'">Expand</button><p id="detail">Collapsed</p>
-<a href="/next">Next page</a><a href="http://other.test/forbidden">Other site</a>
+<a href="/next">Next page</a><a href="http://other.test/forbidden" target="_blank">Other site</a>
 <button onclick="fetch('/write',{method:'POST',body:'synthetic public text'}).catch(()=>{})">Try request</button>
 <label>Security code<input autocomplete="one-time-code"></label><form action="/login" method="get"><label>密码<input name="passphrase" type="password" autocomplete="current-password"></label><button>Sign in</button></form><button aria-label="Pay">Pay</button>`
 
@@ -38,7 +38,10 @@ for (const display of ['headless', 'headed']) {
         response.end(
           request.url.startsWith('/results')
             ? `<title>Search results</title><h1>Found public results</h1><a href="/next">Next page</a>`
-            : fixtureHtml,
+            : fixtureHtml.replace(
+                'http://other.test/forbidden',
+                `http://other.test:${server.address().port}/external`,
+              ),
         )
       })
       await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
@@ -66,13 +69,11 @@ for (const display of ['headless', 'headed']) {
         )
         document = await backend.read(metadata.page)
         assert.match(document.snapshot, /public sample/)
-        await assert.rejects(
-          backend.interact('click', {
-            ...target(document, 'Expand'),
-            element: 'Misleading label',
-          }),
-          /browser_interaction_denied/,
-        )
+        metadata = await backend.interact('click', {
+          ...target(document, 'Expand'),
+          element: 'Expand（展开按钮）',
+        })
+        document = await backend.read(metadata.page)
         metadata = await backend.interact('click', target(document, 'Expand'))
         document = await backend.read(metadata.page)
         assert.match(document.snapshot, /Expanded public detail/)
@@ -92,14 +93,19 @@ for (const display of ['headless', 'headed']) {
           /\/login\?passphrase=synthetic_fixture_only/,
         )
         document = await backend.read(metadata.page)
-        await assert.rejects(
-          backend.interact('click', target(document, 'Pay')),
-          /browser_interaction_denied/,
+        metadata = await backend.interact('click', target(document, 'Pay'))
+        document = await backend.read(metadata.page)
+        metadata = await backend.interact(
+          'click',
+          target(document, 'Other site'),
         )
-        await assert.rejects(
-          backend.interact('click', target(document, 'Other site')),
-          /browser_interaction_denied/,
+        assert.equal(
+          metadata.page.origin,
+          `http://other.test:${server.address().port}`,
         )
+        assert.equal(backend.browser, originalBrowser)
+        metadata = await backend.navigate(origin + '/')
+        document = await backend.read(metadata.page)
         metadata = await backend.interact('type', {
           ...target(document, 'Search query'),
           text: 'public query',
@@ -115,16 +121,12 @@ for (const display of ['headless', 'headed']) {
         document = await backend.read(metadata.page)
         assert.equal(metadata.sourceUrl, origin + '/next')
         assert.equal(backend.browser, originalBrowser)
-        await assert.rejects(
-          backend.interact('click', target(document, 'Try request')),
-          /browser_interaction_network_denied/,
+        metadata = await backend.interact(
+          'click',
+          target(document, 'Try request'),
         )
-        assert.equal(forbiddenHits, 0)
-        assert.equal(
-          originalBrowser.isConnected(),
-          true,
-          'denied interaction must not flash-close the window',
-        )
+        assert.equal(forbiddenHits, 1)
+        assert.equal(originalBrowser.isConnected(), true)
         const restored = await backend.navigate(origin + '/')
         const restoredDocument = await backend.read(restored.page)
         assert.match(restoredDocument.snapshot, /Search query/)

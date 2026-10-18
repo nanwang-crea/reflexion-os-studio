@@ -1,0 +1,15 @@
+diff --git a/lib/coreBundle.js b/lib/coreBundle.js
+index 3d050d3f66703342cead4d35b900e1027c5af8df..3b4d04a9590fa0781bc74ab13efdf0db9fb177dd 100644
+--- a/lib/coreBundle.js
++++ b/lib/coreBundle.js
+@@ -39688,7 +39688,9 @@ var init_crBrowser = __esm({
+         if (targetInfo.type === "browser")
+           return;
+         const session2 = this._session.createChildSession(sessionId);
+-        assert(targetInfo.browserContextId, "targetInfo: " + JSON.stringify(targetInfo, null, 2));
++        // CEF omits browserContextId on service_worker targets; CDP already
++        // routes unknown contexts through the persistent default context below.
++        assert(targetInfo.browserContextId || targetInfo.type === "service_worker", "targetInfo: " + JSON.stringify(targetInfo, null, 2));
+         let context = this._contexts.get(targetInfo.browserContextId) || null;
+         if (!context) {
+           context = this._defaultContext;

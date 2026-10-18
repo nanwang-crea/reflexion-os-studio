@@ -1,36 +1,43 @@
 import type { BrowserContext } from 'playwright'
-import { createHash } from 'node:crypto'
 import { isSafeAgentBrowserUrl } from '@reflexion-os-studio/contracts'
 import { prepareBrowserContent, snapshotSection } from '../security/content.js'
 
+/** A read refreshes a live page; DOM changes do not invalidate its tab identity. */
 export async function observeBrowserPage(
   context: BrowserContext | null,
-  origin: string | null,
   invoke: (name: string, args: Record<string, unknown>) => Promise<string>,
 ) {
   const page = context?.pages()[0]
-  if (!page || page.isClosed()) throw new Error('browser_page_stale')
-  const before = page.url()
-  if (!isSafeAgentBrowserUrl(before) || new URL(before).origin !== origin)
-    throw new Error('browser_page_stale')
-  const result = await invoke('browser_snapshot', {})
-  const sourceUrl = page.url()
-  if (sourceUrl !== before || !isSafeAgentBrowserUrl(sourceUrl))
-    throw new Error('browser_page_stale')
-  const snapshot = snapshotSection(result)
-  const title = await page.title()
-  const content = prepareBrowserContent(title, snapshot)
-  return {
-    ...content,
-    sourceUrl,
-    digest: fingerprint({ sourceUrl, title, snapshot }),
+  if (!page || page.isClosed()) throw new Error('browser_closed')
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await page
+      .waitForLoadState('domcontentloaded', { timeout: 2000 })
+      .catch(() => {})
+    const before = page.url()
+    if (!isSafeAgentBrowserUrl(before))
+      throw new Error('browser_page_unavailable')
+    let result: string
+    try {
+      result = await invoke('browser_snapshot', {})
+    } catch (error) {
+      if (
+        attempt < 2 &&
+        error instanceof Error &&
+        ['browser_page_loading', 'browser_navigation_failed'].includes(
+          error.message,
+        )
+      )
+        continue
+      throw error
+    }
+    const sourceUrl = page.url()
+    if (sourceUrl !== before) continue
+    const title = await page.title()
+    if (page.url() !== sourceUrl) continue
+    return {
+      ...prepareBrowserContent(title, snapshotSection(result)),
+      sourceUrl,
+    }
   }
-}
-
-function fingerprint(document: {
-  sourceUrl: string
-  title: string
-  snapshot: string
-}): string {
-  return createHash('sha256').update(JSON.stringify(document)).digest('hex')
+  throw new Error('browser_page_loading')
 }

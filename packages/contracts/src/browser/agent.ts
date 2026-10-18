@@ -13,8 +13,7 @@ export function isSafeAgentBrowserUrl(value: string): boolean {
       !/[\u0000-\u0020\u007f]/.test(value) &&
       ['http:', 'https:'].includes(url.protocol) &&
       !url.username &&
-      !url.password &&
-      !/^(?:localhost|.*\.localhost|.*\.local)$/i.test(url.hostname)
+      !url.password
     )
   } catch {
     return false

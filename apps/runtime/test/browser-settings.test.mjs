@@ -150,6 +150,7 @@ test('independent Agent settings preserve user browser preferences, persist disp
   const store = new Store(dir)
   const user = {
     ...store.browserSettings.get(),
+    agentBrowserDisplay: 'headless',
     defaultRoute: 'embedded',
     saveHistory: true,
   }

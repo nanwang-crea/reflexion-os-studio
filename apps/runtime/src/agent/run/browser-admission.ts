@@ -9,8 +9,6 @@ import {
   AgentBrowserTypeSchema,
 } from '@reflexion-os-studio/contracts'
 import { compileBrowserExecution } from '../../browser/agent/automation/script.js'
-import { isIP } from 'node:net'
-import { isPublicIp } from '../../network/address-policy.js'
 
 export function validBrowserArgs(name: string, args: unknown): boolean {
   if (name === 'browser.execute') {
@@ -41,10 +39,6 @@ export function validBrowserArgs(name: string, args: unknown): boolean {
           : AgentBrowserPageSchema
   const input = schema.safeParse(args)
   if (!input.success) return false
-  if ('url' in input.data) {
-    const host = new URL(input.data.url).hostname.replace(/^\[|\]$/g, '')
-    if (isIP(host) && !isPublicIp(host)) return false
-  }
   return true
 }
 export function validateToolAdmission(

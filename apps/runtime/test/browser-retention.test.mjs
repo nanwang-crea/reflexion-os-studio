@@ -25,7 +25,7 @@ function fixture(t, lifetime = 'session') {
         callTool: async (operation) => {
           if (operation === 'navigate')
             worker.page = {
-              tabId: randomUUID(),
+              tabId: worker.page?.tabId ?? randomUUID(),
               origin: 'https://example.com',
               pageVersion: randomUUID(),
             }
@@ -74,7 +74,10 @@ test('completed replies retain their browser and only the same session can resum
   f.browser.finishRun('run2')
   await f.navigate('chat', 'run3')
   assert.equal(f.workers.length, 1)
-  await assert.rejects(f.read('chat', 'run3', first.page), /browser_page_stale/)
+  assert.match(
+    (await f.read('chat', 'run3', first.page)).snapshot,
+    /Public page/,
+  )
 })
 
 for (const [lifetime, cancelled] of [

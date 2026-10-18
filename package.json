@@ -29,5 +29,10 @@
     "prettier": "^3.6.2",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "playwright-core@1.64.0-alpha-1790635538000": "patches/playwright-core@1.64.0-alpha-1790635538000.patch"
+    }
   }
 }

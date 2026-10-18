@@ -91,7 +91,7 @@ export class BrowserAgentService {
             ? args.page
             : args,
       )
-      if (!entry?.page || JSON.stringify(page) !== JSON.stringify(entry.page))
+      if (!entry?.page || page.tabId !== entry.page.tabId)
         throw new Error('browser_page_stale')
     }
     if (entry && !active) {
@@ -147,31 +147,24 @@ export class BrowserAgentService {
         throw new Error('browser_disabled')
       if (operation === 'execute') {
         const result = validateExecutionResult(args, current.page, raw)
-        current.page = result.document?.page ?? null
+        current.page = result.document?.page ?? current.page
         if (result.error === 'browser_plan_timeout') this.release(runId)
         return result
       }
       const document = AgentBrowserDocumentSchema.parse(JSON.parse(raw))
-      const target =
-        operation === 'navigate'
-          ? new URL(String(args.url)).origin
-          : current.page?.origin
+      if (document.page.origin !== new URL(document.sourceUrl).origin)
+        throw new Error('browser_response_invalid')
       if (
-        document.page.origin !== target ||
-        new URL(document.sourceUrl).origin !== target
+        operation !== 'navigate' &&
+        current.page &&
+        document.page.tabId !== current.page.tabId
       )
         throw new Error('browser_response_invalid')
       if (operation === 'read' && document.snapshot === undefined)
         throw new Error('browser_response_invalid')
       if (
-        operation === 'read' &&
-        JSON.stringify(document.page) !== JSON.stringify(current.page)
-      )
-        throw new Error('browser_page_stale')
-      if (
         (operation === 'click' || operation === 'type') &&
-        (document.page.tabId !== current.page?.tabId ||
-          document.page.pageVersion === current.page?.pageVersion)
+        document.page.pageVersion === current.page?.pageVersion
       )
         throw new Error('browser_response_invalid')
       if (operation !== 'read' && document.snapshot !== undefined)
@@ -179,18 +172,16 @@ export class BrowserAgentService {
       current.page = document.page
       return document
     } catch (error) {
-      // A stale snapshot is recoverable; identity checks still reject old reads.
-      // Navigation failures have already closed the backend and must be released.
-      if (!(
+      const fatal =
         error instanceof Error &&
-        ((error.message === 'browser_page_stale' && operation !== 'navigate') ||
-          error.message === 'browser_interaction_denied' ||
-          error.message === 'browser_user_control' ||
-          error.message === 'browser_interaction_network_denied' ||
-          error.message === 'browser_interaction_failed') &&
-        !signal.aborted
-      ))
-        this.release(runId)
+        [
+          'browser_closed',
+          'browser_unavailable',
+          'browser_disabled',
+          'browser_response_invalid',
+          'browser_plan_timeout',
+        ].includes(error.message)
+      if (fatal || signal.aborted) this.release(runId)
       if (signal.aborted)
         throw new DOMException('The operation was aborted.', 'AbortError')
       const code = error instanceof Error ? error.message : ''

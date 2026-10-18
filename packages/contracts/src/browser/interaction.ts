@@ -15,7 +15,7 @@ export const AgentBrowserTargetSchema = z.strictObject({
     .trim()
     .min(1)
     .max(200)
-    .describe('快照中目标控件的精确名称；无名称时填写角色名，供审批与执行核对'),
+    .describe('目标控件的描述，供审批展示；执行使用快照 ref 定位'),
 })
 export const AgentBrowserClickSchema = AgentBrowserTargetSchema
 export const AgentBrowserTypeSchema = AgentBrowserTargetSchema.extend({
@@ -26,9 +26,7 @@ export const AgentBrowserTypeSchema = AgentBrowserTargetSchema.extend({
   submit: z
     .boolean()
     .default(false)
-    .describe(
-      '填写后是否在该控件按 Enter；仅支持同源 GET 搜索，不允许 POST 或跨站提交',
-    ),
+    .describe('填写后是否在该控件按 Enter；允许普通表单提交和页面跳转'),
 })
 export type AgentBrowserClick = z.infer<typeof AgentBrowserClickSchema>
 export type AgentBrowserType = z.infer<typeof AgentBrowserTypeSchema>

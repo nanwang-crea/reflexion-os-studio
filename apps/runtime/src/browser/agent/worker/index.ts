@@ -37,6 +37,17 @@ const server = new Server(
 let tail = Promise.resolve()
 const errors = new Set([
   'browser_system_chrome_unavailable',
+  'browser_navigation_timeout',
+  'browser_navigation_blocked',
+  'browser_navigation_failed',
+  'browser_network_dns_failed',
+  'browser_network_connection_refused',
+  'browser_network_certificate',
+  'browser_page_loading',
+  'browser_page_unavailable',
+  'browser_target_missing',
+  'browser_target_ambiguous',
+  'browser_closed',
   'browser_url_denied',
   'browser_page_stale',
   'browser_source_changed',

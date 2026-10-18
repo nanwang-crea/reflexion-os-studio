@@ -4,19 +4,23 @@
 
 ## 首批范围
 
-browser.navigate、browser.read、browser.close、browser.execute、browser.click、browser.type；先导航取得页面身份，再按浏览器批准策略读取真实渲染后的无障碍快照。导航结果不向模型返回正文；读取校验所属 Session、当前 Run 的占用权、标签/来源/页面版本，并重新取快照核对内容摘要，页面变化要求重新导航取得新版本。导航可携带 from 绑定原页面；不带 from 时重新绑定页面版本，同源复用窗口，跨源重建隔离上下文。公开页面控件点击与普通文本输入现已支持；上传、下载、任意 JavaScript/Node 执行和登录态导入不在本批工具清单中。
+browser.navigate、browser.read、browser.close、browser.execute、browser.click、browser.type。稳定 tabId 表示会话标签归属，pageVersion 表示一次观测。read 在原标签获取最新快照、来源和版本，不再要求整页摘要保持不变。导航、重定向与跨站操作保留同一临时上下文；from 绑定所属标签，不要求 DOM 冻结。ref 来自最近快照，role/name 使用 Playwright 精确唯一定位和有界等待，ref 的 name 为审批描述，不再双重严格匹配。已有 AX ref 在导航或新快照后需刷新；普通文字变化不会阻止读取。
 
-不保留静态 HTML 抓取或离线只读标签。用户 Browser Surface 继续使用原生 WebView，不由 Playwright 接管。
+导航使用拥有页面的 Playwright goto，快照复用受管官方 MCP。失败保留可恢复标签，区分 DNS、连接拒绝、证书、超时、加载中和控件失效；分类结果不包含原始网页或请求诊断。首次建页失败、标签关闭、取消和失效响应回收资源。文件上传、下载工具、任意 JavaScript/Node 执行和登录态导入不在现有工具清单。
+
+不保留静态 HTML 抓取或离线只读标签。用户 Browser Surface 使用 CEF；Agent 取得专属临时标签租约，不接管用户其他标签。
 
 ## 审批与安全
 
-默认 Agent 开关关闭。工具经 ToolRegistry、PermissionGate 与 ApprovalGateway；批准策略默认跟随对话权限：workspace-full 自动放行当前导航/读取/关闭，其他档位询问；也可设置每次询问或自动允许只读浏览。ask-everything 覆盖自动放行，Danger 本身不改变浏览器策略；通用会话 operation 规则不能旁路。审批主题展示实际目标及来源页面身份；非法或敏感参数在持久化之前拒绝且不回显。
+默认 Agent 开关关闭。工具经 ToolRegistry、PermissionGate 与 ApprovalGateway；批准策略默认跟随对话权限：workspace-full 自动放行当前导航/读取/关闭，其他档位询问；也可设置每次询问或自动允许只读浏览。ask-everything 覆盖自动放行，Danger 本身不改变浏览器策略；通用会话 operation 规则不能旁路。审批主题展示实际目标及来源页面身份；非法结构参数在持久化之前拒绝且不回显；不再对网页输入做凭据关键词过滤。
 
-浏览器使用临时上下文，不加载用户资料、凭据或历史；服务关闭页面下载、权限、Service Worker 和 WebSocket。首批只允许已批准来源的 GET/HEAD 请求，跨来源资源与重定向拒绝，需要用户批准新的来源。Playwright 请求路由检查 URL/方法；浏览器沿用 Chromium 的系统网络配置，由浏览器处理 DNS、系统代理和连接。CEF 临时上下文显式设为 system 代理模式，不强制直连。应用不再创建本地出口代理或执行域名公网 IP 预检查；获准域名可能解析到本机可达网络，因此不保证仅公网隔离。应用内部域名和开发页面在原生层拒绝。MCP 仅走 stdio/内存传输。web.fetch 的独立公网检查不变。
+浏览器使用临时上下文，不加载用户浏览器资料或历史。跨来源资源、重定向、表单 POST、WebSocket、Service Worker 与页面内普通点击不再被应用统一拦截；正常网络行为交给 Chromium。主页面只进入 HTTP(S)，CEF 拒绝应用自身内部来源与开发页面，本地私有地址不再按 IP 段拒绝。浏览器沿用系统网络配置；CEF 临时上下文显式使用 system 代理模式，不强制直连或创建本地出口代理。web.fetch 的独立公网检查保持不变。网页媒体权限、下载与原生文件对话框尚未开放 Agent 控制。
+
+Agent 的 target=_blank 链接复用当前可见标签，CEF window.open 的 HTTP(S) 目标也复用该租约，避免跳到另一个会话；普通用户标签的新窗口行为不变。用户接管后可使用地址栏/前进后退，交还 Agent 后在原 TargetId 刷新快照。
 
 注入提示使用启发式检测，不宣称识别所有攻击；权限边界由工具白名单、批准策略和隔离执行维持。返回仅保留快照区块，丢弃 MCP 自动代码、日志、网络详情等；页面文字不再经过凭据正则拦截，明确标记网页注入警告与 untrusted_external provenance，进入既有 canonical ToolOutput。该调整不开放系统或用户浏览器凭据读取。
 
-关闭开关、取消和 Runtime shutdown 收回 worker 和浏览器。默认回复结束后按 Session 保留空闲 worker，下一次同会话 Run 首次获准浏览器操作时接管；可在设置中改为每次回复结束关闭。未知服务错误只返回固定安全错误，不记录网页正文或原始 MCP 错误。
+关闭开关、取消和 Runtime shutdown 收回 worker 和浏览器。默认回复结束后按 Session 保留空闲 worker，下一次同会话 Run 首次获准浏览器操作时接管；可在设置中改为每次回复结束关闭。错误返回安全分类及原地恢复指引，不记录原始网页诊断，不自动重放失败操作。新配置默认 headed 可见模式；显式 headless 设置继续受支持。
 
 ## 分发与平台
 
@@ -24,7 +28,7 @@ browser.navigate、browser.read、browser.close、browser.execute、browser.clic
 
 macOS、Windows、Linux 共用 Runtime/worker；Windows 使用 node.exe 与进程树回收，POSIX 使用进程组回收。Linux 仍需要 Chromium 系统库，缺失时明确报不可用，不能静默禁用沙箱。三平台分别构建并验收；Windows/Linux 真机状态保留待验收。本批不宣称完成点击/填表或完整 B4。
 
-## 本批验证
+## 历史首批验证（以下限制已由 2026-10-18 调整替代）
 
 macOS 合成动态页面已通过官方 MCP 渲染与快照读取；导航不泄露正文、页面变化拒绝旧版本、跨来源资源/重定向拒绝、密码控件拒绝、敏感参数拒绝、每次询问模式下 Danger 仍不旁路审批、stdio 工具白名单、取消握手与撤销隔离均有测试。合成 Provider 的 Agent 回路已验证两次审批、网页证据回填及 canonical ToolOutput 持久化；这不代替真实模型遵循率或完整网页矩阵验收。
 
@@ -90,7 +94,7 @@ browser.navigate/read/close 加入可继承工具集合，内置 Research Agent 
 
 ### 窗口生命周期与可恢复错误
 
-同一 Run 内同源导航复用现有浏览器窗口和隔离上下文，每次导航仍重新绑定页面版本并分别执行审批；跨来源导航重建上下文与同源边界。页面动态更新造成 browser_page_stale 时拒绝旧快照，但读取失败不关闭窗口；需不携带旧 from 重新导航取得新版本。页面存在可见或隐藏密码框本身不再触发关闭，2026-10-18 按用户决定移除整页疑似凭据正则扫描，不因页面关键词关闭浏览器。
+同一 Run 内同源导航复用现有浏览器窗口和隔离上下文，每次导航更新观测版本并执行审批；跨来源导航继续使用原上下文。页面动态更新后 read 原地刷新，不再要求重新导航。页面存在可见或隐藏密码框本身不再触发关闭，2026-10-18 按用户决定移除整页疑似凭据正则扫描，不因页面关键词关闭浏览器。
 
 安全拦截、不可恢复的操作错误、取消、显式关闭、设置撤销和应用退出仍释放隔离浏览器。配置每次回复结束关闭或切换来源时的窗口关闭属于生命周期行为，不代表进程崩溃；真实网站兼容性和 Windows/Linux 有头窗口仍需真机验收。
 
@@ -106,14 +110,14 @@ browser.navigate/read/close 加入可继承工具集合，内置 Research Agent 
 
 点击与输入始终逐次 ask，不继承“自动允许只读浏览”、workspace-full 或 Danger 自动放行；plan 模式拒绝。审批绑定完整参数 digest，展示来源、页面、ref、控件名及完整输入/提交参数，不提供会话规则。新工具列入可委派工具交集与角色页“网页交互”组，但不会自动扩张已有模板；“读取与研究”预设继续不含交互。内置网络调研 Skill 和主 Agent 提示已同步操作及结果核验指引。
 
-当前交互仅支持同源 GET/HEAD 导航、普通输入和页面内展开/翻页，不支持支付、文件上传、跨来源或 POST 等写入提交。2026-10-18 按用户明确要求移除浏览器凭据限制：登录/认证路径及参数不再因关键词拒绝，输入文本不再做凭据形态过滤，密码和验证码控件可操作，同源 GET 表单不再因包含密码框拒绝。执行仍检查控件身份、支付/上传类型、方法与来源，不读取控件值作检查。同源请求、下载/弹窗/权限保护保持；公网 DNS 检查和强制代理已于 2026-10-18 移除。拒绝的写请求不自动重试或宣称提交成功，保留窗口供核对；不可恢复的执行错误仍关闭。合成有头/无头验收不代表任意真实站点兼容；Windows/Linux 有头真机仍待验收。
+2026-10-18 按用户决定开放正常可见网页操作：移除同源/GET 请求限制、支付名称拦截、登录 URL 和输入凭据正则；密码与验证码控件可操作，普通 POST 表单和跨站导航可执行。工具审批、用户接管、标签归属、取消与有界超时继续保留。动作执行不等于业务成功，须读取实际页面；失败不自动重复提交。
 
 ## 通用操作与受限脚本（2026-10-16）
 
-`browser.execute` 统一执行动作列表或静态脚本。`mode=actions` 接收 steps；`mode=script` 接收 script。两者均绑定当前 page 身份，整份原始输入和展开动作计划需单次审批，自动只读策略、Danger 和全权限均不跳过。最多20步、4张截图、20秒，失败报告 completed/failedStep 并停止，不自动重放。
+`browser.execute` 统一执行动作列表或静态脚本。`mode=actions` 接收 steps；`mode=script` 接收 script。两者均绑定当前 page 身份，整份原始输入和展开动作计划需单次审批，自动只读策略、Danger 和全权限均不跳过。最多20步、4张截图、20秒，失败报告 completed/failedStep/failurePhase 并停止，不自动重放；after-action 明确表示动作已经执行、之后观测失败。
 
-支持 click/type/hover/press/select/drag/scroll/reveal/screenshot/read/goto/wait。目标为精确唯一的 role/name 或快照 ref/name，导航仍限制同源 GET/HEAD。脚本通过 Acorn 静态解析，不运行 eval、vm 或 Node；支持 const、有限 for...of 字面量数组、page.getByRole(...).click/fill/press/hover/selectOption/dragTo/scrollIntoViewIfNeeded、page.mouse.wheel、page.goto/waitForTimeout/screenshot。禁止任意函数、while、计算属性、DOM/evaluate、文件、进程、网络和浏览器上下文/凭据 API。
+支持 click/type/hover/press/select/drag/scroll/reveal/screenshot/read/goto/wait。目标为精确唯一的 role/name 或快照 ref，name 是审批描述。导航支持跨站和正常网页请求。脚本通过 Acorn 静态解析，不运行 eval、vm 或 Node；支持 const、有限 for...of 字面量数组、page.getByRole(...).click/fill/press/hover/selectOption/dragTo/scrollIntoViewIfNeeded、page.mouse.wheel、page.goto/waitForTimeout/screenshot。禁止任意函数、while、计算属性、DOM/evaluate、文件、进程、网络和浏览器上下文/凭据 API。
 
-截图仅限受控网页 JPEG，默认当前视口，可选 fullPage（宽度最多8000px、高度最多16000px、总面积最多3200万像素），每张最多2MiB；输入框、文本域、选择框与 contenteditable 不再遮罩；iframe 继续遮罩以保持来源隔离（不读取控件值）。截图前后校验页面快照和来源，保存为绑定 Session/Run 的 agent 资产。ToolOutput 只保存引用，工具轨迹展开时显示缩略图。视觉模型请求前才读取图片字节，并在完整工具结果组之后附加明确标记为不可信网页证据的图片消息；历史与即时调用统一从 canonical resourceLinks 及资产归属投影。历史工具截图丢失或损坏时提示不可用并继续文字对话，用户主动上传图片仍严格校验。
+截图仅限受控网页 JPEG，默认当前视口，可选 fullPage（宽度最多8000px、高度最多16000px、总面积最多3200万像素），每张最多2MiB；按当前网页可见内容截图，不再遮罩输入控件和 iframe。截图只校验捕获期间未切换主页面地址，不比较整页内容摘要，保存为绑定 Session/Run 的 agent 资产。ToolOutput 只保存引用，工具轨迹展开时显示缩略图。视觉模型请求前才读取图片字节，并在完整工具结果组之后附加明确标记为不可信网页证据的图片消息；历史与即时调用统一从 canonical resourceLinks 及资产归属投影。历史工具截图丢失或损坏时提示不可用并继续文字对话，用户主动上传图片仍严格校验。
 
 旧 click/type 通过同一 Playwright 执行器执行，仍要求 read 后真实 ref，执行结果仅返回页面身份。新 execute 已审批完整计划，返回最终快照与截图。macOS headed/headless 合成页验收；Windows/Linux 使用相同 Playwright/Node 实现，但尚无本次真机 GUI 验收。

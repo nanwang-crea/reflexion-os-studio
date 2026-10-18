@@ -156,7 +156,7 @@ test('navigation delegates hostname resolution to Chromium without a forced prox
   // .invalid cannot pass a Node DNS preflight. Launch must still be reached.
   await assert.rejects(
     backend.navigate('https://system-network.invalid/'),
-    /fixture_launch_stopped/,
+    /browser_interaction_failed/,
   )
   assert.equal(launches, 1)
   await backend.close()

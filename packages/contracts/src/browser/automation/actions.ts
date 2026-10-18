@@ -106,17 +106,10 @@ export const BrowserPlanSchema = z
     steps: z.array(BrowserStepSchema).min(1).max(20),
   })
   .superRefine((plan, ctx) => {
-    if (
-      plan.steps.filter((step) => step.action === 'screenshot').length > 4 ||
-      plan.steps.some(
-        (step) =>
-          step.action === 'goto' &&
-          new URL(step.url).origin !== plan.page.origin,
-      )
-    )
+    if (plan.steps.filter((step) => step.action === 'screenshot').length > 4)
       ctx.addIssue({
         code: 'custom',
-        message: '最多4张截图，导航必须保持在当前获准来源',
+        message: '最多4张截图',
       })
   })
 export const BrowserExecuteSchema = z.discriminatedUnion('mode', [

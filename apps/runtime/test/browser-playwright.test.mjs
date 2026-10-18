@@ -3,7 +3,6 @@ import { test } from 'node:test'
 import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:http'
 import { AgentBrowserNavigateSchema } from '@reflexion-os-studio/contracts'
-import { allowedRequest } from '../dist/browser/agent/security/network.js'
 import { prepareBrowserContent } from '../dist/browser/agent/security/content.js'
 import { browserWorkerPaths } from '../dist/browser/agent/paths.js'
 import {
@@ -25,13 +24,8 @@ const page = () => ({
   pageVersion: randomUUID(),
 })
 
-test('browser URL admission rejects URL userinfo, unsafe protocols and private literal addresses before persistence', () => {
-  for (const url of [
-    'file:///tmp/a',
-    'https://user:sample@example.com',
-    'http://127.0.0.1/',
-    'http://[::ffff:7f00:1]/',
-  ]) {
+test('browser URL admission rejects URL userinfo and unsafe protocols before persistence', () => {
+  for (const url of ['file:///tmp/a', 'https://user:sample@example.com']) {
     assert.equal(validBrowserArgs('browser.navigate', { url }), false, url)
     assert.equal(
       redactBrowserCalls([
@@ -67,24 +61,6 @@ test('browser URL admission rejects URL userinfo, unsafe protocols and private l
       url: 'https://example.com/',
       evaluate: 'x',
     }).success,
-    false,
-  )
-})
-
-test('requests deny cross-origin and writes', async () => {
-  assert.ok(
-    allowedRequest(
-      'https://example.com',
-      'https://example.com/script.js',
-      'GET',
-    ),
-  )
-  assert.equal(
-    allowedRequest('https://example.com', 'https://other.com/a', 'GET'),
-    false,
-  )
-  assert.equal(
-    allowedRequest('https://example.com', 'https://example.com/a', 'POST'),
     false,
   )
 })
@@ -203,7 +179,7 @@ test('service isolates Run/Session, rejects stale identity and revoke disposes p
       's1',
       'r1',
       'read',
-      { ...first.page, pageVersion: randomUUID() },
+      { ...first.page, tabId: randomUUID() },
       signal,
     ),
     /browser_page_stale/,
@@ -226,101 +202,81 @@ test('service isolates Run/Session, rejects stale identity and revoke disposes p
   )
 })
 
-test('official Playwright MCP observes actual dynamic DOM, rejects changes and blocks cross-origin traffic', async () => {
+test('live DOM updates and cross-origin navigation retain a readable isolated tab', async () => {
   let mutate = false
-  let blockedHits = 0
+  let crossOriginHits = 0
   const server = createServer((request, response) => {
+    response.setHeader('content-type', 'text/html; charset=utf-8')
     if (request.url === '/state') {
       response.end(mutate ? 'Changed' : 'Rendered')
       return
     }
-    if (request.url === '/forbidden') {
-      ++blockedHits
-      response.end('forbidden')
-      return
-    }
-    response.setHeader('content-type', 'text/html')
-    if (request.url === '/form-fixture') {
-      response.end(
-        '<input type="password"><input type="password" hidden><h1>Public title</h1>',
-      )
-      return
-    }
-    if (request.url === '/sensitive-fixture') {
-      response.end('<h1>api_key=synthetic_fixture_value</h1>')
+    if (request.url === '/asset.js') {
+      crossOriginHits++
+      response.setHeader('content-type', 'application/javascript')
+      response.end('window.assetLoaded=true')
       return
     }
     if (request.url === '/redirect') {
-      response.writeHead(302, { location: 'http://other.test/forbidden' })
+      response.writeHead(302, {
+        location: `http://other.test:${server.address().port}/arrived`,
+      })
       response.end()
       return
     }
-    response.end(`<title>Fixture</title><main id="root">Loading</main><script>
-      document.querySelector('#root').innerHTML='<h1>Rendered by JavaScript</h1><a href="/next">Next</a>';
-      fetch('http://other.test/forbidden').catch(()=>{});
-      setInterval(()=>fetch('/state').then(r=>r.text()).then(t=>document.querySelector('h1').textContent=t+' by JavaScript'),100);
-    </script>`)
+    response.end(
+      `<title>Dynamic fixture</title><h1>Rendered</h1><script src="http://other.test:${server.address().port}/asset.js"></script><script>setInterval(()=>fetch('/state').then(r=>r.text()).then(text=>document.querySelector('h1').textContent=text),80)</script>`,
+    )
   })
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   const origin = `http://fixture.test:${server.address().port}`
-  // Test-only dependency injection connects our synthetic host to this fixture.
-  // Production delegates DNS and proxy configuration to Chromium.
   const backend = new PlaywrightBackend()
   try {
     const metadata = await backend.navigate(origin + '/')
-    assert.equal(
-      metadata.snapshot,
-      undefined,
-      'navigation must not disclose page body before read approval',
-    )
-    const document = await backend.read(metadata.page)
-    assert.match(document.snapshot, /Rendered by JavaScript/)
-    assert.equal(blockedHits, 0)
+    assert.equal(metadata.snapshot, undefined)
+    const first = await backend.read(metadata.page)
+    assert.match(first.snapshot, /Rendered/)
+    const browser = backend.browser
+    const context = backend.context
+    await context
+      .pages()[0]
+      .evaluate(() => sessionStorage.setItem('fixture', 'kept'))
     mutate = true
-    await new Promise((resolve) => setTimeout(resolve, 250))
-    await assert.rejects(backend.read(metadata.page), /browser_page_stale/)
-    await assert.rejects(
-      backend.navigate(origin + '/next', metadata.page),
-      /browser_page_stale/,
-    )
-    const existingBrowser = backend.browser
-    const existingContext = backend.context
-    const login = await backend.navigate(origin + '/form-fixture')
-    assert.equal(
-      backend.browser,
-      existingBrowser,
-      'same-origin navigation must retain the window',
-    )
-    assert.equal(backend.context, existingContext)
-    assert.match((await backend.read(login.page)).snapshot, /Public title/)
-    assert.equal(backend.context.pages()[0].isClosed(), false)
-    const other = await backend.navigate(
-      origin.replace('fixture.test', 'second.test') + '/form-fixture',
-    )
-    assert.notEqual(
-      backend.context,
-      existingContext,
-      'cross-origin navigation must create an isolated context',
-    )
-    assert.equal(existingBrowser.isConnected(), false)
-    assert.match((await backend.read(other.page)).snapshot, /Public title/)
-    const keywordPage = await backend.navigate(origin + '/sensitive-fixture')
-    assert.match(
-      (await backend.read(keywordPage.page)).snapshot,
-      /api_key=synthetic_fixture_value/,
-    )
+    await context.pages()[0].getByRole('heading', { name: 'Changed' }).waitFor()
+    const refreshed = await backend.read(metadata.page)
+    assert.match(refreshed.snapshot, /Changed/)
+    assert.equal(refreshed.page.tabId, metadata.page.tabId)
+    assert.notEqual(refreshed.page.pageVersion, first.page.pageVersion)
     const result = await backend.execute({
       mode: 'actions',
-      page: keywordPage.page,
-      steps: [{ action: 'wait', milliseconds: 1 }],
+      page: refreshed.page,
+      steps: [{ action: 'wait', milliseconds: 100 }, { action: 'screenshot' }],
     })
     assert.equal(result.error, null)
-    assert.match(result.document.snapshot, /api_key=synthetic_fixture_value/)
-    assert.equal(backend.context.pages()[0].isClosed(), false)
-    await assert.rejects(backend.navigate(origin + '/redirect'))
-    assert.equal(blockedHits, 0)
+    assert.equal(result.screenshots.length, 1)
+    const redirected = await backend.navigate(origin + '/redirect')
+    assert.equal(
+      redirected.page.origin,
+      `http://other.test:${server.address().port}`,
+    )
+    assert.equal(redirected.page.tabId, metadata.page.tabId)
+    assert.equal(backend.browser, browser)
+    assert.equal(backend.context, context)
+    await backend.navigate(origin + '/')
+    assert.equal(
+      await context
+        .pages()[0]
+        .evaluate(() => sessionStorage.getItem('fixture')),
+      'kept',
+    )
+    assert.ok(crossOriginHits > 0)
+    assert.equal(
+      await context.pages()[0].evaluate(() => window.assetLoaded),
+      true,
+    )
   } finally {
     await backend.close()
+    server.closeAllConnections()
     await new Promise((resolve) => server.close(resolve))
   }
 })
@@ -356,7 +312,7 @@ test('cancellation during worker handshake releases it without waiting for reque
 })
 
 test(
-  'headed browser launches a window and user navigation outside the approved source is rejected before snapshot',
+  'headed browser stays visible and rejects non-web documents before snapshot',
   {
     skip:
       process.platform !== 'darwin'
@@ -398,7 +354,7 @@ test(
         if (args[0] === 'browser_snapshot') ++snapshots
         return call(...args)
       }
-      await assert.rejects(backend.read(next.page), /browser_page_stale/)
+      await assert.rejects(backend.read(next.page), /browser_page_unavailable/)
       assert.equal(snapshots, 0)
     } finally {
       await backend.close()
@@ -441,7 +397,7 @@ for (const display of ['headless', 'headed']) {
       )
       assert.equal((await backend.context.cookies()).length, 0)
       await assert.rejects(
-        backend.navigate('http://localhost/'),
+        backend.navigate('file:///tmp/fixture'),
         /browser_url_denied/,
       )
     } finally {

@@ -64,8 +64,12 @@ wrap_life_span_handler! {
         }
 
         fn on_before_popup(&self,_browser:Option<&mut Browser>,_frame:Option<&mut Frame>,_id:i32,url:Option<&CefString>,_name:Option<&CefString>,_disposition:WindowOpenDisposition,_gesture:i32,_features:Option<&PopupFeatures>,_info:Option<&mut WindowInfo>,_client:Option<&mut Option<Client>>,_settings:Option<&mut BrowserSettings>,_extra:Option<&mut Option<DictionaryValue>>,_access:Option<&mut i32>) -> i32 {
-            if self.policy.origin.is_none() {
-                if let Some(url) = url.map(ToString::to_string).filter(|url| crate::browser::policy::guest_url(url,crate::browser::policy::dev_url(&self.app)).is_ok()) {
+            if let Some(url) = url.map(ToString::to_string).filter(|url| self.policy.allows_navigation(url,"GET")) {
+                if self.policy.origin.is_some() {
+                    if let Some(frame) = _browser.and_then(|browser| browser.main_frame()) {
+                        super::popup::follow(frame, url, self.policy.clone());
+                    }
+                } else {
                     super::popup::open(self.app.clone(), self.tab, url);
                 }
             }

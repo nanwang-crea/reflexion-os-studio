@@ -5,7 +5,6 @@ import { captureBrowserImage } from './screenshot.js'
 
 export async function runBrowserStep(
   page: Page,
-  snapshot: string,
   step: BrowserStep,
   navigate: (url: string) => Promise<unknown>,
   timeout: number,
@@ -15,9 +14,7 @@ export async function runBrowserStep(
     return null
   }
   if (step.action === 'wait') {
-    await new Promise((resolve) =>
-      setTimeout(resolve, Math.min(step.milliseconds, timeout)),
-    )
+    await new Promise((resolve) => setTimeout(resolve, step.milliseconds))
     return null
   }
   if (step.action === 'read') return null
@@ -26,7 +23,7 @@ export async function runBrowserStep(
   if (step.action === 'scroll') {
     const amount = { left: step.deltaX, top: step.deltaY }
     if (step.target) {
-      const target = await automationTarget(page, snapshot, step.target)
+      const target = await automationTarget(page, step.target)
       await target.evaluate(
         (element, amount) =>
           element.scrollBy({ ...amount, behavior: 'instant' }),
@@ -40,19 +37,20 @@ export async function runBrowserStep(
       )
     return null
   }
-  const typing = step.action === 'type'
-  const submit =
-    (step.action === 'type' && step.submit) ||
-    (step.action === 'press' && step.key === 'Enter')
-  const target = await automationTarget(
-    page,
-    snapshot,
-    step.target,
-    typing,
-    submit,
-  )
+  const target = await automationTarget(page, step.target)
   switch (step.action) {
     case 'click':
+      // Keep links in the visible session-owned tab instead of losing popup ownership.
+      await target.evaluate(
+        (element) => {
+          const link = element.closest('a')
+          if (link?.hasAttribute('target')) link.setAttribute('target', '_self')
+          const form = element.closest('form')
+          if (form?.hasAttribute('target')) form.setAttribute('target', '_self')
+        },
+        undefined,
+        { timeout },
+      )
       await target.click({
         button: step.button,
         clickCount: step.count,
@@ -76,7 +74,7 @@ export async function runBrowserStep(
       await target.selectOption(step.values, { timeout })
       break
     case 'drag': {
-      const source = await automationTarget(page, snapshot, step.source)
+      const source = await automationTarget(page, step.source)
       await source.dragTo(target, { timeout })
       break
     }

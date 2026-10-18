@@ -1,4 +1,5 @@
 import { setBrowserPanelOpen } from './panel-state'
+import { browserAddressUrl } from '@reflexion-os-studio/contracts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   BrowserAction,
@@ -14,6 +15,11 @@ export function useBrowserSurface(visible = true) {
   const [error, setError] = useState<string | null>(null)
   const [externalNotice, setExternalNotice] = useState<string | null>(null)
   const [slowLoad, setSlowLoad] = useState(false)
+  const settingsRef = useRef(settings)
+  settingsRef.current = settings
+  const ownedTab = useRef(false)
+  const active = state?.tabs.find((tab) => tab.id === state.activeTabId)
+  ownedTab.current = active?.control === 'agent' || active?.control === 'paused'
   const revision = useRef(-1)
   const agentTabs = useRef(new Set<number>())
   const recorded = useRef(new Map<number, string>())
@@ -117,7 +123,11 @@ export function useBrowserSurface(visible = true) {
       setExternalNotice(null)
       setError(null)
       try {
-        accept(await browserSession.control(action))
+        accept(
+          await (ownedTab.current
+            ? browserSurface.control(action)
+            : browserSession.control(action)),
+        )
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : String(caught))
       }
@@ -129,7 +139,12 @@ export function useBrowserSurface(visible = true) {
       setExternalNotice(null)
       setError(null)
       try {
-        const next = await browserSession.navigate(url)
+        const next = ownedTab.current
+          ? await browserSurface.control({
+              kind: 'navigate',
+              url: browserAddressUrl(url, settingsRef.current),
+            })
+          : await browserSession.navigate(url)
         if (next) accept(next)
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : String(caught))

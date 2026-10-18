@@ -35,7 +35,6 @@ test('scripts compile Playwright locators, constants and bounded loops to exact 
     `while(true){}`,
     `await page['screenshot']()`,
     `await page.screenshot({path:'/tmp/forbidden'})`,
-    `await page.goto('https://other.test/')`,
     `for(const i of [1,2,3,4,5]){await page.screenshot();}`,
   ]) {
     const args = { mode: 'script', page, script }
@@ -145,13 +144,16 @@ test('partial failure stops remaining steps, keeps window, and timeout prevents 
     page: f.metadata.page,
     steps: [
       { action: 'click', target: { role: 'button', name: 'Counter' } },
-      { action: 'click', target: { role: 'button', name: 'Attempt write' } },
+      {
+        action: 'click',
+        target: { role: 'button', name: 'Missing fixture control' },
+      },
       { action: 'click', target: { role: 'button', name: 'Counter' } },
     ],
   })
   assert.equal(result.completed, 1)
   assert.equal(result.failedStep, 1)
-  assert.equal(result.error, 'browser_interaction_network_denied')
+  assert.equal(result.error, 'browser_target_missing')
   assert.equal(
     await f.backend.context.pages()[0].evaluate(() => window.clicks),
     1,
@@ -186,7 +188,7 @@ test('deadline observed before its timer still closes the context exactly once',
           Date.now = () => realNow() + 2000
           return {}
         },
-        page: () => undefined,
+        page: () => ({ url: () => 'https://example.com/' }),
         current: () => true,
         blocked: () => false,
         invalidate: () => {},
@@ -213,7 +215,7 @@ test('timer timeout awaits one asynchronous close before returning', async () =>
     { timeoutMs: 10, steps: [{ action: 'read' }] },
     {
       capture: () => new Promise(() => {}),
-      page: () => undefined,
+      page: () => ({ url: () => 'https://example.com/' }),
       current: () => true,
       blocked: () => false,
       invalidate: () => {},
@@ -230,7 +232,7 @@ test('timer timeout awaits one asynchronous close before returning', async () =>
   assert.equal(calls, 1)
 })
 
-test('screenshots retain editable controls and mask only embedded frames', async (t) => {
+test('screenshots preserve the visible page including editable controls and frames', async (t) => {
   const { captureBrowserImage } =
     await import('../dist/browser/agent/worker/automation/screenshot.js')
   const f = await browserAutomationFixture(t)
@@ -242,11 +244,11 @@ test('screenshots retain editable controls and mask only embedded frames', async
     const screenshot = page.screenshot.bind(page)
     let masked
     page.screenshot = async (options) => {
-      masked = await options.mask[0].count()
+      masked = options.mask
       return screenshot(options)
     }
     const image = await captureBrowserImage(page, false)
-    assert.equal(masked, 1)
+    assert.equal(masked, undefined)
     assert.equal(image.mimeType, 'image/jpeg')
     await page.setContent(
       '<div style="width:100000px;height:10px">Public</div>',
@@ -258,4 +260,32 @@ test('screenshots retain editable controls and mask only embedded frames', async
   } finally {
     await f.backend.close()
   }
+})
+
+test('post-action observation failures preserve the performed step count without replay', async () => {
+  const { executeBrowserPlan } =
+    await import('../dist/browser/agent/worker/automation/execute.js')
+  let captures = 0
+  const result = await executeBrowserPlan(
+    { timeoutMs: 1000, steps: [{ action: 'wait', milliseconds: 0 }] },
+    {
+      page: () => ({ url: () => 'https://example.com/' }),
+      capture: async () => {
+        captures++
+        throw new Error('browser_page_loading')
+      },
+      current: () => true,
+      blocked: () => false,
+      invalidate: () => {},
+      navigate: async () =>
+        assert.fail('an observation failure must not navigate'),
+      close: async () =>
+        assert.fail('a recoverable observation failure must retain the page'),
+    },
+  )
+  assert.equal(result.completed, 1)
+  assert.equal(result.failedStep, 0)
+  assert.equal(result.failurePhase, 'after-action')
+  assert.equal(result.error, 'browser_page_loading')
+  assert.equal(captures, 1)
 })

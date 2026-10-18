@@ -27,7 +27,7 @@ export const AgentBrowserSettingsSchema = z.strictObject({
   source: AgentBrowserSourceSchema.default('auto'),
   lifetime: AgentBrowserLifetimeSchema.default('session'),
   enabled: z.boolean().default(false),
-  display: AgentBrowserDisplaySchema.default('headless'),
+  display: AgentBrowserDisplaySchema.default('headed'),
   approval: AgentBrowserApprovalSchema.default('follow-session'),
 })
 export type AgentBrowserSettings = z.infer<typeof AgentBrowserSettingsSchema>

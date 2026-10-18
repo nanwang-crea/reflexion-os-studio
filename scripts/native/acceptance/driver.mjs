@@ -23,7 +23,23 @@ createInterface({ input: process.stdin }).on('line', (line) => {
     /* Runtime handles unrelated input. */
   }
 })
+let livePosts = 0
+const live = process.env.CEF_ACCEPTANCE_LIVE === '1'
 const fixture = createServer((request, response) => {
+  if (request.url === '/sw.js') {
+    response.setHeader('content-type', 'application/javascript')
+    response.end(
+      "self.addEventListener('install',()=>self.skipWaiting());self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));self.addEventListener('fetch',event=>{if(new URL(event.request.url).pathname==='/sw-probe')event.respondWith(new Response('worker-active'))})",
+    )
+    return
+  }
+  if (request.url === '/agent-search') {
+    assert.equal(request.method, 'POST')
+    livePosts++
+    response.setHeader('content-type', 'application/json')
+    response.end(JSON.stringify({ result: '北京旅游结果' }))
+    return
+  }
   if (request.url === '/native-download') {
     response.writeHead(200, {
       'content-type': 'application/octet-stream',
@@ -34,11 +50,12 @@ const fixture = createServer((request, response) => {
   }
   response.setHeader('content-type', 'text/html; charset=utf-8')
   response.end(
-    `<!doctype html><title>CEF 接管验收</title><style>body{font:18px system-ui;padding:24px;background:#f7f9fb}input,button{font:inherit;padding:12px;margin:10px}output{display:block;margin:20px}</style><h1>CEF 共用页面验收</h1><label>公开查询<input aria-label="公开查询"></label><button onclick="document.querySelector('output').textContent=document.querySelector('input').value">应用</button><output>等待输入</output><p>仅包含合成测试数据。</p><a id="native-popup" href="/native-result" target="_blank">新窗口结果</a><a id="native-download" href="/native-download">取消下载验收</a>`,
+    `<!doctype html><title>CEF 接管验收</title><style>body{font:18px system-ui;padding:24px;background:#f7f9fb}input,button{font:inherit;padding:12px;margin:10px}output{display:block;margin:20px}</style><h1>CEF 共用页面验收</h1><label>公开查询<input aria-label="公开查询"></label><button onclick="document.querySelector('output').textContent=document.querySelector('input').value">应用</button><button onclick="fetch('/agent-search',{method:'POST',body:document.querySelector('input').value}).then(r=>r.json()).then(result=>{history.pushState({},'', '/search_result');document.querySelector('output').textContent=result.result})">POST 搜索</button><button onclick="window.open('/script-popup','_blank')">脚本新窗口</button><output>等待输入</output><p>仅包含合成测试数据。</p><a id="native-popup" href="/native-result" target="_blank">新窗口结果</a><a id="native-download" href="/native-download">取消下载验收</a><script>${live ? "navigator.serviceWorker.register('/sw.js')" : ''}</script>`,
   )
 })
+const checks = {}
 const progress = async (phase, detail = {}) =>
-  writeFile(output, JSON.stringify({ phase, ...detail }) + '\n')
+  writeFile(output, JSON.stringify({ phase, ...checks, ...detail }) + '\n')
 const waitControl = (paused) =>
   new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -87,6 +104,58 @@ async function run() {
   process.stderr.write(
     `[cef-acceptance-viewport] ${JSON.stringify(await first.context.pages()[0].evaluate(() => ({ width: globalThis.innerWidth, height: globalThis.innerHeight })))}\n`,
   )
+  if (live) {
+    const ownedPage = first.context.pages()[0]
+    await ownedPage.waitForFunction(
+      () => navigator.serviceWorker.controller !== null,
+    )
+    assert.equal(
+      await ownedPage.evaluate(() =>
+        fetch('/sw-probe').then((response) => response.text()),
+      ),
+      'worker-active',
+    )
+    checks.serviceWorker = true
+    const search = await first.execute({
+      mode: 'actions',
+      page: initial.page,
+      steps: [
+        {
+          action: 'type',
+          target: { role: 'textbox', name: '公开查询' },
+          text: '北京旅游',
+        },
+        { action: 'click', target: { role: 'button', name: 'POST 搜索' } },
+        { action: 'wait', milliseconds: 200 },
+        { action: 'read' },
+      ],
+    })
+    assert.equal(search.error, null)
+    assert.equal(livePosts, 1)
+    assert.match(search.document.snapshot, /北京旅游结果/)
+    assert.equal(
+      (await first.read(initial.page)).page.tabId,
+      initial.page.tabId,
+    )
+    await first.navigate(origin + '/')
+    const popup = await first.execute({
+      mode: 'actions',
+      page: initial.page,
+      steps: [
+        { action: 'click', target: { role: 'button', name: '脚本新窗口' } },
+        { action: 'wait', milliseconds: 200 },
+        { action: 'read' },
+      ],
+    })
+    assert.equal(popup.error, null)
+    assert.match(popup.document.sourceUrl, /script-popup/)
+    assert.equal(popup.document.page.tabId, initial.page.tabId)
+    await first.navigate(origin + '/')
+    checks.livePostSearch = true
+    checks.stableTabRead = true
+    checks.popupInOwnedTab = true
+    process.stderr.write('[cef-live-probe] passed\n')
+  }
   const edited = await first.execute({
     mode: 'actions',
     page: initial.page,

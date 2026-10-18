@@ -243,13 +243,20 @@ test('service dispatches actions against the current page and rejects body leaks
       } else {
         const updated = await action
         assert.notDeepEqual(updated.page, page)
+        // A read refreshes the current tab in place; only a foreign tab
+        // identity is stale, an older observation version still reads.
         await assert.rejects(
-          service.call('chat', 'run', 'read', page, signal),
+          service.call(
+            'chat',
+            'run',
+            'read',
+            { ...page, tabId: randomUUID() },
+            signal,
+          ),
           /browser_page_stale/,
         )
         assert.match(
-          (await service.call('chat', 'run', 'read', updated.page, signal))
-            .snapshot,
+          (await service.call('chat', 'run', 'read', page, signal)).snapshot,
           /Public result/,
         )
         assert.deepEqual(operations, ['navigate', 'type', 'read'])

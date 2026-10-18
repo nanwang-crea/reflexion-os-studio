@@ -164,6 +164,7 @@ pub fn control(app: &tauri::AppHandle, action: &Action) -> Result<(), String> {
         })
         .ok_or("CEF page unavailable")?;
     if policy.origin.is_some()
+        && policy.locked.load(Ordering::Acquire)
         && !matches!(action, Action::Status | Action::Takeover | Action::Resume)
     {
         return Err("Agent 标签的导航和页面工具由任务管理，请新建普通标签浏览".into());

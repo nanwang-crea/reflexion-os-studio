@@ -3,7 +3,11 @@ import { test } from 'node:test'
 import { randomUUID } from 'node:crypto'
 import { BrowserAgentService } from '../dist/browser/agent/service.js'
 
-for (const failure of ['browser_page_stale', 'browser_operation_failed']) {
+for (const failure of [
+  'browser_page_stale',
+  'browser_navigation_timeout',
+  'browser_closed',
+]) {
   test(`read ${failure} preserves only recoverable browser workers`, async () => {
     let disposed = false
     let version = randomUUID()
@@ -46,7 +50,7 @@ for (const failure of ['browser_page_stale', 'browser_operation_failed']) {
         service.call('session', 'run', 'read', first.page, signal),
         new RegExp(failure),
       )
-      assert.equal(disposed, failure !== 'browser_page_stale')
+      assert.equal(disposed, failure === 'browser_closed')
       if (failure === 'browser_page_stale') {
         const next = await service.call(
           'session',
@@ -58,7 +62,13 @@ for (const failure of ['browser_page_stale', 'browser_operation_failed']) {
         assert.equal(disposed, false)
         assert.notDeepEqual(next.page, first.page)
         await assert.rejects(
-          service.call('session', 'run', 'read', first.page, signal),
+          service.call(
+            'session',
+            'run',
+            'read',
+            { ...first.page, tabId: randomUUID() },
+            signal,
+          ),
           /browser_page_stale/,
         )
       }

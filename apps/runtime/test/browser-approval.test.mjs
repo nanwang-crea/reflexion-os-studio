@@ -137,7 +137,7 @@ test('managed stdio worker exposes only the adapter and refuses script tools and
       /browser_operation_failed/,
     )
     await assert.rejects(
-      client.callTool('navigate', { url: 'http://localhost/' }),
+      client.callTool('navigate', { url: 'file:///tmp/fixture' }),
       /browser_operation_failed/,
     )
     assert.deepEqual(JSON.parse(await client.callTool('close', {})), {

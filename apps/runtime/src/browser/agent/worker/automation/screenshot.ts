@@ -19,9 +19,6 @@ export async function captureBrowserImage(page: Page, fullPage: boolean) {
     fullPage,
     scale: 'css',
     timeout: 5000,
-    // Embedded frames may contain content outside the approved origin.
-    mask: [page.locator('iframe')],
-    maskColor: '#111111',
   })
   if (image.length > 2 * 1024 * 1024)
     throw new Error('browser_interaction_denied')

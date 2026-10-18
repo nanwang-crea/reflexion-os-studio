@@ -182,13 +182,7 @@ export function compileBrowserExecution(raw: unknown): BrowserPlan {
   }
 }
 function validatePlan(plan: BrowserPlan): BrowserPlan {
-  if (
-    plan.steps.filter((step) => step.action === 'screenshot').length > 4 ||
-    plan.steps.some(
-      (step) =>
-        step.action === 'goto' && new URL(step.url).origin !== plan.page.origin,
-    )
-  )
+  if (plan.steps.filter((step) => step.action === 'screenshot').length > 4)
     throw denied()
   return plan
 }

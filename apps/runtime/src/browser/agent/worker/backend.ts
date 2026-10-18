@@ -1,7 +1,8 @@
 import type { EmbeddedConnection } from '../embedded/connection.js'
-import { automationTarget } from './automation/targets.js'
 import { executeBrowserPlan } from './automation/execute.js'
 import { launchAgentBrowser } from './launch.js'
+import { browserFailure } from './errors.js'
+import { navigateBrowserPage } from './navigation.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -20,7 +21,6 @@ import {
   type AgentBrowserDisplay,
   type AgentBrowserLaunch,
 } from '@reflexion-os-studio/contracts'
-import { allowedRequest } from '../security/network.js'
 import { observeBrowserPage } from './observation.js'
 
 export class PlaywrightBackend {
@@ -30,13 +30,9 @@ export class PlaywrightBackend {
   private server:
     Awaited<ReturnType<typeof connectBrowserMcp>>['server'] | null = null
   private document: AgentBrowserDocument | null = null
-  private digest: string | null = null
-  private readVersion: string | null = null
+  private tabId: string | null = null
   private generation = 0
   private output: string | null = null
-  private origin: string | null = null
-  private interacting = false
-  private interactionBlocked = false
 
   constructor(
     private readonly display: AgentBrowserDisplay = 'headless',
@@ -55,25 +51,17 @@ export class PlaywrightBackend {
     if (this.embedded?.paused) throw new Error('browser_user_control')
     if (!isSafeAgentBrowserUrl(url)) throw new Error('browser_url_denied')
     if (from) await this.assertCurrent(from)
-    const origin = new URL(url).origin
-    if (this.origin === origin && this.embedded?.hasPage)
-      await this.syncEmbedded()
+    if (this.embedded?.hasPage) await this.syncEmbedded()
     const reusable =
-      this.origin === origin &&
       (this.embedded?.hasPage || this.browser?.isConnected()) &&
       this.context?.pages().some((page) => !page.isClosed()) &&
       this.client
     if (!reusable) await this.close()
-    if (reusable) await this.embedded?.assertControl()
     const generation = this.generation
-    this.origin = origin
-    this.document = null
-    this.digest = null
-    this.readVersion = null
     try {
       if (!reusable) {
         if (this.embedded) {
-          const connection = await this.embedded.open(origin)
+          const connection = await this.embedded.open(new URL(url).origin)
           this.browser = connection.browser
           this.context = connection.context
         } else {
@@ -98,52 +86,35 @@ export class PlaywrightBackend {
           if (generation !== this.generation) throw new Error('browser_closed')
           this.context = await this.browser.newContext({
             acceptDownloads: false,
-            serviceWorkers: 'block',
             permissions: [],
           })
         }
-        const context = this.context
-        await this.guardContext(context, origin)
+        this.tabId = randomUUID()
+        this.watchContext(this.context)
         this.output = await mkdtemp(join(tmpdir(), 'reflexion-playwright-'))
-        const connection = await connectBrowserMcp(context, this.output)
+        const connection = await connectBrowserMcp(this.context, this.output)
         this.server = connection.server
         this.client = connection.client
-        if (generation !== this.generation) throw new Error('browser_closed')
       }
+      if (generation !== this.generation) throw new Error('browser_closed')
       if (!(this.embedded?.rebound && this.context?.pages()[0]?.url() === url))
-        await this.call('browser_navigate', { url })
+        await navigateBrowserPage(this.context!, url)
       if (this.embedded) this.embedded.rebound = false
-      const observed = await this.observe()
-      if (
-        generation !== this.generation ||
-        new URL(observed.sourceUrl).origin !== origin
-      )
-        throw new Error('browser_source_changed')
-      const { digest, ...document } = observed
-      this.document = {
-        ...document,
-        page: { tabId: randomUUID(), origin, pageVersion: randomUUID() },
-      }
-      this.digest = digest
-      return {
-        page: this.document.page,
-        sourceUrl: this.document.sourceUrl,
-        title: this.document.title,
-        truncated: this.document.truncated,
-        injectionWarning: this.document.injectionWarning,
-      }
+      const document = await this.capture()
+      if (generation !== this.generation) throw new Error('browser_closed')
+      return this.metadata(document)
     } catch (error) {
       if (this.embedded?.paused) throw new Error('browser_user_control')
-      await this.close()
-      throw error
+      // A failed navigation does not destroy a recoverable tab or its session.
+      if (!this.context?.pages().some((page) => !page.isClosed()))
+        await this.close()
+      throw browserFailure(error)
     }
   }
 
   async read(page: AgentBrowserPage): Promise<AgentBrowserDocument> {
     await this.assertCurrent(page)
-    if (!this.document) throw new Error('browser_page_stale')
-    this.readVersion = page.pageVersion
-    return this.document
+    return this.capture()
   }
 
   async interact(
@@ -153,19 +124,6 @@ export class PlaywrightBackend {
     const typing =
       operation === 'type' ? AgentBrowserTypeSchema.parse(args) : null
     const input = typing ?? AgentBrowserClickSchema.parse(args)
-    if (this.readVersion !== input.page.pageVersion)
-      throw new Error('browser_page_stale')
-    await this.assertCurrent(input.page)
-    const browserPage = this.context?.pages()[0]
-    if (!browserPage || !this.document?.snapshot)
-      throw new Error('browser_page_stale')
-    await automationTarget(
-      browserPage,
-      this.document.snapshot,
-      { ref: input.ref, name: input.element },
-      !!typing,
-      typing?.submit ?? false,
-    )
     const result = await this.execute({
       mode: 'actions',
       page: input.page,
@@ -179,57 +137,42 @@ export class PlaywrightBackend {
     })
     if (result.error || !result.document)
       throw new Error(result.error ?? 'browser_interaction_failed')
-    const { page, sourceUrl, title, truncated, injectionWarning } =
-      result.document
-    return { page, sourceUrl, title, truncated, injectionWarning }
+    return this.metadata(result.document)
   }
 
   async execute(raw: unknown) {
     const plan = BrowserPlanSchema.parse(raw)
     await this.assertCurrent(plan.page)
+    // AX references belong to the observed document, not a later navigation.
+    const hasRef = plan.steps.some(
+      (step) =>
+        ('target' in step && step.target && 'ref' in step.target) ||
+        ('source' in step && 'ref' in step.source),
+    )
+    if (
+      hasRef &&
+      (plan.page.pageVersion !== this.document?.page.pageVersion ||
+        this.document?.sourceUrl !== this.context?.pages()[0]?.url())
+    )
+      throw new Error('browser_page_stale')
     const generation = this.generation
-    this.interacting = true
-    this.interactionBlocked = false
-    try {
-      return await executeBrowserPlan(plan, {
-        page: () => this.context?.pages()[0],
-        capture: async () => {
-          await this.embedded?.assertControl()
-          const { digest, ...document } = await this.observe()
-          this.document = {
-            ...document,
-            page: {
-              tabId: this.document?.page.tabId ?? plan.page.tabId,
-              origin: plan.page.origin,
-              pageVersion: randomUUID(),
-            },
-          }
-          this.digest = digest
-          this.readVersion = this.document.page.pageVersion
-          return this.document
-        },
-        navigate: (url) => this.navigate(url),
-        blocked: () => this.interactionBlocked,
-        current: () => generation === this.generation,
-        invalidate: () => {
-          this.document = null
-          this.digest = null
-          this.readVersion = null
-        },
-        close: () => this.close(),
-      })
-    } finally {
-      this.interacting = false
-    }
+    return executeBrowserPlan(plan, {
+      page: () => this.context?.pages()[0],
+      capture: () => this.capture(),
+      navigate: (url) => this.navigate(url),
+      blocked: () => false,
+      current: () => generation === this.generation && !this.embedded?.paused,
+      // Keep tab ownership and the last observation for read-based recovery.
+      invalidate: () => {},
+      close: () => this.close(),
+    })
   }
 
   async close(page?: AgentBrowserPage): Promise<void> {
     if (page) this.assertIdentity(page)
     ++this.generation
     this.document = null
-    this.digest = null
-    this.readVersion = null
-    this.origin = null
+    this.tabId = null
     const [client, server, browser] = [this.client, this.server, this.browser]
     this.client = null
     this.server = null
@@ -246,23 +189,7 @@ export class PlaywrightBackend {
     if (output) await rm(output, { recursive: true, force: true })
   }
 
-  private async guardContext(
-    context: BrowserContext,
-    origin: string,
-  ): Promise<void> {
-    await context.route('**/*', async (route) => {
-      try {
-        const request = route.request()
-        if (!allowedRequest(origin, request.url(), request.method())) {
-          if (this.interacting) this.interactionBlocked = true
-          await route.abort('blockedbyclient')
-        } else await route.continue()
-      } catch {
-        // A handoff or cancellation can disconnect an intercepted request.
-        await route.abort('blockedbyclient').catch(() => {})
-      }
-    })
-    await context.routeWebSocket('**/*', (socket) => socket.close())
+  private watchContext(context: BrowserContext): void {
     const watch = (page: ReturnType<BrowserContext['pages']>[number]) => {
       page.on('download', (download) => void download.cancel().catch(() => {}))
     }
@@ -280,35 +207,46 @@ export class PlaywrightBackend {
       await Promise.allSettled([this.client?.close(), this.server?.close()])
       this.browser = connection.browser
       this.context = connection.context
-      if (!this.origin) throw new Error('browser_closed')
-      await this.guardContext(this.context, this.origin)
+      this.watchContext(this.context)
       if (!this.output)
         this.output = await mkdtemp(join(tmpdir(), 'reflexion-playwright-'))
       const mcp = await connectBrowserMcp(this.context, this.output)
       this.client = mcp.client
       this.server = mcp.server
-      this.readVersion = null
     }
   }
   private assertIdentity(page: AgentBrowserPage): void {
-    const parsed = AgentBrowserPageSchema.parse(page)
-    if (
-      !this.document ||
-      JSON.stringify(parsed) !== JSON.stringify(this.document.page)
-    )
+    if (AgentBrowserPageSchema.parse(page).tabId !== this.tabId)
       throw new Error('browser_page_stale')
   }
   private async assertCurrent(page: AgentBrowserPage): Promise<void> {
     await this.syncEmbedded()
     this.assertIdentity(page)
-    const observed = await this.observe()
-    this.assertIdentity(page)
-    if (observed.digest !== this.digest) throw new Error('browser_page_stale')
+    if (!this.context?.pages().some((page) => !page.isClosed()))
+      throw new Error('browser_closed')
   }
-  private observe() {
-    return observeBrowserPage(this.context, this.origin, (name, args) =>
+  private async capture(): Promise<AgentBrowserDocument> {
+    await this.embedded?.assertControl()
+    const generation = this.generation
+    const document = await observeBrowserPage(this.context, (name, args) =>
       this.call(name, args),
     )
+    if (!this.tabId || generation !== this.generation)
+      throw new Error('browser_closed')
+    this.document = {
+      ...document,
+      page: {
+        tabId: this.tabId,
+        origin: new URL(document.sourceUrl).origin,
+        pageVersion: randomUUID(),
+      },
+    }
+    return this.document
+  }
+  private metadata(document: AgentBrowserDocument): AgentBrowserDocument {
+    const metadata = { ...document }
+    delete metadata.snapshot
+    return metadata
   }
   private async call(
     name: string,
@@ -316,11 +254,13 @@ export class PlaywrightBackend {
   ): Promise<string> {
     if (!this.client) throw new Error('browser_closed')
     const result = await this.client.callTool({ name, arguments: args })
-    if (result.isError || !Array.isArray(result.content))
-      throw new Error('browser_operation_failed')
-    return result.content
+    if (!Array.isArray(result.content))
+      throw new Error('browser_response_invalid')
+    const text = result.content
       .filter((item) => item.type === 'text')
       .map((item) => item.text)
       .join('\n')
+    if (result.isError) throw browserFailure(text)
+    return text
   }
 }

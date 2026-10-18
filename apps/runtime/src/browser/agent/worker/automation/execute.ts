@@ -6,6 +6,7 @@ import {
   type BrowserPlan,
 } from '@reflexion-os-studio/contracts'
 import { runBrowserStep } from './actions.js'
+import { browserFailure } from '../errors.js'
 
 export interface AutomationContext {
   page: () => Page | undefined
@@ -23,6 +24,9 @@ export async function executeBrowserPlan(
   context: AutomationContext,
 ): Promise<BrowserExecutionResult> {
   let completed = 0
+  let failedStep = 0
+  let failurePhase: 'before-action' | 'action' | 'after-action' =
+    'before-action'
   let document: AgentBrowserDocument | null = null
   const screenshots: BrowserExecutionResult['screenshots'] = []
   let closing: Promise<void> | undefined
@@ -36,38 +40,47 @@ export async function executeBrowserPlan(
     if (!context.current()) throw new Error('browser_page_stale')
     if (context.blocked()) throw new Error('browser_interaction_network_denied')
   }
+  const referenceUrl = context.page()?.url()
   const execute = async () => {
-    for (const step of plan.steps) {
-      check()
-      document = await context.capture()
+    for (const [index, step] of plan.steps.entries()) {
+      failedStep = index
+      failurePhase = 'before-action'
       check()
       const page = context.page()
-      if (!page || !document.snapshot) throw new Error('browser_page_stale')
+      if (!page) throw new Error('browser_closed')
+      // Waiting and navigation must work even while the old page is loading.
+      if (step.action !== 'wait' && step.action !== 'goto') {
+        document = await context.capture()
+        check()
+        const usesRef =
+          ('target' in step && step.target && 'ref' in step.target) ||
+          ('source' in step && 'ref' in step.source)
+        if (usesRef && document.sourceUrl !== referenceUrl)
+          throw new Error('browser_page_stale')
+      }
+      const sourceUrl = page.url()
+      failurePhase = 'action'
       const image = await runBrowserStep(
         page,
-        document.snapshot,
         step,
         context.navigate,
         Math.min(5000, deadline - Date.now()),
       )
+      completed++
+      failurePhase = 'after-action'
       check()
       const after = await context.capture()
       check()
-      if (
-        image &&
-        (after.sourceUrl !== document.sourceUrl ||
-          after.snapshot !== document.snapshot)
-      )
-        throw new Error('browser_page_stale')
+      if (image && after.sourceUrl !== sourceUrl)
+        throw new Error('browser_page_loading')
       document = after
       if (image)
         screenshots.push({
-          step: completed,
+          step: index,
           image,
           page: after.page,
           sourceUrl: after.sourceUrl,
         })
-      completed++
     }
   }
   try {
@@ -88,8 +101,8 @@ export async function executeBrowserPlan(
       : context.blocked()
         ? 'browser_interaction_network_denied'
         : error instanceof Error
-          ? error.message
-          : ''
+          ? browserFailure(error).message
+          : 'browser_interaction_failed'
     const parsed = BrowserExecutionResultSchema.shape.error.safeParse(
       code === 'browser_operation_failed' ? 'browser_interaction_failed' : code,
     )
@@ -102,7 +115,8 @@ export async function executeBrowserPlan(
     return {
       document: null,
       completed,
-      failedStep: Math.min(completed, 19),
+      failedStep,
+      failurePhase,
       error: safe,
       screenshots: [...screenshots],
     }

@@ -40,6 +40,7 @@ export function BrowserSurfacePanel({
   const activeTab = state?.tabs.find((tab) => tab.id === state.activeTabId)
   const agentTab =
     activeTab?.control === 'agent' || activeTab?.control === 'paused'
+  const agentLocked = activeTab?.control === 'agent'
   const [findOpen, setFindOpen] = useState(false)
   const [find, setFind] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
@@ -140,7 +141,7 @@ export function BrowserSurfacePanel({
             className="browser-icon-button"
             title="后退"
             aria-label="后退"
-            disabled={agentTab || !state?.canGoBack}
+            disabled={agentLocked || !state?.canGoBack}
             onClick={() => void control({ kind: 'back' })}
           >
             <BrowserIcon name="back" />
@@ -150,7 +151,7 @@ export function BrowserSurfacePanel({
             className="browser-icon-button"
             title="前进"
             aria-label="前进"
-            disabled={agentTab || !state?.canGoForward}
+            disabled={agentLocked || !state?.canGoForward}
             onClick={() => void control({ kind: 'forward' })}
           >
             <BrowserIcon name="forward" />
@@ -160,7 +161,7 @@ export function BrowserSurfacePanel({
             className="browser-icon-button"
             title={busy ? '停止' : '刷新或重试'}
             aria-label={busy ? '停止加载' : '刷新'}
-            disabled={agentTab || !state?.available || !state.url}
+            disabled={agentLocked || !state?.available || !state.url}
             onClick={() => {
               if (state?.status === 'failed' && state.url)
                 void navigate(state.url)
@@ -174,7 +175,7 @@ export function BrowserSurfacePanel({
             className="browser-icon-button"
             title="主页"
             aria-label="主页"
-            disabled={agentTab || !state?.available}
+            disabled={agentLocked || !state?.available}
             onClick={() => {
               const url = browserHomeUrl(settings)
               if (url) void navigate(url)
@@ -188,7 +189,7 @@ export function BrowserSurfacePanel({
           className="browser-address"
           onSubmit={(event) => {
             event.preventDefault()
-            if (!agentTab && address.trim()) {
+            if (!agentLocked && address.trim()) {
               const input = event.currentTarget.querySelector('input')
               void navigate(address).then(() => input?.blur())
             }
@@ -202,7 +203,7 @@ export function BrowserSurfacePanel({
               </span>
             )}
           <input
-            readOnly={agentTab}
+            readOnly={agentLocked}
             aria-label="网址"
             value={
               !addressFocused &&

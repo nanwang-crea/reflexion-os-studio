@@ -97,3 +97,9 @@ debug 验收 driver 可额外设置 `CEF_ACCEPTANCE_NETWORK_URL=https://www.baid
 本轮只使用合成页面与合成输入验证，不读取真实凭据或个人浏览器资料。三平台复用契约与 Runtime 实现；Windows/Linux 真机交互仍待验收。
 
 本轮最终验证：format、lint、根级/桌面类型检查与完整 `pnpm test` 通过（Runtime 754 pass / 4 Windows skip、前端 85、System Runtime 237、终端故障矩阵 26/26）；两个 Cargo 格式检查与宿主 cargo check 通过；macOS app/ARM64 DMG 及包内 workspace 冒烟通过。合成有头/无头页面均验证密码与验证码输入、同源 GET 登录表单；尚未验证真实网站登录、Windows/Linux 真机与本轮长稳。
+
+## 2026-10-18 可见浏览器操作
+
+按用户明确决定，移除整页摘要冻结、跨站与请求方法限制。read 原地获取动态快照；标签身份跨导航保留，临时会话不会因换来源重建。正常资源、POST 表单、重定向、WebSocket 与 Service Worker 交给 Chromium。CEF 保留内部应用来源和非网页主导航限制，允许 blob/data 子资源。Agent 新标签链接和 CEF HTTP 弹窗目标复用当前可见租约；用户接管后允许地址栏和历史导航。
+
+导航失败等待 Chromium 在途错误页提交后返回分类结果，不重试、不关闭可恢复标签。执行结果 failurePhase 区分动作前、动作中与动作后观测失败；completed 记录已执行动作，避免把读取失败当作未提交。wait/goto 不依赖旧页面先能抓取快照。新设置默认可见模式，已有显式设置保留。脚本仍是有界动作语言，未增加任意 JS、宿主文件、其他会话或上下文存储访问。

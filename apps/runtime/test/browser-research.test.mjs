@@ -122,7 +122,10 @@ test('browser research gets a rendered search link and then reads the actual sou
     assert.match(results.snapshot, /Actual research source/)
     assert.ok(results.snapshot.includes('/article'))
     const source = await backend.navigate(`${origin}/article`)
-    await assert.rejects(backend.read(search.page), /browser_page_stale/)
+    assert.match(
+      (await backend.read(search.page)).snapshot,
+      /verified count is 42/,
+    )
     assert.match(
       (await backend.read(source.page)).snapshot,
       /verified count is 42/,
