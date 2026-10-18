@@ -1,4 +1,3 @@
-import { RequestAttempts } from './RequestAttempts'
 import { MessageImage } from '../images/MessageImage'
 import { memo, useMemo } from 'react'
 import type {
@@ -132,7 +131,6 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
           ))}
       </div>
       <div className="assistant-main">
-        <RequestAttempts message={props.message} />
         {reasoningText !== '' && !props.hideReasoning && (
           <ReasoningBlock
             text={reasoningText}

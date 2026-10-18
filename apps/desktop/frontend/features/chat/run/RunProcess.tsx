@@ -1,4 +1,3 @@
-import { RequestAttempts } from '../message/RequestAttempts'
 import type {
   Message,
   ResourceLink,
@@ -29,29 +28,17 @@ export function RunProcess(props: RunProcessProps): React.JSX.Element {
     reasoning: string
     thinking: boolean
     calls: ToolCall[]
-    attemptMessages: Message[]
   }> = []
   for (const { message, toolCalls } of props.items) {
     const text = props.reasoningOnlyMessageIds?.has(message.id)
       ? ''
       : (props.streaming[message.id] ?? message.content)
     const reasoning = props.streamingReasoning[message.id] ?? message.reasoning
-    const attemptMessages =
-      !props.reasoningOnlyMessageIds?.has(message.id) &&
-      message.requestAttempts?.length
-        ? [message]
-        : []
     const previous = parts.at(-1)
     // Only invisible message boundaries can be merged; commentary keeps its place.
     if (text === '' && reasoning === '' && previous) {
       previous.calls.push(...toolCalls)
-      previous.attemptMessages.push(...attemptMessages)
-    } else if (
-      text !== '' ||
-      reasoning !== '' ||
-      toolCalls.length > 0 ||
-      attemptMessages.length > 0
-    ) {
+    } else if (text !== '' || reasoning !== '' || toolCalls.length > 0) {
       parts.push({
         key: message.id,
         text,
@@ -59,7 +46,6 @@ export function RunProcess(props: RunProcessProps): React.JSX.Element {
         thinking:
           props.runActive && props.streamingReasoning[message.id] !== undefined,
         calls: [...toolCalls],
-        attemptMessages,
       })
     }
   }
@@ -79,9 +65,6 @@ export function RunProcess(props: RunProcessProps): React.JSX.Element {
             </div>
           )}
           <ToolTrace calls={part.calls} runActive={props.runActive} />
-          {part.attemptMessages.map((message) => (
-            <RequestAttempts key={message.id} message={message} />
-          ))}
         </div>
       ))}
     </div>
