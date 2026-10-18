@@ -48,7 +48,7 @@ test('interaction admission accepts arbitrary text but denies selector injection
       redactBrowserCalls([
         { id: 'bad', name: 'browser.type', arguments: JSON.stringify(args) },
       ])[0].arguments,
-      '{}',
+      JSON.stringify(args),
     )
   }
   const base = { ...target, text: 'public query', submit: false }
@@ -62,9 +62,10 @@ test('interaction admission accepts arbitrary text but denies selector injection
     assert.notEqual(buildApprovalSubject('browser.type', args).digest, digest)
 })
 
-for (const operation of ['click', 'type', 'execute']) {
+for (const operationCase of ['click', 'type', 'type-default', 'execute']) {
+  const operation = operationCase === 'type-default' ? 'type' : operationCase
   for (const choice of ['allow-once', 'deny']) {
-    test(`${operation} ${choice}: always asks even with automatic read-only, full permissions and Danger`, async () => {
+    test(`${operationCase} ${choice}: always asks even with automatic read-only, full permissions and Danger`, async () => {
       const root = mkdtempSync(join(tmpdir(), 'browser-action-approval-'))
       const store = new Store(root)
       const session = store.sessions.create(null)
@@ -105,7 +106,11 @@ for (const operation of ['click', 'type', 'execute']) {
           ? { mode: 'script', page, script: 'await page.mouse.wheel(0, 500)' }
           : operation === 'click'
             ? target
-            : { ...target, text: 'public query', submit: true }
+            : {
+                ...target,
+                text: 'public query',
+                ...(operationCase === 'type-default' ? {} : { submit: true }),
+              }
       const gate = new PermissionGate({
         preset: 'workspace-full',
         hasWorkspace: false,

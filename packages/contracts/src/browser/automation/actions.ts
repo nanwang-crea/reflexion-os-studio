@@ -1,5 +1,9 @@
 import { z } from 'zod'
-import { AgentBrowserPageSchema, AgentBrowserUrlSchema } from '../agent.js'
+import {
+  AgentBrowserPageSchema,
+  AgentBrowserUrlSchema,
+  AgentBrowserPageExample,
+} from '../agent.js'
 
 const text = z.string().max(10000)
 export const BrowserTargetSchema = z.union([
@@ -112,27 +116,55 @@ export const BrowserPlanSchema = z
         message: '最多4张截图',
       })
   })
+const BrowserScriptSchema = z.strictObject({
+  ...common,
+  mode: z.literal('script'),
+  script: z.string().min(1).max(20000),
+})
 export const BrowserExecuteSchema = z.discriminatedUnion('mode', [
   BrowserPlanSchema,
-  z.strictObject({
-    ...common,
-    mode: z.literal('script'),
-    script: z.string().min(1).max(20000),
-  }),
+  BrowserScriptSchema,
 ])
 export type BrowserStep = z.infer<typeof BrowserStepSchema>
 export type BrowserPlan = z.infer<typeof BrowserPlanSchema>
 export type BrowserTarget = z.infer<typeof BrowserTargetSchema>
-export const BrowserExecuteJsonSchema = z.toJSONSchema(BrowserExecuteSchema, {
-  io: 'input',
-  override: ({ jsonSchema }) => {
-    delete jsonSchema.format
-  },
-})
+function inputJsonSchema(schema: z.ZodType) {
+  return z.toJSONSchema(schema, {
+    io: 'input',
+    override: ({ jsonSchema }) => {
+      delete jsonSchema.format
+    },
+  })
+}
+export const BrowserExecuteJsonSchema = inputJsonSchema(BrowserExecuteSchema)
 BrowserExecuteJsonSchema.type = 'object'
-export const BrowserPlanJsonSchema = z.toJSONSchema(BrowserPlanSchema, {
-  io: 'input',
-  override: ({ jsonSchema }) => {
-    delete jsonSchema.format
-  },
-})
+// 与分支使用同一 Zod 字段，兼容只读取顶层 properties 的模型服务。
+BrowserExecuteJsonSchema.properties = {
+  ...inputJsonSchema(BrowserPlanSchema).properties,
+  ...inputJsonSchema(BrowserScriptSchema).properties,
+  mode: inputJsonSchema(
+    z.enum([
+      BrowserPlanSchema.shape.mode.value,
+      BrowserScriptSchema.shape.mode.value,
+    ]),
+  ),
+}
+BrowserExecuteJsonSchema.required = ['page', 'mode']
+BrowserExecuteJsonSchema.description =
+  '完整 arguments 必须包含 page 和 mode。page 复制最近导航/读取返回的真实 page（不要使用示例 ID）；mode=actions 时传 steps，mode=script 时传 script，两种格式不能混用。脚本仅支持工具说明列出的语法，不能当作任意 Playwright/JavaScript 执行器。'
+BrowserExecuteJsonSchema.examples = [
+  BrowserExecuteSchema.parse({
+    page: AgentBrowserPageExample,
+    mode: 'actions',
+    steps: [
+      { action: 'click', target: { role: 'button', name: '搜索' } },
+      { action: 'read' },
+    ],
+  }),
+  BrowserExecuteSchema.parse({
+    page: AgentBrowserPageExample,
+    mode: 'script',
+    script: "await page.getByRole('button', { name: '搜索' }).click();",
+  }),
+]
+export const BrowserPlanJsonSchema = inputJsonSchema(BrowserPlanSchema)

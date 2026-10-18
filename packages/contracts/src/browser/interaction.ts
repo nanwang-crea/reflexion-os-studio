@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { AgentBrowserPageSchema } from './agent.js'
+import { AgentBrowserPageSchema, AgentBrowserPageExample } from './agent.js'
 
 export const AgentBrowserTargetSchema = z.strictObject({
   page: AgentBrowserPageSchema,
@@ -34,6 +34,7 @@ export type AgentBrowserType = z.infer<typeof AgentBrowserTypeSchema>
 export const AgentBrowserClickJsonSchema = z.toJSONSchema(
   AgentBrowserClickSchema,
   {
+    io: 'input',
     override: ({ jsonSchema }) => {
       delete jsonSchema.format
     },
@@ -42,8 +43,30 @@ export const AgentBrowserClickJsonSchema = z.toJSONSchema(
 export const AgentBrowserTypeJsonSchema = z.toJSONSchema(
   AgentBrowserTypeSchema,
   {
+    io: 'input',
     override: ({ jsonSchema }) => {
       delete jsonSchema.format
     },
   },
 )
+
+AgentBrowserClickJsonSchema.description =
+  '必须传 page、ref、element；page 和 ref 来自最新 browser.read，element 是给用户看的控件描述。'
+AgentBrowserClickJsonSchema.examples = [
+  AgentBrowserClickSchema.parse({
+    page: AgentBrowserPageExample,
+    ref: 'e1',
+    element: '搜索按钮',
+  }),
+]
+AgentBrowserTypeJsonSchema.description =
+  '必须传 page、ref、element、text；page/ref 来自最新读取。submit=true 会按 Enter，请先确认是否需要提交。'
+AgentBrowserTypeJsonSchema.examples = [
+  AgentBrowserTypeSchema.parse({
+    page: AgentBrowserPageExample,
+    ref: 'e1',
+    element: '搜索框',
+    text: '北京旅游',
+    submit: true,
+  }),
+]

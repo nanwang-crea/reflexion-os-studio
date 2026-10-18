@@ -69,7 +69,8 @@ export class ToolRegistry {
       return {
         ok: false,
         result: {
-          content: `invalid tool arguments (not valid JSON): ${truncate(request.arguments)}`,
+          content:
+            'invalid tool arguments (not valid JSON): arguments 必须是完整 JSON 对象，不要使用 Markdown 代码围栏或只在正文描述参数。',
           isError: true,
           code: 'invalid_request',
         },
@@ -78,9 +79,13 @@ export class ToolRegistry {
     const validator = this.validators.get(request.name)!
     if (!validator(args)) {
       const issues = (validator.errors ?? []).map((error) => {
-        const path = error.instancePath
+        let path = error.instancePath
           ? `$${error.instancePath.replaceAll('/', '.')}`
           : '$'
+        if (error.keyword === 'required')
+          path += `.${error.params.missingProperty}`
+        if (error.keyword === 'additionalProperties')
+          path += `.${error.params.additionalProperty}`
         const message = (error.message ?? 'is invalid').replace(
           /^must be (string|number|integer|object|array|boolean|null)$/,
           'must be a $1',
@@ -103,11 +108,11 @@ export class ToolRegistry {
       const hint =
         example === undefined
           ? ''
-          : `。请在工具调用的 arguments 中提交完整 JSON，不能只在正文描述参数；按真实文件和已读原文替换此结构示例：${truncate(JSON.stringify(example), 800)}。不要原样重试无效参数。`
+          : `。请在工具调用的 arguments 中提交完整 JSON，不能只在正文描述参数；按当前任务的真实信息替换示例值（标识和路径不能照抄）：${truncate(JSON.stringify(example), 800)}。不要原样重试无效参数。`
       return {
         ok: false,
         result: {
-          content: `invalid tool arguments: ${issues.slice(0, 4).join('; ')}${guidance}${hint}`,
+          content: `invalid tool arguments: ${[...new Set(issues)].slice(0, 4).join('; ')}${guidance}${hint}`,
           isError: true,
           code: 'invalid_request',
         },

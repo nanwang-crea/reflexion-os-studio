@@ -22,11 +22,20 @@ export function isSafeAgentBrowserUrl(value: string): boolean {
 export const AgentBrowserUrlSchema = z
   .string()
   .max(2048)
-  .refine(isSafeAgentBrowserUrl)
+  .refine(
+    isSafeAgentBrowserUrl,
+    '请使用不含用户名/密码的完整 HTTP(S) URL，不支持 file: 等协议或控制字符',
+  )
 export const AgentBrowserPageSchema = z.strictObject({
-  tabId: z.uuid(),
+  tabId: z
+    .uuid()
+    .describe(
+      '复制 browser.navigate 或 browser.read 返回的 page.tabId，不要自行生成',
+    ),
   origin: z.url().refine((value) => new URL(value).origin === value),
-  pageVersion: z.uuid(),
+  pageVersion: z
+    .uuid()
+    .describe('复制返回的 page.pageVersion；控件操作前读取最新快照'),
 })
 export type AgentBrowserPage = z.infer<typeof AgentBrowserPageSchema>
 export const AgentBrowserNavigateSchema = z.strictObject({
@@ -51,6 +60,12 @@ export const AgentBrowserOperationSchema = z.enum([
   'browser.execute',
 ])
 
+export const AgentBrowserPageExample = AgentBrowserPageSchema.parse({
+  tabId: '11111111-1111-4111-8111-111111111111',
+  origin: 'https://example.com',
+  pageVersion: '22222222-2222-4222-8222-222222222222',
+})
+
 export const AgentBrowserNavigateJsonSchema = z.toJSONSchema(
   AgentBrowserNavigateSchema,
   {
@@ -67,3 +82,10 @@ export const AgentBrowserPageJsonSchema = z.toJSONSchema(
     },
   },
 )
+
+AgentBrowserNavigateJsonSchema.description =
+  '必须传 url；首次导航不要编造 from。地址使用纯 URL，不要传 Markdown 链接。'
+AgentBrowserNavigateJsonSchema.examples = [{ url: 'https://example.com/' }]
+AgentBrowserPageJsonSchema.description =
+  'browser.read/close 在顶层直接传 tabId、origin、pageVersion，复制最近返回的 page 三个字段；不要再嵌套一层 page。示例 ID 不能用于真实调用。'
+AgentBrowserPageJsonSchema.examples = [AgentBrowserPageExample]

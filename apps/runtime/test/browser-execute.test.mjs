@@ -47,7 +47,7 @@ test('scripts compile Playwright locators, constants and bounded loops to exact 
       redactBrowserCalls([
         { id: 'x', name: 'browser.execute', arguments: JSON.stringify(args) },
       ])[0].arguments,
-      '{}',
+      JSON.stringify(args),
     )
   }
 })
@@ -171,7 +171,10 @@ test('partial failure stops remaining steps, keeps window, and timeout prevents 
     ],
   })
   assert.equal(timeout.error, 'browser_plan_timeout')
-  assert.equal(timeout.completed, 0)
+  // Under scheduling delays the wait may finish before the timeout callback runs.
+  // Its completion is valid accounting; the following click must never begin.
+  assert.ok(timeout.completed <= 1)
+  assert.equal(timeout.failedStep, 0)
   assert.equal(f.backend.context === null, true)
 })
 

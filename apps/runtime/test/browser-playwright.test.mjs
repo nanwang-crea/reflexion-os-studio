@@ -24,7 +24,7 @@ const page = () => ({
   pageVersion: randomUUID(),
 })
 
-test('browser URL admission rejects URL userinfo and unsafe protocols before persistence', () => {
+test('browser URL admission rejects URL userinfo and unsafe protocols without erasing unrelated diagnostics', () => {
   for (const url of ['file:///tmp/a', 'https://user:sample@example.com']) {
     assert.equal(validBrowserArgs('browser.navigate', { url }), false, url)
     assert.equal(
@@ -35,7 +35,9 @@ test('browser URL admission rejects URL userinfo and unsafe protocols before per
           arguments: JSON.stringify({ url }),
         },
       ])[0].arguments,
-      '{}',
+      JSON.stringify({
+        url: url.includes('@') ? 'https://redacted:redacted@example.com/' : url,
+      }),
     )
   }
   for (const path of [
