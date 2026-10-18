@@ -47,6 +47,7 @@ export const ROLE_TOOL_GROUPS = [
     title: '辅助能力',
     tools: [
       ['get_current_time', '获取时间'],
+      ['task.inspect', '查看委派进展与记录'],
       ['skill.use', '加载技能'],
       ['ask_user', '向用户提问'],
     ],

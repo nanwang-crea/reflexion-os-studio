@@ -6,6 +6,7 @@ type BuiltinAgentDefinition = Pick<
 >
 
 const READ_TOOLS = [
+  'task.inspect',
   'get_current_time',
   'web.fetch',
   'skill.use',

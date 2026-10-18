@@ -22,6 +22,7 @@ export const emptyRole: RoleDraft = {
   permissionCeiling: 'workspace-read',
   canDelegate: false,
   allowedTools: [
+    'task.inspect',
     'get_current_time',
     'web.fetch',
     'skill.use',

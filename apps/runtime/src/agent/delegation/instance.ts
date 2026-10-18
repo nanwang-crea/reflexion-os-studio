@@ -1,3 +1,4 @@
+import { TASK_INSPECTION_GUIDANCE } from '../prompts/task-inspection.js'
 import { randomUUID } from 'node:crypto'
 import type {
   AgentInstance,
@@ -7,6 +8,7 @@ import type {
 } from '@reflexion-os-studio/contracts'
 
 export const INHERITABLE_CHILD_TOOLS = [
+  'task.inspect',
   'get_current_time',
   'web.fetch',
   'browser.navigate',
@@ -78,6 +80,7 @@ export function createAgentInstance(input: {
     input.template?.systemPrompt,
     input.spawn.role ? `Role: ${input.spawn.role}` : undefined,
     input.spawn.instructions,
+    allowedTools.has('task.inspect') ? TASK_INSPECTION_GUIDANCE : undefined,
     'Complete only the assigned task. Report evidence, actions, and unresolved risks concisely.',
     input.skillInstructions,
   ].filter((part): part is string => Boolean(part))

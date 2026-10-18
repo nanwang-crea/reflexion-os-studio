@@ -1,3 +1,4 @@
+export * from './task-inspection.js'
 export * from './images.js'
 export * from './agent-teams.js'
 export * from './skill-authoring.js'

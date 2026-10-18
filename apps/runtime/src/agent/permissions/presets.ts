@@ -67,6 +67,7 @@ export function isToolOperation(toolName: string): toolName is ToolOperation {
 const AUTOMATIC_OTHER_TOOLS = new Set([
   'skill.prepare',
   'agent_team.inspect',
+  'task.inspect',
   'get_current_time',
   'web.fetch',
   'skill.use',
@@ -154,6 +155,7 @@ export interface PermissionGateOptions {
 const PLAN_MODE_ALLOWED_TOOLS = new Set([
   'skill.prepare',
   'agent_team.inspect',
+  'task.inspect',
   'browser.navigate',
   'browser.read',
   'browser.close',

@@ -28,3 +28,11 @@ Delegation 写入只允许 Runtime 内部 `task` 链路；外部 `delegation.cre
 ## 回滚边界
 
 Mutation receipt 是变更归属记录，不是完整撤销日志。删除、移动和整文件覆盖若未保存 preimage，无法承诺通用一键回滚；因此当前 UI 不提供会产生错误安全感的回滚按钮。未来若开放，应先增加有大小上限、敏感路径过滤和生命周期清理的 preimage store，并让恢复操作重新经过 PermissionGate。任何扩展都不能绕过 ToolRegistry、PermissionGate、Agent Policy 或根级预算边界。
+
+## 按需查询委派记录
+
+`task.inspect` 是只读工具，不主动注入子会话全文。省略 `delegationId` 时分页列出可见委派；指定 ID 后读取已落库的用户/助手正文和 canonical ToolOutput（含工具参数、状态、错误与变更文件）。不返回 reasoning、Provider continuation、系统指令或模型配置。默认每页 5 条、每条 1000 字符；offset/limit 翻页，长条目通过 limit=1 与 textOffset/textLength 分段读取。执行中记录是查询时快照，不代表最终结论，也不保证尚未持久化的流式内容可见。
+
+根 Agent 可读取当前根会话下历次 Run 的委派树，后续轮次及应用重启后仍可查看已保存的中断记录。子 Agent 同样可查看所属根会话的历次委派树，以便新子任务接续历史中断工作，但不能读取其他根会话；不提供任意 sessionId 输入，不读取根会话正文。Runtime 从当前 Run 推导范围并再次复核目标项目。工具只读取，不恢复、不继续也不发送消息。
+
+工具受父域与模板 allowedTools 交集限制，与 canDelegate 无关；没有继续委派权限的 Agent 也可被显式授予查询能力。内置模板、新建模板默认包含该工具，既有自定义模板需要在辅助能力中勾选。计划模式允许，按既有只读内置工具免审批。工具结果照常进入 canonical ToolOutput；来源轨迹中的网页或其他外部指令仍不具有效力。
