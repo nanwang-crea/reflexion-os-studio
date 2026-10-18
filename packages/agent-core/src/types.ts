@@ -94,6 +94,8 @@ export interface ToolExecutionArgs {
 }
 
 export interface ToolResult {
+  /** 原生操作已执行或结果不明：即使整体失败，也禁止原样自动重放。 */
+  replayUnsafe?: boolean
   /** Host-projected image references; raw bytes never enter persisted tool results. */
   images?: ImagePart[]
   /** 回传给模型的文本结果；错误时为可读错误说明。 */

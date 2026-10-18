@@ -3,34 +3,20 @@ import { createHash } from 'node:crypto'
 import type { ToolCallRequest, ToolResult } from './types.js'
 
 /**
- * Loop Guard（W4）：识别重复调用与无进展循环。
- *
- * 指纹与摘要：
- * - 基础指纹 = 工具名 + canonicalJson(args)；完整指纹 = 基础指纹 + freshnessEpoch。
- * - resultDigest = status + errorCode + 模型可见结果哈希。
- *
- * freshness epoch 在以下事件后递增：mutation（write/shell/state）成功、
- * Plan 状态变化、用户发送新消息。因此"修改代码后重跑同一测试"是新指纹。
- *
- * 无进展规则（§8.2）：
- * - 相同完整只读指纹连续两次执行且结果摘要相同 → 第 3 次前注入一次反思；
- *   第 3 次不再执行，Run 以 no_progress 失败；
- * - 摘要不同（结果变化）视为进展，重新计数；
- * - 已成功的 mutation 立即拦截完全相同的重放（duplicate_side_effect），
- *   直到 freshness 因其它原因推进；模型仍重复一次则 no_progress。
+ * 四次相同结果或同资源同类失败后先返回恢复提示；忽略提示重放才终止。
+ * 成功的非幂等变更立即拒绝原样重放，防止重复副作用。
+ * freshness epoch 在成功变更、计划变化或用户新消息后递增。
  */
 export class LoopGuard {
   private readonly failures = new FailureTracker()
   private epoch = 0
-  /** 完整指纹 → 执行次数。 */
-  private readonly seen = new Map<string, number>()
-  /** 完整指纹 → 最近两次结果摘要（判定无进展用）。 */
-  private readonly digestHistory = new Map<
+  private readonly repetitions = new Map<
     string,
-    [string | undefined, string | undefined]
+    { digest: string; count: number }
   >()
-  /** 基础指纹 → 成功 mutation 绑定的 epoch（自身成功后的新 epoch）。 */
-  private readonly successfulMutations = new Map<string, number>()
+  private readonly recoveryWarnings = new Set<string>()
+  /** 基础指纹 → 已执行或结果不明的 mutation 绑定的新 epoch。 */
+  private readonly protectedMutations = new Map<string, number>()
   /** 基础指纹 → 连续被拦截次数（duplicate → no_progress 传导）。 */
   private readonly blockedMutations = new Map<string, number>()
 
@@ -62,51 +48,40 @@ export class LoopGuard {
     verdict: 'allow' | 'block'
     code?: string
     message?: string
+    terminal?: boolean
   } {
     if (this.failures.exhausted(request)) {
-      return {
-        verdict: 'block',
-        code: 'no_progress',
-        message:
-          '同一操作与资源已连续四次出现同类错误，调整参数仍未取得进展，已停止执行。',
-      }
+      return this.noProgress(
+        this.recoveryKey(request),
+        '同一操作与资源已累计四次出现同类错误。不要继续原样重试；依据错误调整策略，或向用户说明当前阻碍。',
+      )
     }
     const base = baseFingerprint(request)
-    // 已成功 mutation 的完全相同重放：freshness 未因其它原因推进 → 拦截。
-    const boundEpoch = this.successfulMutations.get(base)
+    // 已执行或结果不明 mutation 的完全相同重放：freshness 未因其它原因推进 → 拦截。
+    const boundEpoch = this.protectedMutations.get(base)
     if (boundEpoch === this.epoch) {
       if (this.blockedMutations.get(base) ?? 0) {
         // duplicate_side_effect 已回传过一次，模型仍重复 → no_progress。
         return {
           verdict: 'block',
           code: 'no_progress',
+          terminal: true,
           message:
-            '该调用已成功执行过，且模型在收到重复副作用警告后仍发起相同调用，已停止执行。',
+            '该调用已执行或结果不明，且模型在收到重复副作用警告后仍发起相同调用，已停止执行。',
         }
       }
       return {
         verdict: 'block',
         code: 'duplicate_side_effect',
-        message: `该调用已成功执行且环境未发生变化（freshness epoch ${this.epoch}），重复执行可能产生重复副作用。如确需重做，请先修改文件、执行其它变更或调整计划。`,
+        message: `该调用已执行或结果不明，且环境未发生变化（freshness epoch ${this.epoch}），重复执行可能产生重复副作用。请先检查实际结果；不要通过无关操作绕过重复保护。`,
       }
     }
-    const fp = this.fingerprint(request)
-    const count = this.seen.get(fp) ?? 0
-    if (count >= 2) {
-      const history = this.digestHistory.get(fp)
-      if (
-        history !== undefined &&
-        history[0] !== undefined &&
-        history[0] === history[1]
-      ) {
-        // 两次执行结果摘要完全相同：无进展。
-        return {
-          verdict: 'block',
-          code: 'no_progress',
-          message:
-            '检测到同一调用连续重复且结果无变化，已停止执行以避免无限循环。',
-        }
-      }
+    const repetition = this.repetitions.get(this.fingerprint(request))
+    if (repetition !== undefined && repetition.count >= 4) {
+      return this.noProgress(
+        this.recoveryKey(request),
+        '同一调用已连续四次返回相同结果。此调用未再次执行；请改变策略、等待有依据的状态变化，或向用户说明结果，不要原样重试。',
+      )
     }
     return { verdict: 'allow' }
   }
@@ -116,19 +91,23 @@ export class LoopGuard {
     request: ToolCallRequest,
     result: ToolResult,
     mutation: boolean,
+    protectReplay = mutation,
   ): { repeated: boolean } {
     this.failures.record(request, result, mutation)
     const fp = this.fingerprint(request)
     const digest = this.resultDigest(result)
-    const count = this.seen.get(fp) ?? 0
-    this.seen.set(fp, count + 1)
-    const history = this.digestHistory.get(fp) ?? [undefined, undefined]
-    const repeated = history[1] !== undefined && history[1] === digest
-    this.digestHistory.set(fp, [history[1], digest])
-    if (mutation && !result.isError) {
-      // mutation 成功：绑定"成功后的新 epoch"并推进——
+    const previous = this.repetitions.get(fp)
+    const repeated = previous?.digest === digest
+    this.repetitions.set(fp, {
+      digest,
+      count: repeated ? previous.count + 1 : 1,
+    })
+    if (mutation && (!result.isError || result.replayUnsafe)) {
+      // 成功或结果不明的 mutation 绑定新 epoch；只读核对不解除重放保护。
       // 立即重放被拦（duplicate），其它原因推进 epoch 后重跑视为新鲜。
-      this.successfulMutations.set(baseFingerprint(request), this.epoch + 1)
+      if (protectReplay) {
+        this.protectedMutations.set(baseFingerprint(request), this.epoch + 1)
+      }
       this.blockedMutations.delete(baseFingerprint(request))
       this.epoch += 1
     }
@@ -137,16 +116,36 @@ export class LoopGuard {
 
   /** 记录被拦截的调用（不执行）。duplicate 重复出现传导为 no_progress。 */
   recordBlocked(request: ToolCallRequest): void {
+    if (this.failures.exhausted(request)) {
+      this.recoveryWarnings.add(this.recoveryKey(request))
+      return
+    }
     const base = baseFingerprint(request)
-    if (this.successfulMutations.has(base)) {
+    if (this.protectedMutations.get(base) === this.epoch) {
       this.blockedMutations.set(
         base,
         (this.blockedMutations.get(base) ?? 0) + 1,
       )
       return
     }
-    const fp = this.fingerprint(request)
-    this.seen.set(fp, (this.seen.get(fp) ?? 0) + 1)
+    this.recoveryWarnings.add(this.recoveryKey(request))
+  }
+
+  private recoveryKey(request: ToolCallRequest): string {
+    return this.failures.exhausted(request)
+      ? `failure:${this.epoch}:${this.failures.key(request)}`
+      : this.fingerprint(request)
+  }
+
+  private noProgress(key: string, message: string) {
+    return {
+      verdict: 'block' as const,
+      code: 'no_progress',
+      terminal: this.recoveryWarnings.has(key),
+      message: this.recoveryWarnings.has(key)
+        ? `收到无进展提示后仍重复调用，已停止执行。${message}`
+        : message,
+    }
   }
 }
 

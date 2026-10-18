@@ -519,54 +519,88 @@ test('cancelled run keeps plan untouched and draft to interrupted', () => {
   assert.equal(cancels, 1)
 })
 
-test('no-progress loop stops before the third identical call with stable code', async () => {
-  const store = freshStore()
-  const session = store.sessions.create(
-    store.projects.create({ name: 'p', folderPath: '/w' }).id,
-  )
-  const run = store.runs.create({
-    sessionId: session.id,
-    providerId: 'provider',
-    model: 'model',
-  })
-  // 每轮返回完全相同的 grep 调用（相同 id 会违反 call id 全局唯一——
-  // 用不同 id + 相同参数，指纹只看 name+args）。
-  let callSeq = 0
-  const server = await startServer((_req, res) => {
-    callSeq += 1
-    res.writeHead(200, { 'content-type': 'text/event-stream' })
-    res.end(
-      sseChunk({
-        choices: [
-          {
-            delta: {
-              tool_calls: [
-                {
-                  index: 0,
-                  id: `g${callSeq}`,
-                  function: {
-                    name: 'get_current_time',
-                    arguments: '{"fixed":"same"}',
+for (const recover of [false, true]) {
+  test(`no-progress loop allows recovery before terminal replay: ${recover}`, async () => {
+    const store = freshStore()
+    const session = store.sessions.create(
+      store.projects.create({ name: 'p', folderPath: '/w' }).id,
+    )
+    const run = store.runs.create({
+      sessionId: session.id,
+      providerId: 'provider',
+      model: 'model',
+    })
+    // 每轮返回完全相同的 grep 调用（相同 id 会违反 call id 全局唯一——
+    // 用不同 id + 相同参数，指纹只看 name+args）。
+    let callSeq = 0
+    const requests = []
+    const server = await startServer(async (req, res) => {
+      let body = ''
+      for await (const chunk of req) body += chunk.toString()
+      requests.push(JSON.parse(body))
+      callSeq += 1
+      if (recover && callSeq === 6) {
+        res.writeHead(200, { 'content-type': 'text/event-stream' })
+        res.end(
+          sseChunk({
+            choices: [
+              {
+                delta: { content: '无法取得新的结果，停止重复操作。' },
+                finish_reason: 'stop',
+              },
+            ],
+          }) + 'data: [DONE]\n\n',
+        )
+        return
+      }
+      res.writeHead(200, { 'content-type': 'text/event-stream' })
+      res.end(
+        sseChunk({
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: `g${callSeq}`,
+                    function: {
+                      name: 'get_current_time',
+                      arguments: '{"fixed":"same"}',
+                    },
                   },
-                },
-              ],
+                ],
+              },
+              finish_reason: 'tool_calls',
             },
-            finish_reason: 'tool_calls',
-          },
-        ],
-      }) + 'data: [DONE]\n\n',
+          ],
+        }) + 'data: [DONE]\n\n',
+      )
+    })
+    try {
+      await new RunRunner(store).execute({
+        ...baseInput(store, run, { port: server.address().port }),
+        settings: { maxTurns: 8 },
+      })
+    } finally {
+      server.close()
+    }
+    assert.equal(
+      store.runs.get(run.id).status,
+      recover ? 'completed' : 'failed',
+    )
+    assert.equal(
+      store.runs.get(run.id).errorCode,
+      recover ? null : 'no_progress',
+    )
+    assert.match(JSON.stringify(requests[5].messages), /四次/)
+    const blocked = store.toolCalls
+      .listByRun(run.id)
+      .filter((call) => call.errorCode === 'no_progress')
+    assert.ok(blocked.length >= 1)
+    assert.ok(
+      blocked.every(
+        (call) => call.status === 'failed' && Boolean(call.output?.content),
+      ),
     )
   })
-  try {
-    await new RunRunner(store).execute(
-      baseInput(store, run, {
-        port: server.address().port,
-        settings: { maxTurns: 8 },
-      }),
-    )
-  } finally {
-    server.close()
-  }
-  assert.equal(store.runs.get(run.id).status, 'failed')
-  assert.equal(store.runs.get(run.id).errorCode, 'no_progress')
-})
+}

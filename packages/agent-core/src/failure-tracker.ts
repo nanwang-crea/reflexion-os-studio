@@ -10,6 +10,11 @@ export class FailureTracker {
     this.failures.clear()
   }
 
+  key(request: ToolCallRequest): string | null {
+    const resource = resourceFor(request)
+    return resource === null ? null : `${request.name}:${resource}`
+  }
+
   exhausted(request: ToolCallRequest): boolean {
     const resource = resourceFor(request)
     return (
@@ -34,6 +39,15 @@ export class FailureTracker {
       categories.set(category, (categories.get(category) ?? 0) + 1)
       this.failures.set(key, categories)
       return
+    }
+    // 单个 Run 只拥有一个受管浏览器；重导航/关闭使该浏览器旧失败失效。
+    if (
+      request.name === 'browser.navigate' ||
+      request.name === 'browser.close'
+    ) {
+      for (const operation of this.failures.keys()) {
+        if (operation.startsWith('browser.')) this.failures.delete(operation)
+      }
     }
     let revision: string | undefined
     try {
@@ -70,7 +84,8 @@ function resourceFor(request: ToolCallRequest): string | null {
         ? normalized.toLowerCase()
         : normalized
     }
-    for (const key of ['url', 'serverId', 'sessionId', 'planId']) {
+    if (typeof args.page?.tabId === 'string') return `tabId=${args.page.tabId}`
+    for (const key of ['url', 'tabId', 'serverId', 'sessionId', 'planId']) {
       if (typeof args[key] === 'string') return `${key}=${args[key]}`
     }
   } catch {

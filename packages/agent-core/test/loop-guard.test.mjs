@@ -17,7 +17,7 @@ test('canonicalJson sorts object keys, keeps array order', () => {
   )
 })
 
-test('same call admitted twice, third blocked with no_progress', () => {
+test('four unchanged reads return a recovery warning before terminal replay', () => {
   const guard = new LoopGuard()
   const request = REQ('file.grep', { path: 'src', q: 'x' })
   assert.equal(guard.admit(request).verdict, 'allow')
@@ -25,9 +25,13 @@ test('same call admitted twice, third blocked with no_progress', () => {
   assert.equal(guard.admit(request).verdict, 'allow')
   const second = guard.recordExecution(request, OK('hit1'), false)
   assert.equal(second.repeated, true)
-  const third = guard.admit(request)
-  assert.equal(third.verdict, 'block')
-  assert.equal(third.code, 'no_progress')
+  for (let i = 0; i < 2; i++) {
+    assert.equal(guard.admit(request).verdict, 'allow')
+    guard.recordExecution(request, OK('hit1'), false)
+  }
+  assert.equal(guard.admit(request).terminal, false)
+  guard.recordBlocked(request)
+  assert.equal(guard.admit(request).terminal, true)
 })
 
 test('different digest resets repetition: changing results keeps admitting', () => {
@@ -75,17 +79,20 @@ test('mutation failure does not bump epoch nor block replays', () => {
 test('user message bumps epoch: same read after user turn is fresh', () => {
   const guard = new LoopGuard()
   const request = REQ('file.read', { path: 'a.ts' })
-  guard.recordExecution(request, OK('old'), false)
-  guard.recordExecution(request, OK('old'), false)
+  for (let i = 0; i < 4; i++) guard.recordExecution(request, OK('old'), false)
+  guard.recordBlocked(request)
+  assert.equal(guard.admit(request).terminal, true)
   guard.bumpEpoch()
   assert.equal(guard.admit(request).verdict, 'allow')
 })
 
-test('no_progress block only after two identical executions, error results count', () => {
+test('identical failures allow four executions then one recovery opportunity', () => {
   const guard = new LoopGuard()
   const request = REQ('web.fetch', { url: 'https://down.example' })
-  guard.recordExecution(request, ERR('timeout'), false)
-  guard.recordExecution(request, ERR('timeout'), false)
+  for (let i = 0; i < 4; i++) {
+    assert.equal(guard.admit(request).verdict, 'allow')
+    guard.recordExecution(request, ERR('timeout'), false)
+  }
   const third = guard.admit(request)
   assert.equal(third.verdict, 'block')
   assert.equal(third.code, 'no_progress')
@@ -172,4 +179,96 @@ test('another successful mutation invalidates an earlier replay block', () => {
   guard.recordBlocked(edit)
   guard.recordExecution(REQ('file.edit', { path: 'b.ts' }), OK('written'), true)
   assert.equal(guard.admit(edit).verdict, 'allow')
+})
+
+test('changing results resets the entire consecutive repetition streak', () => {
+  const guard = new LoopGuard()
+  const request = REQ('file.read', { path: 'a.ts' })
+  for (const content of ['a', 'a', 'a', 'b', 'b', 'b']) {
+    assert.equal(guard.admit(request).verdict, 'allow')
+    guard.recordExecution(request, OK(content), false)
+  }
+  assert.equal(guard.admit(request).verdict, 'allow')
+  guard.recordExecution(request, OK('b'), false)
+  assert.equal(guard.admit(request).terminal, false)
+})
+
+test('browser failures remain bounded across changed observation versions', () => {
+  const guard = new LoopGuard()
+  const request = (version) =>
+    REQ('browser.read', {
+      tabId: 'owned-tab',
+      pageVersion: version,
+    })
+  for (let i = 0; i < 4; i++)
+    guard.recordExecution(
+      request(String(i)),
+      ERR('loading', 'browser_page_loading'),
+      false,
+    )
+  assert.equal(guard.admit(request('4')).terminal, false)
+  guard.recordBlocked(request('4'))
+  assert.equal(guard.admit(request('5')).terminal, true)
+  guard.bumpEpoch()
+  assert.equal(guard.admit(request('6')).verdict, 'allow')
+})
+
+test('declared idempotent state changes do not trigger duplicate side effects', () => {
+  const guard = new LoopGuard()
+  const request = REQ('browser.navigate', { url: 'https://example.com' })
+  guard.recordExecution(request, OK('opened'), true, false)
+  assert.equal(guard.admit(request).verdict, 'allow')
+})
+
+test('successful browser navigation permits recovery from prior tab read failures', () => {
+  const guard = new LoopGuard()
+  const read = REQ('browser.read', { tabId: 'tab', pageVersion: 'old' })
+  for (let i = 0; i < 4; i++)
+    guard.recordExecution(read, ERR('loading', 'browser_page_loading'), false)
+  guard.recordBlocked(read)
+  assert.equal(guard.admit(read).terminal, true)
+  guard.recordExecution(
+    REQ('browser.navigate', { url: 'https://example.com' }),
+    OK('opened'),
+    true,
+    false,
+  )
+  assert.equal(guard.admit(read).verdict, 'allow')
+})
+
+test('failed mutations with uncertain committed effects cannot be replayed', () => {
+  const guard = new LoopGuard()
+  const request = REQ('browser.execute', { plan: 'submit then read' })
+  guard.recordExecution(
+    request,
+    { ...ERR('read failed'), replayUnsafe: true },
+    true,
+  )
+  assert.equal(guard.admit(request).code, 'duplicate_side_effect')
+  guard.recordExecution(
+    REQ('browser.read', { tabId: 'tab' }),
+    OK('submitted'),
+    false,
+  )
+  assert.equal(guard.admit(request).code, 'duplicate_side_effect')
+  guard.recordBlocked(request)
+  assert.equal(guard.admit(request).terminal, true)
+})
+
+test('resource exhaustion with uncertain mutations still terminates after its warning', () => {
+  const guard = new LoopGuard()
+  let request
+  for (let i = 0; i < 4; i++) {
+    request = REQ('browser.execute', {
+      page: { tabId: 'tab', pageVersion: String(i) },
+    })
+    guard.recordExecution(
+      request,
+      { ...ERR('unknown'), replayUnsafe: true },
+      true,
+    )
+  }
+  assert.equal(guard.admit(request).terminal, false)
+  guard.recordBlocked(request)
+  assert.equal(guard.admit(request).terminal, true)
 })

@@ -110,7 +110,7 @@ test('top-level fields are visible while invalid and mixed calls remain rejected
   assert.equal(writes(), 0)
   const guard = new LoopGuard()
   const request = { id: 'empty', name: 'file.edit', arguments: '{}' }
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < 4; i++) {
     assert.equal(guard.admit(request).verdict, 'allow')
     guard.recordExecution(request, await registry.call(request, signal), true)
   }

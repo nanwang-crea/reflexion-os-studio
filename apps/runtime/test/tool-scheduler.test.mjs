@@ -227,3 +227,168 @@ test('results map back in declaration order regardless of completion time', asyn
   )
   void session
 })
+
+test('real browser read policy permits repeated observation and serializes its tab', async () => {
+  const { LoopGuard } = await import('@reflexion-os-studio/agent-core')
+  const { browserTools } = await import('../dist/agent/tools/browser.js')
+  const { executeToolBatch } =
+    await import('../dist/agent/run/tool-scheduler.js')
+  const { createRunExecutionState } =
+    await import('../dist/agent/run/run-state.js')
+  const { randomUUID } = await import('node:crypto')
+  const store = freshStore()
+  const session = store.sessions.create(null)
+  const run = store.runs.create({
+    sessionId: session.id,
+    providerId: 'test',
+    model: 'test',
+  })
+  const page = {
+    tabId: randomUUID(),
+    pageVersion: randomUUID(),
+    origin: 'https://example.com',
+  }
+  let active = 0
+  let peak = 0
+  let calls = 0
+  const registry = new ToolRegistry()
+  for (const tool of browserTools({
+    runId: run.id,
+    sessionId: session.id,
+    browser: {
+      enabled: true,
+      call: async () => {
+        active++
+        peak = Math.max(peak, active)
+        calls++
+        await new Promise((resolve) => setTimeout(resolve, 5))
+        active--
+        return {
+          page,
+          sourceUrl: 'https://example.com/',
+          snapshot: 'unchanged',
+        }
+      },
+    },
+  }))
+    registry.register(tool)
+  const guard = new LoopGuard()
+  const deps = {
+    store,
+    run,
+    registry,
+    guard,
+    state: createRunExecutionState(),
+    emitter: new RunEventEmitter(run.id, () => {}),
+    executeOne: (request, signal) => registry.call(request, signal),
+  }
+  const request = (id, name = 'browser.read', args = page) => ({
+    id,
+    name,
+    arguments: JSON.stringify(args),
+  })
+  const signal = new AbortController().signal
+  try {
+    const reads = await executeToolBatch(
+      deps,
+      [request('r1'), request('r2')],
+      signal,
+    )
+    assert.ok(reads.every((result) => !result.isError))
+    assert.equal(peak, 1)
+    const navigation = request('n1', 'browser.navigate', {
+      url: 'https://example.com/',
+    })
+    assert.equal(
+      (await executeToolBatch(deps, [navigation], signal))[0].isError,
+      false,
+    )
+    assert.equal(
+      (await executeToolBatch(deps, [{ ...navigation, id: 'n2' }], signal))[0]
+        .isError,
+      false,
+    )
+    assert.equal(calls, 4)
+    await executeToolBatch(
+      deps,
+      ['r3', 'r4', 'r5', 'r6'].map((id) => request(id)),
+      signal,
+    )
+    const warnings = await executeToolBatch(
+      deps,
+      [request('r7'), request('r8')],
+      signal,
+    )
+    assert.ok(warnings.every((result) => result.code === 'no_progress'))
+    assert.equal(calls, 8)
+    await assert.rejects(executeToolBatch(deps, [request('r9')], signal), {
+      code: 'no_progress',
+    })
+  } finally {
+    store.close()
+  }
+})
+
+test('browser action failures distinguish missing targets from possibly committed effects', async () => {
+  const { LoopGuard } = await import('@reflexion-os-studio/agent-core')
+  const { browserTools } = await import('../dist/agent/tools/browser.js')
+  const { randomUUID } = await import('node:crypto')
+  const page = {
+    tabId: randomUUID(),
+    pageVersion: randomUUID(),
+    origin: 'https://example.com',
+  }
+  const signal = new AbortController().signal
+  for (const [completed, failurePhase, expected] of [
+    [0, 'before-action', false],
+    [0, 'action', true],
+    [1, 'after-action', true],
+  ]) {
+    const tools = browserTools({
+      runId: 'run',
+      sessionId: 'session',
+      browser: {
+        enabled: true,
+        call: async (sessionId, runId, operation) => {
+          if (operation !== 'execute')
+            throw new Error('browser_interaction_failed')
+          return {
+            document: null,
+            screenshots: [],
+            completed,
+            failurePhase,
+            failedStep: 0,
+            error: 'browser_interaction_failed',
+          }
+        },
+      },
+    })
+    const args = {
+      mode: 'actions',
+      page,
+      steps: [{ action: 'click', target: { role: 'button', name: 'Submit' } }],
+    }
+    const result = await tools
+      .find((tool) => tool.name === 'browser.execute')
+      .execute({ args, signal })
+    assert.equal(result.isError, true)
+    assert.equal(result.replayUnsafe, expected)
+    const guard = new LoopGuard()
+    const request = {
+      id: 'submit',
+      name: 'browser.execute',
+      arguments: JSON.stringify(args),
+    }
+    guard.recordExecution(request, result, true)
+    assert.equal(
+      guard.admit(request).code,
+      expected ? 'duplicate_side_effect' : undefined,
+    )
+    const click = tools.find((tool) => tool.name === 'browser.click')
+    const failedClick = await click.execute({
+      args: { page, ref: 'e1', element: 'Submit' },
+      signal,
+    })
+    assert.equal(failedClick.replayUnsafe, true)
+  }
+})

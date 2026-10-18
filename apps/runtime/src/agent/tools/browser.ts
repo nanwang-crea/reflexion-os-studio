@@ -1,5 +1,8 @@
 import { browserExecuteTool } from './browser-execute.js'
-import { browserFailureMessages } from './browser-errors.js'
+import {
+  browserActionMayHaveRun,
+  browserFailureMessages,
+} from './browser-errors.js'
 import {
   AgentBrowserNavigateSchema,
   AgentBrowserNavigateJsonSchema,
@@ -57,9 +60,10 @@ export function browserTools(ctx: ToolContext): ToolDefinition[] {
               ? AgentBrowserTypeJsonSchema
               : AgentBrowserPageJsonSchema) as ToolDefinition['parameters'],
         execution: {
-          effect: 'state',
+          effect: name === 'read' ? 'read' : 'state',
           resourceKeys: () => [`browser:${ctx.runId}`],
-          idempotent: false,
+          idempotent:
+            name === 'read' || name === 'navigate' || name === 'close',
         },
         execute: async ({ args, signal }) => {
           try {
@@ -116,6 +120,9 @@ export function browserTools(ctx: ToolContext): ToolDefinition[] {
                                   ? '旧版浏览器网络检查拒绝了导航（browser_network_denied）。请更新并重启应用后重新请求导航；此结果不代表搜索无结果。'
                                   : `浏览器操作被拒绝或失败（${code}）。控件失效时原地读取刷新；浏览器不可用时检查浏览器组件与系统依赖。`),
               code,
+              replayUnsafe:
+                (name === 'click' || name === 'type') &&
+                browserActionMayHaveRun(code),
               isError: true,
             }
           }

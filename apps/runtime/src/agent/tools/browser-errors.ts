@@ -22,3 +22,19 @@ export const browserFailureMessages: Record<string, string> = {
     '目标匹配多个控件。请读取最新快照并使用唯一的 ref 或精确 role/name。',
   browser_closed: '当前浏览器标签已关闭，请重新导航打开页面。',
 }
+
+/** 这些错误在动作派发前返回；其它交互错误可能发生在提交之后。 */
+export function browserActionMayHaveRun(code: string): boolean {
+  return ![
+    'browser_target_missing',
+    'browser_target_ambiguous',
+    'browser_page_stale',
+    'browser_user_control',
+    'browser_runtime_not_installed',
+    'browser_disabled',
+    'browser_interaction_denied',
+    'browser_script_invalid',
+    'browser_capacity',
+    'browser_system_chrome_unavailable',
+  ].includes(code)
+}

@@ -13,7 +13,7 @@ const DEFAULT_REFLECTION_THRESHOLD = 2
 /** 反思消息：提示模型先总结失败原因再调整策略，避免盲目重试。 */
 function buildReflectionMessage(failedTools: string[]): string {
   const names = [...new Set(failedTools)].join('、')
-  return `[反思] 最近的 ${failedTools.length} 次工具调用失败（${names}）。依据工具返回的错误证据选择恢复动作，并继续执行已授权的原任务。原因不明时先验证，不要猜测原因或原样重试；需要说明时只简短说明下一步，不要把反思或修正策略当作最终答复。`
+  return `[反思] 最近的 ${failedTools.length} 次工具调用失败（${names}）。依据工具返回的错误证据选择恢复动作，能恢复时继续执行已授权的原任务。原因不明时先验证，不要猜测原因或原样重试；没有可行恢复路径时，向用户说明已完成的工作和具体阻碍，不要为了继续执行而重复失败操作。`
 }
 
 /** length 续写控制帧：仅存在于当前 Run 的内存消息流，不落库。 */

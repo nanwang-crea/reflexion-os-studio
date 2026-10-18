@@ -5,7 +5,7 @@ import type {
   ToolResult,
 } from '@reflexion-os-studio/agent-core'
 import type { JsonValue } from '@reflexion-os-studio/contracts'
-import type { RunExecutionState } from './run-state.js'
+import { finalizeRejectedTool, type RunExecutionState } from './run-state.js'
 import type { Run } from '@reflexion-os-studio/contracts'
 import type { Store } from '../../store/index.js'
 import type { RunEventEmitter } from '../../events.js'
@@ -42,11 +42,13 @@ export interface SchedulerDeps {
       verdict: 'allow' | 'block'
       code?: string
       message?: string
+      terminal?: boolean
     }
     recordExecution(
       request: ToolCallRequest,
       result: ToolResult,
       mutation: boolean,
+      protectReplay?: boolean,
     ): void
     recordBlocked(request: ToolCallRequest): void
   }
@@ -58,6 +60,7 @@ interface PlannedCall {
   request: ToolCallRequest
   effect: 'pure' | 'read' | 'write' | 'shell' | 'state'
   resourceKeys: string[]
+  protectReplay?: boolean
 }
 
 /** 解析执行策略；未知工具（registry 会回 unsupported）按 state 保守串行。 */
@@ -81,7 +84,13 @@ function planCall(
       resourceKeys = []
     }
   }
-  return { index, request, effect, resourceKeys }
+  return {
+    index,
+    request,
+    effect,
+    resourceKeys,
+    protectReplay: policy?.idempotent !== true,
+  }
 }
 
 /** 资源键有交集视为冲突（同路径读写互斥）。 */
@@ -129,26 +138,33 @@ async function guardedExecuteOne(
   deps: SchedulerDeps,
   planned: PlannedCall,
   signal: AbortSignal,
+  recovery: { warned: boolean },
 ): Promise<ToolResult> {
   if (deps.guard !== undefined) {
     const admission = deps.guard.admit(planned.request)
     if (admission.verdict === 'block') {
       deps.guard.recordBlocked(planned.request)
-      // no_progress：模型已自纠一次仍重复，Run 立即以稳定错误码收敛，
-      // 不再回传让模型继续。duplicate_side_effect 仍作为工具错误回传
-      // （模型有机会先修改环境再重做）。
-      if (admission.code === 'no_progress') {
+      const result = finalizeRejectedTool(
+        deps,
+        planned.request,
+        {
+          content: admission.message ?? 'loop guard blocked this call',
+          isError: true,
+          code: admission.code ?? 'no_progress',
+        },
+        parseToolArgs(planned.request.arguments),
+        deps.store.sessions.get(deps.run.sessionId)?.projectId ?? null,
+      )
+      // 首次无进展作为工具错误回传，留出恢复/说明机会；再次重放才终止。
+      if (admission.terminal && !recovery.warned) {
         const limit = new ChildLimitError(
           'no_progress',
           admission.message ?? '检测到重复无进展的执行循环，已停止',
         )
         throw limit
       }
-      return {
-        content: admission.message ?? 'loop guard blocked this call',
-        isError: true,
-        code: admission.code ?? 'no_progress',
-      }
+      recovery.warned = true
+      return result
     }
   }
   const result = await deps.executeOne(planned.request, signal)
@@ -157,6 +173,7 @@ async function guardedExecuteOne(
       planned.request,
       result,
       isMutation(planned.effect),
+      planned.protectReplay,
     )
   }
   return result
@@ -180,6 +197,8 @@ export async function executeToolBatch(
   )
   const batches = planBatches(planned)
   const results: ToolResult[] = new Array(requests.length)
+  // 同一模型轮的多条重复声明只反馈，不抢在模型看到提示前终止。
+  const recovery = { warned: false }
   try {
     for (const batch of batches) {
       if (signal.aborted) {
@@ -187,12 +206,17 @@ export async function executeToolBatch(
       }
       if (batch.length === 1) {
         const call = batch[0]
-        results[call.index] = await guardedExecuteOne(deps, call, signal)
+        results[call.index] = await guardedExecuteOne(
+          deps,
+          call,
+          signal,
+          recovery,
+        )
         continue
       }
       // 只读并行批次：Promise.all 保持请求顺序回填（结果数组按下标归位）。
       const settled = await Promise.all(
-        batch.map((call) => guardedExecuteOne(deps, call, signal)),
+        batch.map((call) => guardedExecuteOne(deps, call, signal, recovery)),
       )
       for (let i = 0; i < batch.length; i += 1) {
         results[batch[i].index] = settled[i]

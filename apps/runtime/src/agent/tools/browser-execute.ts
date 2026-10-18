@@ -1,4 +1,7 @@
-import { browserFailureMessages } from './browser-errors.js'
+import {
+  browserActionMayHaveRun,
+  browserFailureMessages,
+} from './browser-errors.js'
 import { BrowserExecuteJsonSchema } from '@reflexion-os-studio/contracts'
 import type { ToolDefinition } from '@reflexion-os-studio/agent-core'
 import type { ToolContext } from './shared.js'
@@ -17,8 +20,10 @@ export function browserExecuteTool(ctx: ToolContext): ToolDefinition {
       idempotent: false,
     },
     async execute({ args, signal }) {
+      let started = false
       try {
         const plan = compileBrowserExecution(args)
+        started = true
         const raw = await ctx.browser!.call(
           ctx.sessionId,
           ctx.runId,
@@ -44,6 +49,9 @@ export function browserExecuteTool(ctx: ToolContext): ToolDefinition {
             source: data.document?.sourceUrl ?? plan.page.origin,
           },
           isError: data.error !== null,
+          replayUnsafe:
+            data.error !== null &&
+            (data.completed > 0 || data.failurePhase === 'action'),
           ...(data.error ? { code: data.error } : {}),
         }
       } catch (error) {
@@ -54,6 +62,7 @@ export function browserExecuteTool(ctx: ToolContext): ToolDefinition {
             : 'browser_operation_failed'
         return {
           isError: true,
+          replayUnsafe: started && browserActionMayHaveRun(code),
           code,
           content:
             browserFailureMessages[code] ??
