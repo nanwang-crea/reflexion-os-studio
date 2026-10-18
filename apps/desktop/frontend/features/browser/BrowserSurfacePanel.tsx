@@ -1,3 +1,5 @@
+import { BrowserNavigationFailure } from './BrowserNavigationFailure'
+import type { BrowserNavigationCompletion } from '../../api/browser-navigation'
 import { useEffect, useRef, useState } from 'react'
 import { useBrowserSurface } from './useBrowserSurface'
 import { useLoadingProgress } from './useLoadingProgress'
@@ -17,11 +19,15 @@ import { getBrowserCapabilities } from '../../api/browser-capabilities'
 /** Trusted browser chrome; native webpage content remains a separate view. */
 export function BrowserSurfacePanel({
   visible,
+  navigationFailure,
+  onDismissNavigationFailure,
   onWorkspace,
   onTerminal,
   onCollapse,
 }: {
   visible: boolean
+  navigationFailure?: BrowserNavigationCompletion | null
+  onDismissNavigationFailure?: () => void
   onWorkspace: () => void
   onTerminal: () => void
   onCollapse: () => void
@@ -30,7 +36,7 @@ export function BrowserSurfacePanel({
   const [addressFocused, setAddressFocused] = useState(false)
   const addressFocus = useRef(false)
   const { state, error, control, navigate, external, externalNotice } =
-    useBrowserSurface(visible)
+    useBrowserSurface(visible && !navigationFailure)
   const activeTab = state?.tabs.find((tab) => tab.id === state.activeTabId)
   const agentTab =
     activeTab?.control === 'agent' || activeTab?.control === 'paused'
@@ -57,6 +63,7 @@ export function BrowserSurfacePanel({
   const layoutError = useBrowserViewport(
     viewport,
     visible &&
+      !navigationFailure &&
       (agentTab || settings.mode !== 'system') &&
       (agentTab || Boolean(state?.url)) &&
       !menuOpen &&
@@ -78,6 +85,21 @@ export function BrowserSurfacePanel({
   const target = address.trim() || state?.url || ''
   const progress = useLoadingProgress(state)
   const busy = progress.running
+  if (navigationFailure)
+    return (
+      <section className="browser-surface-panel" aria-label="浏览器面板">
+        <BrowserPanelHeader
+          state={state}
+          control={control}
+          onWorkspace={onWorkspace}
+          onCollapse={onCollapse}
+        />
+        <BrowserNavigationFailure
+          failure={navigationFailure}
+          onDismiss={() => onDismissNavigationFailure?.()}
+        />
+      </section>
+    )
   return (
     <section className="browser-surface-panel" aria-label="浏览器面板">
       <BrowserPanelHeader

@@ -1,3 +1,4 @@
+import { BrowserNavigationResultSchema } from './browser/navigation-result.js'
 import { WorkflowRunStatusSchema } from './workflow/execution.js'
 import { WorkflowGenerationStatusSchema } from './workflow/authoring.js'
 import { z } from 'zod'
@@ -196,6 +197,7 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
   }),
   RunEnvelopeSchema.extend({
     type: z.literal('tool.completed'),
+    navigation: BrowserNavigationResultSchema.optional(),
     toolCallId: z.string().min(1),
     status: z.enum(['completed', 'failed', 'cancelled']),
     errorCode: z.string().nullable(),

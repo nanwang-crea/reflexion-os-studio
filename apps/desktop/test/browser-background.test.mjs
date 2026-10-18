@@ -25,18 +25,25 @@ test('Agent page opens and receives native bounds while animation frames are sus
       absWorkingDir: desktop,
       stdin: {
         contents: `
-          import React, { useRef } from 'react';
+          import React, { useRef, useState } from 'react';
           import { createRoot } from 'react-dom/client';
+          import { useBrowserNavigationFailure } from './frontend/features/browser/useBrowserNavigationFailure';
+          import { BrowserNavigationFailure } from './frontend/features/browser/BrowserNavigationFailure';
+          import { setBrowserPanelOpen } from './frontend/features/browser/panel-state';
           import { useBrowserSurface } from './frontend/features/browser/useBrowserSurface';
           import { useBrowserViewport } from './frontend/features/browser/useBrowserViewport';
           import { useBrowserPanelOpen } from './frontend/features/browser/panel-state';
           window.requestAnimationFrame = () => 1;
           function Fixture() {
+            const [session, setSession] = useState('active');
+            const navigation = useBrowserNavigationFailure(session);
+            window.switchSession = setSession;
+            window.closePanel = () => setBrowserPanelOpen(false);
             const open = useBrowserPanelOpen();
             const { state } = useBrowserSurface(open);
             const ref = useRef(null);
-            useBrowserViewport(ref, open, state?.available === true, state?.activeTabId ?? null);
-            return <div ref={ref} style={{width: 400, height: 300}} data-open={open} />;
+            useBrowserViewport(ref, open && !navigation.failure, state?.available === true, state?.activeTabId ?? null);
+            return <div ref={ref} style={{width: 400, height: 300}} data-session={session} data-open={open}>{navigation.failure && <BrowserNavigationFailure failure={navigation.failure} onDismiss={navigation.dismiss} />}</div>;
           }
           const root = createRoot(document.getElementById('root'));
           root.render(<Fixture />);
@@ -63,6 +70,10 @@ test('Agent page opens and receives native bounds while animation frames are sus
             };
             export const browserSession = {attach: async () => state};
           `,
+            }))
+            build.onLoad({ filter: /api[/\\]browser-navigation\.ts$/ }, () => ({
+              loader: 'js',
+              contents: `export const subscribeBrowserNavigation = listener => {window.emitNavigation = listener; window.navigationSubscriptions = (window.navigationSubscriptions ?? 0) + 1; return () => {window.emitNavigation = () => {}; window.navigationSubscriptions--;};};`,
             }))
             build.onLoad({ filter: /api[/\\]browser-settings\.ts$/ }, () => ({
               loader: 'js',
@@ -114,7 +125,60 @@ test('Agent page opens and receives native bounds while animation frames are sus
     const count = await page.evaluate(() => window.layouts.length)
     await new Promise((resolve) => setTimeout(resolve, 250))
     assert.equal(await page.evaluate(() => window.layouts.length), count)
+    const failure = {
+      toolCallId: 'denied-1',
+      status: 'failed',
+      errorCode: 'browser_network_denied',
+      navigation: {
+        sessionId: 'child',
+        rootSessionId: 'active',
+        url: 'https://example.com/search?q=test',
+        message: 'DNS 返回私有或保留地址，导航未执行。',
+      },
+    }
+    await page.evaluate(() => window.closePanel())
+    await page.locator('[data-open="false"]').waitFor()
+    await page.evaluate((event) => window.emitNavigation(event), {
+      ...failure,
+      navigation: { ...failure.navigation, rootSessionId: 'other' },
+    })
+    assert.equal(await page.getByRole('alert').count(), 0)
+    await page.evaluate((event) => window.emitNavigation(event), failure)
+    await page.locator('[data-open="true"]').waitFor()
+    await page.getByRole('heading', { name: '导航被拦截' }).waitFor()
+    assert.match(await page.getByRole('alert').innerText(), /example.com/)
+    await page.waitForFunction(
+      () => window.layouts.at(-1).visible === false,
+      null,
+      { polling: 50 },
+    )
+    await page.getByRole('button', { name: '返回浏览器' }).click()
+    await page.evaluate(() => window.closePanel())
+    await page.locator('[data-open="false"]').waitFor()
+    await page.evaluate((event) => window.emitNavigation(event), failure)
+    assert.equal(await page.getByRole('alert').count(), 0)
+    assert.equal(await page.locator('[data-open="false"]').count(), 1)
+    await page.evaluate((event) => window.emitNavigation(event), {
+      ...failure,
+      toolCallId: 'denied-2',
+    })
+    await page.getByRole('alert').waitFor()
+    await page.evaluate((event) => window.emitNavigation(event), {
+      ...failure,
+      toolCallId: 'success-3',
+      status: 'completed',
+    })
+    await page.getByRole('alert').waitFor({ state: 'detached' })
+    await page.evaluate((event) => window.emitNavigation(event), {
+      ...failure,
+      toolCallId: 'denied-4',
+    })
+    await page.getByRole('alert').waitFor()
+    await page.evaluate(() => window.switchSession('other'))
+    await page.getByRole('alert').waitFor({ state: 'detached' })
+    assert.equal(await page.evaluate(() => window.navigationSubscriptions), 1)
     await page.evaluate(() => window.unmount())
+    assert.equal(await page.evaluate(() => window.navigationSubscriptions), 0)
     assert.equal(
       await page.evaluate(() => window.layouts.at(-1).visible),
       false,

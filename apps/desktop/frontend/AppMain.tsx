@@ -1,3 +1,4 @@
+import { useBrowserNavigationFailure } from './features/browser/useBrowserNavigationFailure'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { BrowserSurfacePanel } from './features/browser/BrowserSurfacePanel'
 import {
@@ -70,6 +71,7 @@ export interface AppMainProps {
  */
 export function AppMain(props: AppMainProps): React.JSX.Element {
   const { view, activeSessionId, notice, workspace, terminal } = props
+  const navigation = useBrowserNavigationFailure(activeSessionId)
   const surfaceRef = useRef<HTMLDivElement>(null)
   const [collaborationOpen, setCollaborationOpen] = useState(false)
   const [browserWidth, setBrowserWidth] = useState<number | null>(null)
@@ -279,6 +281,8 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
             style={{ display: browserOpen ? 'flex' : 'none' }}
           >
             <BrowserSurfacePanel
+              navigationFailure={navigation.failure}
+              onDismissNavigationFailure={navigation.dismiss}
               visible={browserOpen}
               onWorkspace={() => {
                 setCollaborationOpen(false)

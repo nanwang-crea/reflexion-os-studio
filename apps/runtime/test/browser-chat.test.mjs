@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createServer } from 'node:http'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ToolRegistry } from '@reflexion-os-studio/agent-core'
@@ -200,5 +200,108 @@ test('Agent receives approved rendered browser evidence through canonical ToolOu
     await new Promise((resolve) => provider.close(resolve))
     await new Promise((resolve) => pageServer.close(resolve))
     store.close()
+  }
+})
+
+test('navigation completion projects persisted failure and root conversation without creating a page', async () => {
+  const { finalizeToolCall, createRunExecutionState } =
+    await import('../dist/agent/run/run-state.js')
+  const { navigationResult } =
+    await import('../dist/agent/run/navigation-result.js')
+  const directory = mkdtempSync(join(tmpdir(), 'browser-navigation-notice-'))
+  const store = new Store(directory)
+  try {
+    const rootSession = store.sessions.create(null)
+    const childSession = store.sessions.create(null)
+    const root = store.runs.create({
+      sessionId: rootSession.id,
+      providerId: null,
+      model: null,
+    })
+    const child = store.runs.create({
+      sessionId: childSession.id,
+      providerId: null,
+      model: null,
+      parentRunId: root.id,
+    })
+    const call = store.toolCalls.create({
+      runId: child.id,
+      messageId: null,
+      toolName: 'browser.navigate',
+      args: { url: 'https://example.com/search?q=test' },
+    })
+    const events = []
+    const emitter = new RunEventEmitter(child.id, (event) => events.push(event))
+    const output = {
+      type: 'tool_output',
+      version: 1,
+      content: 'DNS returned a reserved address',
+      data: null,
+      changedFiles: [],
+      resourceLinks: [],
+      provenance: null,
+    }
+    finalizeToolCall(
+      store,
+      createRunExecutionState(),
+      emitter,
+      call.id,
+      'failed',
+      'browser_network_denied',
+      output,
+    )
+    assert.equal(events[0].navigation.rootSessionId, rootSession.id)
+    assert.equal(events[0].navigation.sessionId, childSession.id)
+    assert.equal(
+      events[0].navigation.message,
+      store.toolCalls.get(call.id).output.content,
+    )
+    assert.equal(events[0].navigation.url, call.args.url)
+    assert.deepEqual(navigationResult(store, call.id, 'cancelled'), {})
+    const other = store.toolCalls.create({
+      runId: child.id,
+      messageId: null,
+      toolName: 'web.fetch',
+      args: { url: call.args.url },
+    })
+    finalizeToolCall(
+      store,
+      createRunExecutionState(),
+      emitter,
+      other.id,
+      'failed',
+      'network_denied',
+      output,
+    )
+    assert.equal(events[1].navigation, undefined)
+    finalizeToolCall(
+      store,
+      createRunExecutionState(),
+      emitter,
+      call.id,
+      'completed',
+      null,
+      output,
+    )
+    assert.equal(events[2].navigation.message, '')
+    const unsafe = store.toolCalls.create({
+      runId: child.id,
+      messageId: null,
+      toolName: 'browser.navigate',
+      args: { url: 'file:///tmp/example' },
+    })
+    finalizeToolCall(
+      store,
+      createRunExecutionState(),
+      emitter,
+      unsafe.id,
+      'failed',
+      'invalid_request',
+      output,
+    )
+    assert.equal(events[3].navigation, undefined)
+  } finally {
+    store.close()
+    rmSync(directory, { recursive: true, force: true })
   }
 })

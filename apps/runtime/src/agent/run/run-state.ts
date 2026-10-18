@@ -1,3 +1,4 @@
+import { navigationResult } from './navigation-result.js'
 import type {
   ToolCallRequest,
   ToolResult,
@@ -56,6 +57,7 @@ export function finalizeToolCall(
     toolCallId: rowId,
     status,
     errorCode,
+    ...navigationResult(store, rowId, status),
   })
 }
 
