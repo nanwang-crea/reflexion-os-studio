@@ -79,3 +79,13 @@ Windows 原生输入、IME、高 DPI、沙箱 bootstrap、下载与退出需要 
 统一 dispatcher 在 CEF 消息泵返回后执行原生变更，popup、用户命令、Agent 请求、下载 continuation、凭据确认返回和 Runtime 故障回收均经该队列。调度器合并最早截止时间，以 posted/running 防止重复投递和嵌套模态循环重入；停止后清空待执行任务并拒绝新调度，兜底消息泵有界退出，不常驻轮询。
 
 macOS 已完成 30 轮合成导航/弹窗关闭、5 轮原生界面关闭结果标签、百度搜索结果实际打开与恢复、下载取消、接管交还及退出测试。证据、复跑方法和平台限制见 [生命周期回归记录](CEF-LIFECYCLE-REGRESSION-2026-10-17.md)。这次验证覆盖已知故障路径，不等于无限时长稳定性或 Windows 真机验收。
+
+## 2026-10-18 系统网络调整
+
+Agent 临时 CEF RequestContext 使用 `proxy.mode=system`，上下文配置成功前保持网络关闭。租约协议不再携带应用出口代理地址；Runtime 不再做域名公网 DNS 预检查或启动本地出口代理。独立 Playwright worker 不覆盖 Chromium 代理设置，三个平台分别使用 Chromium 对应的系统网络实现。审批、同源 GET/HEAD、凭据保护及应用内部来源拒绝保持；获准域名可能解析到本机可达网络，不保证仅公网隔离。web.fetch 不在本次调整范围。
+
+debug 验收 driver 可额外设置 `CEF_ACCEPTANCE_NETWORK_URL=https://www.baidu.com/`，先使用独立租约导航并读取公开页面，再继续原有合成接管验收；默认不依赖外网。成功输出 `[cef-network-probe]` 标题与来源，不读取日常浏览器资料。
+
+本轮独立 Chromium 与内嵌 CEF 均实际打开百度并返回“百度一下，你就知道”。CEF 合成页面加载、中文输入与会话隔离通过，driver 达到 `await-takeover`；本轮未重复人工接管及交还验收。最初使用产品标识启动 QA 时 CEF 初始化失败，独立 Tauri 标识隔离缓存后成功，未修改产品缓存。Windows/Linux 本轮未做真机网络验收。
+
+验证通过：format/lint、根级与桌面 typecheck、packages 构建、完整 `pnpm test`（Runtime 754 pass / 4 Windows skip、前端 85、System Runtime 237、终端故障矩阵 26/26）、默认 CEF 宿主 47 项与无 CEF 宿主 31 项单测、两个 Cargo 格式检查、默认宿主编译、macOS app/ARM64 DMG 打包及包内 workspace 冒烟。未执行 Windows/Linux 真机或本轮长稳测试。

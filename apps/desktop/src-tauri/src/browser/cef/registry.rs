@@ -13,12 +13,11 @@ pub struct Policy {
     pub origin: Option<String>,
     pub dev_url: Option<url::Url>,
     pub locked: AtomicBool,
-    pub proxy_ready: AtomicBool,
+    pub network_ready: AtomicBool,
 }
 pub struct Lease {
     pub id: String,
     pub origin: String,
-    pub proxy: String,
 }
 pub struct Guest {
     pub browser: Browser,
@@ -54,11 +53,11 @@ pub fn attach(app: &tauri::AppHandle, lease: Option<Lease>) -> Result<(), String
     let policy = Arc::new(Policy {
         origin: lease.as_ref().map(|lease| lease.origin.clone()),
         locked: AtomicBool::new(lease.is_some()),
-        proxy_ready: AtomicBool::new(lease.is_none()),
+        network_ready: AtomicBool::new(lease.is_none()),
         dev_url: crate::browser::policy::dev_url(app).cloned(),
     });
-    let mut context = if let Some(lease) = lease.as_ref() {
-        super::contexts::agent(policy.clone(), lease.proxy.clone())?
+    let mut context = if lease.is_some() {
+        super::contexts::agent(policy.clone())?
     } else {
         super::contexts::user(app)?
     };
@@ -233,7 +232,7 @@ pub fn lease_tab(lease: &str) -> Option<(u32, bool, bool)> {
                 (
                     *id,
                     g.policy.locked.load(Ordering::Acquire),
-                    g.policy.proxy_ready.load(Ordering::Acquire),
+                    g.policy.network_ready.load(Ordering::Acquire),
                 )
             })
     })

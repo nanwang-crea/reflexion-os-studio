@@ -11,7 +11,6 @@ export const HostBrowserRequestSchema = z.discriminatedUnion('kind', [
       .refine(
         (value) => new URL(value).origin === value && /^https?:/.test(value),
       ),
-    proxy: z.string().regex(/^http:\/\/127\.0\.0\.1:[1-9]\d{0,4}$/),
   }),
   z.strictObject({ kind: z.enum(['check', 'close']), lease: z.uuid() }),
 ])

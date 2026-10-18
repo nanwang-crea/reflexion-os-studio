@@ -8,7 +8,6 @@ import { writeFile } from 'node:fs/promises'
 import { HostBrowserTransport } from '../../../apps/runtime/dist/browser/agent/embedded/host.js'
 import { EmbeddedConnection } from '../../../apps/runtime/dist/browser/agent/embedded/connection.js'
 import { PlaywrightBackend } from '../../../apps/runtime/dist/browser/agent/worker/backend.js'
-import { createBrowserProxy } from '../../../apps/runtime/dist/browser/agent/security/proxy.js'
 const output = process.env.CEF_ACCEPTANCE_OUTPUT
 if (!output) throw new Error('CEF_ACCEPTANCE_OUTPUT required')
 const host = new HostBrowserTransport((message) =>
@@ -57,15 +56,25 @@ const waitControl = (paused) =>
 let first, second
 async function run() {
   await new Promise((resolve) => fixture.listen(0, '127.0.0.1', resolve))
-  const origin = `http://cef-fixture.test:${fixture.address().port}`
+  const origin = `http://127.0.0.1:${fixture.address().port}`
   const backend = (session) =>
     new PlaywrightBackend(
-      (approved) => createBrowserProxy(approved, async () => '127.0.0.1'),
-      async () => '93.184.216.34',
       'headed',
       undefined,
       new EmbeddedConnection(host, session),
     )
+  if (process.env.CEF_ACCEPTANCE_NETWORK_URL) {
+    const probe = backend('cef-network-acceptance')
+    try {
+      const page = await probe.navigate(process.env.CEF_ACCEPTANCE_NETWORK_URL)
+      await probe.read(page.page)
+      process.stderr.write(
+        `[cef-network-probe] ${JSON.stringify({ title: page.title, sourceUrl: page.sourceUrl })}\n`,
+      )
+    } finally {
+      await probe.close()
+    }
+  }
   first = backend('cef-acceptance-a')
   const initial = await first.navigate(origin + '/')
   await first.read(initial.page)

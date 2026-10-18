@@ -19,7 +19,9 @@ impl Policy {
         }
         match &self.origin {
             Some(origin) => {
-                self.proxy_ready.load(std::sync::atomic::Ordering::Acquire)
+                self.network_ready
+                    .load(std::sync::atomic::Ordering::Acquire)
+                    && crate::browser::policy::guest_url(raw, self.dev_url.as_ref()).is_ok()
                     && matches!(method, "GET" | "HEAD")
                     && url.origin().ascii_serialization() == *origin
             }
@@ -68,11 +70,11 @@ mod tests {
             origin: Some("https://example.test".into()),
             dev_url: None,
             locked: AtomicBool::new(true),
-            proxy_ready: AtomicBool::new(ready),
+            network_ready: AtomicBool::new(ready),
         }
     }
     #[test]
-    fn agent_network_is_closed_until_proxy_ready_and_never_accepts_writes_or_other_origins() {
+    fn agent_network_is_closed_until_network_ready_and_never_accepts_writes_or_other_origins() {
         let policy = agent(false);
         assert!(policy.allows("about:blank#lease", "GET"));
         assert!(!policy.allows("https://example.test/", "GET"));
@@ -94,12 +96,33 @@ mod tests {
         assert!(!policy.allows("https://example.test/", "POST"));
     }
     #[test]
+    fn agent_cannot_use_system_network_to_open_application_origins() {
+        for origin in [
+            "http://127.0.0.1:5173",
+            "https://tauri.localhost",
+            "https://ipc.localhost",
+            "https://asset.localhost",
+        ] {
+            let mut policy = agent(true);
+            policy.origin = Some(origin.into());
+            policy.dev_url = Some(url::Url::parse("http://localhost:5173").unwrap());
+            assert!(!policy.allows(&format!("{origin}/"), "GET"));
+        }
+    }
+    #[test]
+    fn agent_no_longer_rejects_fake_ip_addresses_by_range() {
+        let mut policy = agent(true);
+        policy.origin = Some("http://198.18.0.25".into());
+        assert!(policy.allows("http://198.18.0.25/", "GET"));
+        assert!(!policy.allows("http://198.18.0.25/", "POST"));
+    }
+    #[test]
     fn user_webpages_cannot_navigate_to_application_origins() {
         let policy = Policy {
             origin: None,
             dev_url: Some(url::Url::parse("http://localhost:5173").unwrap()),
             locked: AtomicBool::new(false),
-            proxy_ready: AtomicBool::new(true),
+            network_ready: AtomicBool::new(true),
         };
         assert!(!policy.allows("http://localhost:5173/", "GET"));
         assert!(!policy.allows("http://127.0.0.1:5173/", "GET"));

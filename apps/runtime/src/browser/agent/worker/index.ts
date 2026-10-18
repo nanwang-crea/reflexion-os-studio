@@ -29,7 +29,7 @@ const launch = AgentBrowserLaunchSchema.parse(
       ?.slice('--launch='.length) ?? '{"channel":"chromium"}',
   ),
 )
-const backend = new PlaywrightBackend(undefined, undefined, display, launch)
+const backend = new PlaywrightBackend(display, launch)
 const server = new Server(
   { name: 'reflexion-playwright', version: '1' },
   { capabilities: { tools: {} } },
@@ -38,7 +38,6 @@ let tail = Promise.resolve()
 const errors = new Set([
   'browser_system_chrome_unavailable',
   'browser_url_denied',
-  'browser_network_denied',
   'browser_sensitive_content',
   'browser_page_stale',
   'browser_source_changed',

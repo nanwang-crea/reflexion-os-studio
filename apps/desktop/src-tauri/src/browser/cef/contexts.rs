@@ -4,21 +4,21 @@ use crate::browser::state;
 use cef::*;
 use std::sync::{atomic::Ordering, Arc};
 wrap_request_context_handler! {
-    struct AgentContext { policy:Arc<Policy>, proxy:String }
+    struct AgentContext { policy:Arc<Policy> }
     impl RequestContextHandler {
         fn on_request_context_initialized(&self, context:Option<&mut RequestContext>) {
             let Some(context)=context else{return;};
-            let proxy=serde_json::json!({"mode":"fixed_servers","server":self.proxy,"bypass_list":"<-loopback>"});
+            let proxy=serde_json::json!({"mode":"system"});
             let Some(mut value)=parse_json(Some(&CefString::from(proxy.to_string().as_str())),JsonParserOptions::default()) else{return;};
             // A default CefString is a null pointer, not a writable output string.
             let mut error=CefString::from("");
             let success=context.set_preference(Some(&CefString::from("proxy")),Some(&mut value),Some(&mut error))==1;
-            self.policy.proxy_ready.store(success,Ordering::Release);
+            self.policy.network_ready.store(success,Ordering::Release);
         }
     }
 }
-pub fn agent(policy: Arc<Policy>, proxy: String) -> Result<RequestContext, String> {
-    let mut handler = AgentContext::new(policy, proxy);
+pub fn agent(policy: Arc<Policy>) -> Result<RequestContext, String> {
+    let mut handler = AgentContext::new(policy);
     request_context_create_context(Some(&RequestContextSettings::default()), Some(&mut handler))
         .ok_or_else(|| "browser_unavailable".into())
 }

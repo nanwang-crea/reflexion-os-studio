@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createServer } from 'node:http'
-import { createBrowserProxy } from '../dist/browser/agent/security/proxy.js'
 import { browserWorkerPaths } from '../dist/browser/agent/paths.js'
 process.env.PLAYWRIGHT_BROWSERS_PATH = browserWorkerPaths().browsers
-const { PlaywrightBackend } =
-  await import('../dist/browser/agent/worker/backend.js')
+const { PlaywrightBackend } = await import('./fixtures/browser-backend.mjs')
 
 function target(document, name) {
   const line = document.snapshot
@@ -45,11 +43,7 @@ for (const display of ['headless', 'headed']) {
       })
       await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
       const origin = `http://fixture.test:${server.address().port}`
-      const backend = new PlaywrightBackend(
-        (approved) => createBrowserProxy(approved, async () => '127.0.0.1'),
-        async () => '93.184.216.34',
-        display,
-      )
+      const backend = new PlaywrightBackend(display)
       try {
         let metadata = await backend.navigate(origin + '/')
         const originalBrowser = backend.browser

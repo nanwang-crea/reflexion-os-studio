@@ -136,3 +136,47 @@ test('MCP context cannot select, route or close sibling pages, including event c
   assert.deepEqual(scoped.pages(), [])
   await assert.rejects(scoped.newPage(), /browser_closed/)
 })
+
+test('navigation delegates hostname resolution to Chromium without a forced proxy', async () => {
+  let launches = 0
+  const backend = new PlaywrightBackend(
+    'headless',
+    undefined,
+    undefined,
+    async (_config, options) => {
+      launches++
+      assert.equal(options.proxy, undefined)
+      assert.equal(options.chromiumSandbox, true)
+      assert.ok(
+        !options.args.some((arg) => /proxy-server|host-resolver/.test(arg)),
+      )
+      throw new Error('fixture_launch_stopped')
+    },
+  )
+  // .invalid cannot pass a Node DNS preflight. Launch must still be reached.
+  await assert.rejects(
+    backend.navigate('https://system-network.invalid/'),
+    /fixture_launch_stopped/,
+  )
+  assert.equal(launches, 1)
+  await backend.close()
+})
+
+test('embedded lease protocol no longer accepts an application proxy', async () => {
+  const { HostBrowserRequestSchema } =
+    await import('@reflexion-os-studio/contracts')
+  const request = {
+    kind: 'open',
+    lease: randomUUID(),
+    sessionId: 'session',
+    origin: 'https://example.com',
+  }
+  assert.equal(HostBrowserRequestSchema.safeParse(request).success, true)
+  assert.equal(
+    HostBrowserRequestSchema.safeParse({
+      ...request,
+      proxy: 'http://127.0.0.1:1234',
+    }).success,
+    false,
+  )
+})

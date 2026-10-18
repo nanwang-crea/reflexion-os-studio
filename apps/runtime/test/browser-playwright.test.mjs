@@ -3,12 +3,7 @@ import { test } from 'node:test'
 import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:http'
 import { AgentBrowserNavigateSchema } from '@reflexion-os-studio/contracts'
-import { createBrowserProxy } from '../dist/browser/agent/security/proxy.js'
-import {
-  allowedRequest,
-  publicIp,
-  publicAddress,
-} from '../dist/browser/agent/security/network.js'
+import { allowedRequest } from '../dist/browser/agent/security/network.js'
 import { filterBrowserContent } from '../dist/browser/agent/security/content.js'
 import { browserWorkerPaths } from '../dist/browser/agent/paths.js'
 import {
@@ -23,8 +18,7 @@ import {
 } from '../dist/agent/permissions/index.js'
 
 process.env.PLAYWRIGHT_BROWSERS_PATH = browserWorkerPaths().browsers
-const { PlaywrightBackend } =
-  await import('../dist/browser/agent/worker/backend.js')
+const { PlaywrightBackend } = await import('./fixtures/browser-backend.mjs')
 const page = () => ({
   tabId: randomUUID(),
   origin: 'https://example.com',
@@ -66,7 +60,7 @@ test('browser URL admission rejects credentials, sensitive routes and private li
   )
 })
 
-test('egress denies cross-origin, writes, special IPv6 and private DNS', async () => {
+test('requests deny cross-origin and writes', async () => {
   assert.ok(
     allowedRequest(
       'https://example.com',
@@ -82,15 +76,6 @@ test('egress denies cross-origin, writes, special IPv6 and private DNS', async (
     allowedRequest('https://example.com', 'https://example.com/a', 'POST'),
     false,
   )
-  for (const ip of [
-    '127.0.0.1',
-    '198.18.0.1',
-    '::1',
-    '::ffff:7f00:1',
-    '2001:db8::1',
-  ])
-    assert.equal(publicIp(ip), false)
-  await assert.rejects(publicAddress('127.0.0.1'), /browser_network_denied/)
 })
 
 test('sensitive results are refused and instruction injection is disclosed', () => {
@@ -263,11 +248,8 @@ test('official Playwright MCP observes actual dynamic DOM, rejects changes and b
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   const origin = `http://fixture.test:${server.address().port}`
   // Test-only dependency injection connects our synthetic host to this fixture.
-  // Production uses DNS public-address verification; there is no env bypass.
-  const backend = new PlaywrightBackend(
-    (approved) => createBrowserProxy(approved, async () => '127.0.0.1'),
-    async () => '93.184.216.34',
-  )
+  // Production delegates DNS and proxy configuration to Chromium.
+  const backend = new PlaywrightBackend()
   try {
     const metadata = await backend.navigate(origin + '/')
     assert.equal(
@@ -365,11 +347,7 @@ test(
     })
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
     const origin = `http://fixture.test:${server.address().port}`
-    const backend = new PlaywrightBackend(
-      (approved) => createBrowserProxy(approved, async () => '127.0.0.1'),
-      async () => '93.184.216.34',
-      'headed',
-    )
+    const backend = new PlaywrightBackend('headed')
     try {
       const metadata = await backend.navigate(origin + '/')
       assert.match(
@@ -423,12 +401,11 @@ for (const display of ['headless', 'headed']) {
       )
     })
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
-    const backend = new PlaywrightBackend(
-      (approved) => createBrowserProxy(approved, async () => '127.0.0.1'),
-      async () => '93.184.216.34',
-      display,
-      { channel: 'chrome', executablePath, fallbackManaged: false },
-    )
+    const backend = new PlaywrightBackend(display, {
+      channel: 'chrome',
+      executablePath,
+      fallbackManaged: false,
+    })
     try {
       const metadata = await backend.navigate(
         `http://fixture.test:${server.address().port}/`,

@@ -16,13 +16,7 @@ export class EmbeddedBrowserClient {
   async connect(): Promise<void> {
     const { PlaywrightBackend } = await import('../worker/backend.js')
     if (this.disposed) throw new Error('browser_closed')
-    this.backend = new PlaywrightBackend(
-      undefined,
-      undefined,
-      'headed',
-      undefined,
-      this.connection,
-    )
+    this.backend = new PlaywrightBackend('headed', undefined, this.connection)
   }
   async callTool(
     operation: string,

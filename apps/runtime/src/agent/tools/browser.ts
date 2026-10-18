@@ -113,7 +113,7 @@ export function browserTools(ctx: ToolContext): ToolDefinition[] {
                                 : code === 'browser_system_chrome_unavailable'
                                   ? '本机 Chrome 未检测到或启动不兼容。请用户在“设置 → Agent 浏览器”选择自动模式或下载并选择受管 Chromium。'
                                   : code === 'browser_network_denied'
-                                    ? '浏览器目标未通过公网网络检查（browser_network_denied）。DNS 返回私有/保留地址（含 Fake-IP）等情况会被拒绝；请检查 DNS/代理与目标来源。这不是搜索无结果，不通过更换工具或关闭安全边界绕过。'
+                                    ? '旧版浏览器网络检查拒绝了导航（browser_network_denied）。请更新并重启应用后重新请求导航；此结果不代表搜索无结果。'
                                     : `浏览器操作被拒绝或失败（${code}）。页面版本失效时重新导航；浏览器不可用时检查浏览器组件与系统依赖。`,
               code,
               isError: true,

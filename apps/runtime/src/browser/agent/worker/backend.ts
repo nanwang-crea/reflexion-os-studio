@@ -20,15 +20,12 @@ import {
   type AgentBrowserDisplay,
   type AgentBrowserLaunch,
 } from '@reflexion-os-studio/contracts'
-import { createBrowserProxy } from '../security/proxy.js'
-import { allowedRequest, publicAddress } from '../security/network.js'
+import { allowedRequest } from '../security/network.js'
 import { observeBrowserPage } from './observation.js'
 
-type Proxy = Awaited<ReturnType<typeof createBrowserProxy>>
 export class PlaywrightBackend {
   private browser: Browser | null = null
   private context: BrowserContext | null = null
-  private proxy: Proxy | null = null
   private client: Client | null = null
   private server:
     Awaited<ReturnType<typeof connectBrowserMcp>>['server'] | null = null
@@ -42,14 +39,13 @@ export class PlaywrightBackend {
   private interactionBlocked = false
 
   constructor(
-    private readonly proxyFactory = createBrowserProxy,
-    private readonly resolveAddress = publicAddress,
     private readonly display: AgentBrowserDisplay = 'headless',
     private readonly launch: AgentBrowserLaunch = {
       channel: 'chromium',
       fallbackManaged: false,
     },
     private readonly embedded?: EmbeddedConnection,
+    private readonly launchBrowser = launchAgentBrowser,
   ) {}
 
   async navigate(
@@ -76,21 +72,16 @@ export class PlaywrightBackend {
     this.readVersion = null
     try {
       if (!reusable) {
-        await this.resolveAddress(new URL(url).hostname)
-        if (generation !== this.generation) throw new Error('browser_closed')
-        this.proxy = await this.proxyFactory(origin)
-        if (generation !== this.generation) throw new Error('browser_closed')
         if (this.embedded) {
-          const connection = await this.embedded.open(origin, this.proxy.server)
+          const connection = await this.embedded.open(origin)
           this.browser = connection.browser
           this.context = connection.context
         } else {
-          this.browser = await launchAgentBrowser(
+          this.browser = await this.launchBrowser(
             this.launch,
             {
               headless: this.display === 'headless',
               chromiumSandbox: true,
-              proxy: { server: this.proxy.server, bypass: '<-loopback>' },
               args: [
                 ...(process.platform === 'linux' &&
                 this.display === 'headed' &&
@@ -99,7 +90,6 @@ export class PlaywrightBackend {
                   ? ['--ozone-platform=wayland']
                   : []),
                 '--disable-background-networking',
-                '--disable-quic',
                 '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
               ],
             },
@@ -240,24 +230,17 @@ export class PlaywrightBackend {
     this.digest = null
     this.readVersion = null
     this.origin = null
-    const [client, server, browser, proxy] = [
-      this.client,
-      this.server,
-      this.browser,
-      this.proxy,
-    ]
+    const [client, server, browser] = [this.client, this.server, this.browser]
     this.client = null
     this.server = null
     this.browser = null
     this.context = null
-    this.proxy = null
     const output = this.output
     this.output = null
     await Promise.allSettled([
       client?.close(),
       server?.close(),
       browser?.close(),
-      proxy?.close(),
       this.embedded?.close(),
     ])
     if (output) await rm(output, { recursive: true, force: true })

@@ -85,7 +85,6 @@ export class EmbeddedConnection {
   ) {}
   async open(
     origin: string,
-    proxy: string,
   ): Promise<{ browser: Browser; context: BrowserContext }> {
     const lease = randomUUID()
     this.lease = lease
@@ -108,7 +107,6 @@ export class EmbeddedConnection {
           lease,
           sessionId: this.sessionId,
           origin,
-          proxy,
         }),
       )
       this.endpoint = result.endpoint

@@ -93,12 +93,11 @@ test('source choices resolve independently of installation; auto fallback requir
   assert.equal(downloads, 0)
 })
 
-test('fallback preserves sandbox and proxy and never reuses the Chrome executable override', async () => {
+test('fallback preserves sandbox and system network options without reusing the Chrome executable override', async () => {
   const options = {
     headless: true,
     chromiumSandbox: true,
-    proxy: { server: 'http://fixture' },
-    args: ['--disable-quic'],
+    args: ['--disable-background-networking'],
   }
   const calls = []
   const result = await launchAgentBrowser(

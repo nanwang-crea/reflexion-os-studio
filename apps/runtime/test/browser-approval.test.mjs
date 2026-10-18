@@ -118,7 +118,7 @@ for (const [policy, override, choice] of [
   })
 }
 
-test('managed stdio worker exposes only the adapter and refuses script tools and private network access', async () => {
+test('managed stdio worker exposes only the adapter and refuses script tools and restricted URLs', async () => {
   const paths = browserWorkerPaths()
   const client = new McpClient({
     command: process.execPath,
@@ -137,8 +137,8 @@ test('managed stdio worker exposes only the adapter and refuses script tools and
       /browser_operation_failed/,
     )
     await assert.rejects(
-      client.callTool('navigate', { url: 'http://127.0.0.1/' }),
-      /browser_network_denied/,
+      client.callTool('navigate', { url: 'http://localhost/' }),
+      /browser_operation_failed/,
     )
     assert.deepEqual(JSON.parse(await client.callTool('close', {})), {
       closed: true,

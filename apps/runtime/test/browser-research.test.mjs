@@ -11,7 +11,6 @@ import { createToolRegistry } from '../dist/agent/tools/index.js'
 import { RunEventEmitter } from '../dist/events.js'
 import { Store } from '../dist/store/index.js'
 import { browserWorkerPaths } from '../dist/browser/agent/paths.js'
-import { createBrowserProxy } from '../dist/browser/agent/security/proxy.js'
 
 const browserNames = ['browser.navigate', 'browser.read', 'browser.close']
 function instance(template, tools = INHERITABLE_CHILD_TOOLS) {
@@ -99,8 +98,7 @@ test('child registry exposes browser tools only when enabled and allowed, withou
 
 test('browser research gets a rendered search link and then reads the actual source', async () => {
   process.env.PLAYWRIGHT_BROWSERS_PATH = browserWorkerPaths().browsers
-  const { PlaywrightBackend } =
-    await import('../dist/browser/agent/worker/backend.js')
+  const { PlaywrightBackend } = await import('./fixtures/browser-backend.mjs')
   const server = createServer((request, response) => {
     response.setHeader('content-type', 'text/html')
     if (new URL(request.url, 'http://fixture.test').pathname === '/search')
@@ -114,10 +112,7 @@ test('browser research gets a rendered search link and then reads the actual sou
   })
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   const origin = `http://research.test:${server.address().port}`
-  const backend = new PlaywrightBackend(
-    (target) => createBrowserProxy(target, async () => '127.0.0.1'),
-    async () => '93.184.216.34',
-  )
+  const backend = new PlaywrightBackend()
   try {
     const search = await backend.navigate(
       `${origin}/search?q=${encodeURIComponent('公开资料')}`,
@@ -138,7 +133,7 @@ test('browser research gets a rendered search link and then reads the actual sou
   }
 })
 
-test('network denial is reported as an environment restriction rather than an empty search', async () => {
+test('legacy network denial recommends updating rather than treating it as empty search', async () => {
   const tool = browserTools({
     browser: {
       enabled: true,
@@ -155,6 +150,7 @@ test('network denial is reported as an environment restriction rather than an em
   })
   assert.equal(result.isError, true)
   assert.equal(result.code, 'browser_network_denied')
-  assert.match(result.content, /DNS/)
-  assert.match(result.content, /不是搜索无结果/)
+  assert.match(result.content, /更新并重启/)
+  assert.doesNotMatch(result.content, /请检查 DNS/)
+  assert.match(result.content, /不代表搜索无结果/)
 })

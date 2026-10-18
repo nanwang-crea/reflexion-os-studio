@@ -7,7 +7,6 @@ import { join } from 'node:path'
 import { ToolRegistry } from '@reflexion-os-studio/agent-core'
 import { Store } from '../dist/store/index.js'
 import { BrowserAgentService } from '../dist/browser/agent/service.js'
-import { createBrowserProxy } from '../dist/browser/agent/security/proxy.js'
 import { browserWorkerPaths } from '../dist/browser/agent/paths.js'
 import { browserTools } from '../dist/agent/tools/browser.js'
 import { RunRunner } from '../dist/agent/run/runner.js'
@@ -18,8 +17,7 @@ import {
 } from '../dist/agent/permissions/index.js'
 
 process.env.PLAYWRIGHT_BROWSERS_PATH = browserWorkerPaths().browsers
-const { PlaywrightBackend } =
-  await import('../dist/browser/agent/worker/backend.js')
+const { PlaywrightBackend } = await import('./fixtures/browser-backend.mjs')
 
 function send(response, delta, finish) {
   response.writeHead(200, { 'content-type': 'text/event-stream' })
@@ -58,10 +56,7 @@ test('Agent receives approved rendered browser evidence through canonical ToolOu
   })
   await new Promise((resolve) => pageServer.listen(0, '127.0.0.1', resolve))
   const url = `http://fixture.test:${pageServer.address().port}/`
-  const backend = new PlaywrightBackend(
-    (origin) => createBrowserProxy(origin, async () => '127.0.0.1'),
-    async () => '93.184.216.34',
-  )
+  const backend = new PlaywrightBackend()
   let identity
   const browser = new BrowserAgentService(store, () => ({
     connect: async () => {},

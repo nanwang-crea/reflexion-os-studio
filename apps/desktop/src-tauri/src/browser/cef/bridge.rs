@@ -11,7 +11,6 @@ enum Request {
         lease: String,
         session_id: String,
         origin: String,
-        proxy: String,
     },
     #[serde(rename = "check")]
     Check { lease: String },
@@ -38,26 +37,14 @@ pub fn execute(app: &tauri::AppHandle, params: Value) -> Result<Value, String> {
             lease,
             session_id,
             origin,
-            proxy,
         } => {
             if !lease_valid(&lease) || session_id.is_empty() || session_id.len() > 256 {
                 return Err("browser_request_invalid".into());
             }
-            let target = url::Url::parse(&origin).map_err(|_| "browser_request_invalid")?;
-            let proxy_url = url::Url::parse(&proxy).map_err(|_| "browser_request_invalid")?;
-            if target.origin().ascii_serialization() != origin
-                || !matches!(target.scheme(), "http" | "https")
-                || !target.username().is_empty()
-                || target.password().is_some()
-                || proxy_url.scheme() != "http"
-                || proxy_url.host_str() != Some("127.0.0.1")
-                || proxy_url.port().is_none()
-                || !proxy_url.username().is_empty()
-                || proxy_url.password().is_some()
-                || proxy_url.path() != "/"
-                || proxy_url.query().is_some()
-                || proxy_url.fragment().is_some()
-            {
+            let target =
+                crate::browser::policy::guest_url(&origin, crate::browser::policy::dev_url(app))
+                    .map_err(|_| "browser_request_invalid")?;
+            if target.origin().ascii_serialization() != origin {
                 return Err("browser_request_invalid".into());
             }
             if super::registry::lease_tab(&lease).is_some() {
@@ -77,7 +64,6 @@ pub fn execute(app: &tauri::AppHandle, params: Value) -> Result<Value, String> {
                 Some(super::registry::Lease {
                     id: lease.clone(),
                     origin,
-                    proxy,
                 }),
             ) {
                 state::update(app, |state| {

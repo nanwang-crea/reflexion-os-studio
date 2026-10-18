@@ -125,3 +125,5 @@ app/数据目录打开网页；持久标记、慢下载、同/跨来源重定向
 静态读取已移除。内置受管官方 Playwright MCP 的导航/读取/关闭、真实动态 DOM、审批与页面身份绑定、取消/撤销/隔离及 Agent 证据回填已有合成回归。具体范围见 [当前 B4 设计](BROWSER-AGENT.md)。此前静态快照相关证据不适用于该实现；三平台真机矩阵、真实模型和网站兼容性仍待验收。
 
 Playwright 首批最终验证：全量测试通过，Runtime 497 pass + 4 Windows skip、前端 78 pass、System Runtime 233 pass、宿主 41 pass，故障矩阵 26/26；format/lint/typecheck 与 macOS app/DMG 通过。随包 Node 和 Chromium 沙箱/stdio 冒烟通过；取消导航与强杀 worker 的受控进程回收检查通过。当前没有新增 GUI 或长稳验收结果；Fake-IP DNS 被策略拒绝，详见 B4 文档。
+
+2026-10-18 网络策略更新：上文私有 DNS / Fake-IP 拒绝属于历史验收记录。当前浏览器使用系统网络，移除应用公网 DNS 检查与强制本地出口代理，见 [Browser Agent](BROWSER-AGENT.md)。历史 GUI 待验收项不因本次变更自动完成。

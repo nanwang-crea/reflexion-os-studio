@@ -1,9 +1,7 @@
 import { createServer } from 'node:http'
 import { browserWorkerPaths } from '../../dist/browser/agent/paths.js'
-import { createBrowserProxy } from '../../dist/browser/agent/security/proxy.js'
 process.env.PLAYWRIGHT_BROWSERS_PATH = browserWorkerPaths().browsers
-const { PlaywrightBackend } =
-  await import('../../dist/browser/agent/worker/backend.js')
+const { PlaywrightBackend } = await import('./browser-backend.mjs')
 
 export async function browserAutomationFixture(t, display = 'headless') {
   let writes = 0
@@ -25,11 +23,7 @@ export async function browserAutomationFixture(t, display = 'headless') {
   })
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   const origin = `http://fixture.test:${server.address().port}`
-  const backend = new PlaywrightBackend(
-    (approved) => createBrowserProxy(approved, async () => '127.0.0.1'),
-    async () => '93.184.216.34',
-    display,
-  )
+  const backend = new PlaywrightBackend(display)
   t.after(async () => {
     await backend.close()
     await new Promise((resolve) => server.close(resolve))

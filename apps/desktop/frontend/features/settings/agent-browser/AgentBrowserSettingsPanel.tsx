@@ -84,6 +84,10 @@ export function AgentBrowserSettingsPanel(): React.JSX.Element {
             : '配置 Agent 使用的独立 Playwright 浏览器。'}
         </p>
       </div>
+      <p className="hint">
+        浏览器使用系统网络配置，可达范围取决于本机网络，不提供仅公网隔离。
+        工具审批与同源操作限制保持启用。
+      </p>
       <BrowserRuntimePanel onEmbedded={setEmbedded} />
       {notice && (
         <p className="settings-error" role="alert">
