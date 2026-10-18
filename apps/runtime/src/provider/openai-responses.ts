@@ -1,3 +1,4 @@
+import { describeTransportFailure } from './transport-error.js'
 import { reportToolProgress } from './tool-progress.js'
 import { ProviderRequestTimeout } from './request-timeout.js'
 import { streamReaderCleanup } from './stream-reader.js'
@@ -10,7 +11,6 @@ import {
   DEFAULT_MAX_RETRIES,
   StreamCallbackError,
   isAbort,
-  isTimeout,
   mapHttpStatus,
   parseRetryAfterMs,
   retryWaitMs,
@@ -54,9 +54,23 @@ export async function streamOpenAIResponses(
   const { instructions, input } = toResponsesInput(options, canonicalToProvider)
 
   let attempt = 0
+  let requestTimeout!: ProviderRequestTimeout
+  const describeFailure = (
+    error: unknown,
+    phase: 'request' | 'stream',
+    receivedData = false,
+  ) =>
+    describeTransportFailure(error, {
+      phase,
+      receivedData,
+      retries: attempt,
+      maxRetries,
+      timeoutMs: options.timeoutMs,
+      signal: requestTimeout.signal,
+      apiKey: options.apiKey,
+    })
   attempts: for (;;) {
     let response: Response
-    let requestTimeout!: ProviderRequestTimeout
     for (;;) {
       requestTimeout = new ProviderRequestTimeout(
         options.signal,
@@ -106,20 +120,18 @@ export async function streamOpenAIResponses(
       } catch (error) {
         requestTimeout.dispose()
         if (options.signal.aborted) throw error
-        if (isAbort(error)) throw error
+        const failure = describeFailure(error, 'request')
+        if (isAbort(error) && failure.code !== 'timeout') throw error
         if (attempt < maxRetries) {
           attempt += 1
           await backoffAfterRetry({
             attempt,
             maxRetries,
-            reason: `${isTimeout(error) ? 'timeout' : 'network'}: ${redactProviderError(error, options.apiKey)}`,
+            reason: failure.reason,
           })
           continue
         }
-        throw new ProviderError(
-          isTimeout(error) ? 'timeout' : 'network',
-          `provider request failed: ${redactProviderError(error, options.apiKey)}`,
-        )
+        throw new ProviderError(failure.code, failure.message)
       }
 
       if (response.ok) {
@@ -146,19 +158,17 @@ export async function streamOpenAIResponses(
     if (!response.body) {
       requestTimeout.dispose()
       const error = new Error('provider response has no body')
+      const failure = describeFailure(error, 'stream')
       if (attempt < maxRetries) {
         attempt += 1
         await backoffAfterRetry({
           attempt,
           maxRetries,
-          reason: `stream failure: ${redactProviderError(error, options.apiKey)}`,
+          reason: failure.reason,
         })
         continue
       }
-      throw new ProviderError(
-        'network',
-        `provider stream failed: ${redactProviderError(error, options.apiKey)}`,
-      )
+      throw new ProviderError(failure.code, failure.message)
     }
 
     const continuation = new ResponsesContinuation()
@@ -171,6 +181,7 @@ export async function streamOpenAIResponses(
     let cachedTokens: number | undefined
     const toolCalls: StreamedToolCall[] = []
     const streamedCalls = new ResponsesToolCalls()
+    let receivedData = false
     const reader = response.body.getReader()
     const cleanupReader = streamReaderCleanup(reader)
     const decoder = new TextDecoder()
@@ -288,6 +299,7 @@ export async function streamOpenAIResponses(
       for (;;) {
         const { done, value } = await reader.read()
         if (done) break
+        receivedData ||= value.byteLength > 0
         requestTimeout.refresh()
         buffer += decoder.decode(value, { stream: true })
         let newlineIndex = buffer.indexOf('\n')
@@ -304,23 +316,19 @@ export async function streamOpenAIResponses(
       cleanupReader()
       if (options.signal.aborted) throw error
       if (error instanceof StreamCallbackError) throw error.cause
-      if (isAbort(error)) throw error
       if (error instanceof ProviderError) throw error
+      const failure = describeFailure(error, 'stream', receivedData)
+      if (isAbort(error) && failure.code !== 'timeout') throw error
       if (attempt < maxRetries) {
         attempt += 1
         await backoffAfterRetry({
           attempt,
           maxRetries,
-          reason: isTimeout(error)
-            ? `timeout: ${redactProviderError(error, options.apiKey)}`
-            : `stream failure: ${redactProviderError(error, options.apiKey)}`,
+          reason: failure.reason,
         })
         continue attempts
       }
-      throw new ProviderError(
-        isTimeout(error) ? 'timeout' : 'network',
-        `provider stream failed: ${redactProviderError(error, options.apiKey)}`,
-      )
+      throw new ProviderError(failure.code, failure.message)
     } finally {
       requestTimeout.dispose()
       cleanupReader()

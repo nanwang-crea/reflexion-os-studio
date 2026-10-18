@@ -14,3 +14,5 @@ import './provider/native-protocol.test.mjs'
 import './provider/stream-liveness.test.mjs'
 
 import './provider/tool-progress.test.mjs'
+
+import './provider/transport-errors.test.mjs'
