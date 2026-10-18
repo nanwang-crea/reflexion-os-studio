@@ -20,14 +20,11 @@
     "cross-spawn": "^7.0.6",
     "fflate": "0.8.2",
     "playwright": "1.64.0-alpha-1790635538000",
-    "proxy-agent": "6.5.0",
-    "proxy-from-env": "1.1.0",
     "yaml": "^2.8.1"
   },
   "devDependencies": {
     "@types/cross-spawn": "^6.0.6",
     "@types/node": "^22.10.0",
-    "@types/proxy-from-env": "1.0.3",
     "typescript": "^5.7.3"
   }
 }

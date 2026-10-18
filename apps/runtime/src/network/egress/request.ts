@@ -1,15 +1,12 @@
 import http from 'node:http'
 import https from 'node:https'
-import type { ProxyAgent } from 'proxy-agent'
 import type { SafeResponse } from './web-fetch.js'
 
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 
-export function requestPinned(
+export function requestWeb(
   url: URL,
-  resolved: { address: string; family: number } | undefined,
   init: { signal: AbortSignal; headers: Record<string, string> },
-  agent?: ProxyAgent,
 ): Promise<SafeResponse> {
   return new Promise((resolve, reject) => {
     const transport = url.protocol === 'https:' ? https : http
@@ -17,21 +14,8 @@ export function requestPinned(
       url,
       {
         method: 'GET',
-        family: resolved?.family,
         headers: init.headers,
         signal: init.signal,
-        ...(agent ? { agent } : {}),
-        ...(resolved
-          ? {
-              lookup: ((_hostname, _options, callback) =>
-                callback(
-                  null,
-                  resolved.address,
-                  resolved.family,
-                )) as NonNullable<http.RequestOptions['lookup']>,
-            }
-          : {}),
-        ...(url.protocol === 'https:' ? { servername: url.hostname } : {}),
       },
       (response) => {
         const chunks: Buffer[] = []
@@ -73,15 +57,7 @@ export function requestPinned(
         })
       },
     )
-    request.once('error', (error) =>
-      reject(
-        agent && error.name !== 'AbortError'
-          ? new Error(
-              `代理网络请求失败（${(error as NodeJS.ErrnoException).code ?? 'connection_error'}），请检查系统代理或环境代理配置`,
-            )
-          : error,
-      ),
-    )
+    request.once('error', reject)
     request.end()
   })
 }
