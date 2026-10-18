@@ -1,30 +1,21 @@
 import { describeTransportFailure } from './transport-error.js'
-import { reportToolProgress } from './tool-progress.js'
 import { ProviderRequestTimeout } from './request-timeout.js'
 import { streamReaderCleanup } from './stream-reader.js'
 import { chatRequestBody } from './openai-chat/projection.js'
+import { createChatStream } from './openai-chat/stream.js'
 import {
   DEFAULT_MAX_RETRIES,
   StreamCallbackError,
   buildToolNameMapping,
   isAbort,
-  mapFinishReason,
   mapHttpStatus,
   parseRetryAfterMs,
   retryWaitMs,
   shouldRetryStatus,
   sleep,
 } from './shared.js'
-import {
-  ProviderError,
-  redactProviderError,
-  providerStreamError,
-} from './provider-error.js'
-import type {
-  StreamChatOptions,
-  StreamChatResult,
-  StreamedToolCall,
-} from './types.js'
+import { ProviderError, redactProviderError } from './provider-error.js'
+import type { StreamChatOptions, StreamChatResult } from './types.js'
 
 export async function streamOpenAIChat(
   options: StreamChatOptions,
@@ -172,124 +163,19 @@ export async function streamOpenAIChat(
       throw new ProviderError(failure.code, failure.message)
     }
 
-    let content = ''
-    let reasoning = ''
-    let finishReason:
-      'stop' | 'length' | 'content_filter' | 'tool_calls' | null = null
-    let rawFinishReason: string | null | undefined
-    let usage:
-      | {
-          promptTokens: number
-          completionTokens: number
-          cachedPromptTokens?: number
-        }
-      | undefined
-    const toolCallByIndex = new Map<number, StreamedToolCall>()
+    const stream = createChatStream(
+      options,
+      providerToCanonical,
+      onDelta,
+      onReasoningDelta,
+    )
+    const { diagnostics, handleLine, toolCallByIndex } = stream
+    const requestAttemptId = options.attemptTracker?.id
     let receivedData = false
     const reader = response.body.getReader()
     const cleanupReader = streamReaderCleanup(reader)
     const decoder = new TextDecoder()
     let buffer = ''
-    let sawDone = false
-
-    const handleLine = (line: string): void => {
-      const trimmed = line.trim()
-      if (!trimmed.startsWith('data:')) return
-      const payload = trimmed.slice(5).trim()
-      if (payload === '[DONE]') {
-        sawDone = true
-        return
-      }
-      let parsed: {
-        error?: { message?: unknown; code?: unknown } | string
-        choices?: {
-          delta?: {
-            content?: string
-            reasoning_content?: string
-            reasoning?: string
-            tool_calls?: {
-              index?: number
-              id?: string
-              function?: { name?: string; arguments?: string }
-            }[]
-          }
-          finish_reason?: string | null
-        }[]
-        usage?: {
-          prompt_tokens?: number
-          completion_tokens?: number
-          prompt_tokens_details?: { cached_tokens?: number }
-          prompt_cache_hit_tokens?: number
-          prompt_cache_miss_tokens?: number
-        }
-      }
-      if (payload === '') return
-      try {
-        parsed = JSON.parse(payload)
-      } catch {
-        throw new Error('malformed SSE data payload')
-      }
-      if (parsed.error) {
-        throw providerStreamError(parsed.error, options)
-      }
-      const delta = parsed.choices?.[0]?.delta
-      const reasoningDelta = delta?.reasoning_content ?? delta?.reasoning
-      if (reasoningDelta) {
-        reasoning += reasoningDelta
-        try {
-          onReasoningDelta?.(reasoningDelta)
-        } catch (error) {
-          cleanupReader()
-          throw new StreamCallbackError(error)
-        }
-      }
-      if (delta?.content) {
-        content += delta.content
-        try {
-          onDelta(delta.content)
-        } catch (error) {
-          throw new StreamCallbackError(error)
-        }
-      }
-      for (const chunk of delta?.tool_calls ?? []) {
-        const index = typeof chunk.index === 'number' ? chunk.index : 0
-        const existing = toolCallByIndex.get(index) ?? {
-          id: '',
-          name: '',
-          arguments: '',
-        }
-        if (typeof chunk.id === 'string' && chunk.id !== '')
-          existing.id = chunk.id
-        if (typeof chunk.function?.name === 'string') {
-          existing.name += chunk.function.name
-        }
-        if (typeof chunk.function?.arguments === 'string') {
-          existing.arguments += chunk.function.arguments
-        }
-        toolCallByIndex.set(index, existing)
-        if (providerToCanonical.has(existing.name))
-          reportToolProgress(options, {
-            ...existing,
-            id: existing.id || `index-${index}`,
-            name: providerToCanonical.get(existing.name)!,
-          })
-      }
-      rawFinishReason = parsed.choices?.[0]?.finish_reason
-      const mapped = mapFinishReason(rawFinishReason)
-      if (mapped) finishReason = mapped
-      if (parsed.usage) {
-        const cachedTokens =
-          parsed.usage.prompt_cache_hit_tokens ??
-          parsed.usage.prompt_tokens_details?.cached_tokens
-        usage = {
-          promptTokens: parsed.usage.prompt_tokens ?? 0,
-          completionTokens: parsed.usage.completion_tokens ?? 0,
-          ...(typeof cachedTokens === 'number'
-            ? { cachedPromptTokens: cachedTokens }
-            : {}),
-        }
-      }
-    }
 
     try {
       for (;;) {
@@ -305,43 +191,41 @@ export async function streamOpenAIChat(
           buffer = buffer.slice(newlineIndex + 1)
           newlineIndex = buffer.indexOf('\n')
         }
-        if (sawDone) break
+        if (diagnostics.counts.doneEvents > 0) break
       }
       handleLine(buffer)
-      if (!sawDone) {
+      // 未知值优先于缺失结束标记，避免 EOF 或 usage 块掩盖协议错误。
+      const terminalError = diagnostics.terminalError()
+      if (diagnostics.counts.unsupportedFinishFields > 0) throw terminalError
+      if (diagnostics.counts.doneEvents === 0) {
         throw new Error('stream ended before [DONE]')
       }
-      if (finishReason === null) {
-        // [DONE] 已到但从未出现合法 finish_reason：多见于网关提前收尾的瞬时
-        // 截断，按可重试的流失败处理（复用传输层重试预算）；出现过未知非空
-        // 值属于方言不匹配，重试无意义，立即失败。附带诊断便于定位方言差异。
-        const missing =
-          rawFinishReason === undefined || rawFinishReason === null
-        const raw = redactProviderError(
-          rawFinishReason,
-          options.apiKey,
-          options.headers,
-        ).slice(0, 40)
-        throw new ProviderError(
-          'provider_protocol',
-          `stream ended without a valid finish_reason (raw: ${raw}, done: ${sawDone}, receivedData: ${receivedData}, contentChars: ${content.length}, toolCalls: ${toolCallByIndex.size})`,
-          missing,
-        )
-      }
+      if (terminalError) throw terminalError
     } catch (error) {
       requestTimeout.dispose()
       cleanupReader()
       if (options.signal.aborted) throw error
       if (error instanceof StreamCallbackError) throw error.cause
-      const failure =
-        error instanceof ProviderError
+      const terminalError =
+        diagnostics.counts.unsupportedFinishFields > 0
+          ? diagnostics.terminalError()
+          : null
+      const failureError = terminalError ?? error
+      const baseFailure =
+        failureError instanceof ProviderError
           ? {
-              code: error.code,
-              message: error.message,
-              reason: error.message,
-              retryable: error.retryable,
+              code: failureError.code,
+              message: failureError.message,
+              reason: failureError.message,
+              retryable: failureError.retryable,
             }
-          : describeFailure(error, 'stream', receivedData)
+          : describeFailure(failureError, 'stream', receivedData)
+      const details = diagnostics.describe(receivedData, toolCallByIndex.size)
+      const failure = {
+        ...baseFailure,
+        message: `${baseFailure.message}; ${details}`,
+        reason: `${baseFailure.reason}; ${details}`,
+      }
       options.attemptTracker?.finish(
         'failed',
         new ProviderError(failure.code, failure.message),
@@ -360,6 +244,13 @@ export async function streamOpenAIChat(
     } finally {
       requestTimeout.dispose()
       cleanupReader()
+      process.stderr.write(
+        `${JSON.stringify({
+          type: 'provider.chat_stream',
+          requestAttemptId,
+          ...diagnostics.snapshot(),
+        })}\n`,
+      )
     }
 
     // 空/重复 id 会让 Run 层按 call.id 建索引时互相覆盖；兜底为轮次内唯一 id。
@@ -383,11 +274,11 @@ export async function streamOpenAIChat(
       })
 
     return {
-      content,
-      reasoning,
-      finishReason,
-      rawStopReason: finishReason,
-      usage,
+      content: stream.content,
+      reasoning: stream.reasoning,
+      finishReason: diagnostics.finishReason!,
+      rawStopReason: diagnostics.finishReason!,
+      usage: stream.usage,
       toolCalls,
     }
   }

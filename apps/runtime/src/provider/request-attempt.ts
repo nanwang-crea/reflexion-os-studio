@@ -47,6 +47,9 @@ export function createRequestAttemptTracker(options: StreamChatOptions) {
     }
   }
   return {
+    get id() {
+      return current?.id
+    },
     finish,
     async fetch(url: string, init: RequestInit): Promise<Response> {
       started = performance.now()

@@ -18,6 +18,16 @@ Runtime 在打开业务数据库、迁移及启动恢复之前，必须持有数
 
 ## Agent Loop Hardening 与 Atomic Finalizer（2026-09）
 
+OpenAI Chat 流在每次物理请求内保留首次不支持的 `finish_reason`，usage 空块、
+后续 null 或合法终止值不得覆盖它。选中 choice 的终止状态区分 absent（未出现字段）、
+null_only（只出现 null）、unsupported（含空字符串或非字符串）与 valid；
+前两类在流收尾后复用重试预算，unsupported 不重试，也不执行已聚合的工具调用。
+错误详情和每请求一次的 stderr `provider.chat_stream` 统计只含计数、长度和固定分类：
+data/JSON/DONE、注释/其他行、usage/choice/非零 index、终止字段、正文/思考与工具参数。
+错误中的不支持终止字符串先按 Provider key/附加头/Bearer 脱敏再限长；对象只记录类型。
+日志通过 requestAttemptId 关联物理请求，不记录正文、思考、工具参数、事件名称或请求头。
+断流仍保留这些统计，并维持网络错误分类；已观察到不支持终止值时优先按协议错误处理。
+
 - **完成状态机**：只有 `finish_reason=stop` 且无工具调用的轮次才能完成 Run；`length` 在续写预算内（默认 2 轮）继续，耗尽为 `output_truncated`；`content_filter` 失败且草稿落 failed（不伪造 completed）；finish reason 缺失/未知或与 toolCalls 不一致失败为 `provider_protocol`；其中流已收尾但从未出现合法终止原因（缺 finish_reason / 缺 stop_reason / 缺 response.completed）视为可重试的流异常，复用传输层重试预算，重试耗尽才失败，错误消息附带 done/已收数据/内容长度/工具调用数诊断；出现未知非空终止值属于方言不匹配，立即失败。稳定错误码：`max_turns` / `output_truncated` / `content_filtered` / `provider_protocol` / `no_progress` / `run_timeout` / `run_token_budget` / `tool_call_budget`。
 - **Atomic Run Finalizer**：全部 Run 终态唯一生产入口，单个 SQLite 事务内收尾 pending 消息（含首轮失败悬挂的草稿清扫）、取消未终态 ToolCall（预建行一并收敛）、收敛活动 Plan（含未完成步骤）、写 Run 终态与失败事件；提交后按序发事件并执行回调（回调最多一次，通知器抛错不吞回调）。事务失败受控重试一次。终态不再创建自动记忆任务，Memory V2 以文件即记忆为准。
 - **ToolCall 批量预建**：Provider 返回合法 tool_calls 后，模型轮事务内按声明顺序创建全部行（初始 pending），提交后发 `tool.requested`；进程在工具执行前退出时全部调用可审计，启动恢复统一 cancelled。
