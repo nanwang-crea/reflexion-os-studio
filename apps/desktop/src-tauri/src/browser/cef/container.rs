@@ -1,11 +1,19 @@
-//! Own the embedding root independently from Wry's renderer parent.
+//! Own the embedding root and identify Wry's renderer without relying on child order.
 use objc2::{rc::Retained, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{NSAutoresizingMaskOptions, NSView, NSWindow};
 use std::cell::RefCell;
 use tauri::Manager;
-thread_local! { static ROOT: RefCell<Option<Retained<NSView>>> = const { RefCell::new(None) }; }
+
+#[derive(Clone)]
+pub struct Embedding {
+    pub root: Retained<NSView>,
+    wry_parent: Retained<NSView>,
+    pub renderer: Retained<objc2_web_kit::WKWebView>,
+}
+thread_local! { static EMBEDDING: RefCell<Option<Embedding>> = const { RefCell::new(None) }; }
+
 pub fn ensure(app: &tauri::AppHandle) -> Result<(), String> {
-    if ROOT.with(|root| root.borrow().is_some()) {
+    if EMBEDDING.with(|slot| slot.borrow().is_some()) {
         return Ok(());
     }
     let marker = MainThreadMarker::new().ok_or("CEF requires main thread")?;
@@ -16,52 +24,74 @@ pub fn ensure(app: &tauri::AppHandle) -> Result<(), String> {
         let native = &*(window
             .ns_window()
             .map_err(|_| "native window unavailable")? as *const NSWindow);
-        let renderer_parent = native.contentView().ok_or("renderer unavailable")?;
-        trace("before-reparent", &renderer_parent);
-        let root = NSView::initWithFrame(NSView::alloc(marker), renderer_parent.frame());
+        let wry_parent = native.contentView().ok_or("renderer unavailable")?;
+        let renderer = wry_parent
+            .subviews()
+            .iter()
+            .find_map(|view| view.downcast::<objc2_web_kit::WKWebView>().ok())
+            .ok_or("renderer unavailable")?;
+        trace("before-reparent", &wry_parent);
+        let root = NSView::initWithFrame(NSView::alloc(marker), wry_parent.frame());
         root.setAutoresizingMask(
             NSAutoresizingMaskOptions::ViewWidthSizable
                 | NSAutoresizingMaskOptions::ViewHeightSizable,
         );
-        // Keep the old content retained across reparenting. Wry still owns its
-        // parent, and the new root's subview list owns the embedding reference.
         native.setContentView(Some(&root));
-        renderer_parent.setFrame(root.bounds());
-        root.addSubview(&renderer_parent);
-        trace("after-reparent", &renderer_parent);
-        ROOT.with(|slot| *slot.borrow_mut() = Some(root));
+        wry_parent.setFrame(root.bounds());
+        root.addSubview(&wry_parent);
+        trace("after-reparent", &wry_parent);
+        EMBEDDING.with(|slot| {
+            *slot.borrow_mut() = Some(Embedding {
+                root,
+                wry_parent,
+                renderer,
+            })
+        });
     }
     Ok(())
 }
-pub fn dispose() {
-    ROOT.with(|root| {
-        root.borrow_mut().take();
-    });
+
+/// Clone bounded owners before AppKit calls, which may synchronously invoke callbacks.
+pub fn current(app: &tauri::AppHandle) -> Result<Embedding, String> {
+    let embedding = EMBEDDING
+        .with(|slot| slot.borrow().clone())
+        .ok_or("browser embedding unavailable")?;
+    let window = app
+        .get_webview_window("main")
+        .ok_or("main window unavailable")?;
+    let native = window
+        .ns_window()
+        .map_err(|_| "native window unavailable")?;
+    let content = unsafe { (&*(native as *const NSWindow)).contentView() }
+        .ok_or("native view unavailable")?;
+    if !std::ptr::eq(&*content, &*embedding.root) {
+        return Err("browser embedding is no longer the window content".into());
+    }
+    Ok(embedding)
 }
 
-/// Restore the content view installed by Wry before its normal window teardown.
-/// Merely detaching it leaves AppKit's deferred releases without the window's
-/// owning reference while Tauri still owns the corresponding WebView.
+pub fn dispose() {
+    // Dropping native owners may reenter AppKit; never do it under a RefCell borrow.
+    let embedding = EMBEDDING.with(|slot| slot.borrow_mut().take());
+    drop(embedding);
+}
+
+/// Restore the exact original Wry container before its normal window teardown.
 pub fn restore_wry(app: &tauri::AppHandle) {
-    ROOT.with(|root| {
-        let binding = root.borrow();
-        let Some(root) = binding.as_ref() else {
-            return;
-        };
-        let Some(window) = app.get_webview_window("main") else {
-            return;
-        };
-        let Ok(native) = window.ns_window() else {
-            return;
-        };
-        let Some(renderer) = root.subviews().firstObject() else {
-            return;
-        };
-        trace("before-restore", &renderer);
-        renderer.removeFromSuperview();
-        unsafe { (&*(native as *const NSWindow)).setContentView(Some(&renderer)) };
-        trace("after-restore", &renderer);
-    });
+    let Ok(embedding) = current(app) else {
+        return;
+    };
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let Ok(native) = window.ns_window() else {
+        return;
+    };
+    trace("before-restore", &embedding.wry_parent);
+    embedding.wry_parent.removeFromSuperview();
+    unsafe { (&*(native as *const NSWindow)).setContentView(Some(&embedding.wry_parent)) };
+    trace("after-restore", &embedding.wry_parent);
+    dispose();
 }
 
 pub fn trace(stage: &str, view: &NSView) {

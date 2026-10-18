@@ -1,6 +1,7 @@
 use super::registry::{Bounds, Policy};
 use cef::*;
 use std::sync::Arc;
+#[cfg(target_os = "windows")]
 use tauri::Manager;
 
 pub fn window_info(
@@ -8,19 +9,15 @@ pub fn window_info(
     id: u32,
     _policy: Arc<Policy>,
 ) -> Result<WindowInfo, String> {
+    #[cfg(target_os = "windows")]
     let window = app
         .get_webview_window("main")
         .ok_or("main window unavailable")?;
     #[cfg(target_os = "macos")]
-    let parent = unsafe {
-        use objc2_app_kit::NSWindow;
+    let parent = {
         super::container::ensure(app)?;
-        let view = (&*(window
-            .ns_window()
-            .map_err(|_| "native window unavailable")? as *const NSWindow))
-            .contentView()
-            .ok_or("native view unavailable")?;
-        super::input::create(id, &view, _policy)?
+        let embedding = super::container::current(app)?;
+        super::input::create(id, &embedding.root, _policy)?
     };
     #[cfg(target_os = "windows")]
     let parent = window.hwnd().map_err(|_| "native window unavailable")?.0 as *mut std::ffi::c_void;
@@ -46,6 +43,7 @@ pub fn layout(
     active: bool,
     locked: bool,
 ) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
     let window = app
         .get_webview_window("main")
         .ok_or("main window unavailable")?;
@@ -54,27 +52,18 @@ pub fn layout(
     let visible = active && bounds.visible && bounds.width > 0.0 && bounds.height > 0.0;
     #[cfg(target_os = "macos")]
     {
-        use objc2_app_kit::{NSView, NSWindow};
+        use objc2_app_kit::NSView;
         use objc2_foundation::{NSPoint, NSRect, NSSize};
         // Tauri's renderer rect is the CSS coordinate reference, including titlebar offsets.
         unsafe {
-            use objc2::{runtime::NSObjectProtocol, ClassType};
-            let native = &*(window
-                .ns_window()
-                .map_err(|_| "native window unavailable")?
-                as *const NSWindow);
-            if let Some(parent) = native.contentView() {
-                // Stay in the owned CEF dispatcher. with_webview constructs
-                // separately retained raw WK/manager/window handles on macOS.
-                let children = parent.subviews();
-                let renderer_parent = children.firstObject().ok_or("renderer unavailable")?;
-                super::container::trace("layout-parent", &renderer_parent);
-                let renderer_children = renderer_parent.subviews();
-                let renderer = renderer_children
-                    .iter()
-                    .find(|view| view.isKindOfClass(objc2_web_kit::WKWebView::class()))
-                    .ok_or("renderer unavailable")?;
-                let view = &*(handle as *const NSView);
+            let embedding = super::container::current(app)?;
+            let parent = &embedding.root;
+            let renderer = &embedding.renderer;
+            {
+                // GetWindowHandle is borrowed. Keep the child alive across AppKit
+                // layout and window-transition callbacks, then release this scope.
+                let view = objc2::rc::Retained::retain(handle as *mut NSView)
+                    .ok_or("native browser view unavailable")?;
                 if bounds.width <= 0.0 || bounds.height <= 0.0 {
                     super::input::hide(_id);
                     return Ok(());
@@ -100,13 +89,13 @@ pub fn layout(
                     ),
                     NSSize::new(width, height),
                 );
-                let frame = renderer.convertRect_toView(local, Some(&parent));
+                let frame = renderer.convertRect_toView(local, Some(parent));
                 // Resize the parent first: Chromium's child autoresizes with it.
                 // Setting the child first would apply the parent's size delta
                 // twice, moving the page edges and scrollbars outside the slot.
                 // Only the owned container is detached; Chromium observes its
                 // window transition and restores compositor visibility on reattach.
-                super::input::layout(_id, &parent, frame, visible);
+                super::input::layout(_id, parent, frame, visible);
                 view.setFrame(NSRect::new(NSPoint::new(0.0, 0.0), frame.size));
                 view.setHidden(false);
             }
@@ -162,8 +151,11 @@ pub fn destroy(id: u32) {
         };
         #[cfg(target_os = "macos")]
         unsafe {
+            let Some(view) = objc2::rc::Retained::retain(handle as *mut objc2_app_kit::NSView)
+            else {
+                return;
+            };
             super::input::hide(id);
-            let view = &*(handle as *const objc2_app_kit::NSView);
             view.removeFromSuperview();
         }
         #[cfg(target_os = "windows")]

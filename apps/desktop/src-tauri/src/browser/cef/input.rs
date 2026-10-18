@@ -67,7 +67,8 @@ mod macos {
         }
     }
     pub fn remove(id: u32) {
-        if let Some(view) = CONTAINERS.with(|r| r.borrow_mut().remove(&id)) {
+        let view = CONTAINERS.with(|r| r.borrow_mut().remove(&id));
+        if let Some(view) = view {
             view.removeFromSuperview();
         }
     }

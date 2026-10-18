@@ -112,3 +112,21 @@ apps/desktop/src-tauri/target/debug/reflexion-desktop
 最终构建的 `.app` 也通过本机合成网页加载、原生输入框输入和红色按钮关窗，退出码 0，正常完成 Runtime/System Runtime 协议关闭，最终测试进程与其 sidecar 无残留。`pnpm format:check`、lint、根级/前端 typecheck、`pnpm build:packages`、两个 Rust workspace 的格式检查、System Runtime 236 项测试、宿主 check 与 50 项测试通过。System Runtime 真机测试首次受沙箱的 `sandbox_apply` 限制，正常宿主权限下重跑通过；`pnpm build:desktop` 完成 `.app` 后首次创建 DMG 受磁盘设备访问限制，使用正常宿主权限重跑现有 DMG 脚本成功，生成约 200 MB 的安装包。
 
 本修复只改变 macOS 原生视图恢复步骤。Windows 子 HWND 的关闭流程和 Linux 系统浏览器回退保持既有实现；没有 Windows/Linux 真机验证，也不据短期关闭测试宣称长期稳定。
+
+## 2026-10-18 运行期所有权加固（原生长稳待验收）
+
+22:13:57 的系统日志记录宿主 PID 94407 在 CEF dispatcher 的自动释放池排空时，
+因仍有 superview 的普通 NSView 进入 dealloc 抛出异常并以 SIGTRAP 退出。
+本次对象没有被识别为此前的 WryWebViewParent，不能据相同栈认定同一释放来源。
+
+macOS 嵌入状态现显式持有 root、原始 Wry parent 与 WKWebView；布局和关窗恢复
+不再用第一个子视图推测身份。布局前复核窗口 contentView 仍是本次嵌入 root，
+恢复 Wry 后清理嵌入状态。CEF GetWindowHandle 的借用视图在布局和销毁操作期间
+建立作用域强引用，覆盖拆卸父容器可能触发的同步原生回调；操作结束即释放。
+原生对象释放移出 RefCell 借用作用域，避免释放回调重入仍占用的状态。
+
+隐藏期间拆卸 Guard 容器的既有合成恢复机制保留，不把未经验证的 setHidden 替换
+当作修复。Windows 继续按 HWND 原流程管理；Linux 继续系统浏览器回退。
+这些改动修正身份管理和操作期所有权边界，不是首次错误 release 已被捕获的证明。
+仍需独立数据目录下进行导航、反复隐藏/恢复、标签销毁和关窗原生回归，以及长稳、
+CPU/内存基线对比；Windows/Linux 未做真机验收。
