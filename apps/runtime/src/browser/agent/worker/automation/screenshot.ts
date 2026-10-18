@@ -19,9 +19,8 @@ export async function captureBrowserImage(page: Page, fullPage: boolean) {
     fullPage,
     scale: 'css',
     timeout: 5000,
-    // Mask every editable control: credentials may use ordinary text fields or
-    // contenteditable without a recognizable name/type. Never inspect values.
-    mask: [page.locator('input,textarea,select,[contenteditable],iframe')],
+    // Embedded frames may contain content outside the approved origin.
+    mask: [page.locator('iframe')],
     maskColor: '#111111',
   })
   if (image.length > 2 * 1024 * 1024)

@@ -20,8 +20,7 @@ export function validateExecutionResult(
     (result.error === null &&
       (result.completed !== plan.steps.length || !result.document?.snapshot)) ||
     (result.error !== null &&
-      (result.failedStep !== result.completed || result.document !== null)) ||
-    (result.error === 'browser_sensitive_content' && result.screenshots.length)
+      (result.failedStep !== result.completed || result.document !== null))
   )
     invalid()
   if (

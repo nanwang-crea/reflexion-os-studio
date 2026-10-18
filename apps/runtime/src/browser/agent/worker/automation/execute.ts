@@ -99,10 +99,6 @@ export async function executeBrowserPlan(
       expired = true
       await close()
     }
-    if (safe === 'browser_sensitive_content') {
-      await close()
-      screenshots.length = 0
-    }
     return {
       document: null,
       completed,

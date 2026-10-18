@@ -1,8 +1,7 @@
 import { z } from 'zod'
-import { isSafeBrowserText } from '../interaction.js'
 import { AgentBrowserPageSchema, AgentBrowserUrlSchema } from '../agent.js'
 
-const text = z.string().max(10000).refine(isSafeBrowserText)
+const text = z.string().max(10000)
 export const BrowserTargetSchema = z.union([
   z.strictObject({
     ref: z
@@ -125,7 +124,7 @@ export const BrowserExecuteSchema = z.discriminatedUnion('mode', [
   z.strictObject({
     ...common,
     mode: z.literal('script'),
-    script: z.string().min(1).max(20000).refine(isSafeBrowserText),
+    script: z.string().min(1).max(20000),
   }),
 ])
 export type BrowserStep = z.infer<typeof BrowserStepSchema>

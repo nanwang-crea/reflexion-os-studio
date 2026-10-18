@@ -19,12 +19,12 @@ export function browserTools(ctx: ToolContext): ToolDefinition[] {
     [
       'click',
       AgentBrowserClickSchema,
-      '按最新 browser.read 快照的 ref 点击控件。绑定页面版本，逐次审批；仅支持同源 GET 导航及页面内交互，禁止支付、凭据、上传与跨站提交。只返回新页面身份，之后需 browser.read。',
+      '按最新 browser.read 快照的 ref 点击控件。绑定页面版本，逐次审批；仅支持同源 GET 导航及页面内交互，禁止支付、上传与跨站提交。只返回新页面身份，之后需 browser.read。',
     ],
     [
       'type',
       AgentBrowserTypeSchema,
-      '按最新 browser.read 快照 ref 填写普通文本框（替换原内容）；submit=true 在该控件按 Enter 搜索。逐次审批并展示输入内容，不填写凭据、验证码或支付信息；只返回新页面身份，之后需 browser.read。',
+      '按最新 browser.read 快照 ref 填写文本框（替换原内容）；submit=true 在该控件按 Enter 搜索。逐次审批并展示输入内容，不进行支付或非 GET 提交；只返回新页面身份，之后需 browser.read。',
     ],
     [
       'navigate',
@@ -101,20 +101,18 @@ export function browserTools(ctx: ToolContext): ToolDefinition[] {
                     : code === 'browser_interaction_failed'
                       ? '网页交互未能确认完成，可能部分执行；浏览器已保留。不要自动重复操作或宣称成功，请重新导航并读取核对页面。'
                       : code === 'browser_interaction_denied'
-                        ? '未执行操作：请核对快照中的精确控件名称；凭据、支付、上传、非 GET 表单等控件不允许交互。跨来源链接需用 browser.navigate 单独审批新来源，不能重试绕过敏感控件保护。'
+                        ? '未执行操作：请核对快照中的精确控件名称；支付、上传、非 GET 表单等控件不允许交互。跨来源链接需用 browser.navigate 单独审批新来源，不能重试绕过操作限制。'
                         : code === 'browser_interaction_network_denied'
                           ? '交互触发了被阻止的请求（非 GET/HEAD、敏感地址或跨来源）。操作可能只完成了一部分，不自动重试或宣称提交成功；请重新导航并读取核对页面。'
                           : code === 'browser_capacity'
                             ? '已达到 8 个活动或保留浏览器的上限。请在“设置 → 模型与工具 → Agent 浏览器”点击“关闭所有 Agent 浏览器窗口”，再重新导航。'
                             : code === 'browser_page_stale'
                               ? '页面内容或地址已变化，旧页面版本不可读取（browser_page_stale）。请重新 browser.navigate 获取新版本，不携带旧 from；这不代表浏览器崩溃。'
-                              : code === 'browser_sensitive_content'
-                                ? '页面命中疑似凭据保护（browser_sensitive_content），访问已中止并释放隔离浏览器。不要重复访问或更换工具绕过保护。'
-                                : code === 'browser_system_chrome_unavailable'
-                                  ? '本机 Chrome 未检测到或启动不兼容。请用户在“设置 → Agent 浏览器”选择自动模式或下载并选择受管 Chromium。'
-                                  : code === 'browser_network_denied'
-                                    ? '旧版浏览器网络检查拒绝了导航（browser_network_denied）。请更新并重启应用后重新请求导航；此结果不代表搜索无结果。'
-                                    : `浏览器操作被拒绝或失败（${code}）。页面版本失效时重新导航；浏览器不可用时检查浏览器组件与系统依赖。`,
+                              : code === 'browser_system_chrome_unavailable'
+                                ? '本机 Chrome 未检测到或启动不兼容。请用户在“设置 → Agent 浏览器”选择自动模式或下载并选择受管 Chromium。'
+                                : code === 'browser_network_denied'
+                                  ? '旧版浏览器网络检查拒绝了导航（browser_network_denied）。请更新并重启应用后重新请求导航；此结果不代表搜索无结果。'
+                                  : `浏览器操作被拒绝或失败（${code}）。页面版本失效时重新导航；浏览器不可用时检查浏览器组件与系统依赖。`,
               code,
               isError: true,
             }

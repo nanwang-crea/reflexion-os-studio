@@ -1,8 +1,5 @@
 import { z } from 'zod'
 
-const sensitive =
-  /(?:password|passwd|secret|token|credential|authorization|api[_-]?key|private[_-]?key|id_token|\.env(?:[./?#]|$)|\.(?:pem|key)(?:[/?#]|$)|\.ssh|\.gnupg|\.aws|\.npmrc|\.netrc|keychain|cookie|login|signin|sign-in|oauth|\/auth(?:\/|$))/i
-
 export function isSafeAgentBrowserUrl(value: string): boolean {
   try {
     const url = new URL(value)
@@ -17,7 +14,6 @@ export function isSafeAgentBrowserUrl(value: string): boolean {
       ['http:', 'https:'].includes(url.protocol) &&
       !url.username &&
       !url.password &&
-      !sensitive.test(decoded) &&
       !/^(?:localhost|.*\.localhost|.*\.local)$/i.test(url.hostname)
     )
   } catch {

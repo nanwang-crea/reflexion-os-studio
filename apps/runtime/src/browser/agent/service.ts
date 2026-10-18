@@ -12,7 +12,6 @@ import {
 import type { Store } from '../../store/index.js'
 import { McpClient } from '../../mcp/client.js'
 import { browserWorkerPaths } from './paths.js'
-import { filterBrowserContent } from './security/content.js'
 
 export class BrowserAgentService {
   readonly runtime: BrowserRuntimeService
@@ -148,17 +147,8 @@ export class BrowserAgentService {
         throw new Error('browser_disabled')
       if (operation === 'execute') {
         const result = validateExecutionResult(args, current.page, raw)
-        if (result.document)
-          filterBrowserContent(
-            result.document.title,
-            result.document.snapshot ?? '',
-          )
         current.page = result.document?.page ?? null
-        if (
-          result.error === 'browser_sensitive_content' ||
-          result.error === 'browser_plan_timeout'
-        )
-          this.release(runId)
+        if (result.error === 'browser_plan_timeout') this.release(runId)
         return result
       }
       const document = AgentBrowserDocumentSchema.parse(JSON.parse(raw))
@@ -173,7 +163,6 @@ export class BrowserAgentService {
         throw new Error('browser_response_invalid')
       if (operation === 'read' && document.snapshot === undefined)
         throw new Error('browser_response_invalid')
-      filterBrowserContent(document.title, document.snapshot ?? '')
       if (
         operation === 'read' &&
         JSON.stringify(document.page) !== JSON.stringify(current.page)

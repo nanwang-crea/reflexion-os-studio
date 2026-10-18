@@ -36,7 +36,6 @@ test('scripts compile Playwright locators, constants and bounded loops to exact 
     `await page['screenshot']()`,
     `await page.screenshot({path:'/tmp/forbidden'})`,
     `await page.goto('https://other.test/')`,
-    `await page.type({target:{role:'textbox',name:'Query'},text:'api_key=synthetic_fixture_value'})`,
     `for(const i of [1,2,3,4,5]){await page.screenshot();}`,
   ]) {
     const args = { mode: 'script', page, script }
@@ -231,7 +230,7 @@ test('timer timeout awaits one asynchronous close before returning', async () =>
   assert.equal(calls, 1)
 })
 
-test('screenshots mask editable values even without credential names', async (t) => {
+test('screenshots retain editable controls and mask only embedded frames', async (t) => {
   const { captureBrowserImage } =
     await import('../dist/browser/agent/worker/automation/screenshot.js')
   const f = await browserAutomationFixture(t)
@@ -247,7 +246,7 @@ test('screenshots mask editable values even without credential names', async (t)
       return screenshot(options)
     }
     const image = await captureBrowserImage(page, false)
-    assert.equal(masked, 5)
+    assert.equal(masked, 1)
     assert.equal(image.mimeType, 'image/jpeg')
     await page.setContent(
       '<div style="width:100000px;height:10px">Public</div>',

@@ -8,7 +8,7 @@ export function browserExecuteTool(ctx: ToolContext): ToolDefinition {
   return {
     name: 'browser.execute',
     description:
-      '通用 Playwright 浏览器操作：mode=actions 时 steps 可组合 click/type/hover/press/select/drag/scroll/screenshot/read/goto/wait；mode=script 时 script 支持 await page.getByRole("button",{name:"展开"}).click()、fill/press/hover/selectOption/dragTo/scrollIntoViewIfNeeded，page.mouse.wheel(x,y)、page.screenshot()、await page.<动作>({...})、const 和有限 for...of 常量数组循环。目标用 target:{role,name} 或 {ref,name}，精确且唯一；drag 另有 source，press 需 key。只允许同源 GET/HEAD，不提供 eval、DOM 脚本、宿主文件或凭据访问。最多20步、4张截图、20秒，逐次审批完整计划；返回最新页面、快照和截图引用，可由视觉模型查看。不自动重跑失败计划。',
+      '通用 Playwright 浏览器操作：mode=actions 时 steps 可组合 click/type/hover/press/select/drag/scroll/screenshot/read/goto/wait；mode=script 时 script 支持 await page.getByRole("button",{name:"展开"}).click()、fill/press/hover/selectOption/dragTo/scrollIntoViewIfNeeded，page.mouse.wheel(x,y)、page.screenshot()、await page.<动作>({...})、const 和有限 for...of 常量数组循环。目标用 target:{role,name} 或 {ref,name}，精确且唯一；drag 另有 source，press 需 key。只允许同源 GET/HEAD，不提供 eval、DOM 脚本或宿主文件访问。最多20步、4张截图、20秒，逐次审批完整计划；返回最新页面、快照和截图引用，可由视觉模型查看。不自动重跑失败计划。',
     parameters: BrowserExecuteJsonSchema as ToolDefinition['parameters'],
     execution: {
       effect: 'state',

@@ -1,7 +1,7 @@
 import type { BrowserContext } from 'playwright'
 import { createHash } from 'node:crypto'
 import { isSafeAgentBrowserUrl } from '@reflexion-os-studio/contracts'
-import { filterBrowserContent, snapshotSection } from '../security/content.js'
+import { prepareBrowserContent, snapshotSection } from '../security/content.js'
 
 export async function observeBrowserPage(
   context: BrowserContext | null,
@@ -19,7 +19,7 @@ export async function observeBrowserPage(
     throw new Error('browser_page_stale')
   const snapshot = snapshotSection(result)
   const title = await page.title()
-  const content = filterBrowserContent(title, snapshot)
+  const content = prepareBrowserContent(title, snapshot)
   return {
     ...content,
     sourceUrl,

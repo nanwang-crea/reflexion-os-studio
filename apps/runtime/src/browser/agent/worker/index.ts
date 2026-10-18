@@ -38,7 +38,6 @@ let tail = Promise.resolve()
 const errors = new Set([
   'browser_system_chrome_unavailable',
   'browser_url_denied',
-  'browser_sensitive_content',
   'browser_page_stale',
   'browser_source_changed',
   'browser_snapshot_unavailable',

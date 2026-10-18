@@ -30,9 +30,15 @@ const page = {
 }
 const target = { page, ref: 'e2', element: 'Search' }
 
-test('interaction admission denies secret-shaped text and selector injection before persistence', () => {
+test('interaction admission accepts arbitrary text but denies selector injection before persistence', () => {
+  assert.equal(
+    validBrowserArgs('browser.type', {
+      ...target,
+      text: 'api_key=synthetic_fixture_value',
+    }),
+    true,
+  )
   const invalid = [
-    { ...target, text: 'api_key=synthetic_fixture_value' },
     { ...target, text: 'ordinary', ref: 'body >> input' },
     { ...target, text: 'ordinary', evaluate: 'document.cookie' },
   ]

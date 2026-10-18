@@ -89,3 +89,11 @@ debug 验收 driver 可额外设置 `CEF_ACCEPTANCE_NETWORK_URL=https://www.baid
 本轮独立 Chromium 与内嵌 CEF 均实际打开百度并返回“百度一下，你就知道”。CEF 合成页面加载、中文输入与会话隔离通过，driver 达到 `await-takeover`；本轮未重复人工接管及交还验收。最初使用产品标识启动 QA 时 CEF 初始化失败，独立 Tauri 标识隔离缓存后成功，未修改产品缓存。Windows/Linux 本轮未做真机网络验收。
 
 验证通过：format/lint、根级与桌面 typecheck、packages 构建、完整 `pnpm test`（Runtime 754 pass / 4 Windows skip、前端 85、System Runtime 237、终端故障矩阵 26/26）、默认 CEF 宿主 47 项与无 CEF 宿主 31 项单测、两个 Cargo 格式检查、默认宿主编译、macOS app/ARM64 DMG 打包及包内 workspace 冒烟。未执行 Windows/Linux 真机或本轮长稳测试。
+
+## 2026-10-18 浏览器凭据限制移除
+
+按用户明确要求，移除整页凭据扫描及其强制关闭分支、URL 路径/参数关键词拦截、输入文本凭据形态过滤、密码/验证码控件与 GET 凭据表单拒绝、可编辑控件截图遮罩。Runtime 提示与主 Agent 指令同步更新。旧 browser_sensitive_content 枚举仅兼容历史结果，当前 worker 不产生此错误。审批、页面身份、临时会话隔离、应用内部来源、同源 GET/HEAD、支付/上传、iframe 遮罩及截图大小限制保持。该调整不新增个人浏览器资料、系统凭据或浏览器上下文存储读取 API。
+
+本轮只使用合成页面与合成输入验证，不读取真实凭据或个人浏览器资料。三平台复用契约与 Runtime 实现；Windows/Linux 真机交互仍待验收。
+
+本轮最终验证：format、lint、根级/桌面类型检查与完整 `pnpm test` 通过（Runtime 754 pass / 4 Windows skip、前端 85、System Runtime 237、终端故障矩阵 26/26）；两个 Cargo 格式检查与宿主 cargo check 通过；macOS app/ARM64 DMG 及包内 workspace 冒烟通过。合成有头/无头页面均验证密码与验证码输入、同源 GET 登录表单；尚未验证真实网站登录、Windows/Linux 真机与本轮长稳。

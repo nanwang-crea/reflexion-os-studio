@@ -122,7 +122,7 @@ test('Agent browser source rejects arbitrary executable paths and settings resul
   }
 })
 
-test('browser interactions accept only bound AX references and ordinary text', async () => {
+test('browser interactions accept only bound AX references without credential text filtering', async () => {
   const {
     AgentBrowserClickSchema,
     AgentBrowserTypeSchema,
@@ -146,8 +146,14 @@ test('browser interactions accept only bound AX references and ordinary text', a
     AgentBrowserTypeSchema.parse({ ...target, text: '普通搜索词' }).submit,
     false,
   )
+  assert.equal(
+    AgentBrowserTypeSchema.safeParse({
+      ...target,
+      text: 'api_key=synthetic_fixture_value',
+    }).success,
+    true,
+  )
   for (const extra of [
-    { text: 'api_key=synthetic_fixture_value' },
     { text: 'public', ref: '#query' },
     { text: 'public', evaluate: '1+1' },
   ])

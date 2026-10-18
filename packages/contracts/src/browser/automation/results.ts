@@ -21,6 +21,7 @@ export const BrowserExecutionResultSchema = z.strictObject({
       'browser_interaction_network_denied',
       'browser_interaction_failed',
       'browser_page_stale',
+      // Legacy result compatibility; current workers do not emit this code.
       'browser_sensitive_content',
       'browser_plan_timeout',
       'browser_operation_failed',

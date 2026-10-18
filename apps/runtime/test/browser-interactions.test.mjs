@@ -18,7 +18,7 @@ const fixtureHtml = `<title>Public interaction fixture</title>
 <button onclick="document.querySelector('#detail').textContent='Expanded public detail'">Expand</button><p id="detail">Collapsed</p>
 <a href="/next">Next page</a><a href="http://other.test/forbidden">Other site</a>
 <button onclick="fetch('/write',{method:'POST',body:'synthetic public text'}).catch(()=>{})">Try request</button>
-<label>Security code<input autocomplete="one-time-code"></label><button aria-label="Pay">Pay</button>`
+<label>Security code<input autocomplete="one-time-code"></label><form action="/login" method="get"><label>密码<input name="passphrase" type="password" autocomplete="current-password"></label><button>Sign in</button></form><button aria-label="Pay">Pay</button>`
 
 for (const display of ['headless', 'headed']) {
   test(
@@ -32,7 +32,7 @@ for (const display of ['headless', 'headed']) {
     async () => {
       let forbiddenHits = 0
       const server = createServer((request, response) => {
-        response.setHeader('content-type', 'text/html')
+        response.setHeader('content-type', 'text/html; charset=utf-8')
         if (request.method === 'POST' || request.url === '/forbidden')
           ++forbiddenHits
         response.end(
@@ -76,13 +76,22 @@ for (const display of ['headless', 'headed']) {
         metadata = await backend.interact('click', target(document, 'Expand'))
         document = await backend.read(metadata.page)
         assert.match(document.snapshot, /Expanded public detail/)
-        await assert.rejects(
-          backend.interact('type', {
-            ...target(document, 'Security code'),
-            text: '123456',
-          }),
-          /browser_interaction_denied/,
+        metadata = await backend.interact('type', {
+          ...target(document, 'Security code'),
+          text: '123456',
+        })
+        document = await backend.read(metadata.page)
+        metadata = await backend.interact('type', {
+          ...target(document, '密码'),
+          text: 'synthetic_fixture_only',
+        })
+        document = await backend.read(metadata.page)
+        metadata = await backend.interact('click', target(document, 'Sign in'))
+        assert.match(
+          metadata.sourceUrl,
+          /\/login\?passphrase=synthetic_fixture_only/,
         )
+        document = await backend.read(metadata.page)
         await assert.rejects(
           backend.interact('click', target(document, 'Pay')),
           /browser_interaction_denied/,
