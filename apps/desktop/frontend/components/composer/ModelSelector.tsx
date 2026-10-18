@@ -3,7 +3,7 @@ import type {
   ProviderModel,
 } from '@reflexion-os-studio/runtime-client'
 import { Select } from '../forms/Select'
-import { ChevronIcon } from '../../ui/icons'
+import { GroupedSelect } from '../forms/GroupedSelect'
 
 export interface ComposerModelOption {
   key: string
@@ -37,24 +37,14 @@ export function ModelSelector(props: {
   }
   return (
     <>
-      <label className="composer-select model" title="对话使用的模型">
-        <Select
+      <span className="composer-select model" title="对话使用的模型">
+        <GroupedSelect
           aria-label="对话模型"
-          value={props.selectedKey ?? ''}
+          groups={groups}
+          value={props.selectedKey}
           onValueChange={props.onModelChange}
-        >
-          {[...groups].map(([group, options]) => (
-            <optgroup key={group} label={group}>
-              {options.map((option) => (
-                <option key={option.key} value={option.key}>
-                  {option.label}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </Select>
-        <ChevronIcon />
-      </label>
+        />
+      </span>
       {props.reasoning && (
         <label
           className="composer-select reasoning"

@@ -25,6 +25,7 @@ initializeTheme()
 setThemePreference(query.get('theme') === 'light' ? 'light' : 'dark')
 
 function Fixture() {
+  const [modelKey, setModelKey] = useState('demo')
   const [effort, setEffort] = useState<ReasoningEffort | null>('high')
   const reasoning = query.get('reasoning')
   const [settings, setSettings] = useState(false)
@@ -108,9 +109,22 @@ function Fixture() {
                     label: '示例模型 · 标准',
                     group: '示例供应商',
                   },
+                  ...(query.has('many-models')
+                    ? Array.from({ length: 50 }, (_, index) => ({
+                        key: `backup-${index}`,
+                        label: `长模型名称-${index}-${'上下文与推理版本'.repeat(8)}`,
+                        group: '备用供应商',
+                      }))
+                    : [
+                        {
+                          key: 'backup',
+                          label: '备用模型',
+                          group: '备用供应商',
+                        },
+                      ]),
                 ]}
-                selectedModelKey="demo"
-                onModelChange={noop}
+                selectedModelKey={modelKey}
+                onModelChange={setModelKey}
                 reasoningSelection={{
                   value: reasoning === 'supported' ? effort : null,
                   options: [

@@ -58,6 +58,8 @@ test('composer actions remain aligned in both themes and narrow split layouts', 
     browser = await chromium.launch({ headless: true })
     const page = await browser.newPage()
     const url = `http://127.0.0.1:${server.address().port}`
+    if (process.env.UI_REVIEW_OUTPUT)
+      await mkdir(process.env.UI_REVIEW_OUTPUT, { recursive: true })
     for (const theme of ['light', 'dark'])
       for (const width of [1440, 940]) {
         await page.setViewportSize({ width, height: 860 })
@@ -86,9 +88,31 @@ test('composer actions remain aligned in both themes and narrow split layouts', 
           true,
         )
         await page
-          .getByRole('combobox', { name: '对话模型', exact: true })
+          .getByRole('button', { name: '对话模型', exact: true })
           .click()
-        await page.getByRole('listbox').waitFor()
+        await page.getByRole('menuitem', { name: '示例供应商' }).waitFor()
+        await page.getByRole('menuitem', { name: '示例供应商' }).focus()
+        await page.keyboard.press('ArrowRight')
+        const selected = page.getByRole('menuitemradio', {
+          name: '示例模型 · 标准',
+        })
+        await selected.waitFor()
+        assert.equal(await selected.getAttribute('aria-checked'), 'true')
+        for (const menu of await page.locator('.ui-grouped-menu').all()) {
+          const bounds = await menu.boundingBox()
+          assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width)
+          assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= 860)
+        }
+        if (process.env.UI_REVIEW_OUTPUT)
+          await page.screenshot({
+            animations: 'disabled',
+            path: join(
+              process.env.UI_REVIEW_OUTPUT,
+              `model-menu-${theme}-${width}.png`,
+            ),
+          })
+        await page.keyboard.press('Escape')
+
         await page.keyboard.press('Escape')
         await page.waitForFunction(
           () =>
@@ -105,6 +129,40 @@ test('composer actions remain aligned in both themes and narrow split layouts', 
           })
         }
       }
+    await page.getByRole('button', { name: '对话模型', exact: true }).click()
+    await page.getByRole('menuitem', { name: '备用供应商' }).hover()
+    await page
+      .getByRole('menuitemradio', { name: '备用模型', exact: true })
+      .click()
+    assert.match(
+      await page
+        .getByRole('button', { name: '对话模型', exact: true })
+        .innerText(),
+      /备用模型/,
+    )
+    assert.equal(await page.locator('.ui-grouped-menu').count(), 0)
+    await page.goto(`${url}?theme=light&many-models=1`)
+    await page.getByRole('button', { name: '对话模型', exact: true }).click()
+    await page.getByRole('menuitem', { name: '备用供应商' }).focus()
+    await page.keyboard.press('ArrowRight')
+    await page.getByRole('menuitemradio').first().waitFor()
+    await page.keyboard.press('End')
+    await page.waitForFunction(() =>
+      document.activeElement?.textContent?.startsWith('长模型名称-49-'),
+    )
+    const longMenu = await page
+      .getByRole('menu', { name: '备用供应商', exact: true })
+      .boundingBox()
+    assert.ok(longMenu.width <= 320)
+    assert.ok(longMenu.height <= 360)
+    assert.ok(longMenu.x >= 0 && longMenu.x + longMenu.width <= 940)
+    await page.keyboard.press('Enter')
+    assert.match(
+      await page
+        .getByRole('button', { name: '对话模型', exact: true })
+        .innerText(),
+      /长模型名称-49-/,
+    )
     await page.goto(`${url}?theme=light&reasoning=supported`)
     const reasoning = page.getByRole('combobox', { name: '对话思考强度' })
     await reasoning.waitFor()
