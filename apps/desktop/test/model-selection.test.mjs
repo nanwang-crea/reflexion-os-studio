@@ -10,14 +10,20 @@ after(() => rmSync(directory, { recursive: true, force: true }))
 const outfile = join(directory, 'model-selection.mjs')
 await build({
   absWorkingDir: fileURLToPath(new URL('..', import.meta.url)),
-  entryPoints: ['frontend/hooks/session/model-selection.ts'],
+  stdin: {
+    contents: `export * from './frontend/hooks/session/model-selection'; export * from './frontend/hooks/session/reasoning-storage'`,
+    resolveDir: fileURLToPath(new URL('..', import.meta.url)),
+  },
   bundle: true,
   format: 'esm',
   outfile,
 })
-const { modelOptionsFor, selectedEffort } = await import(
-  pathToFileURL(outfile).href
-)
+const {
+  modelOptionsFor,
+  selectedEffort,
+  loadReasoningChoice,
+  saveReasoningChoice,
+} = await import(pathToFileURL(outfile).href)
 
 const provider = {
   id: 'p',
@@ -161,4 +167,65 @@ test('unknown capabilities and unknown levels remain distinct from unsupported m
     ],
   )[0]
   assert.equal(unsupported.reasoningUnavailableReason, '不支持调整')
+})
+
+test('reasoning preferences survive reload, stay scoped to a model and preserve server default', () => {
+  const data = new Map()
+  const storage = {
+    getItem: (key) => data.get(key) ?? null,
+    setItem: (key, value) => data.set(key, value),
+  }
+  const a = { key: 'p::a', defaultValue: 'high', value: 'low' }
+  const b = { key: 'p::b', defaultValue: 'medium', value: null }
+  saveReasoningChoice(a, storage)
+  saveReasoningChoice(b, storage)
+  assert.deepEqual(loadReasoningChoice(a.key, storage), a)
+  assert.deepEqual(loadReasoningChoice(b.key, storage), b)
+  assert.equal(loadReasoningChoice('other::a', storage), null)
+  const options = modelOptionsFor([provider], configs)
+  assert.equal(
+    selectedEffort(options[0], loadReasoningChoice(a.key, storage)),
+    'low',
+  )
+  assert.equal(
+    selectedEffort(
+      { ...options[0], defaultReasoningEffort: 'medium' },
+      loadReasoningChoice(a.key, storage),
+    ),
+    'medium',
+  )
+  assert.equal(
+    selectedEffort(
+      { ...options[0], reasoningOptions: [{ label: '高', value: 'high' }] },
+      loadReasoningChoice(a.key, storage),
+    ),
+    'high',
+  )
+})
+
+test('invalid or unavailable preference storage falls back without blocking selection', () => {
+  for (const raw of [
+    'not json',
+    '{}',
+    '["high",123]',
+    '[null]',
+    '["high","bad value"]',
+  ]) {
+    assert.equal(loadReasoningChoice('p::a', { getItem: () => raw }), null)
+  }
+  const storage = {
+    getItem: () => {
+      throw Error('unavailable')
+    },
+    setItem: () => {
+      throw Error('quota')
+    },
+  }
+  assert.equal(loadReasoningChoice('p::a', storage), null)
+  assert.doesNotThrow(() =>
+    saveReasoningChoice(
+      { key: 'p::a', defaultValue: 'high', value: 'low' },
+      storage,
+    ),
+  )
 })

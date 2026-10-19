@@ -12,6 +12,10 @@ import {
   selectedEffort,
   type ReasoningChoice,
 } from './session/model-selection'
+import {
+  loadReasoningChoice,
+  saveReasoningChoice,
+} from './session/reasoning-storage'
 import type { SessionData } from '../api/sessions'
 
 /**
@@ -67,7 +71,7 @@ export function useModelSelection(
   const [selectedModelKey, setModelKey] = useState<string | null>(null)
   const setSelectedModelKey = useCallback((key: string | null) => {
     setModelKey(key)
-    setChoice(null)
+    setChoice(key === null ? null : loadReasoningChoice(key))
   }, [])
   const selected = modelOptions.find(
     (option) => option.key === selectedModelKey,
@@ -76,7 +80,9 @@ export function useModelSelection(
   const value = selectedEffort(selected, choice)
   const onReasoningChange = useCallback(
     (value: ReasoningEffort | null) => {
-      setChoice({ key: selectedModelKey, defaultValue, value })
+      const next = { key: selectedModelKey, defaultValue, value }
+      setChoice(next)
+      saveReasoningChoice(next)
     },
     [selectedModelKey, defaultValue],
   )
