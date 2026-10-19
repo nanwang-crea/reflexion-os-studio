@@ -114,8 +114,8 @@ jobs:
       - name: Verify MCP process launch regressions
         run: pnpm --filter @reflexion-os-studio/runtime exec node --disable-warning=ExperimentalWarning --import ./test/set-test-data-dir.mjs --test test/mcp.test.mjs test/mcp-launch.test.mjs
 
-      - name: Verify Windows CRT dependency checker
-        run: node --test scripts/test/windows-crt.test.mjs
+      - name: Verify desktop packaging regressions
+        run: node --test scripts/test/windows-crt.test.mjs scripts/test/desktop-bundle.test.mjs
 
       - name: Verify multi-agent collaboration
         run: pnpm --filter @reflexion-os-studio/runtime exec node --import ./test/set-test-data-dir.mjs --test test/agent-roles.test.mjs test/agent-teams.test.mjs

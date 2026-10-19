@@ -218,10 +218,12 @@ pub unsafe extern "C" fn RunWinMain(
     _version_info: *mut std::ffi::c_void,
 ) -> i32 {
     if std::env::args_os().any(|arg| arg == "--verify-frontend-assets") {
-        return if verify_frontend_assets().is_ok() {
-            0
-        } else {
-            1
+        return match verify_frontend_assets() {
+            Ok(()) => 0,
+            Err(error) => {
+                eprintln!("Embedded frontend verification failed in CEF host DLL: {error}");
+                1
+            }
         };
     }
     browser::cef::SANDBOX.store(sandbox as usize, std::sync::atomic::Ordering::Release);

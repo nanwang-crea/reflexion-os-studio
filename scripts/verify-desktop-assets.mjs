@@ -1,38 +1,41 @@
 #!/usr/bin/env node
 // Run after Rust compilation and before any platform installer is bundled.
 import { spawnSync } from 'node:child_process'
-import { existsSync, statSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { desktopBuildPaths } from './desktop-build-paths.mjs'
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const host = join(root, 'apps', 'desktop', 'src-tauri')
-const target = process.env.CARGO_TARGET_DIR
-  ? resolve(host, process.env.CARGO_TARGET_DIR)
-  : join(host, 'target')
-const profile = process.env.TAURI_ENV_DEBUG === 'true' ? 'debug' : 'release'
-const executable = `reflexion-desktop${process.platform === 'win32' ? '.exe' : ''}`
-const triple =
-  process.env.CARGO_BUILD_TARGET ?? process.env.TAURI_ENV_TARGET_TRIPLE
-const candidates = [
-  ...(triple ? [join(target, triple, profile, executable)] : []),
-  join(target, profile, executable),
-]
-  .filter(existsSync)
-  .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)
-if (!candidates.length) throw new Error('Compiled desktop executable not found')
-const result = spawnSync(candidates[0], ['--verify-frontend-assets'], {
-  stdio: 'inherit',
-  timeout: 30000,
-})
-if (result.error || result.status !== 0) {
-  throw new Error(
-    'Embedded frontend verification failed; installer bundling stopped',
-    {
-      cause: result.error,
-    },
+export function verifyDesktopAssets(
+  root,
+  env = process.env,
+  platform = process.platform,
+  run = spawnSync,
+) {
+  const { executable } = desktopBuildPaths(root, env, platform)
+  const result = run(executable, ['--verify-frontend-assets'], {
+    stdio: 'inherit',
+    timeout: 30000,
+    cwd: dirname(executable),
+    env,
+  })
+  if (result.error || result.status !== 0) {
+    const status =
+      result.status === null
+        ? 'none'
+        : `${result.status} (0x${(result.status >>> 0).toString(16).padStart(8, '0')})`
+    throw new Error(
+      `Embedded frontend verification failed; installer bundling stopped: executable=${executable}, exit=${status}, signal=${result.signal ?? 'none'}${result.error ? `, error=${result.error.message}` : ''}`,
+      result.error ? { cause: result.error } : undefined,
+    )
+  }
+  console.log(
+    'Embedded frontend verified: index.html and entry JS/CSS are present',
   )
 }
-console.log(
-  'Embedded frontend verified: index.html and entry JS/CSS are present',
-)
+
+if (
+  process.argv[1] &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  verifyDesktopAssets(resolve(dirname(fileURLToPath(import.meta.url)), '..'))
+}

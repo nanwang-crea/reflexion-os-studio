@@ -6,7 +6,7 @@ use tauri::Manager;
 
 pub fn window_info(
     app: &tauri::AppHandle,
-    id: u32,
+    _id: u32,
     _policy: Arc<Policy>,
 ) -> Result<WindowInfo, String> {
     #[cfg(target_os = "windows")]
@@ -17,7 +17,7 @@ pub fn window_info(
     let parent = {
         super::container::ensure(app)?;
         let embedding = super::container::current(app)?;
-        super::input::create(id, &embedding.root, _policy)?
+        super::input::create(_id, &embedding.root, _policy)?
     };
     #[cfg(target_os = "windows")]
     let parent = window.hwnd().map_err(|_| "native window unavailable")?.0;
