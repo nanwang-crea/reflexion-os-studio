@@ -118,14 +118,14 @@
   min-width: 52px;
   padding: 4px 11px;
   border-radius: 6px;
-  background: var(--accent);
-  color: var(--bg-sidebar);
+  background: var(--accent-solid);
+  color: var(--on-accent);
   font-size: 12px;
   font-weight: 600;
 }
 
 .file-save-action:hover:not(:disabled) {
-  background: var(--accent-hover);
+  background: var(--accent-solid-hover);
 }
 
 .jump-form input {

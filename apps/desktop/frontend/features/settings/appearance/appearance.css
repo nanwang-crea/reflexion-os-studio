@@ -48,7 +48,7 @@
 }
 .appearance-preview > span:first-child {
   width: 28%;
-  background: #f1f4f5;
+  background: #f1f5f9;
   border-right: 1px solid #dedede;
 }
 .appearance-preview > span:last-child {
@@ -66,22 +66,30 @@
   width: 65%;
 }
 .appearance-preview-dark {
-  background: #151d24;
-  border-color: #3b505c;
+  background: #171e27;
+  border-color: #3b4b5e;
 }
 .appearance-preview-dark > span:first-child {
-  background: #10171d;
-  border-color: #3b505c;
+  background: #111821;
+  border-color: #3b4b5e;
 }
 .appearance-preview-dark i {
-  background: #3b505c;
+  background: #3b4b5e;
 }
 .appearance-preview-system {
-  background: linear-gradient(90deg, #fff 50%, #151d24 50%);
+  background: linear-gradient(90deg, #fff 50%, #171e27 50%);
 }
 .appearance-preview-system > span:first-child {
   background: #e9e9e9;
 }
 .appearance-preview-system i {
   background: #999;
+}
+
+/* The preview's short final line represents the shared sky-blue action. */
+.appearance-preview i:last-child {
+  background: #b5e0f8;
+}
+.appearance-preview-dark i:last-child {
+  background: #96d3f5;
 }

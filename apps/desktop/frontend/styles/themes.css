@@ -1,32 +1,34 @@
 /* Dark remains the default for existing installations. */
 :root {
-  --on-accent: #102d28;
-  --selection-bg: #345082;
+  --on-accent: #142c3d;
+  --selection-bg: #294e6a;
   --selection-text: #fff;
 }
 :root[data-theme='light'] {
   color-scheme: light;
-  --bg: #fbfcfd;
-  --bg-sidebar: #f1f4f5;
+  --bg: #fafcfe;
+  --bg-sidebar: #f1f5f9;
   --bg-elevated: #ffffff;
-  --bg-hover: #eaf0f0;
-  --bg-active: #e0eae8;
-  --bg-inset: #f5f7f8;
+  --bg-hover: #edf3f9;
+  --bg-active: #e3eef8;
+  --bg-inset: #f4f7fb;
   --bg-editor: #ffffff;
   --surface-overlay: rgba(255, 255, 255, 0.94);
   --surface-translucent: rgba(255, 255, 255, 0.82);
   --scrim: rgba(0, 0, 0, 0.3);
-  --border: #dae3e5;
-  --border-subtle: #e3eaeb;
-  --text: #1c2d34;
-  --text-secondary: #5a6a72;
-  --text-muted: #60717a;
-  --accent: #176d60;
-  --accent-hover: #12594e;
-  --on-accent: #ffffff;
-  --accent-soft: rgba(23, 109, 96, 0.07);
-  --accent-border: rgba(23, 109, 96, 0.5);
-  --focus-ring: #258879;
+  --border: #d2dde8;
+  --border-subtle: #e1e8f0;
+  --text: #233346;
+  --text-secondary: #53677b;
+  --text-muted: #60758a;
+  --accent: #14638b;
+  --accent-hover: #0c4e74;
+  --accent-solid: #b5e0f8;
+  --accent-solid-hover: #9dd4f3;
+  --on-accent: #17364b;
+  --accent-soft: rgba(43, 134, 188, 0.08);
+  --accent-border: rgba(43, 134, 188, 0.48);
+  --focus-ring: #287fae;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
   --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.07);
   --danger: #c42b32;
@@ -34,8 +36,8 @@
   --warning-text: #96510b;
   --info: #2563b8;
   --ok: #167545;
-  --selection-bg: #dceee9;
-  --selection-text: #1c2d34;
+  --selection-bg: #d6ebfa;
+  --selection-text: #233346;
 }
 ::selection {
   background: var(--selection-bg);
@@ -46,13 +48,11 @@
 .edit-resend-actions .primary {
   color: var(--on-accent);
 }
-:root[data-theme='light'] input[type='checkbox']:not(.ui-switch):checked {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m3 8 3 3 7-7' fill='none' stroke='%23fff' stroke-width='2'/%3E%3C/svg%3E");
-}
+
 :root[data-theme='light'] .settings-primary:hover:not(:disabled),
 :root[data-theme='light'] .form-actions .primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
+  background: var(--accent-solid-hover);
+  border-color: var(--accent-solid-hover);
 }
 :root[data-theme='light']
   .settings-view

@@ -271,10 +271,10 @@
 }
 
 .edit-resend-actions .primary {
-  background: var(--accent);
+  background: var(--accent-solid);
   color: var(--on-accent);
 }
 
 .edit-resend-actions .primary:hover:not(:disabled) {
-  background: var(--accent-hover);
+  background: var(--accent-solid-hover);
 }

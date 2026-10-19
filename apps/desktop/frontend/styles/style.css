@@ -17,27 +17,31 @@
   --on-danger: #ffffff;
 
   color-scheme: dark;
-  --bg: #151d24;
-  --bg-sidebar: #10171d;
-  --bg-elevated: #1c2832;
-  --bg-hover: #24343f;
-  --bg-active: #2b3d48;
-  --bg-inset: #121b22;
+  --bg: #171e27;
+  --bg-sidebar: #111821;
+  --bg-elevated: #202b38;
+  --bg-hover: #283645;
+  --bg-active: #2d4053;
+  --bg-inset: #141c26;
   /* active 标签与编辑器背景融合；必须与
      features/workspace/editor/monaco.ts 的 editor.background 保持同值 */
   --bg-editor: #1e1e1e;
   --surface-overlay: rgba(23, 23, 23, 0.72);
   --surface-translucent: rgba(23, 23, 23, 0.45);
   --scrim: rgba(0, 0, 0, 0.6);
-  --border: #3b505c;
-  --border-subtle: #2a3944;
-  --text: #e7eff2;
-  --text-secondary: #b1c2cb;
-  --text-muted: #8da2af;
-  --accent: #88d6c4;
-  --accent-hover: #a5e5d7;
-  --accent-soft: rgba(136, 214, 196, 0.1);
-  --accent-border: rgba(136, 214, 196, 0.45);
+  --border: #3b4b5e;
+  --border-subtle: #2b3949;
+  --text: #e8eef5;
+  --text-secondary: #b8c6d5;
+  --text-muted: #93a7bc;
+  --accent: #96d3f5;
+  --accent-hover: #bae5fc;
+  --accent-solid: #96d3f5;
+  --accent-solid-hover: #bae5fc;
+  --on-accent: #142c3d;
+  --focus-ring: #96d3f5;
+  --accent-soft: rgba(150, 211, 245, 0.1);
+  --accent-border: rgba(150, 211, 245, 0.48);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.18);
   --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.22);
   --danger: #f87171;
@@ -143,9 +147,9 @@ input:is([type='checkbox'], [type='radio']) {
 }
 
 input[type='checkbox']:checked {
-  background-color: var(--text);
-  border-color: var(--text);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m3 8 3 3 7-7' fill='none' stroke='%23111' stroke-width='2'/%3E%3C/svg%3E");
+  background-color: var(--accent-solid);
+  border-color: var(--accent-solid);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m3 8 3 3 7-7' fill='none' stroke='%23142c3d' stroke-width='2'/%3E%3C/svg%3E");
 }
 
 input[type='radio'] {
@@ -153,7 +157,8 @@ input[type='radio'] {
 }
 
 input[type='radio']:checked {
-  background: var(--text);
+  background: var(--accent);
+  border-color: var(--accent);
   box-shadow: inset 0 0 0 3px var(--bg-inset);
 }
 

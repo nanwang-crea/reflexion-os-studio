@@ -95,13 +95,13 @@
 }
 
 .form-actions .primary {
-  background: var(--text);
-  color: var(--bg-sidebar);
+  background: var(--accent-solid);
+  color: var(--on-accent);
   font-weight: 600;
 }
 
 .form-actions .primary:hover:not(:disabled) {
-  background: var(--accent-hover);
+  background: var(--accent-solid-hover);
 }
 
 .settings-list-toolbar h4,
@@ -157,16 +157,16 @@
 .settings-primary {
   min-height: 34px;
   padding: 7px 12px;
-  border: 1px solid var(--text);
+  border: 1px solid var(--accent-solid);
   border-radius: 7px;
-  background: var(--text);
-  color: var(--bg-sidebar);
+  background: var(--accent-solid);
+  color: var(--on-accent);
   font-weight: 600;
 }
 
 .settings-primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
+  background: var(--accent-solid-hover);
+  border-color: var(--accent-solid-hover);
 }
 
 .settings-feedback {

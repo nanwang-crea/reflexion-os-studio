@@ -86,7 +86,11 @@ input[type='checkbox'].ui-switch {
     background-position 160ms ease;
 }
 input[type='checkbox'].ui-switch:checked {
-  background-color: var(--focus-ring);
-  background-image: radial-gradient(circle, #fff 7px, transparent 7.5px);
+  background-color: var(--accent-solid);
+  background-image: radial-gradient(
+    circle,
+    var(--on-accent) 7px,
+    transparent 7.5px
+  );
   background-position: calc(100% - 2px) center;
 }

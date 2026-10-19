@@ -57,6 +57,8 @@ test('composer actions remain aligned in both themes and narrow split layouts', 
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
     browser = await chromium.launch({ headless: true })
     const page = await browser.newPage()
+    // Measure settled colors rather than an intermediate disabled→enabled transition.
+    await page.emulateMedia({ reducedMotion: 'reduce' })
     const url = `http://127.0.0.1:${server.address().port}`
     if (process.env.UI_REVIEW_OUTPUT)
       await mkdir(process.env.UI_REVIEW_OUTPUT, { recursive: true })
@@ -65,6 +67,40 @@ test('composer actions remain aligned in both themes and narrow split layouts', 
         await page.setViewportSize({ width, height: 860 })
         await page.goto(`${url}?theme=${theme}`)
         await page.waitForSelector('.composer-send')
+        await page
+          .locator('.composer textarea')
+          .fill('帮我梳理这个项目，先给出清晰的实现方案。')
+        const colors = await page
+          .locator('.composer-send')
+          .evaluate((button) => {
+            const style = getComputedStyle(button)
+            const rgb = (value) =>
+              value
+                .match(/[\d.]+/g)
+                .slice(0, 3)
+                .map(Number)
+            const luminance = (color) =>
+              rgb(color)
+                .map((v) => {
+                  const c = v / 255
+                  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+                })
+                .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0)
+            const a = luminance(style.color),
+              b = luminance(style.backgroundColor)
+            return {
+              contrast: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05),
+              fill: rgb(style.backgroundColor),
+            }
+          })
+        assert.ok(
+          colors.contrast >= 4.5,
+          `${theme}: action contrast ${colors.contrast}`,
+        )
+        assert.ok(
+          colors.fill[2] > colors.fill[1] && colors.fill[1] > colors.fill[0],
+          'primary action uses sky blue',
+        )
         const boxes = await page.evaluate(() => {
           const box = (selector) => {
             const r = document.querySelector(selector).getBoundingClientRect()
@@ -184,11 +220,17 @@ test('composer actions remain aligned in both themes and narrow split layouts', 
     await page.getByRole('navigation', { name: '设置分类' }).waitFor()
     await page.getByRole('radio', { name: /^浅色/ }).check()
     assert.equal(await page.locator('html').getAttribute('data-theme'), 'light')
-    if (process.env.UI_REVIEW_OUTPUT)
+    if (process.env.UI_REVIEW_OUTPUT) {
       await page.screenshot({
         animations: 'disabled',
         path: join(process.env.UI_REVIEW_OUTPUT, 'settings-light.png'),
       })
+      await page.getByRole('radio', { name: /^深色/ }).check()
+      await page.screenshot({
+        animations: 'disabled',
+        path: join(process.env.UI_REVIEW_OUTPUT, 'settings-dark.png'),
+      })
+    }
   } finally {
     await browser?.close()
     await new Promise((resolve) => server.close(resolve))

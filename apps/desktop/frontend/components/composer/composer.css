@@ -15,7 +15,7 @@
   border: 1px solid var(--border);
   border-radius: 18px;
   padding: 12px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow-sm);
   transition:
     border-color 0.16s ease,
     box-shadow 0.16s ease;
@@ -23,7 +23,9 @@
 
 .composer:focus-within {
   border-color: var(--accent-border);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+  box-shadow:
+    0 0 0 3px var(--accent-soft),
+    var(--shadow-sm);
 }
 
 /* 拖入文件悬停在输入框上方时的反馈；pointer-events 置空以免影响命中与 dragleave。 */
@@ -311,14 +313,14 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: var(--accent);
+  background: var(--accent-solid);
   color: var(--on-accent);
   box-shadow: none;
 }
 
 .composer-send:hover:not(:disabled),
 .composer-stop:hover:not(:disabled) {
-  background: var(--accent-hover);
+  background: var(--accent-solid-hover);
 }
 
 .composer-send:disabled {

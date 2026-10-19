@@ -105,10 +105,10 @@
   flex-shrink: 0;
 }
 .settings-nav-item.active {
-  box-shadow: inset 3px 0 0 var(--accent);
+  box-shadow: inset 2px 0 0 var(--accent);
   color: var(--text);
-  background: var(--bg-active);
-  font-weight: 500;
+  background: var(--accent-soft);
+  font-weight: 600;
 }
 .settings-search-empty {
   margin: 0;
