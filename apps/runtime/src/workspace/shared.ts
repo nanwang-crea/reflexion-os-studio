@@ -4,7 +4,7 @@
  * 单一实现避免两处漂移。
  */
 import { CommandError } from '../agent/errors.js'
-import type { SystemRuntimeClient } from '../system.js'
+import { SystemRuntimeError, type SystemRuntimeClient } from '../system.js'
 
 export function requireWorkspaceProject(
   store: { projects: { get(id: string): { folderPath: string } | null } },
@@ -51,7 +51,10 @@ export async function requestSystem(
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') throw error
     throw new CommandError(
-      'internal',
+      error instanceof SystemRuntimeError &&
+        error.code === 'operation_uncertain'
+        ? 'operation_uncertain'
+        : 'internal',
       error instanceof Error ? error.message : String(error),
     )
   }

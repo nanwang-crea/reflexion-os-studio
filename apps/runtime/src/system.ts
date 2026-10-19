@@ -169,7 +169,12 @@ export class SystemRuntimeClient {
         if (!entry) return
         this.pending.delete(id)
         clearTimeout(entry.timer)
-        entry.reject(new Error(`system request failed: ${writeError.message}`))
+        entry.reject(
+          new SystemRuntimeError(
+            `system request failed: ${writeError.message}; result uncertain`,
+            'operation_uncertain',
+          ),
+        )
       })
     })
   }
@@ -348,7 +353,12 @@ export class SystemRuntimeClient {
     )
       this.restarts = 0
     this.readySince = 0
-    this.rejectPending(new Error(detail))
+    this.rejectPending(
+      new SystemRuntimeError(
+        `${detail}; result uncertain`,
+        'operation_uncertain',
+      ),
+    )
     this.child = null
     this.setStatus('degraded', detail)
     if (this.restarts >= MAX_RESTARTS) {

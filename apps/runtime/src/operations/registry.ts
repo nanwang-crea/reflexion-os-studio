@@ -147,7 +147,11 @@ export class OperationRegistry {
               error instanceof Error ? error.message : String(error)
             try {
               update(
-                effectCompleted || /timeout|timed out/i.test(message)
+                effectCompleted ||
+                  (error instanceof Error &&
+                    'code' in error &&
+                    error.code === 'operation_uncertain') ||
+                  /timeout|timed out/i.test(message)
                   ? 'uncertain'
                   : 'failed',
                 message,

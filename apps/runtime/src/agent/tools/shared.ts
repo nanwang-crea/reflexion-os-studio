@@ -65,7 +65,7 @@ export async function callSystem(
     ) {
       return {
         content:
-          '系统请求超时，操作结果不明。请核对实际结果，禁止自动重放该操作。',
+          '系统请求未收到执行确认（超时或连接中断），操作结果不明。请核对实际结果，禁止自动重放该操作。',
         isError: true,
         code: 'operation_uncertain',
         replayUnsafe: true,

@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { Store } from '../dist/store/index.js'
 import { OperationRegistry } from '../dist/operations/registry.js'
 import { SystemRuntimeClient, SystemRuntimeError } from '../dist/system.js'
+import { requestSystem } from '../dist/workspace/shared.js'
 import { callSystem } from '../dist/agent/tools/shared.js'
 import { ContextBuilder } from '../dist/agent/context/context.js'
 import { reconstructSessionFramesWithIds } from '../dist/agent/context/context-frames.js'
@@ -216,6 +217,7 @@ const emit=m=>process.stdout.write(JSON.stringify(m)+'\\n');let timer;
 emit({jsonrpc:'2.0',method:'system.ready',params:{protocolVersion:'1.3',runtimeVersion:'fixture',capabilities:[]}});
 if(process.argv.includes('--crash'))setTimeout(()=>process.exit(2),20);
 createInterface({input:process.stdin}).on('line',line=>{const m=JSON.parse(line);
+if(m.method==='review.crash')process.exit(2);
 if(m.method==='review.write')timer=setTimeout(()=>emit({jsonrpc:'2.0',id:m.id,result:{written:true}}),500);
 if(m.method==='system.cancel'){clearTimeout(timer);emit({jsonrpc:'2.0',method:'review.cancelled',params:{}})}
 if(m.method==='system.shutdown'){clearTimeout(timer);process.exit(0)}
@@ -314,4 +316,42 @@ test('v52 migration preserves canonical history while discarding only rebuildabl
   t.after(() => store.close())
   assert.equal(store.messages.get(message.id).content, 'Preserve this history')
   assert.equal(store.contextCheckpoints.get(session.id), null)
+})
+
+test('sidecar crash preserves uncertain status through tools, workspace calls and receipts', async (t) => {
+  let ready
+  const started = new Promise((resolve) => (ready = resolve))
+  const client = new SystemRuntimeClient(
+    process.execPath,
+    [stub(t)],
+    (status) => {
+      if (status === 'ready') ready()
+    },
+  )
+  t.after(() => client.shutdown())
+  client.start()
+  await started
+  const controller = new AbortController()
+  const tool = callSystem(client, 'review.write', {}, controller.signal)
+  const registry = new OperationRegistry()
+  const operation = registry.execute(
+    'workspace.write_file',
+    { requestId: 'crash' },
+    () => requestSystem(client, 'review.write', {}),
+  )
+  // Register rejection handlers before crashing the child.
+  const rejected = assert.rejects(
+    operation,
+    (error) => error.code === 'operation_uncertain',
+  )
+  await assert.rejects(
+    client.request('review.crash'),
+    (error) => error.code === 'operation_uncertain',
+  )
+  await rejected
+  const result = await tool
+  assert.equal(result.replayUnsafe, true)
+  assert.equal(result.code, 'operation_uncertain')
+  assert.equal(getEventListeners(controller.signal, 'abort').length, 0)
+  assert.equal(registry.get('workspace.write_file', 'crash').phase, 'uncertain')
 })

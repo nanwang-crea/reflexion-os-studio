@@ -117,9 +117,8 @@ export function useStreamingCache(): {
   const collectStalePrune = useCallback(
     (runId: string, messageId?: string): (() => void) => {
       const belongsToScope = (id: string): boolean =>
-        messageId !== undefined
-          ? id === messageId
-          : streamRunRef.current[id] === runId
+        streamRunRef.current[id] === runId &&
+        (messageId === undefined || id === messageId)
       const staleContent = Object.keys(streamingRef.current).filter(
         belongsToScope,
       )
@@ -131,7 +130,6 @@ export function useStreamingCache(): {
         for (const id of staleContent) {
           if (id in streamingRef.current && belongsToScope(id)) {
             delete streamingRef.current[id]
-            delete streamRunRef.current[id]
             contentChanged = true
           }
         }
@@ -139,9 +137,12 @@ export function useStreamingCache(): {
         for (const id of staleReasoning) {
           if (id in streamingReasoningRef.current && belongsToScope(id)) {
             delete streamingReasoningRef.current[id]
-            delete streamRunRef.current[id]
             reasoningChanged = true
           }
+        }
+        // Both caches need the ownership map until their scope checks finish.
+        for (const id of new Set([...staleContent, ...staleReasoning])) {
+          if (belongsToScope(id)) delete streamRunRef.current[id]
         }
         if (contentChanged) setStreaming({ ...streamingRef.current })
         if (reasoningChanged)

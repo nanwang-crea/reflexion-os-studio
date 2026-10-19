@@ -159,12 +159,14 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
       const sessionId = deps.activeSessionRef.current
       const refresh =
         sessionId !== null
-          ? deps.refreshSessionData(sessionId).catch(() => undefined)
+          ? deps.refreshSessionData(sessionId)
           : Promise.resolve()
-      void refresh.finally(() => {
-        if (messageId === undefined) activity.clearRunActivity(runId)
-        prune()
-      })
+      void refresh
+        .then(prune)
+        .catch(() => undefined)
+        .finally(() => {
+          if (messageId === undefined) activity.clearRunActivity(runId)
+        })
     },
     [deps, cache, activity],
   )
