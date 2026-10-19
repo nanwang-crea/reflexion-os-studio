@@ -1,3 +1,4 @@
+import { filePartsText } from './file-parts.js'
 import { toolImageParts } from './tool-images.js'
 import {
   FrameError,
@@ -34,10 +35,12 @@ export function reconstructSessionFramesWithIds(
   const messageIds: (string | null)[] = [null]
   for (const message of store.messages.listBySession(sessionId)) {
     if (message.role === 'system') continue
-    const text = message.parts
-      .filter((part) => part.type === 'text')
-      .map((part) => part.text)
-      .join('')
+    const text =
+      message.parts
+        .filter((part) => part.type === 'text')
+        .map((part) => part.text)
+        .join('') +
+      (message.role === 'user' ? filePartsText(message.parts) : '')
     if (message.role === 'user') {
       const images = message.parts.filter((part) => part.type === 'image')
       if (text !== '' || images.length > 0) {

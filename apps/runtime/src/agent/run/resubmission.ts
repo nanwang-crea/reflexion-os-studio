@@ -10,7 +10,10 @@ import { CommandError } from '../errors.js'
 import { createPendingAssistantMessage, type RunLauncher } from '../launcher.js'
 import { DEFAULT_PRESET, resolveInputPreset } from '../permissions/index.js'
 import { resolveProvider, resolveSampling } from '../provider-resolver.js'
-import { userContentParts } from '../context/image-parts.js'
+import {
+  userContentParts,
+  messageAttachmentIds,
+} from '../context/image-parts.js'
 import {
   requireSession,
   requireIdleSession,
@@ -127,19 +130,21 @@ export class RunResubmissionService {
     }
     // Omission preserves persisted attachments; [] explicitly removes them.
     const parts: ContentPart[] =
-      params.imageAssetIds === undefined
+      messageAttachmentIds(params) === undefined
         ? [
             ...(content ? [{ type: 'text' as const, text: content }] : []),
-            ...lastUserMessage.parts.filter((part) => part.type === 'image'),
+            ...lastUserMessage.parts.filter(
+              (part) => part.type === 'image' || part.type === 'file',
+            ),
           ]
         : userContentParts(
             this.store,
             params.sessionId,
             content,
-            params.imageAssetIds,
+            messageAttachmentIds(params),
           )
     if (parts.length === 0) {
-      throw new CommandError('invalid_request', '消息内容或图片不能为空')
+      throw new CommandError('invalid_request', '消息内容或附件不能为空')
     }
     const replacedRunIds: string[] = []
     let replacedRun = lastUserMessage.runId

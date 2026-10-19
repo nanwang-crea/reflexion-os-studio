@@ -1,3 +1,12 @@
+export {
+  MAX_MESSAGE_ATTACHMENTS,
+  MAX_DOCUMENT_BYTES,
+  MAX_DOCUMENT_CHARS,
+  ATTACHMENT_ACCEPT,
+  TEXT_FILE_EXTENSIONS,
+  DocumentUploadSchema,
+} from '@reflexion-os-studio/contracts'
+export type { DocumentUpload, FilePart } from '@reflexion-os-studio/contracts'
 export { DEFAULT_REASONING_OPTIONS } from '@reflexion-os-studio/contracts'
 export {
   MAX_IMAGE_BYTES,

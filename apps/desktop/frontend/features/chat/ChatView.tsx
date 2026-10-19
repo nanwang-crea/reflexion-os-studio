@@ -20,9 +20,9 @@ import { QueueBar } from './QueueBar'
 import { PlanCard } from './run/PlanCard'
 import { buildChatBlocks } from './chat-blocks'
 import { InteractionQueue } from './interactions/InteractionQueue'
-import type { DraftImage } from '../../components/composer/useComposerImages'
-import { MAX_MESSAGE_IMAGES } from '@reflexion-os-studio/runtime-client'
-import { validateImageFile } from './images/upload-message-images'
+import type { DraftAttachment } from '../../components/composer/useComposerAttachments'
+import { MAX_MESSAGE_ATTACHMENTS } from '@reflexion-os-studio/runtime-client'
+import { validateAttachmentFile } from './attachments/upload-message-files'
 
 /** 距底部小于该值视为“贴底”，流式期间继续跟随滚动。 */
 const PIN_THRESHOLD_PX = 80
@@ -35,8 +35,8 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
   const [editMessageId, setEditMessageId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState('')
   const [editImageAssetIds, setEditImageAssetIds] = useState<string[]>([])
-  const [editImages, setEditImages] = useState<DraftImage[]>([])
-  const editImagesRef = useRef<DraftImage[]>([])
+  const [editImages, setEditImages] = useState<DraftAttachment[]>([])
+  const editImagesRef = useRef<DraftAttachment[]>([])
   const [editImageError, setEditImageError] = useState<string | null>(null)
   const [editSaving, setEditSaving] = useState(false)
   const sessionId = props.sessionData?.session?.id ?? null
@@ -248,11 +248,11 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
       const current = editImagesRef.current
       if (
         editImageAssetIds.length + current.length + files.length >
-        MAX_MESSAGE_IMAGES
+        MAX_MESSAGE_ATTACHMENTS
       ) {
-        throw new Error('每条消息最多 4 张图片')
+        throw new Error('每条消息最多 4 个文件（含图片）')
       }
-      files.forEach(validateImageFile)
+      files.forEach(validateAttachmentFile)
       const next = [
         ...current,
         ...files.map((file) => ({
@@ -265,7 +265,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
       setEditImages(next)
       setEditImageError(null)
     } catch (error) {
-      setEditImageError(error instanceof Error ? error.message : '图片添加失败')
+      setEditImageError(error instanceof Error ? error.message : '文件添加失败')
     }
   }
 
@@ -290,7 +290,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
     setEditImageError(null)
     setEditImageAssetIds(
       message.parts
-        .filter((part) => part.type === 'image')
+        .filter((part) => part.type === 'image' || part.type === 'file')
         .map((part) => part.assetId),
     )
   }

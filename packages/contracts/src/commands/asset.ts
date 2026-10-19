@@ -1,9 +1,14 @@
+import { DocumentUploadSchema } from '../attachments.js'
 import { z } from 'zod'
 import { ImageUploadSchema } from '../images.js'
 import { AssetRefSchema } from '../entities.js'
 import { RequestIdSchema } from './params.js'
 
 export const assetCommands = {
+  'asset.upload_document': {
+    params: DocumentUploadSchema.extend({ requestId: RequestIdSchema }),
+    result: z.object({ asset: AssetRefSchema }),
+  },
   'asset.upload_image': {
     params: ImageUploadSchema.extend({ requestId: RequestIdSchema }),
     result: z.object({ asset: AssetRefSchema }),

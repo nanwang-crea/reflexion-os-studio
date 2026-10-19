@@ -1,5 +1,5 @@
 import type { ChatViewProps } from '../chat-view-types'
-import type { DraftImage } from '../../../components/composer/useComposerImages'
+import type { DraftAttachment } from '../../../components/composer/useComposerAttachments'
 import type { ChatBlock } from '../chat-blocks'
 import { computeRunDurationMs, isLastEditableUserMessage } from '../chat-blocks'
 import type {
@@ -30,7 +30,7 @@ interface Props {
   editDraft: string
   editSaving: boolean
   editImageAssetIds: string[]
-  editImages: DraftImage[]
+  editImages: DraftAttachment[]
   editImageError: string | null
   onDraftChange: (value: string) => void
   onAddImages: (files: File[]) => void

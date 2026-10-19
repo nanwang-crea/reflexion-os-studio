@@ -245,7 +245,7 @@ pub fn native_handle(id: u32) -> Option<usize> {
             .get(&id)?
             .browser
             .host()
-            .map(|host| host.window_handle() as usize)
+            .map(|host| super::handles::address(host.window_handle()))
     })
 }
 pub fn mark_closing(id: u32) {

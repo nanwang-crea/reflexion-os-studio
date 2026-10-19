@@ -1,3 +1,4 @@
+import { hasSensitivePathSegments } from '../../agent/permissions/escalation.js'
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -22,6 +23,11 @@ export async function uploadImageAsset(
   if (!parsed.success)
     throw new CommandError('invalid_request', '图片格式或大小无效')
   const input = parsed.data
+  if (
+    /[\\/\x00-\x1f]/.test(input.fileName) ||
+    hasSensitivePathSegments(input.fileName)
+  )
+    throw new CommandError('invalid_request', '禁止上传敏感文件或无效文件名')
   const session = store.sessions.get(input.sessionId)
   if (!session) throw new CommandError('not_found', '会话不存在')
   const content = Buffer.from(input.base64, 'base64')

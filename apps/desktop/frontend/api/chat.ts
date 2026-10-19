@@ -14,7 +14,7 @@ export interface SendMessageResult {
 export function sendMessage(input: {
   sessionId: string
   content: string
-  imageAssetIds?: string[]
+  attachmentAssetIds?: string[]
   providerId?: string
   model?: string
   reasoningEffort?: ReasoningEffort | null
@@ -70,7 +70,7 @@ export function editResendMessage(input: {
   sessionId: string
   messageId: string
   content: string
-  imageAssetIds?: string[]
+  attachmentAssetIds?: string[]
   providerId?: string
   model?: string
   reasoningEffort?: ReasoningEffort | null

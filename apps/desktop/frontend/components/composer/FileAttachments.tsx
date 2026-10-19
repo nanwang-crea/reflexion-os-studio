@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import { ImagePreview } from '../images/ImagePreview'
-import type { DraftImage } from './useComposerImages'
+import type { DraftAttachment } from './useComposerAttachments'
 import './images.css'
 
-export function ImageAttachments({
+export function FileAttachments({
   images,
   disabled,
   onRemove,
 }: {
-  images: DraftImage[]
+  images: DraftAttachment[]
   disabled: boolean
   onRemove: (id: string) => void
 }): React.JSX.Element {
@@ -18,15 +18,21 @@ export function ImageAttachments({
     <div className="composer-images">
       {images.map((image) => (
         <div key={image.id} className="composer-image">
-          <button
-            type="button"
-            className="composer-image-open"
-            aria-label={`预览 ${image.file.name}`}
-            onClick={() => setPreviewId(image.id)}
-          >
-            <img src={image.url} alt={image.file.name} />
-          </button>
-          <span title={image.file.name}>{image.file.name}</span>
+          {image.file.type.startsWith('image/') ? (
+            <button
+              type="button"
+              className="composer-image-open"
+              aria-label={`预览 ${image.file.name}`}
+              onClick={() => setPreviewId(image.id)}
+            >
+              <img src={image.url} alt={image.file.name} />
+            </button>
+          ) : (
+            <span className="composer-file-label">文件 · 待发送</span>
+          )}
+          <span title={image.file.name}>
+            {image.file.name} · {Math.ceil(image.file.size / 1024)} KB
+          </span>
           <button
             type="button"
             className="composer-image-remove"

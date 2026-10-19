@@ -1,3 +1,4 @@
+import type { DocumentUpload } from '@reflexion-os-studio/runtime-client'
 import type { AssetRef } from '@reflexion-os-studio/runtime-client'
 import type { ImageUpload } from '@reflexion-os-studio/runtime-client'
 import { request } from './client'
@@ -32,4 +33,10 @@ export function deleteAsset(assetId: string): Promise<{ removed: boolean }> {
 
 export function uploadImage(input: ImageUpload): Promise<{ asset: AssetRef }> {
   return request('asset.upload_image', input)
+}
+
+export function uploadDocument(
+  input: DocumentUpload,
+): Promise<{ asset: AssetRef }> {
+  return request('asset.upload_document', input)
 }

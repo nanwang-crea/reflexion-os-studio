@@ -11,7 +11,7 @@ export function createMemoryRememberTool(ctx: ToolContext): ToolDefinition {
   return {
     name: 'memory.remember',
     description:
-      '追加一条稳定的长期记忆到 MEMORY.md。适合：用户明确纠正/表达的稳定偏好、项目纪律与踩过的坑。只记结论不记流水账，≤200 字，禁止包含任何凭据；scope=global 为跨项目偏好，scope=project 为本项目纪律（会话需已关联项目）。写错内容会被拒绝并说明原因。',
+      '追加一条稳定的长期记忆到 MEMORY.md。适合：用户明确纠正/表达的稳定偏好、项目纪律与踩过的坑。只记结论不记流水账，≤500 字，禁止包含任何凭据；scope=global 为跨项目偏好，scope=project 为本项目纪律（会话需已关联项目）。写错内容会被拒绝并说明原因。',
     parameters: {
       type: 'object',
       properties: {

@@ -28,6 +28,7 @@ export async function createChatArchive(
       'invalid_request',
       '请等待当前回复完成或停止回复后再导出',
     )
+  const files = new Map<string, ChatArchive['files'][number]>()
   const images = new Map<string, ChatArchive['images'][number]>()
   const calls = store.toolCalls.listBySession(sessionId)
   const models = new Map(runs.map((run) => [run.id, run.model]))
@@ -42,8 +43,24 @@ export async function createChatArchive(
   const messages: ChatArchive['messages'] = []
   for (const message of store.messages.listBySession(sessionId)) {
     if (message.role === 'system') continue
+    const fileIds: string[] = []
     const imageIds: string[] = []
     for (const part of message.parts) {
+      if (part.type === 'file') {
+        const asset = store.assetStore.get(part.assetId)
+        if (!asset || asset.sessionId !== sessionId)
+          throw new CommandError(
+            'invalid_request',
+            '会话附件缺失，无法完整导出',
+          )
+        fileIds.push(part.assetId)
+        if (!files.has(part.assetId))
+          files.set(part.assetId, {
+            id: part.assetId,
+            fileName: asset.fileName,
+            base64: await assets.readDocumentBytes(part.assetId),
+          })
+      }
       if (part.type !== 'image') continue
       imageIds.push(part.assetId)
       if (images.has(part.assetId)) continue
@@ -91,6 +108,7 @@ export async function createChatArchive(
             : 'interrupted',
       model: (message.runId ? models.get(message.runId) : null) ?? null,
       images: imageIds,
+      files: fileIds,
       tools: (callsByMessage.get(message.id) ?? []).map((call) => ({
         name: call.toolName,
         args: call.args ?? {},
@@ -107,11 +125,12 @@ export async function createChatArchive(
   }
   const archive = ChatArchiveSchema.parse({
     format: 'reflexion-chat',
-    version: 1,
+    version: files.size > 0 ? 2 : 1,
     exportedAt: new Date().toISOString(),
     title: session.title,
     messages,
     images: [...images.values()],
+    files: [...files.values()],
   })
   if (
     Buffer.byteLength(JSON.stringify(archive), 'utf8') > MAX_CHAT_ARCHIVE_BYTES

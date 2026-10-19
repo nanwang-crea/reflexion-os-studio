@@ -1,3 +1,4 @@
+import { FilePartSchema } from '../../attachments.js'
 import { ProviderRequestAttemptSchema } from '../../providers/request-attempt.js'
 import { z } from 'zod'
 import { ProviderContinuationSchema } from '../../providers/continuation.js'
@@ -30,6 +31,7 @@ export type ResourceLinkPart = z.infer<typeof ResourceLinkPartSchema>
 export const ContentPartSchema = z.discriminatedUnion('type', [
   TextPartSchema,
   ImagePartSchema,
+  FilePartSchema,
   ResourceLinkPartSchema,
 ])
 export type ContentPart = z.infer<typeof ContentPartSchema>
@@ -76,6 +78,7 @@ export const QueueEntrySchema = z.object({
   permissionPreset: PermissionPresetSchema.nullable(),
   skillId: z.string().min(1).nullable(),
   agentTemplateId: z.string().min(1).nullable(),
+  attachmentAssetIds: z.array(z.string().min(1)).max(4).optional(),
   imageAssetIds: z.array(z.string().min(1)).optional(),
   /** 0 起位置；出队发送时该项即消失。 */
   position: z.number().int().nonnegative(),

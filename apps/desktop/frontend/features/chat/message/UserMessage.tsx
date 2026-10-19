@@ -1,9 +1,11 @@
+import { ATTACHMENT_ACCEPT } from '@reflexion-os-studio/runtime-client'
+import { MessageFile } from './MessageFile'
 import { MessageImage } from '../images/MessageImage'
 import { isComposing } from '../../../lib/keyboard'
 import type { Message } from '@reflexion-os-studio/runtime-client'
 import { CopyButton } from '../../../components/CopyButton'
 import { PencilIcon } from '../../../ui/icons'
-import type { DraftImage } from '../../../components/composer/useComposerImages'
+import type { DraftAttachment } from '../../../components/composer/useComposerAttachments'
 import { useRef } from 'react'
 
 export function UserMessage({
@@ -33,7 +35,7 @@ export function UserMessage({
   onSave: () => Promise<void>
   onEdit: () => void
   editImageAssetIds: string[]
-  editImages: DraftImage[]
+  editImages: DraftAttachment[]
   editImageError: string | null
   onAddImages: (files: File[]) => void
   onRemoveImage: (id: string) => void
@@ -62,18 +64,30 @@ export function UserMessage({
               ))}
           </div>
         )}
+        {!editing &&
+          message.parts
+            .filter((part) => part.type === 'file')
+            .map((part) => <MessageFile key={part.assetId} part={part} />)}
         {editing ? (
           <div className="edit-resend-inline">
             <div className="edit-image-attachments">
               {editImageAssetIds.map((assetId) => (
                 <div key={assetId} className="edit-image-item">
-                  <MessageImage assetId={assetId} />
+                  {message.parts
+                    .filter((part) => part.type === 'file')
+                    .filter((part) => part.assetId === assetId)
+                    .map((part) => (
+                      <MessageFile key={part.assetId} part={part} />
+                    ))}
+                  {message.parts.some(
+                    (part) => part.type === 'image' && part.assetId === assetId,
+                  ) && <MessageImage assetId={assetId} />}
                   <button
                     type="button"
                     className="edit-image-remove"
                     onClick={() => onRemoveAsset(assetId)}
                     disabled={editSaving}
-                    aria-label="移除原图片"
+                    aria-label="移除原附件"
                   >
                     ×
                   </button>
@@ -81,7 +95,11 @@ export function UserMessage({
               ))}
               {editImages.map((image) => (
                 <div key={image.id} className="edit-image-item">
-                  <img src={image.url} alt={image.file.name} />
+                  {image.file.type.startsWith('image/') ? (
+                    <img src={image.url} alt={image.file.name} />
+                  ) : (
+                    <span>{image.file.name}</span>
+                  )}
                   <button
                     type="button"
                     className="edit-image-remove"
@@ -105,15 +123,7 @@ export function UserMessage({
               value={editDraft}
               onChange={(event) => onDraftChange(event.target.value)}
               onPaste={(event) => {
-                const files = Array.from(event.clipboardData.files).filter(
-                  (file) =>
-                    [
-                      'image/png',
-                      'image/jpeg',
-                      'image/webp',
-                      'image/gif',
-                    ].includes(file.type),
-                )
+                const files = Array.from(event.clipboardData.files)
                 if (files.length > 0) {
                   event.preventDefault()
                   onAddImages(files)
@@ -134,7 +144,7 @@ export function UserMessage({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif"
+                accept={ATTACHMENT_ACCEPT}
                 multiple
                 hidden
                 onChange={(event) => handleFiles(event.target.files)}
@@ -145,7 +155,7 @@ export function UserMessage({
                 onClick={() => fileInputRef.current?.click()}
                 disabled={editSaving}
               >
-                添加图片
+                添加文件
               </button>
               <button
                 type="button"
@@ -161,7 +171,7 @@ export function UserMessage({
                 onClick={() => void onSave()}
                 disabled={editSaving || !hasEditContent}
               >
-                {editSaving ? '发送中…' : '发送'}
+                {editSaving ? '上传并发送中…' : '发送'}
               </button>
             </div>
           </div>

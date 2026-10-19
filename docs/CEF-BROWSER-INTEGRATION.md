@@ -11,7 +11,7 @@
 - Chromium 沙箱必须开启。Windows 使用 CEF 官方 sandbox bootstrap / DLL 入口；macOS 使用 helper bundles。不可通过关闭沙箱换取“跨平台支持”。
 - 消息循环采用 CEF `on_schedule_message_pump_work` 回调驱动，只保留一个可重排的定时器；不以常驻 16ms 轮询实现。
 - macOS：NSView 子视图、Retina/CSS 坐标转换、CEF NSApplication 协议、helper/frameworks 打包。
-- Windows：HWND 子窗口、DPI/焦点、官方 sandbox bootstrap、CEF DLL/资源打包。
+- Windows：HWND 子窗口、DPI/焦点、官方 sandbox bootstrap、CEF DLL/资源打包。CEF 154 的窗口句柄是 `cef::sys::HWND` 包装类型，与 Tauri 的 HWND 通过其内部原始指针转换；转换集中在 `cef/handles.rs`，不能将包装类型直接 `as usize`。macOS 继续使用 NSView 原始指针，Linux 不编译此 CEF 嵌入模块。
 - Linux：当前迁移不启用 CEF 原生嵌入，保留明确不可用/系统浏览器回退；X11/Wayland 另行真机验收，不能静默提供半成品。
 
 ## 验收

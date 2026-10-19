@@ -20,7 +20,7 @@ import { containsSecretLike } from './secretGuard.js'
 
 const MEMORY_FILE_HEADER =
   '# 记忆\n\n本文件由 ReflexionOS Studio 的 remember 工具与用户共同维护。\n\n## 记忆条目\n'
-const MAX_ENTRY_CHARS = 200
+const MAX_ENTRY_CHARS = 500
 /** MEMORY.md 体积上限：超限拒绝追加，提示到指令页整理（本轮不做自动治理）。 */
 const MAX_MEMORY_FILE_BYTES = 64 * 1024
 /** 指令页保存的内容上限（AGENTS.md 允许更大，用户在编辑器里写长文）。 */

@@ -1,5 +1,5 @@
 import { deleteAsset } from '../../api/assets'
-import { uploadMessageImages } from '../../features/chat/images/upload-message-images'
+import { uploadMessageFiles } from '../../features/chat/attachments/upload-message-files'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import { open } from '@tauri-apps/plugin-dialog'
 import type {
@@ -64,7 +64,7 @@ export function useSessionActions(deps: SessionActionsDeps): {
   editResendMessage: (
     messageId: string,
     content: string,
-    imageAssetIds: string[],
+    attachmentAssetIds: string[],
     images: File[],
   ) => Promise<void>
   stopRun: () => Promise<void>
@@ -195,7 +195,7 @@ export function useSessionActions(deps: SessionActionsDeps): {
         const created = await sessionsApi.createSession(deps.activeProjectId)
         sessionId = created.session.id
       }
-      const imageAssetIds = await uploadMessageImages(sessionId, images)
+      const attachmentAssetIds = await uploadMessageFiles(sessionId, images)
       try {
         await chatApi.sendMessage({
           sessionId,
@@ -205,10 +205,10 @@ export function useSessionActions(deps: SessionActionsDeps): {
           reasoningEffort: deps.requestedReasoningEffort,
           permissionPreset,
           agentTemplateId,
-          imageAssetIds,
+          attachmentAssetIds,
         })
       } catch (error) {
-        await Promise.allSettled(imageAssetIds.map(deleteAsset))
+        await Promise.allSettled(attachmentAssetIds.map(deleteAsset))
         throw error
       }
       accepted = true
@@ -256,7 +256,7 @@ export function useSessionActions(deps: SessionActionsDeps): {
   const editResendMessage = async (
     messageId: string,
     content: string,
-    imageAssetIds: string[],
+    attachmentAssetIds: string[],
     images: File[],
   ): Promise<void> => {
     const sessionId = deps.activeSessionId
@@ -266,13 +266,13 @@ export function useSessionActions(deps: SessionActionsDeps): {
     let uploadedImageIds: string[] = []
     try {
       uploadedImageIds =
-        images.length > 0 ? await uploadMessageImages(sessionId, images) : []
+        images.length > 0 ? await uploadMessageFiles(sessionId, images) : []
       try {
         await chatApi.editResendMessage({
           sessionId,
           messageId,
           content,
-          imageAssetIds: [...imageAssetIds, ...uploadedImageIds],
+          attachmentAssetIds: [...attachmentAssetIds, ...uploadedImageIds],
           providerId:
             modelKey && separator > 0
               ? modelKey.slice(0, separator)

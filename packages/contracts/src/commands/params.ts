@@ -33,6 +33,8 @@ export const MessageSendParamsSchema = z.object({
   requestId: RequestIdSchema,
   sessionId: z.string().min(1),
   content: z.string().min(1),
+  attachmentAssetIds: z.array(z.string().min(1)).max(4).optional(),
+  // Compatibility for clients that only sent images. New clients use attachmentAssetIds.
   imageAssetIds: z.array(z.string().min(1)).max(MAX_MESSAGE_IMAGES).optional(),
   // 不传则使用启用的 Provider 及其第一个模型。
   providerId: z.string().min(1).optional(),
@@ -60,6 +62,8 @@ export const MessageEditResendParamsSchema = z.object({
   sessionId: z.string().min(1),
   messageId: z.string().min(1),
   content: z.string(),
+  attachmentAssetIds: z.array(z.string().min(1)).max(4).optional(),
+  // Compatibility for clients that only sent images. New clients use attachmentAssetIds.
   imageAssetIds: z
     .array(z.string().min(1))
     .max(MAX_MESSAGE_IMAGES)

@@ -1,3 +1,4 @@
+import { DocumentUploadSchema } from './attachments.js'
 import { z } from 'zod'
 import { JsonValueSchema } from './json-value.js'
 import { IsoDateTimeSchema } from './entities/shared.js'
@@ -14,7 +15,7 @@ const ArchiveToolSchema = z.strictObject({
 })
 export const ChatArchiveSchema = z.strictObject({
   format: z.literal('reflexion-chat'),
-  version: z.literal(1),
+  version: z.union([z.literal(1), z.literal(2)]),
   exportedAt: IsoDateTimeSchema,
   title: z.string().min(1).max(1000),
   messages: z
@@ -28,10 +29,15 @@ export const ChatArchiveSchema = z.strictObject({
         model: z.string().nullable(),
         runKey: id.nullable().default(null),
         images: z.array(id).max(4),
+        files: z.array(id).max(4).default([]),
         tools: z.array(ArchiveToolSchema).max(1000),
       }),
     )
     .max(100_000),
+  files: z
+    .array(DocumentUploadSchema.omit({ sessionId: true }).extend({ id }))
+    .max(1000)
+    .default([]),
   images: z
     .array(ImageUploadSchema.omit({ sessionId: true }).extend({ id }))
     .max(1000),

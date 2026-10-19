@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { MAX_MESSAGE_IMAGES } from '@reflexion-os-studio/runtime-client'
-import { validateImageFile } from '../../features/chat/images/upload-message-images'
+import { MAX_MESSAGE_ATTACHMENTS } from '@reflexion-os-studio/runtime-client'
+import { validateAttachmentFile } from '../../features/chat/attachments/upload-message-files'
 
-export interface DraftImage {
+export interface DraftAttachment {
   id: string
   file: File
   url: string
 }
 
-export function useComposerImages() {
-  const [images, setImages] = useState<DraftImage[]>([])
+export function useComposerAttachments() {
+  const [images, setImages] = useState<DraftAttachment[]>([])
   const [error, setError] = useState<string | null>(null)
-  const current = useRef<DraftImage[]>([])
+  const current = useRef<DraftAttachment[]>([])
   useEffect(
     () => () =>
       current.current.forEach((image) => URL.revokeObjectURL(image.url)),
@@ -19,9 +19,9 @@ export function useComposerImages() {
   )
   const add = useCallback((files: File[]) => {
     try {
-      if (current.current.length + files.length > MAX_MESSAGE_IMAGES)
-        throw new Error('每条消息最多 4 张图片')
-      files.forEach(validateImageFile)
+      if (current.current.length + files.length > MAX_MESSAGE_ATTACHMENTS)
+        throw new Error('每条消息最多 4 个文件（含图片）')
+      files.forEach(validateAttachmentFile)
       const next = [
         ...current.current,
         ...files.map((file) => ({
@@ -34,7 +34,7 @@ export function useComposerImages() {
       setImages(next)
       setError(null)
     } catch (error) {
-      setError(error instanceof Error ? error.message : '图片添加失败')
+      setError(error instanceof Error ? error.message : '文件添加失败')
     }
   }, [])
   const remove = useCallback((id: string) => {

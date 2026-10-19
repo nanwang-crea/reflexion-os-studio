@@ -165,7 +165,7 @@ export class MessageStore {
       this.db
         .prepare(
           `SELECT 1 FROM messages, json_each(messages.parts_json) AS part
-      WHERE json_extract(part.value, '$.type') = 'image'
+      WHERE json_extract(part.value, '$.type') IN ('image', 'file')
         AND json_extract(part.value, '$.assetId') = ? LIMIT 1`,
         )
         .get(assetId) !== undefined

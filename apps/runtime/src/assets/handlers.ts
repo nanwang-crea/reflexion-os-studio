@@ -1,4 +1,7 @@
-import { ImageUploadSchema } from '@reflexion-os-studio/contracts'
+import {
+  ImageUploadSchema,
+  DocumentUploadSchema,
+} from '@reflexion-os-studio/contracts'
 import { CommandError } from '../agent/errors.js'
 import { requireString, type CommandHandler } from '../command-utils.js'
 
@@ -8,6 +11,9 @@ import { requireString, type CommandHandler } from '../command-utils.js'
  * 导出/下载/系统应用打开属后续阶段。
  */
 export const assetCommandHandlers: Record<string, CommandHandler> = {
+  'asset.upload_document': async (p, { assets }) => ({
+    asset: await assets.uploadDocument(DocumentUploadSchema.parse(p)),
+  }),
   'asset.upload_image': async (p, { assets }) => ({
     asset: await assets.uploadImage(ImageUploadSchema.parse(p)),
   }),
@@ -29,9 +35,11 @@ export const assetCommandHandlers: Record<string, CommandHandler> = {
       asset?.sessionId &&
       agent
         .listQueue(asset.sessionId)
-        .items.some((item) => item.imageAssetIds?.includes(assetId))
+        .items.some((item) =>
+          (item.attachmentAssetIds ?? item.imageAssetIds)?.includes(assetId),
+        )
     ) {
-      throw new CommandError('invalid_request', '图片正在排队发送，不能删除')
+      throw new CommandError('invalid_request', '附件正在排队发送，不能删除')
     }
     return { removed: await assets.delete(assetId) }
   },

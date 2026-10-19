@@ -43,3 +43,16 @@ await build({
 })
 
 console.log(`runtime bundle written: ${outFile}`)
+
+await build({
+  entryPoints: [join(repoRoot, 'apps/runtime/src/assets/documents/worker.ts')],
+  outfile: join(outDir, 'document-worker.mjs'),
+  bundle: true,
+  platform: 'node',
+  format: 'esm',
+  target: 'node22',
+  external: ['node:*'],
+  banner: {
+    js: "import { createRequire as __documentCreateRequire } from 'node:module'; const require = __documentCreateRequire(import.meta.url)",
+  },
+})

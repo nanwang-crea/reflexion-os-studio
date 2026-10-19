@@ -1,3 +1,8 @@
+import { uploadDocumentAsset } from './documents/upload.js'
+import {
+  DocumentExtractionSchema,
+  type DocumentUpload,
+} from '@reflexion-os-studio/contracts'
 import { readAssetContent } from './content.js'
 import { touchesSensitive } from '../agent/permissions/escalation.js'
 import { uploadImageAsset } from './images/upload.js'
@@ -202,6 +207,27 @@ export class AssetService {
     return uploadImageAsset(this.store, this.dataDir, input)
   }
 
+  uploadDocument(input: DocumentUpload): Promise<AssetRef> {
+    return uploadDocumentAsset(this.store, this.dataDir, input)
+  }
+
+  async readDocumentBytes(assetId: string): Promise<string> {
+    const asset = this.store.assetStore.get(assetId)
+    if (!asset || asset.metadata.type !== 'message-document')
+      throw new CommandError('not_found', '附件不存在')
+    const bytes = await readAssetContent(
+      this.dataDir,
+      this.contentPath(asset),
+      10 * 1024 * 1024,
+    )
+    if (
+      !bytes ||
+      createHash('sha256').update(bytes).digest('hex') !== asset.hash
+    )
+      throw new CommandError('invalid_request', '附件已丢失或损坏')
+    return bytes.toString('base64')
+  }
+
   private contentPath(asset: AssetRef): string {
     return asset.sessionId
       ? join(this.dataDir, 'assets', 'sessions', asset.sessionId, asset.assetId)
@@ -232,6 +258,16 @@ export class AssetService {
     const asset = this.store.assetStore.get(assetId)
     if (asset === null) {
       throw new CommandError('not_found', `asset not found: ${assetId}`)
+    }
+    if (asset.metadata.type === 'message-document') {
+      const extraction = DocumentExtractionSchema.safeParse(
+        asset.metadata.extraction,
+      )
+      return {
+        asset,
+        text: extraction.success ? extraction.data.text : null,
+        base64: null,
+      }
     }
     if (asset.preview !== 'ready' || asset.kind === 'file') {
       return { asset, text: null, base64: null }
@@ -271,7 +307,7 @@ export class AssetService {
     if (this.store.messages.referencesAsset(assetId)) {
       throw new CommandError(
         'invalid_request',
-        '图片已用于消息，不能删除；可删除所属会话',
+        '附件已用于消息，不能删除；可删除所属会话',
       )
     }
     const destPath = this.contentPath(asset)

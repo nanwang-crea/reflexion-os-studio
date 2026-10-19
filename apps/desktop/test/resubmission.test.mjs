@@ -69,7 +69,7 @@ test('changing composer selection immediately changes retry and edit resend requ
   assert.equal(before.params.model, 'old-model')
   assert.equal(retry.method, 'run.retry')
   assert.equal(edit.method, 'message.edit_resend')
-  assert.deepEqual(edit.params.imageAssetIds, [])
+  assert.deepEqual(edit.params.attachmentAssetIds, [])
   for (const request of [retry, edit]) {
     assert.equal(request.params.providerId, 'new-provider')
     assert.equal(request.params.model, 'new::model')
@@ -153,8 +153,90 @@ test('edit resend forwards retained image references and explicit removal', asyn
   )
   await actions.editResendMessage('message', 'edited question', [], [])
   assert.deepEqual(
-    globalThis.__chatRequests.map((r) => r.params.imageAssetIds),
+    globalThis.__chatRequests.map((r) => r.params.attachmentAssetIds),
     [['retained-image'], []],
   )
   delete globalThis.__chatRequests
+})
+
+test('document sends use the general upload command and preserve extracted asset references', async () => {
+  globalThis.__chatRequests = []
+  globalThis.FileReader = class {
+    readAsDataURL(file) {
+      void file.arrayBuffer().then((buffer) => {
+        this.result = `data:;base64,${Buffer.from(buffer).toString('base64')}`
+        this.onload()
+      })
+    }
+  }
+  globalThis.__chatRequestResult = (method) =>
+    method === 'asset.upload_document' ? { asset: { assetId: 'document' } } : {}
+  try {
+    await useSessionActions(sendDeps()).sendMessage('analyze', undefined, [
+      new File(['const x = 1'], 'example.ts'),
+    ])
+    const upload = globalThis.__chatRequests.find(
+      (request) => request.method === 'asset.upload_document',
+    )
+    const send = globalThis.__chatRequests.find(
+      (request) => request.method === 'message.send',
+    )
+    assert.equal(upload.params.fileName, 'example.ts')
+    assert.deepEqual(send.params.attachmentAssetIds, ['document'])
+    assert.equal(send.params.imageAssetIds, undefined)
+  } finally {
+    delete globalThis.__chatRequestResult
+    delete globalThis.FileReader
+  }
+})
+
+test('five files are rejected before upload and partial failed uploads are cleaned up', async () => {
+  globalThis.__chatRequests = []
+  const actions = useSessionActions(sendDeps())
+  const files = Array.from(
+    { length: 5 },
+    (_, index) => new File(['text'], `${index}.txt`),
+  )
+  await assert.rejects(
+    actions.sendMessage('analyze', undefined, files),
+    /最多 4 个文件/,
+  )
+  assert.equal(globalThis.__chatRequests.length, 0)
+  globalThis.FileReader = class {
+    readAsDataURL(file) {
+      void file.arrayBuffer().then((buffer) => {
+        this.result = `data:;base64,${Buffer.from(buffer).toString('base64')}`
+        this.onload()
+      })
+    }
+  }
+  let count = 0
+  globalThis.__chatRequestResult = (method) => {
+    if (method === 'asset.upload_document') {
+      if (++count === 2) throw new Error('parse failed')
+      return { asset: { assetId: 'first' } }
+    }
+    return {}
+  }
+  try {
+    await assert.rejects(
+      actions.sendMessage('analyze', undefined, files.slice(0, 2)),
+      /parse failed/,
+    )
+    assert.deepEqual(
+      globalThis.__chatRequests
+        .filter((request) => request.method === 'asset.delete')
+        .map((request) => request.params.assetId),
+      ['first'],
+    )
+    assert.equal(
+      globalThis.__chatRequests.some(
+        (request) => request.method === 'message.send',
+      ),
+      false,
+    )
+  } finally {
+    delete globalThis.__chatRequestResult
+    delete globalThis.FileReader
+  }
 })

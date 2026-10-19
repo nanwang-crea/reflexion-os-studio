@@ -12,6 +12,7 @@ mod contexts;
 #[cfg(target_os = "macos")]
 pub mod credentials;
 mod downloads;
+mod handles;
 mod input;
 mod lifecycle;
 mod network;
@@ -101,14 +102,15 @@ pub fn initialize(app: &tauri::AppHandle) -> Result<(), String> {
         .port();
     drop(listener);
     let args = cef::args::Args::new();
-    let mut settings = Settings {
+    let settings = Settings {
         external_message_pump: 1,
         remote_debugging_port: port.into(),
         root_cache_path: CefString::from(cache.to_str().ok_or("invalid CEF cache path")?),
         ..Default::default()
     };
     #[cfg(target_os = "macos")]
-    {
+    let settings = {
+        let mut settings = settings;
         settings.framework_dir_path = CefString::from(
             FRAMEWORK
                 .get()
@@ -119,7 +121,8 @@ pub fn initialize(app: &tauri::AppHandle) -> Result<(), String> {
         let helper = helper_path()?;
         settings.browser_subprocess_path =
             CefString::from(helper.to_str().ok_or("invalid CEF helper path")?);
-    }
+        settings
+    };
     let mock_keychain = super::keychain::mock_enabled(app);
     let mut handler = application::BrowserApp::new(mock_keychain);
     #[cfg(target_os = "windows")]

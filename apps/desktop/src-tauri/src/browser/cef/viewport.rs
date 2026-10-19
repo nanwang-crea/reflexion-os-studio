@@ -20,13 +20,13 @@ pub fn window_info(
         super::input::create(id, &embedding.root, _policy)?
     };
     #[cfg(target_os = "windows")]
-    let parent = window.hwnd().map_err(|_| "native window unavailable")?.0 as *mut std::ffi::c_void;
+    let parent = window.hwnd().map_err(|_| "native window unavailable")?.0;
     Ok(WindowInfo {
         runtime_style: RuntimeStyle::ALLOY,
         ..Default::default()
     }
     .set_as_child(
-        parent,
+        super::handles::from_raw(parent),
         &Rect {
             x: 0,
             y: 0,
@@ -48,7 +48,7 @@ pub fn layout(
         .get_webview_window("main")
         .ok_or("main window unavailable")?;
     let host = browser.host().ok_or("page closed")?;
-    let handle = host.window_handle() as usize;
+    let handle = super::handles::address(host.window_handle());
     let visible = active && bounds.visible && bounds.width > 0.0 && bounds.height > 0.0;
     #[cfg(target_os = "macos")]
     {

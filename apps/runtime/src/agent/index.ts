@@ -1,5 +1,8 @@
 import type { BrowserAgentService } from '../browser/agent/service.js'
-import { userContentParts } from './context/image-parts.js'
+import {
+  userContentParts,
+  messageAttachmentIds,
+} from './context/image-parts.js'
 import { randomUUID } from 'node:crypto'
 import type {
   AgentSettings,
@@ -121,7 +124,7 @@ export class ChatAgent {
       this.store,
       params.sessionId,
       params.content,
-      params.imageAssetIds,
+      messageAttachmentIds(params),
     )
     // 入队前先校验技能与 Provider/模型配置,参数错误当场反馈。
     resolveSkillInvocation(
@@ -142,7 +145,7 @@ export class ChatAgent {
     }
     const rest: Omit<ChatCommand, 'requestId' | 'sessionId'> = {
       content: params.content,
-      imageAssetIds: params.imageAssetIds,
+      attachmentAssetIds: messageAttachmentIds(params),
       providerId: params.providerId,
       model: params.model,
       reasoningEffort: params.reasoningEffort,
@@ -272,7 +275,7 @@ export class ChatAgent {
       this.store,
       params.sessionId,
       params.content,
-      params.imageAssetIds,
+      messageAttachmentIds(params),
     )
     const run = this.store.runs.create({
       sessionId: params.sessionId,

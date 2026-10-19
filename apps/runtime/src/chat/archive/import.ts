@@ -3,11 +3,13 @@ import {
   ChatArchiveSchema,
   MAX_CHAT_ARCHIVE_BYTES,
   type ChatArchive,
+  type FilePart,
   type ChatArchiveImportParams,
 } from '@reflexion-os-studio/contracts'
 import type { CommandContext } from '../../command-utils.js'
 import { CommandError } from '../../agent/errors.js'
 import { detectImageMime } from '../../assets/images/upload.js'
+import { userContentParts } from '../../agent/context/image-parts.js'
 import { readArchiveFile } from './files.js'
 import { resolveImportTarget } from './target.js'
 
@@ -25,6 +27,15 @@ function parseArchive(content: string): ChatArchive {
       '聊天备份格式无效或版本不支持，尚未创建会话',
     )
   }
+  const files = new Set(archive.files.map((file) => file.id))
+  const usedFiles = new Set(
+    archive.messages.flatMap((message) => message.files),
+  )
+  if (
+    files.size !== archive.files.length ||
+    archive.files.some((file) => !usedFiles.has(file.id))
+  )
+    throw new CommandError('invalid_request', '备份附件标识重复或没有消息引用')
   const images = new Set(archive.images.map((image) => image.id))
   if (images.size !== archive.images.length)
     throw new CommandError('invalid_request', '备份包含重复图片标识')
@@ -37,6 +48,11 @@ function parseArchive(content: string): ChatArchive {
   for (const message of archive.messages) {
     if (
       message.createdAt < previous ||
+      message.files.some((id) => !files.has(id)) ||
+      message.files.length + message.images.length > 4 ||
+      new Set([...message.files, ...message.images]).size !==
+        message.files.length + message.images.length ||
+      (message.role !== 'user' && message.files.length > 0) ||
       (message.role !== 'assistant' && message.tools.length) ||
       message.images.some((id) => !images.has(id))
     )
@@ -92,10 +108,30 @@ export async function importChatArchive(
       })
       images.set(image.id, saved.assetId)
     }
+    const fileParts = new Map<string, FilePart>()
+    for (const file of archive.files) {
+      const asset = await ctx.assets.uploadDocument({
+        sessionId: session.id,
+        fileName: file.fileName,
+        base64: file.base64,
+      })
+      const part = userContentParts(ctx.store, session.id, '', [
+        asset.assetId,
+      ])[0]
+      if (part.type !== 'file')
+        throw new CommandError('invalid_request', '附件类型无效')
+      fileParts.set(file.id, part)
+    }
+    for (const message of archive.messages) {
+      userContentParts(ctx.store, session.id, '', [
+        ...message.images.map((id) => images.get(id)!),
+        ...message.files.map((id) => fileParts.get(id)!.assetId),
+      ])
+    }
     ctx.store.transaction(() => {
       if (!ctx.store.sessions.get(session.id))
         throw new CommandError('not_found', '导入会话已被删除')
-      ctx.store.chatArchives.restore(session.id, archive, images)
+      ctx.store.chatArchives.restore(session.id, archive, images, fileParts)
     })
     return {
       session: ctx.store.sessions.get(session.id)!,

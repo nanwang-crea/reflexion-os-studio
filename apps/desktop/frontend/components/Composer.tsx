@@ -1,5 +1,6 @@
-import { useComposerImages } from './composer/useComposerImages'
-import { ImageAttachments } from './composer/ImageAttachments'
+import { ATTACHMENT_ACCEPT } from '@reflexion-os-studio/runtime-client'
+import { useComposerAttachments } from './composer/useComposerAttachments'
+import { FileAttachments } from './composer/FileAttachments'
 import { isComposing } from '../lib/keyboard'
 import { Select } from './forms/Select'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -79,7 +80,7 @@ const SLASH_QUERY_RE = /^\/([a-z0-9-]*)$/
 
 export function Composer(props: ComposerProps): React.JSX.Element {
   const [draft, setDraft] = useState('')
-  const attachments = useComposerImages()
+  const attachments = useComposerAttachments()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [sendError, setSendError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
@@ -169,7 +170,7 @@ export function Composer(props: ComposerProps): React.JSX.Element {
 
   const submit = async (): Promise<void> => {
     const content =
-      draft.trim() || (attachments.images.length ? '请分析这些图片。' : '')
+      draft.trim() || (attachments.images.length ? '请分析这些附件。' : '')
     if (!content || props.disabled || sending) return
     setSending(true)
     setSendError(null)
@@ -214,7 +215,7 @@ export function Composer(props: ComposerProps): React.JSX.Element {
           ))}
         </div>
       )}
-      <ImageAttachments
+      <FileAttachments
         images={attachments.images}
         disabled={sending}
         onRemove={attachments.remove}
@@ -226,7 +227,15 @@ export function Composer(props: ComposerProps): React.JSX.Element {
       )}
       {attachments.images.length > 0 && (
         <div className="composer-image-hint">
-          请使用支持视觉的模型 · 最多 4 张，每张 4MB
+          最多 4 个文件（含图片）· 图片 4MB / 文档 10MB · PDF、DOCX 仅提取文字
+        </div>
+      )}
+      {attachments.images.some((item) =>
+        item.file.type.startsWith('image/'),
+      ) && <div className="composer-image-hint">图片请使用支持视觉的模型</div>}
+      {sending && attachments.images.length > 0 && (
+        <div className="composer-image-hint" role="status">
+          正在上传并解析附件…
         </div>
       )}
       <input
@@ -235,7 +244,7 @@ export function Composer(props: ComposerProps): React.JSX.Element {
         disabled={props.disabled || sending}
         hidden
         multiple
-        accept="image/png,image/jpeg,image/webp,image/gif"
+        accept={ATTACHMENT_ACCEPT}
         onChange={(event) => {
           attachments.add(Array.from(event.target.files ?? []))
           event.target.value = ''
@@ -249,7 +258,7 @@ export function Composer(props: ComposerProps): React.JSX.Element {
         onPaste={(event) => {
           if (sending || props.disabled) return
           const files = Array.from(event.clipboardData.items)
-            .filter((item) => item.type.startsWith('image/'))
+            .filter((item) => item.kind === 'file')
             .flatMap((item) => {
               const file = item.getAsFile()
               return file ? [file] : []
@@ -329,7 +338,7 @@ export function Composer(props: ComposerProps): React.JSX.Element {
                   }}
                 >
                   <span className="composer-plus-symbol">⌕</span>
-                  <span>添加图片</span>
+                  <span>添加文件</span>
                 </button>
                 <div className="composer-plus-item" role="menuitem">
                   <span className="composer-plus-symbol">@</span>

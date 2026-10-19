@@ -261,3 +261,92 @@ test('edit resend replaces images with validated session assets', (t) => {
     originalImage,
   )
 })
+
+for (const mode of ['preserve', 'replace', 'remove']) {
+  test(`document edit resend retains canonical extraction: ${mode}`, async (t) => {
+    const f = fixture(t)
+    const { AssetService } = await import('../dist/assets/service.js')
+    const { userContentParts } =
+      await import('../dist/agent/context/image-parts.js')
+    const assets = new AssetService(f.store, f.store.dataDir)
+    const upload = (name) =>
+      assets.uploadDocument({
+        sessionId: f.session.id,
+        fileName: name,
+        base64: Buffer.from(name).toString('base64'),
+      })
+    const first = await upload('first.ts')
+    const second = await upload('second.txt')
+    f.store.messages.finalize(
+      f.user.id,
+      f.user.content,
+      'completed',
+      '',
+      userContentParts(f.store, f.session.id, f.user.content, [first.assetId]),
+    )
+    f.agent.startEditResend({
+      requestId: 'edit-file',
+      sessionId: f.session.id,
+      messageId: f.user.id,
+      content: 'revised',
+      ...(mode === 'preserve'
+        ? {}
+        : { attachmentAssetIds: mode === 'remove' ? [] : [second.assetId] }),
+    })
+    const user = f.store.messages
+      .listBySession(f.session.id)
+      .find((message) => message.role === 'user')
+    const files = user.parts.filter((part) => part.type === 'file')
+    assert.deepEqual(
+      files.map((part) => part.assetId),
+      mode === 'remove'
+        ? []
+        : [mode === 'preserve' ? first.assetId : second.assetId],
+    )
+    if (files.length)
+      assert.match(files[0].extraction.text, /1: (first.ts|second.txt)/)
+    const run = f.store.runs.activeForSession(f.session.id)
+    f.store.runs.finalize(run.id, 'failed')
+    f.agent.startRetry({ requestId: 'retry-file', runId: run.id })
+    assert.deepEqual(
+      f.store.messages
+        .listBySession(f.session.id)
+        .find((message) => message.role === 'user').parts,
+      user.parts,
+    )
+  })
+}
+
+test('queued documents survive text edits and are validated again when sent', async (t) => {
+  const f = fixture(t)
+  const { AssetService } = await import('../dist/assets/service.js')
+  const assets = new AssetService(f.store, f.store.dataDir)
+  const file = await assets.uploadDocument({
+    sessionId: f.session.id,
+    fileName: 'queued.txt',
+    base64: Buffer.from('queued contents').toString('base64'),
+  })
+  const active = f.store.runs.create({
+    sessionId: f.session.id,
+    providerId: f.providers[0].id,
+    model: 'old-model',
+  })
+  const queued = f.agent.send({
+    requestId: 'queue-file',
+    sessionId: f.session.id,
+    content: 'analyze',
+    attachmentAssetIds: [file.assetId],
+  })
+  assert.equal(queued.queued, true)
+  const edited = f.agent.updateQueue(f.session.id, queued.queueId, 'updated')
+  assert.deepEqual(edited.item.attachmentAssetIds, [file.assetId])
+  f.store.runs.finalize(active.id, 'completed')
+  f.agent.pumpQueue(f.session.id)
+  const user = f.store.messages
+    .listBySession(f.session.id)
+    .filter((message) => message.role === 'user')
+    .at(-1)
+  assert.equal(user.content, 'updated')
+  assert.equal(user.parts[1].assetId, file.assetId)
+  assert.equal(user.parts[1].extraction.text, '1: queued contents')
+})

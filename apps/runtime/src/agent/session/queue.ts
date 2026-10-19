@@ -130,6 +130,7 @@ export class QueueService {
       id: entry.id,
       sessionId,
       content: entry.params.content,
+      attachmentAssetIds: entry.params.attachmentAssetIds,
       imageAssetIds: entry.params.imageAssetIds,
       providerId: entry.params.providerId ?? null,
       model: entry.params.model ?? null,

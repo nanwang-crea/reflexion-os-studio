@@ -50,3 +50,13 @@
   background: transparent;
   cursor: zoom-in;
 }
+
+.composer-image .composer-file-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 72px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  white-space: normal;
+}

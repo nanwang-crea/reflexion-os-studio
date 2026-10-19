@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import type {
   ChatArchive,
   ContentPart,
+  FilePart,
   ToolOutput,
 } from '@reflexion-os-studio/contracts'
 
@@ -13,6 +14,7 @@ export class ChatArchiveStore {
     sessionId: string,
     archive: ChatArchive,
     imageIds: Map<string, string>,
+    fileParts: Map<string, FilePart> = new Map(),
   ): void {
     const imagesById = new Map(archive.images.map((image) => [image.id, image]))
     const keys = archive.messages.map((message, index) =>
@@ -66,6 +68,7 @@ export class ChatArchiveStore {
           mimeType: image.mimeType,
         })
       }
+      for (const sourceId of message.files) parts.push(fileParts.get(sourceId)!)
       this.db
         .prepare(
           'INSERT INTO messages (id, session_id, run_id, role, content, parts_json, reasoning, status, created_at, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
