@@ -103,19 +103,9 @@ pub(crate) fn data_dir() -> PathBuf {
 /// 提权/危险档位一律不得覆盖的敏感路径（双向重叠即拒绝：既不能是敏感路径
 /// 内部，也不能是敏感路径的祖先——不给任何平台留"粗根吞掉凭据目录"的洞）。
 pub(crate) fn sensitive_roots() -> Vec<PathBuf> {
-    let mut roots = vec![data_dir()];
-    let home = std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from);
-    if let Some(home) = home {
-        for tail in [".ssh", ".aws", ".gnupg", ".config/gcloud", ".docker"] {
-            roots.push(home.join(tail));
-        }
-    }
+    let mut roots = crate::sensitive::roots();
     #[cfg(unix)]
-    {
-        roots.push(PathBuf::from("/etc"));
-    }
+    roots.push(PathBuf::from("/etc"));
     #[cfg(windows)]
     if let Some(windir) = std::env::var_os("SystemRoot") {
         roots.push(PathBuf::from(windir));

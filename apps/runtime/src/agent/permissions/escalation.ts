@@ -1,3 +1,4 @@
+import { NO_READ_POLICY } from '@reflexion-os-studio/contracts'
 import { homedir } from 'node:os'
 import { isAbsolute, normalize, join } from 'node:path'
 
@@ -7,15 +8,7 @@ import { isAbsolute, normalize, join } from 'node:path'
  * Rust 侧（resolve_escalation_roots）独立执行同一不变量，双端不互信。
  */
 
-const SENSITIVE_DIR_NAMES = new Set([
-  '.ssh',
-  '.aws',
-  '.gnupg',
-  'pgp',
-  '.docker',
-  '.npmrc',
-  '.netrc',
-])
+const SENSITIVE_DIR_NAMES = new Set(NO_READ_POLICY.names)
 
 /** 平台敏感根（与 Rust sensitive_roots 同源清单）。 */
 export function sensitiveRoots(): string[] {
@@ -24,11 +17,7 @@ export function sensitiveRoots(): string[] {
     process.env.REFLEXION_DATA_DIR ?? join(home, '.reflexion-os-studio')
   const roots = [
     dataDir,
-    join(home, '.ssh'),
-    join(home, '.aws'),
-    join(home, '.gnupg'),
-    join(home, '.config', 'gcloud'),
-    join(home, '.docker'),
+    ...NO_READ_POLICY.homePaths.map((tail) => join(home, ...tail.split('/'))),
   ]
   if (process.platform !== 'win32') {
     roots.push('/etc')
@@ -52,11 +41,8 @@ export function hasSensitivePathSegments(path: string): boolean {
   return segments.some(
     (segment) =>
       SENSITIVE_DIR_NAMES.has(segment) ||
-      segment.startsWith('.env') ||
-      segment.startsWith('id_rsa') ||
-      segment.startsWith('id_ed25519') ||
-      ['credentials.json', 'secrets.json', 'id_token'].includes(segment) ||
-      /\.(pem|key|token)$/.test(segment),
+      NO_READ_POLICY.prefixes.some((prefix) => segment.startsWith(prefix)) ||
+      NO_READ_POLICY.suffixes.some((suffix) => segment.endsWith(suffix)),
   )
 }
 

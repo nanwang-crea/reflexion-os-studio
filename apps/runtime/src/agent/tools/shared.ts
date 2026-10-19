@@ -59,6 +59,18 @@ export async function callSystem(
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') throw error
     const message = error instanceof Error ? error.message : String(error)
+    if (
+      error instanceof SystemRuntimeError &&
+      error.code === 'operation_uncertain'
+    ) {
+      return {
+        content:
+          '系统请求超时，操作结果不明。请核对实际结果，禁止自动重放该操作。',
+        isError: true,
+        code: 'operation_uncertain',
+        replayUnsafe: true,
+      }
+    }
     const revisionConflict =
       (method === 'file.write' ||
         method === 'file.write_stream' ||

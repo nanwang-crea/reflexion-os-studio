@@ -30,10 +30,24 @@ export function reconstructSessionFramesWithIds(
   store: Store,
   sessionId: string,
   systemPrompt: string,
+  window?: { after?: string; through?: string },
 ): { frames: ContextFrame[]; messageIds: (string | null)[] } {
   const frames: ContextFrame[] = [{ kind: 'system', content: systemPrompt }]
   const messageIds: (string | null)[] = [null]
-  for (const message of store.messages.listBySession(sessionId)) {
+  const messages = window
+    ? store.messages.listWindow(sessionId, window.after, window.through)
+    : store.messages.listBySession(sessionId)
+  const calls = new Map<string, ToolCall[]>()
+  for (const call of store.toolCalls.listByMessages(
+    messages.map((message) => message.id),
+  )) {
+    if (call.messageId) {
+      const group = calls.get(call.messageId) ?? []
+      group.push(call)
+      calls.set(call.messageId, group)
+    }
+  }
+  for (const message of messages) {
     if (message.role === 'system') continue
     const text =
       message.parts
@@ -59,7 +73,7 @@ export function reconstructSessionFramesWithIds(
     ) {
       continue
     }
-    const toolCallRows = store.toolCalls.listByMessage(message.id)
+    const toolCallRows = calls.get(message.id) ?? []
     if (toolCallRows.length === 0) {
       // 非完成的纯文本 assistant（interrupted/failed）不回放正文。
       if (

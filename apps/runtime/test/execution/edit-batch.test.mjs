@@ -212,3 +212,29 @@ test('Run finalization preserves canonical progress when cancelling an unfinishe
   })
   assert.deepEqual(f.store.toolCalls.get(row.id).output, output)
 })
+
+test('uncertain failed child protects the batch from replay even when no child completed', async (t) => {
+  const f = fixture(t)
+  f.registry.register(createFileEditBatchTool())
+  f.registry.register({
+    name: 'file.edit',
+    description: 'uncertain fixture',
+    parameters: { type: 'object' },
+    execution: FILE_WRITE_POLICY,
+    execute: () => ({
+      content: 'Operation result unknown',
+      isError: true,
+      code: 'operation_uncertain',
+      replayUnsafe: true,
+    }),
+  })
+  const result = await executeFileEditBatch(
+    f,
+    {},
+    request('uncertain-batch', 'file.edit_batch', { files: [edit('a.ts')] }),
+    new AbortController().signal,
+  )
+  assert.equal(result.isError, true)
+  assert.equal(result.replayUnsafe, true)
+  assert.equal(result.data.results[0].status, 'failed')
+})

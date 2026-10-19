@@ -1,3 +1,4 @@
+import { readCheckpointTail } from './checkpoint/fast-path.js'
 import { checkpointSummaryHasContent } from './checkpoint/summary.js'
 import { formatCheckpointBlock } from './checkpoint/format.js'
 import { contextBudgetFor, type ProviderRuntimeConfig } from './budget.js'
@@ -111,12 +112,27 @@ export class ContextBuilder {
       instructionBlock === ''
         ? systemPrompt
         : `${systemPrompt}\n\n${instructionBlock}`
+    const budget = contextBudgetFor(provider, tools)
+    const cached = readCheckpointTail(
+      this.store,
+      sessionId,
+      effectiveSystem,
+      budget,
+      KEEP_RECENT_FRAMES,
+    )
+    if (cached) {
+      emitContextMetrics(sessionId, {
+        contextBuildMs: Date.now() - buildStartedAt,
+        checkpointHit: true,
+        compactionCalls: 0,
+      })
+      return cached
+    }
     const { frames, messageIds } = reconstructSessionFramesWithIds(
       this.store,
       sessionId,
       effectiveSystem,
     )
-    const budget = contextBudgetFor(provider, tools)
     if (estimateFrameTokens(frames) <= budget) {
       emitContextMetrics(sessionId, {
         contextBuildMs: Date.now() - buildStartedAt,
@@ -162,6 +178,13 @@ export class ContextBuilder {
         stableIds,
         throughMessageId,
         signal,
+        validateSource: () =>
+          throughMessageId !== null &&
+          computeSourceHash(
+            reconstructSessionFramesWithIds(this.store, sessionId, '', {
+              through: throughMessageId,
+            }).frames.slice(1),
+          ) === computeSourceHash(stable),
       }).catch((error) => {
         if (!(error instanceof Error && error.name === 'AbortError')) {
           process.stderr.write(

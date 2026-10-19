@@ -34,6 +34,7 @@ const HANDSHAKE_TIMEOUT_MS = 5_000
 const REQUEST_TIMEOUT_MS = 10_000
 const SHUTDOWN_GRACE_MS = 2_000
 /** 崩溃重启策略：有限次数 + 退避；耗尽后保持 degraded 直到 Runtime 重启。 */
+const HEALTHY_UPTIME_MS = 60_000
 const MAX_RESTARTS = 3
 const RESTART_BACKOFF_MS = [500, 1_000, 2_000]
 
@@ -56,6 +57,7 @@ export class SystemRuntimeClient {
   private restartTimer: NodeJS.Timeout | null = null
   private stopping = false
   private restarts = 0
+  private readySince = 0
   private status: SystemAvailability = 'starting'
   /** 握手上报的沙箱 provider 标识（"none"/"seatbelt"/"bwrap"/"windows-token"）。 */
   private sandboxProviderName: string | null = null
@@ -112,11 +114,16 @@ export class SystemRuntimeClient {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id)
-        reject(new Error(`system request timeout: ${method}`))
+        options?.signal?.removeEventListener('abort', onAbort)
+        cancel()
+        reject(
+          new SystemRuntimeError(
+            `system request timeout: ${method}; result uncertain`,
+            'operation_uncertain',
+          ),
+        )
       }, options?.timeoutMs ?? REQUEST_TIMEOUT_MS)
-      const onAbort = (): void => {
-        this.pending.delete(id)
-        clearTimeout(timer)
+      const cancel = (): void => {
         // Rust 主循环可能正被长命令占用：cancel 通知由其 stdin 顺序处理，
         // 对运行中的 shell 按请求 id 杀进程树。
         try {
@@ -130,6 +137,12 @@ export class SystemRuntimeClient {
         } catch {
           // 管道已断：进程退出路径会统一收尾。
         }
+      }
+      const onAbort = (): void => {
+        this.pending.delete(id)
+        clearTimeout(timer)
+        options?.signal?.removeEventListener('abort', onAbort)
+        cancel()
         reject(new DOMException('The operation was aborted.', 'AbortError'))
       }
       if (options?.signal?.aborted) {
@@ -284,8 +297,8 @@ export class SystemRuntimeClient {
         }
         return
       }
-      // 重新协商成功：重置重启预算，避免历史崩溃累计导致后续无谓降级。
-      this.restarts = 0
+      // A handshake is not evidence of stability. Reset only after healthy uptime.
+      this.readySince = performance.now()
       this.sandboxProviderName = parsed.data.sandbox ?? null
       this.setStatus('ready', parsed.data.runtimeVersion)
       return
@@ -329,6 +342,12 @@ export class SystemRuntimeClient {
 
   private onUnexpectedExit(detail: string, generation: number): void {
     if (generation !== this.generation) return
+    if (
+      this.readySince &&
+      performance.now() - this.readySince >= HEALTHY_UPTIME_MS
+    )
+      this.restarts = 0
+    this.readySince = 0
     this.rejectPending(new Error(detail))
     this.child = null
     this.setStatus('degraded', detail)

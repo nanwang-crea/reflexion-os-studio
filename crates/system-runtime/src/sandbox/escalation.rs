@@ -40,27 +40,7 @@ pub(crate) fn prepare(params: Value) -> Result<Value, OpError> {
 }
 
 fn protected_name(path: &Path) -> bool {
-    path.components().any(|part| {
-        let name = part.as_os_str().to_string_lossy().to_lowercase();
-        matches!(
-            name.as_str(),
-            ".ssh"
-                | ".aws"
-                | ".gnupg"
-                | "pgp"
-                | ".docker"
-                | ".npmrc"
-                | ".netrc"
-                | "credentials.json"
-                | "secrets.json"
-                | "id_token"
-        ) || name.starts_with(".env")
-            || name.ends_with(".key")
-            || name.ends_with(".pem")
-            || name.ends_with(".token")
-            || name.starts_with("id_rsa")
-            || name.starts_with("id_ed25519")
-    })
+    crate::sensitive::protected_name(path)
 }
 
 pub(crate) fn resolve_escalation_roots(

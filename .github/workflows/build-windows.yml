@@ -103,6 +103,9 @@ jobs:
           cargo test --manifest-path crates/Cargo.toml canonical_root_matches_created_and_deleted_paths
           cargo test --manifest-path crates/Cargo.toml path_lookup_finds_windows_exe
           cargo test --manifest-path crates/Cargo.toml filesystem::paths::tests
+          cargo test --manifest-path crates/Cargo.toml sensitive::tests
+          cargo test --manifest-path crates/Cargo.toml filesystem::dispatch::tests
+          cargo test --manifest-path crates/Cargo.toml filesystem::read::tests
           pnpm --filter @reflexion-os-studio/runtime exec node --disable-warning=ExperimentalWarning --import ./test/set-test-data-dir.mjs --test test/handlers.test.mjs test/workspace-indexer.test.mjs
 
       - name: Verify terminal shell startup regressions
@@ -116,6 +119,9 @@ jobs:
 
       - name: Verify desktop packaging regressions
         run: node --test scripts/test/windows-crt.test.mjs scripts/test/desktop-bundle.test.mjs
+
+      - name: Verify Runtime reliability
+        run: pnpm --filter @reflexion-os-studio/runtime exec node --import ./test/set-test-data-dir.mjs --test test/reliability.test.mjs test/operations.test.mjs test/context/request-budget.test.mjs test/execution/*.test.mjs
 
       - name: Verify multi-agent collaboration
         run: pnpm --filter @reflexion-os-studio/runtime exec node --import ./test/set-test-data-dir.mjs --test test/agent-roles.test.mjs test/agent-teams.test.mjs

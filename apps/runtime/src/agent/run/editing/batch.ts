@@ -182,7 +182,11 @@ export async function executeFileEditBatch(
     content: batchSummary(data),
     data,
     isError: data.results.some((entry) => entry.status !== 'completed'),
-    replayUnsafe: data.results.some((entry) => entry.status === 'completed'),
+    replayUnsafe:
+      data.results.some((entry) => entry.status === 'completed') ||
+      rowIds.some(
+        (id) => store.toolCalls.get(id)?.errorCode === 'operation_uncertain',
+      ),
   }
   finalizeToolCall(
     store,

@@ -43,6 +43,30 @@ export class MessageStore {
       .map((row) => this.toMessage(row as Row))
   }
 
+  get(id: string): Message | null {
+    const row = this.db.prepare('SELECT * FROM messages WHERE id = ?').get(id)
+    return row ? this.toMessage(row as Row) : null
+  }
+
+  listWindow(sessionId: string, after?: string, through?: string): Message[] {
+    const lower = after
+      ? 'AND (created_at, rowid) > (SELECT created_at, rowid FROM messages WHERE id = ? AND session_id = ?)'
+      : ''
+    const upper = through
+      ? 'AND (created_at, rowid) <= (SELECT created_at, rowid FROM messages WHERE id = ? AND session_id = ?)'
+      : ''
+    return this.db
+      .prepare(
+        `SELECT * FROM messages WHERE session_id = ? AND status <> 'superseded' ${lower} ${upper} ORDER BY created_at, rowid`,
+      )
+      .all(
+        sessionId,
+        ...(after ? [after, sessionId] : []),
+        ...(through ? [through, sessionId] : []),
+      )
+      .map((row) => this.toMessage(row as Row))
+  }
+
   /** A turn starts at a user message; never cut assistant/tool rounds in half. */
   listPage(sessionId: string, turns: number, before?: HistoryCursor) {
     const boundary = before ? 'AND (created_at, rowid) < (?, ?)' : ''

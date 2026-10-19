@@ -149,3 +149,7 @@ AGENTS.md 第 12 节 no-read 清单；Provider secret 及 `secretRef` 原值、�
 ## B4 Playwright 审批（首批）
 
 静态读取链路已移除。内置 Playwright 工具通过 browser-page subject 绑定实际操作、来源、标签与页面版本；出现审批时仅 allow-once/deny，通用会话规则与 Danger 不旁路。浏览器批准模式默认跟随对话权限（workspace-full 自动、其他档位询问），可设置强制询问或自动只读；ask-everything 优先。导航审批展示目标来源及可选原页面，读取审批绑定精确页面版本；执行时核对实时快照摘要，陈旧页面拒绝读取。网页内容按不可信外部资料处理，用户凭据不向 Agent 开放。详见 [B4 设计](BROWSER-AGENT.md)。
+
+## 2026-10-19 拒读边界修正
+
+敏感路径策略以 contracts 的 `security/no-read-policy.json` 为公共数据源。工作区内也不豁免：直接文件读取、二进制预览、搜索和变更均复核敏感路径。macOS 沙箱使用 Seatbelt 固定根与名称正则。按用户明确要求，Linux/Windows Shell 保留既有执行能力与审批流程，不因未实现完整拒读而整体禁用；`require_unsandboxed` 恢复逐次审批后执行，批准不代表具备 OS 敏感拒读保证。各平台原有沙箱能力检查、授权绑定和网络审批仍保留。

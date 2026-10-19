@@ -119,3 +119,35 @@ test('receipts and lifecycle events never include mutation inputs', async () => 
     ['error', 'method', 'phase', 'requestId'],
   )
 })
+
+test('receipt storage failure cannot admit an effect or misclassify a completed effect as failed', async () => {
+  for (const failedPhase of ['queued', 'succeeded']) {
+    let calls = 0
+    const registry = new OperationRegistry(undefined, {
+      get: () => null,
+      save: (_key, _fingerprint, snapshot) => {
+        if (snapshot.phase === failedPhase)
+          throw Error('fixture storage unavailable')
+      },
+    })
+    const invoke = () =>
+      registry.execute(
+        'workspace.write_file',
+        { requestId: failedPhase },
+        async () => {
+          calls++
+          return { ok: true }
+        },
+      )
+    await assert.rejects(invoke(), /storage unavailable/)
+    assert.equal(calls, failedPhase === 'queued' ? 0 : 1)
+    if (failedPhase === 'succeeded') {
+      assert.equal(
+        registry.get('workspace.write_file', failedPhase).phase,
+        'uncertain',
+      )
+      await assert.rejects(invoke())
+      assert.equal(calls, 1)
+    }
+  }
+})

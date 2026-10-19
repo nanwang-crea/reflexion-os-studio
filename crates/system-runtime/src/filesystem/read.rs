@@ -49,6 +49,12 @@ pub fn read_with_line_endings(
         return Err(format!("not a regular file: {relative}"));
     }
     let size = fs::metadata(&path).map_err(|e| e.to_string())?.len();
+    const MAX_SCAN_BYTES: u64 = 64 * 1024 * 1024;
+    if size > MAX_SCAN_BYTES {
+        return Err(format!(
+            "file exceeds {MAX_SCAN_BYTES} byte scan limit; use indexed search or a smaller file"
+        ));
+    }
     let start = offset.unwrap_or(0);
     let max_lines = limit.unwrap_or(DEFAULT_READ_LIMIT).min(MAX_READ_LIMIT);
     let file = fs::File::open(&path).map_err(|error| error.to_string())?;
@@ -58,18 +64,46 @@ pub fn read_with_line_endings(
     let mut total_lines = 0usize;
     let mut selected_bytes = 0u64;
     let mut buffer = Vec::new();
+    let mut scanned = 0u64;
     loop {
+        super::dispatch::check_cancelled()?;
         buffer.clear();
-        let read = reader
-            .read_until(b'\n', &mut buffer)
-            .map_err(|error| error.to_string())?;
-        if read == 0 {
+        let selected_line = total_lines >= start && selected.len() < max_lines;
+        let mut line_bytes = 0usize;
+        loop {
+            super::dispatch::check_cancelled()?;
+            let available = reader.fill_buf().map_err(|error| error.to_string())?;
+            if available.is_empty() {
+                break;
+            }
+            let count = available
+                .iter()
+                .position(|byte| *byte == b'\n')
+                .map_or(available.len(), |index| index + 1);
+            let slice = &available[..count];
+            let newline = slice.last() == Some(&b'\n');
+            scanned += count as u64;
+            if scanned > MAX_SCAN_BYTES {
+                return Err("file exceeds scan byte budget".into());
+            }
+            hasher.update(slice);
+            if selected_line {
+                if selected_bytes + buffer.len() as u64 + count as u64 > MAX_READ_BYTES + 2 {
+                    return Err(format!("requested line window exceeds {MAX_READ_BYTES} bytes; reduce limit or use file.grep"));
+                }
+                buffer.extend_from_slice(slice);
+            }
+            line_bytes += count;
+            reader.consume(count);
+            if newline {
+                break;
+            }
+        }
+        if line_bytes == 0 {
             break;
         }
-        hasher.update(&buffer);
-        let line_index = total_lines;
         total_lines += 1;
-        if line_index < start || selected.len() >= max_lines {
+        if !selected_line {
             continue;
         }
         if !preserve_line_endings {
@@ -82,7 +116,7 @@ pub fn read_with_line_endings(
             return Err(format!("requested line window exceeds {MAX_READ_BYTES} bytes; reduce limit or use file.grep"));
         }
         selected.push(
-            String::from_utf8(buffer.clone())
+            String::from_utf8(std::mem::take(&mut buffer))
                 .map_err(|_| "file is not valid UTF-8 text (binary file?)".to_string())?,
         );
     }

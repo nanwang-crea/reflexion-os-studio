@@ -182,6 +182,9 @@ pub fn handle_shell_execute(id: Value, params: Value) -> Result<(Value, bool), O
 }
 
 pub fn handle_cancel(params: &Value) {
+    if let Some(id) = params.get("requestId") {
+        crate::filesystem::dispatch::cancel(id);
+    }
     let request_id = params.get("requestId").and_then(|value| match value {
         Value::String(value) if !value.is_empty() => Some(value.clone()),
         Value::Number(value) => Some(value.to_string()),

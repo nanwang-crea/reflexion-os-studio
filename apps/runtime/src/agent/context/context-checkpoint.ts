@@ -38,6 +38,7 @@ export interface CheckpointOptions {
   /** 稳定窗口最后一个来源消息 id（watermark 落库值）。 */
   throughMessageId: string | null
   signal: AbortSignal
+  validateSource?: () => boolean
 }
 
 export interface CheckpointOutcome {
@@ -139,6 +140,8 @@ async function runEnsure(
       signal: options.signal,
     })
     options.signal.throwIfAborted()
+    if (options.validateSource && !options.validateSource())
+      throw new Error('checkpoint source changed during summarization')
     const summary = sanitizeSummary(raw)
     failedHashes.delete(flightKey)
     store.contextCheckpoints.upsert({

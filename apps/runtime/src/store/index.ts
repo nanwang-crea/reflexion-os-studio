@@ -1,3 +1,4 @@
+import { OperationReceiptStore } from './chat/operationReceipts.js'
 import { WorkflowDraftStore } from './workflows/authoring/drafts.js'
 import { WorkflowGenerationStore } from './workflows/authoring/generations.js'
 import { recoverWorkflows } from './workflows/execution/recovery.js'
@@ -46,6 +47,7 @@ export { DEFAULT_SESSION_TITLE, resolveDataDir } from './shared.js'
  */
 export class Store {
   private readonly db: DatabaseSync
+  readonly operationReceipts: OperationReceiptStore
   readonly projects: ProjectStore
   readonly sessions: SessionStore
   readonly chatArchives: ChatArchiveStore
@@ -91,6 +93,8 @@ export class Store {
     this.db.exec(SCHEMA)
     runMigrations(this.db, dir)
 
+    this.operationReceipts = new OperationReceiptStore(this.db)
+    this.operationReceipts.recover()
     this.projects = new ProjectStore(this.db)
     this.sessions = new SessionStore(this.db)
     this.chatArchives = new ChatArchiveStore(this.db)

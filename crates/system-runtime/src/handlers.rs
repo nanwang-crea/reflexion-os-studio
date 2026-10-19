@@ -16,7 +16,9 @@ mod edit;
 pub use edit::handle_file_edit;
 
 fn file_error(message: String) -> OpError {
-    let code = if message.contains("changed since last read")
+    let code = if message.contains("sensitive path denied") {
+        "permission_denied"
+    } else if message.contains("changed since last read")
         || message.contains("changed since upload began")
     {
         "stale_revision"

@@ -1,3 +1,7 @@
+import {
+  OPERATION_RECEIPTS_SCHEMA,
+  CHECKPOINT_INVALIDATION_SCHEMA,
+} from './migrations/runtime-reliability.js'
 import { migrateModelCapabilities } from './migrations/model-capabilities.js'
 import { migrateAgentTemplates } from './migrations/agent-templates.js'
 import { WORKFLOW_AUTHORING_SCHEMA } from './migrations/workflow-authoring.js'
@@ -464,6 +468,11 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
       )
     )
       db.exec('ALTER TABLE runs ADD COLUMN performance_json TEXT')
+    if (version < 53) {
+      db.exec(OPERATION_RECEIPTS_SCHEMA)
+      db.exec('DELETE FROM context_checkpoints')
+      db.exec(CHECKPOINT_INVALIDATION_SCHEMA)
+    }
     db.exec('COMMIT')
     // 迁移全部执行完毕才推进版本号；否则下次启动会重复进入迁移分支。
     version = LATEST_SCHEMA_VERSION

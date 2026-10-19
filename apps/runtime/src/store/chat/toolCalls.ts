@@ -59,6 +59,16 @@ export class ToolCallStore {
     return toolCall
   }
 
+  listByMessages(messageIds: string[]): ToolCall[] {
+    if (!messageIds.length) return []
+    return this.db
+      .prepare(
+        `SELECT * FROM tool_calls WHERE message_id IN (SELECT value FROM json_each(?)) ORDER BY created_at, rowid`,
+      )
+      .all(JSON.stringify(messageIds))
+      .map((row) => this.toToolCall(row as Row))
+  }
+
   get(id: string): ToolCall | null {
     const row = this.db.prepare('SELECT * FROM tool_calls WHERE id = ?').get(id)
     return row ? this.toToolCall(row as Row) : null

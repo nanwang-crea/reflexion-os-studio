@@ -1,3 +1,4 @@
+import { createRunExecutionState } from '../../dist/agent/run/run-state.js'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
@@ -83,7 +84,7 @@ test('final model-window check includes tool schemas and fails before any provid
         provider: config,
         registry: { specs: () => tools },
         store: {},
-        state: {},
+        state: createRunExecutionState(),
         run: {},
         emitter: {},
       },

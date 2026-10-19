@@ -1,3 +1,4 @@
+import type { Store } from '../store/index.js'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { createHash } from 'node:crypto'
 import {
@@ -24,7 +25,7 @@ function canonical(value: unknown): string {
   return JSON.stringify(value) ?? 'null'
 }
 
-/** Session-local receipts, never parameters or secrets. No replay after unknown results. */
+/** Durable identity/status plus bounded recent results. Never persist mutation parameters. */
 export class OperationRegistry {
   private readonly entries = new Map<
     string,
@@ -34,12 +35,40 @@ export class OperationRegistry {
       result: Promise<Record<string, unknown>>
     }
   >()
+  private readonly tombstones = new Map<
+    string,
+    { fingerprint: string; snapshot: OperationSnapshot }
+  >()
   constructor(
     private readonly notify: (snapshot: OperationSnapshot) => void = () => {},
+    private readonly receipts?: Store['operationReceipts'],
   ) {}
 
+  private receipt(key: string) {
+    return this.receipts?.get(key) ?? this.tombstones.get(key) ?? null
+  }
+
+  private remember(
+    key: string,
+    fingerprint: string,
+    snapshot: OperationSnapshot,
+  ): void {
+    if (this.receipts) this.receipts.save(key, fingerprint, snapshot)
+    else this.tombstones.set(key, { fingerprint, snapshot: { ...snapshot } })
+    // Only completed results are evictable; the durable identity still prevents replay.
+    if (this.entries.size > 256) {
+      for (const [id, entry] of this.entries) {
+        if (this.entries.size <= 256) break
+        if (!['queued', 'running'].includes(entry.snapshot.phase))
+          this.entries.delete(id)
+      }
+    }
+  }
+
   get(method: string, requestId: string): OperationSnapshot | null {
-    const snapshot = this.entries.get(`${method}:${requestId}`)?.snapshot
+    const key = `${method}:${requestId}`
+    const snapshot =
+      this.entries.get(key)?.snapshot ?? this.receipt(key)?.snapshot
     return snapshot ? { ...snapshot } : null
   }
 
@@ -66,12 +95,14 @@ export class OperationRegistry {
         )
       return existing.result
     }
-    // Never evict a receipt and then accidentally execute the same request again.
-    if (this.entries.size >= 4096)
+    const receipt = this.receipt(key)
+    if (receipt)
       return Promise.reject(
         new CommandError(
           'invalid_request',
-          '本次启动的操作记录已满，请核对未确认操作后重启应用',
+          receipt.fingerprint !== fingerprint
+            ? '同一请求标识不能用于不同操作内容'
+            : '该请求已有执行回执，结果缓存已释放；请查询操作状态，禁止重新执行',
         ),
       )
     const snapshot: OperationSnapshot = {
@@ -86,32 +117,56 @@ export class OperationRegistry {
     ): void => {
       snapshot.phase = phase
       snapshot.error = error
-      this.notify({ ...snapshot })
+      this.remember(key, fingerprint, snapshot)
+      try {
+        this.notify({ ...snapshot })
+      } catch {
+        /* Delivery cannot change execution facts. */
+      }
     }
-    // Defer execution until the receipt is registered, including synchronous failures.
+    // Persist admission before scheduling any effect. A storage failure must not
+    // leave an already-scheduled task executing after the caller receives failure.
+    try {
+      this.remember(key, fingerprint, snapshot)
+    } catch (error) {
+      return Promise.reject(error)
+    }
     const result = Promise.resolve().then(() =>
       execution.run(
         () => update('running'),
         async () => {
-          if (!method.startsWith('workspace.git_')) update('running')
+          let effectCompleted = false
           try {
+            if (!method.startsWith('workspace.git_')) update('running')
             const result = await task()
+            effectCompleted = true
             update('succeeded')
             return result
           } catch (error) {
             const message =
               error instanceof Error ? error.message : String(error)
-            update(
-              /timeout|timed out/i.test(message) ? 'uncertain' : 'failed',
-              message,
-            )
+            try {
+              update(
+                effectCompleted || /timeout|timed out/i.test(message)
+                  ? 'uncertain'
+                  : 'failed',
+                message,
+              )
+            } catch {
+              snapshot.phase = 'uncertain'
+              snapshot.error = '回执存储不可用，操作状态需核对；禁止重放'
+            }
             throw error
           }
         },
       ),
     )
     this.entries.set(key, { fingerprint, snapshot, result })
-    update('queued')
+    try {
+      this.notify({ ...snapshot })
+    } catch {
+      /* The receipt is already registered. */
+    }
     return result
   }
 }

@@ -26,7 +26,10 @@ pub fn resolve_in_workspace(root: &Path, relative: &str) -> Result<PathBuf, Stri
         .canonicalize()
         .map_err(|error| format!("workspace root invalid: {error}"))?;
     let target = canonical_root.join(relative_path);
-    resolve_with_symlink_boundary(&canonical_root, &target)
+    crate::sensitive::assert_allowed(&target)?;
+    let resolved = resolve_with_symlink_boundary(&canonical_root, &target)?;
+    crate::sensitive::assert_allowed(&resolved)?;
+    Ok(resolved)
 }
 
 /// 已存在目标直接 canonicalize（符号链接边界）；

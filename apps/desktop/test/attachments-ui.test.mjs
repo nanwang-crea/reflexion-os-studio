@@ -34,9 +34,14 @@ createRoot(document.getElementById('root')).render(<><Composer placeholder="è¾“å
     const page = await browser.newPage({
       viewport: { width: 940, height: 800 },
     })
-    await page.setContent(
-      '<!doctype html><meta charset="utf-8"><div id="root"></div>',
+    // randomUUID requires the secure context supplied by the real desktop host.
+    await page.route('https://attachments.test/**', (route) =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<!doctype html><meta charset="utf-8"><div id="root"></div>',
+      }),
     )
+    await page.goto('https://attachments.test/')
     await page.addStyleTag({
       content: built.outputFiles.find((file) => file.path.endsWith('.css'))
         .text,

@@ -268,3 +268,12 @@ AgentSettings 保留数字/null 的默认语义，通过可选 `unlimitedLimits`
 消息文件附件的协议、解析边界、跨平台行为与备份语义见
 [消息文件附件](docs/MESSAGE-ATTACHMENTS.md)。文档输入以本地提取文字接入既有
 上下文，不包含 OCR 或 Provider 原生文件 API。
+
+## 2026-10-19 执行可靠性修正
+
+- 敏感路径策略以 `packages/contracts/src/security/no-read-policy.json` 为公共数据源，TS 与 Rust 复用。Rust 文件路径解析同时检查请求形状和解析目标，覆盖直接文本/二进制读取和变更；搜索复用同一名称规则。macOS Shell 通过 Seatbelt 的固定敏感根和大小写兼容路径正则执行拒读。Linux bwrap / Windows token 保留各自既有沙箱能力，Shell 按原有权限和审批流程执行，不因缺少完整名称拒读而整体禁用；`require_unsandboxed` 仍须逐次审批。用户终端是独立的人工 Surface，不据此宣称模型 Shell 已完成三平台验收。
+- IPC 超时发送取消、释放监听，返回 `operation_uncertain`。有副作用工具和批量父调用传播重放保护；取消通知不代表已经撤销落盘效果。Rust 文件请求进入最多 64 个排队项的 FIFO 执行器，读取段最多 4 项并发，变更独占并形成屏障，取消可在主循环立即登记。排队操作在执行前检查取消；正在进行的原子变更仍可能完成，调用方必须核对结果，不能自动重放。
+- 文本扫描最多 64MiB，每个返回窗口仍最多 2MiB；流式分块计算完整 revision，不累积未选中长行，扫描循环可取消。超限明确报错，不伪造部分 revision。
+- TS 与 Host 的崩溃重启预算只在连续运行至少 60 秒后重置，握手本身不重置预算。
+- SQLite schema v53 添加不含参数/结果的操作回执（请求键、参数摘要和状态）。最近 256 个结果保留内存缓存；缓存淘汰或进程重启后的重复请求只查询回执，不重新执行；启动将未终态回执转成 uncertain。磁盘元数据取代启动周期 4096 次操作限制。
+- Context Frame 的工具记录按消息集合批量查询。有效 checkpoint 直接读取水位后的后缀；messages/tool_calls 的前缀变更触发缓存失效，迟到摘要写回前再次验证来源。迁移仅清理可重建 checkpoint，不改写历史消息或工具结果；新增八个稳定 Frame 后继续后台刷新。

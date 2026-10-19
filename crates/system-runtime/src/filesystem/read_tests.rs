@@ -85,3 +85,24 @@ fn original_mode_keeps_workspace_and_selected_byte_limits() {
         .contains("exceeds"));
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn skips_a_long_unselected_line_without_accumulating_it_and_enforces_scan_budget() {
+    let root = workspace("bounded-scan");
+    let mut content = vec![b'x'; MAX_READ_BYTES as usize * 2];
+    content.extend_from_slice(b"\ntail\n");
+    fs::write(root.join("long.txt"), content).unwrap();
+    let page = read_with_line_endings(&root, "long.txt", Some(1), Some(1), false).unwrap();
+    assert_eq!(page.content, "tail");
+    assert_eq!(page.total_lines, 2);
+    let file = fs::File::create(root.join("large.txt")).unwrap();
+    file.set_len(64 * 1024 * 1024 + 1).unwrap();
+    drop(file);
+    assert!(
+        read_with_line_endings(&root, "large.txt", None, Some(1), false)
+            .err()
+            .unwrap()
+            .contains("scan limit")
+    );
+    fs::remove_dir_all(root).unwrap();
+}

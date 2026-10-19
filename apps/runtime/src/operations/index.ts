@@ -5,7 +5,7 @@ const registries = new WeakMap<Store, OperationRegistry>()
 export function operationsFor(store: Store): OperationRegistry {
   let registry = registries.get(store)
   if (!registry) {
-    registry = new OperationRegistry()
+    registry = new OperationRegistry(undefined, store.operationReceipts)
     registries.set(store, registry)
   }
   return registry

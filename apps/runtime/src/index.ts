@@ -139,8 +139,9 @@ process.once('exit', releaseDataDirectoryLock)
 const store = new Store(dataDir)
 registerOperations(
   store,
-  new OperationRegistry((operation) =>
-    statusEmitter.next({ type: 'operation.changed', operation }),
+  new OperationRegistry(
+    (operation) => statusEmitter.next({ type: 'operation.changed', operation }),
+    store.operationReceipts,
   ),
 )
 const skillPlugins = new SkillPluginService(store, resolveDataDir(), notify)

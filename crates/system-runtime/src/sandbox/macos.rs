@@ -80,13 +80,10 @@ impl SandboxProvider for SeatbeltSandbox {
 }
 
 fn denied_read_paths(home: Option<&Path>, data_dir: &Path) -> Vec<PathBuf> {
-    let mut paths = vec![profile_path(data_dir)];
-    if let Some(home) = home {
-        for tail in [".ssh", ".aws", ".gnupg"] {
-            paths.push(profile_path(&home.join(tail)));
-        }
-    }
-    paths
+    crate::sensitive::roots_for(home, data_dir)
+        .iter()
+        .map(|path| profile_path(path))
+        .collect()
 }
 
 /// 内核按解析后的真实 vnode 路径匹配，macOS `/var`、`/tmp` 是指向 `/private/*` 的符号链接：
@@ -171,6 +168,10 @@ pub(crate) fn render_profile(
         profile.push_str(&format!(" (subpath {})", sbpl_string(path)));
     }
     profile.push_str(")\n");
+    profile.push_str(&format!(
+        "(deny file-read* (regex #{}))\n",
+        sbpl_string(Path::new(&crate::sensitive::path_pattern()))
+    ));
     profile
 }
 
@@ -243,7 +244,7 @@ mod tests {
             "writable root must render normalized: {profile}"
         );
         assert!(
-            profile.contains("(deny file-read* (subpath \"/private/tmp/x-data\"))"),
+            profile.contains("(deny file-read* (subpath \"/private/tmp/x-data\")"),
             "data_dir deny must render normalized: {profile}"
         );
         assert!(

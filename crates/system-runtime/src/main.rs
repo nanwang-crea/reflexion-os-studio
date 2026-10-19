@@ -25,6 +25,7 @@ mod handlers_git;
 mod params;
 mod protocol;
 mod sandbox;
+mod sensitive;
 mod shell;
 mod terminal;
 mod watcher;
@@ -34,7 +35,7 @@ use std::io::{self, BufRead};
 
 use crate::protocol::{error_response, finish, ok_response, OpError};
 
-fn handle_request(request: &Value) -> (Value, bool) {
+fn handle_request_sync(request: &Value) -> (Value, bool) {
     let id = request.get("id").cloned().unwrap_or(Value::Null);
     let error_id = id.clone();
     let method = request.get("method").and_then(Value::as_str);
@@ -242,7 +243,15 @@ fn main() {
             }
             continue;
         }
-        let (response, should_stop) = handle_request(&request);
+        if request
+            .get("method")
+            .and_then(Value::as_str)
+            .is_some_and(|method| method.starts_with("file."))
+        {
+            filesystem::dispatch::submit(request, handle_request_sync);
+            continue;
+        }
+        let (response, should_stop) = handle_request_sync(&request);
         // Null 哨兵：shell.execute 异步回包，这里不写。
         if !response.is_null() {
             protocol::emit(response);

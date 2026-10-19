@@ -157,32 +157,7 @@ fn walk_search_files_with_limits(start_dir: &Path, max_files: usize, max_depth: 
 
 /// 搜索不得读取或通过命中片段泄露凭据；ignore 文件中的反向规则也不能覆盖此边界。
 fn is_sensitive_search_path(relative: &Path) -> bool {
-    let components: Vec<String> = relative
-        .components()
-        .map(|component| component.as_os_str().to_string_lossy().to_ascii_lowercase())
-        .collect();
-    if components.iter().any(|component| {
-        matches!(
-            component.as_str(),
-            ".ssh" | ".gnupg" | "pgp" | ".aws" | ".docker"
-        )
-    }) {
-        return true;
-    }
-    let Some(name) = components.last() else {
-        return false;
-    };
-    name == ".npmrc"
-        || name == ".netrc"
-        || name == "credentials.json"
-        || name == "secrets.json"
-        || name == "id_token"
-        || name.starts_with(".env")
-        || name.ends_with(".key")
-        || name.ends_with(".pem")
-        || name.ends_with(".token")
-        || name.starts_with("id_rsa")
-        || name.starts_with("id_ed25519")
+    crate::sensitive::protected_name(relative)
 }
 
 struct WalkState {

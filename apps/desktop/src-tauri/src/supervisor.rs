@@ -125,10 +125,6 @@ fn observe_stdout(
                     snapshot.runtime_ready = true;
                     derive_state(snapshot.runtime_ready, snapshot.system_ready)
                 };
-                // 重启成功后清零预算：历史崩溃不再累计，避免后续无谓降级。
-                if let Ok(mut restart) = state.restart.lock() {
-                    restart.count = 0;
-                }
                 update_state(&app, &state, next, None);
             }
             if method == Some("runtime.status") {
@@ -170,6 +166,7 @@ fn observe_stderr(name: &'static str, stderr: impl std::io::Read + Send + 'stati
 }
 
 fn monitor_exit(app: tauri::AppHandle, state: Arc<SupervisorState>, cfg: Arc<RuntimeLaunchConfig>) {
+    let started = std::time::Instant::now();
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_millis(300));
         let Ok(mut guard) = state.runtime.lock() else {
@@ -212,6 +209,9 @@ fn monitor_exit(app: tauri::AppHandle, state: Arc<SupervisorState>, cfg: Arc<Run
                     let Ok(mut restart) = state.restart.lock() else {
                         return;
                     };
+                    if started.elapsed() >= std::time::Duration::from_secs(60) {
+                        restart.count = 0;
+                    }
                     if restart.count >= MAX_RUNTIME_RESTARTS {
                         crate::logging::write(&format!(
                             "[host] runtime restart budget exhausted; staying down"
