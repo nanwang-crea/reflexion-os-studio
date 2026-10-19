@@ -1,9 +1,11 @@
+import { RunPerformanceDetails } from './RunPerformanceDetails'
 import { RunActivityStatus } from './RunActivityStatus'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
   Delegation,
   ResourceLink,
   Usage,
+  RunPerformance,
 } from '@reflexion-os-studio/runtime-client'
 import { ChevronIcon } from '../../../ui/icons'
 import type { RunActivity } from '../../../hooks/session/useRunActivity'
@@ -24,6 +26,7 @@ interface RunBlockProps {
   streamingReasoning: Record<string, string>
   runDurationMs: number | null
   runUsage: Usage | null
+  runPerformance?: RunPerformance | null
   /** Run 最终状态为 failed（非进行中）时用“运行失败”替代“处理完成”。 */
   runFailed: boolean
   /** 该 Run 的失败事件（含错误码与完整错误信息）；无失败或无记录时为 null。 */
@@ -177,6 +180,9 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
         activity={props.runActivity}
         delegations={props.delegations}
       />
+      {!props.runActive && (
+        <RunPerformanceDetails metrics={props.runPerformance} />
+      )}
       <ChangedFiles
         files={changedFiles}
         projectId={props.projectId}

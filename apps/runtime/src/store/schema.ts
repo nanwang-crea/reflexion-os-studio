@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS runs (
   skill_id TEXT,
   agent_template_id TEXT,
   usage_json TEXT,
+  performance_json TEXT,
   plan_id TEXT REFERENCES plans(id) ON DELETE SET NULL,
   plan_step_id TEXT REFERENCES plan_steps(id) ON DELETE SET NULL
 );
@@ -336,4 +337,4 @@ CREATE INDEX IF NOT EXISTS idx_run_events_run ON run_events(run_id, created_at);
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 51
+export const LATEST_SCHEMA_VERSION = 52

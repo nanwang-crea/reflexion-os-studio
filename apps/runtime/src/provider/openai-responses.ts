@@ -1,5 +1,5 @@
 import { describeTransportFailure } from './transport-error.js'
-import { reportToolProgress } from './tool-progress.js'
+import { reportToolProgress, reportToolReady } from './tool-progress.js'
 import { ProviderRequestTimeout } from './request-timeout.js'
 import { streamReaderCleanup } from './stream-reader.js'
 import { buildContinuationToolMapping } from './continuation.js'
@@ -250,11 +250,19 @@ export async function streamOpenAIResponses(
 
       if (streamedCalls.handle(parsed)) {
         for (const call of streamedCalls.values()) {
-          if (providerToCanonical.has(call.name))
+          if (call.name)
             reportToolProgress(options, {
               ...call,
-              name: providerToCanonical.get(call.name)!,
+              name: providerToCanonical.get(call.name) ?? call.name,
             })
+        }
+        if (eventType === 'response.output_item.done') {
+          const item = parsed.item as Record<string, unknown> | undefined
+          const call = streamedCalls
+            .values()
+            .find((entry) => entry.id === item?.call_id)
+          const name = call && providerToCanonical.get(call.name)
+          if (call && name) reportToolReady(options, { ...call, name })
         }
         return
       }

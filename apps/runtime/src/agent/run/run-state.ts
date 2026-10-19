@@ -1,3 +1,4 @@
+import type { RunMetrics } from './performance/metrics.js'
 import { navigationResult } from './navigation-result.js'
 import type {
   ToolCallRequest,
@@ -18,6 +19,7 @@ export interface TurnDraft {
 
 /** 单次 Run 执行期的可变状态：轮次草稿 + 未收尾工具调用行 + 预建行映射。 */
 export interface RunExecutionState {
+  metrics?: RunMetrics
   /** 当前持久化 TurnExecution；每次模型调用开始时替换。 */
   currentTurnId: string | null
   /** 流式中断/失败时未落终态的当前轮次草稿。 */

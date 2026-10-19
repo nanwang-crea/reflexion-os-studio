@@ -1,3 +1,5 @@
+import { precreateToolCalls } from './tool-call-rows.js'
+import type { StreamingReadCoordinator } from './streaming/reads.js'
 import { checkRequestBudget } from '../context/budget.js'
 import { persistRequestAttempt } from './request-attempts.js'
 import { limitSettingsHint } from './budgets.js'
@@ -13,7 +15,6 @@ import {
   type ToolRegistry,
 } from '@reflexion-os-studio/agent-core'
 import type { Message, Run } from '@reflexion-os-studio/contracts'
-import { JsonValueSchema, type JsonValue } from '@reflexion-os-studio/contracts'
 import { RunEventEmitter } from '../../events.js'
 import { ProviderError, streamChat } from '../../provider.js'
 import type { Store } from '../../store/index.js'
@@ -23,6 +24,7 @@ import { normalizeContent } from '../context/resource-links.js'
 import type { RunExecutionState, TurnDraft } from './run-state.js'
 
 export interface ModelTurnInput {
+  streaming?: StreamingReadCoordinator
   store: Store
   state: RunExecutionState
   run: Run
@@ -59,6 +61,7 @@ export async function executeModelTurn(
   signal: AbortSignal,
 ): Promise<ModelTurnOutcome> {
   const { store, state, run, provider, registry, emitter } = input
+  state.precreatedToolCallRows.clear()
   const tools = registry.specs()
   checkRequestBudget(messages, provider, tools)
   const reuseFirst = state.lastAssistantMessageId === null
@@ -107,93 +110,111 @@ export async function executeModelTurn(
     phase: 'waiting',
   })
   const outputBudget = resolveOutputBudget(provider)
-  const result = await streamChat(
-    {
-      baseUrl: provider.baseUrl,
-      apiKey: provider.apiKey,
-      model: provider.model,
-      headers: provider.headers,
-      messages: await resolveModelImages(
-        store,
-        run.sessionId,
-        messages,
+  const requestModel = async () =>
+    streamChat(
+      {
+        baseUrl: provider.baseUrl,
+        apiKey: provider.apiKey,
+        model: provider.model,
+        headers: provider.headers,
+        messages: await resolveModelImages(
+          store,
+          run.sessionId,
+          messages,
+          signal,
+        ),
+        tools,
+        onToolCallReady: (call) => {
+          // Chat only closes calls at finish, so keep its whole-batch budget admission.
+          if (
+            provider.apiFormat === 'anthropic' ||
+            provider.apiFormat === 'openai-responses'
+          )
+            input.streaming?.accept(call)
+        },
+        onToolCallProgress: (call) => {
+          markStreaming()
+          activity.report(call)
+          input.streaming?.observe(call)
+        },
+        ...(provider.reasoningEffort !== undefined
+          ? { reasoningEffort: provider.reasoningEffort }
+          : {}),
+        ...(provider.temperature !== undefined
+          ? { temperature: provider.temperature }
+          : {}),
+        ...(outputBudget.requestMaxTokens !== undefined
+          ? { maxTokens: outputBudget.requestMaxTokens }
+          : {}),
+        retryBackoffInitialMs: provider.retryBackoffInitialMs,
+        retryBackoffMaxMs: provider.retryBackoffMaxMs,
+        ...(provider.maxRetries !== undefined
+          ? { maxRetries: provider.maxRetries }
+          : {}),
+        ...(provider.timeoutMs !== undefined
+          ? { timeoutMs: provider.timeoutMs }
+          : {}),
+        onAttempt: (attempt) => {
+          state.metrics?.attempt(attempt)
+          persistRequestAttempt(store, emitter, draft, provider, attempt)
+        },
+        onRetry: ({ attempt, maxRetries, reason, waitMs }) => {
+          input.streaming?.reset()
+          activity.reset()
+          draft.content = ''
+          draft.reasoning = ''
+          chunkSeq = 0
+          streamingMarked = false
+          reasoningSeq = 0
+          store.messages.resetPending(draft.id)
+          store.runEvents.createRetrying({
+            sessionId: run.sessionId,
+            runId: run.id,
+            attempt,
+            maxRetries,
+            reason,
+          })
+          emitter.next({
+            type: 'run.retrying',
+            attempt,
+            maxRetries,
+            reason,
+            waitMs,
+          })
+          emitter.next({
+            type: 'message.reset',
+            messageId: draft.id,
+          })
+        },
         signal,
-      ),
-      tools,
-      onToolCallProgress: (call) => {
+      },
+      provider.apiFormat,
+      (delta) => {
+        draft.content += delta
         markStreaming()
-        activity.report(call)
-      },
-      ...(provider.reasoningEffort !== undefined
-        ? { reasoningEffort: provider.reasoningEffort }
-        : {}),
-      ...(provider.temperature !== undefined
-        ? { temperature: provider.temperature }
-        : {}),
-      ...(outputBudget.requestMaxTokens !== undefined
-        ? { maxTokens: outputBudget.requestMaxTokens }
-        : {}),
-      retryBackoffInitialMs: provider.retryBackoffInitialMs,
-      retryBackoffMaxMs: provider.retryBackoffMaxMs,
-      ...(provider.maxRetries !== undefined
-        ? { maxRetries: provider.maxRetries }
-        : {}),
-      ...(provider.timeoutMs !== undefined
-        ? { timeoutMs: provider.timeoutMs }
-        : {}),
-      onAttempt: (attempt) =>
-        persistRequestAttempt(store, emitter, draft, provider, attempt),
-      onRetry: ({ attempt, maxRetries, reason, waitMs }) => {
-        activity.reset()
-        draft.content = ''
-        draft.reasoning = ''
-        chunkSeq = 0
-        streamingMarked = false
-        reasoningSeq = 0
-        store.messages.resetPending(draft.id)
-        store.runEvents.createRetrying({
-          sessionId: run.sessionId,
-          runId: run.id,
-          attempt,
-          maxRetries,
-          reason,
-        })
         emitter.next({
-          type: 'run.retrying',
-          attempt,
-          maxRetries,
-          reason,
-          waitMs,
-        })
-        emitter.next({
-          type: 'message.reset',
+          type: 'message.delta',
           messageId: draft.id,
+          chunkSeq: chunkSeq++,
+          delta,
         })
       },
-      signal,
-    },
-    provider.apiFormat,
-    (delta) => {
-      draft.content += delta
-      markStreaming()
-      emitter.next({
-        type: 'message.delta',
-        messageId: draft.id,
-        chunkSeq: chunkSeq++,
-        delta,
-      })
-    },
-    (delta) => {
-      draft.reasoning += delta
-      markStreaming()
-      emitter.next({
-        type: 'message.reasoning_delta',
-        messageId: draft.id,
-        chunkSeq: reasoningSeq++,
-        delta,
-      })
-    },
-  )
+      (delta) => {
+        draft.reasoning += delta
+        markStreaming()
+        emitter.next({
+          type: 'message.reasoning_delta',
+          messageId: draft.id,
+          chunkSeq: reasoningSeq++,
+          delta,
+        })
+      },
+    )
+
+  const result = state.metrics
+    ? await state.metrics.measure('modelMs', requestModel)
+    : await requestModel()
+  await input.streaming?.finish(result.toolCalls, result.finishReason)
 
   if (input.onModelResult && result.usage)
     store.runs.addUsage(run.id, result.usage)
@@ -310,7 +331,6 @@ export async function executeModelTurn(
   // 按声明顺序创建全部 ToolCall（初始 pending）并在提交后发 tool.requested。
   // 即使进程在第一个工具开始前退出，全部声明过的调用仍可审计。
   if (disposition.kind === 'tools') {
-    state.precreatedToolCallRows.clear()
     precreateToolCalls(store, state, run, emitter, result.toolCalls)
     if (state.currentTurnId !== null) {
       store.turnExecutions.transition(state.currentTurnId, 'scheduling_tools', {
@@ -386,48 +406,5 @@ export async function executeModelTurn(
       usage: result.usage,
     },
     finalContent: normalized.content,
-  }
-}
-
-/** 批量预建本模型轮声明的全部 ToolCall（单事务），提交后发 tool.requested。 */
-function precreateToolCalls(
-  store: Store,
-  state: RunExecutionState,
-  run: Run,
-  emitter: RunEventEmitter,
-  calls: { id: string; name: string; arguments: string }[],
-): void {
-  const rows = store.transaction(() =>
-    calls.map((call) =>
-      store.toolCalls.create({
-        runId: run.id,
-        messageId: state.lastAssistantMessageId,
-        toolName: call.name,
-        args: parseToolArgsForPrecreate(call.arguments),
-        status: 'pending',
-      }),
-    ),
-  )
-  for (let i = 0; i < rows.length; i += 1) {
-    state.precreatedToolCallRows.set(calls[i].id, rows[i].id)
-  }
-  for (let i = 0; i < rows.length; i += 1) {
-    emitter.next({
-      type: 'tool.requested',
-      toolCallId: rows[i].id,
-      toolName: calls[i].name,
-      args: rows[i].args,
-    })
-  }
-}
-
-function parseToolArgsForPrecreate(arguments_: string): JsonValue {
-  try {
-    const parsed: unknown =
-      arguments_.trim() === '' ? {} : JSON.parse(arguments_)
-    const result = JsonValueSchema.safeParse(parsed)
-    return result.success ? result.data : {}
-  } catch {
-    return {}
   }
 }

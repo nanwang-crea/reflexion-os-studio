@@ -1,3 +1,4 @@
+export { FileEditBatchResultSchema } from '@reflexion-os-studio/contracts'
 export {
   MAX_MESSAGE_ATTACHMENTS,
   MAX_DOCUMENT_BYTES,
@@ -30,6 +31,7 @@ export type {
   ReasoningEffort,
   ProviderHeader,
   Run,
+  RunPerformance,
   RuntimeEvent,
   RuntimeStatus,
   Session,

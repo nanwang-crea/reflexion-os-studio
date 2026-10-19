@@ -2,7 +2,10 @@ import type {
   ChangedFile,
   ResourceLink,
 } from '@reflexion-os-studio/runtime-client'
-import { workspaceFileUri } from '@reflexion-os-studio/runtime-client'
+import {
+  FileEditBatchResultSchema,
+  workspaceFileUri,
+} from '@reflexion-os-studio/runtime-client'
 import { ChevronIcon } from '../../../ui/icons'
 import type { ProcessItem } from './RunProcess'
 
@@ -34,7 +37,20 @@ export function aggregateChangedFiles(
     files.set(key, file)
   }
   for (const call of calls) {
-    if (seenCalls.has(call.id) || call.status !== 'completed') continue
+    if (seenCalls.has(call.id)) continue
+    if (call.toolName === 'file.edit_batch') {
+      const batch = FileEditBatchResultSchema.safeParse(call.output?.data)
+      if (batch.success) {
+        seenCalls.add(call.id)
+        for (const entry of batch.data.results) {
+          if (entry.status === 'completed') {
+            for (const file of entry.output?.changedFiles ?? []) record(file)
+          }
+        }
+      }
+      continue
+    }
+    if (call.status !== 'completed') continue
     seenCalls.add(call.id)
     const canonicalFiles = call.output?.changedFiles
     if (canonicalFiles && canonicalFiles.length > 0) {

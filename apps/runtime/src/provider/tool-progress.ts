@@ -11,3 +11,14 @@ export function reportToolProgress(
     throw new StreamCallbackError(error)
   }
 }
+
+export function reportToolReady(
+  options: StreamChatOptions,
+  call: StreamedToolCall,
+): void {
+  try {
+    options.onToolCallReady?.({ ...call })
+  } catch (error) {
+    throw new StreamCallbackError(error)
+  }
+}

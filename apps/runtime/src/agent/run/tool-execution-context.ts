@@ -105,7 +105,11 @@ export async function requestToolApproval(
     )
   }
   try {
-    return await input.approvals.request(request)
+    return await (state.metrics
+      ? state.metrics.measure('approvalWaitMs', () =>
+          input.approvals.request(request),
+        )
+      : input.approvals.request(request))
   } finally {
     // 并行工具轮次:还有其它调用在等审批时保持 awaiting_approval，
     // 否则才回置 running，避免 Run 状态错报。

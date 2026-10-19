@@ -1,3 +1,5 @@
+export * from './file-edit-batch.js'
+export * from './run-performance.js'
 export * from './attachments.js'
 export * from './task-inspection.js'
 export * from './images.js'

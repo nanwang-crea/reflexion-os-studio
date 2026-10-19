@@ -1,3 +1,6 @@
+import { StreamingReadCoordinator } from './streaming/reads.js'
+import { executeFileEditBatch, toolCallCost } from './editing/batch.js'
+import { RunMetrics } from './performance/metrics.js'
 import { runLimit, limitSettingsHint } from './budgets.js'
 import { withTaskContext } from '../context/task-context.js'
 import { resolveOutputBudget } from '../../provider/output-budget.js'
@@ -110,6 +113,12 @@ export class RunRunner {
     const { run, controller, emitter, registry } = input
     const maxTurns = runLimit(input.settings, 'maxTurns', DEFAULT_MAX_TURNS)
     const state = createRunExecutionState()
+    const metrics = new RunMetrics(
+      this.store.runs.get(run.id)?.performance,
+      (value) => this.store.runs.setPerformance(run.id, value),
+      run.startedAt ? Math.max(0, Date.now() - Date.parse(run.startedAt)) : 0,
+    )
+    state.metrics = metrics
     const finalizer = new RunFinalizer(this.store)
     const guard = new LoopGuard()
     const budgets = {
@@ -124,38 +133,39 @@ export class RunRunner {
     }
     const runStartedAt = Date.now()
     let finalFragments: string[] = []
+    let streaming: StreamingReadCoordinator | undefined
     let toolCallsUsed = 0
     let modelTurnsUsed = 0
     let turnAttempt =
       this.store.turnExecutions.latestForRun(run.id)?.attempt ?? 0
 
     /** 单工具执行（供调度器与预算分支共用）：权限上下文完整。 */
+    const executorInput = {
+      store: this.store,
+      state,
+      run,
+      gate: input.gate,
+      approvals: input.approvals,
+      workspaceRoot: input.workspaceRoot,
+      registry,
+      emitter,
+      sandboxProvider: input.sandboxProvider ?? null,
+      system: input.system,
+      permissionDomainId: input.permissionDomainId,
+      rootRunId: input.rootRunId,
+      beforeToolInvoke: input.beforeToolInvoke,
+      mutationCoordinator: input.mutationCoordinator,
+    }
     const executeOneGuarded = (
       request: import('@reflexion-os-studio/agent-core').ToolCallRequest,
       signal: AbortSignal,
-    ): Promise<import('@reflexion-os-studio/agent-core').ToolResult> =>
-      executeToolCall(
-        {
-          store: this.store,
-          state,
-          run,
-          gate: input.gate,
-          approvals: input.approvals,
-          workspaceRoot: input.workspaceRoot,
-          registry,
-          emitter,
-          sandboxProvider: input.sandboxProvider ?? null,
-          system: input.system,
-          permissionDomainId: input.permissionDomainId,
-          rootRunId: input.rootRunId,
-          beforeToolInvoke: input.beforeToolInvoke,
-          mutationCoordinator: input.mutationCoordinator,
-        },
-        request,
-        signal,
-      )
+    ) =>
+      request.name === 'file.edit_batch'
+        ? executeFileEditBatch(executorInput, { guard }, request, signal)
+        : executeToolCall(executorInput, request, signal)
 
     const finalize = (decision: RunTerminalDecision): void => {
+      metrics.flush()
       finalizer.finalize(
         {
           run,
@@ -230,7 +240,18 @@ export class RunRunner {
               },
             })
             state.currentTurnId = turnExecution.id
+            streaming = new StreamingReadCoordinator(executorInput, {
+              guard,
+              signal,
+              admit: (request) => {
+                if (toolCallsUsed + 1 > budgets.maxToolCalls) return false
+                input.onToolBatch?.([request.name])
+                toolCallsUsed++
+                return true
+              },
+            })
             // Run 累计 token 预算在 model-turn 内检查（usage 累计后）。
+            metrics.add('modelCalls')
             const result = await executeModelTurn(
               {
                 store: this.store,
@@ -244,6 +265,7 @@ export class RunRunner {
                 childTokenBudget: input.childTokenBudget,
                 runTotalTokenBudget: budgets.maxRunTotalTokens,
                 onModelResult: input.onModelResult,
+                streaming,
               },
               messages,
               signal,
@@ -262,17 +284,29 @@ export class RunRunner {
             // 直接执行前 remaining 个调用，绕过调度器的批次/审计与预算计数，
             // 造成预算、调度、审计三重失效。被拒批次的预建 ToolCall 行由
             // Finalizer 统一取消。
-            if (toolCallsUsed + requests.length > budgets.maxToolCalls) {
+            const pending = requests.filter(
+              (request) => !streaming?.completed.has(request.id),
+            )
+            const cost = pending.reduce(
+              (total, request) => total + toolCallCost(request),
+              0,
+            )
+            if (toolCallsUsed + cost > budgets.maxToolCalls) {
               process.stderr.write(
-                `[runtime] tool call budget exhausted (${toolCallsUsed} used + ${requests.length} requested > ${budgets.maxToolCalls}); rejecting whole batch\n`,
+                `[runtime] tool call budget exhausted (${toolCallsUsed} used + ${cost} requested > ${budgets.maxToolCalls}); rejecting whole batch\n`,
               )
               throw new ChildLimitError(
                 'tool_call_budget',
-                `工具调用达到上限：已用 ${toolCallsUsed} 次，本批 ${requests.length} 次，上限 ${budgets.maxToolCalls} 次。${limitSettingsHint('工具调用次数上限')}`,
+                `工具调用达到上限：已用 ${toolCallsUsed} 次，本批 ${cost} 次，上限 ${budgets.maxToolCalls} 次。${limitSettingsHint('工具调用次数上限')}`,
               )
             }
-            input.onToolBatch?.(requests.map((request) => request.name))
-            toolCallsUsed += requests.length
+            input.onToolBatch?.(
+              pending.flatMap((request) => [
+                request.name,
+                ...Array<string>(toolCallCost(request) - 1).fill('file.edit'),
+              ]),
+            )
+            toolCallsUsed += cost
             if (state.currentTurnId !== null) {
               this.store.turnExecutions.transition(
                 state.currentTurnId,
@@ -297,16 +331,21 @@ export class RunRunner {
               emitter,
               guard,
               executeOne: executeOneGuarded,
+              completedCalls: streaming?.completed,
             }
-            return executeToolBatch(deps, requests, signal).then((results) => {
-              if (state.currentTurnId !== null) {
-                this.store.turnExecutions.transition(
-                  state.currentTurnId,
-                  'completed',
-                )
-              }
-              return results
-            })
+            return metrics
+              .measure('toolBatchMs', () =>
+                executeToolBatch(deps, requests, signal),
+              )
+              .then((results) => {
+                if (state.currentTurnId !== null) {
+                  this.store.turnExecutions.transition(
+                    state.currentTurnId,
+                    'completed',
+                  )
+                }
+                return results
+              })
           },
         })
 
@@ -334,6 +373,7 @@ export class RunRunner {
         clearTimeout(timeoutHandle)
       }
     } catch (error) {
+      await streaming?.abandon()
       if (controller.signal.aborted) {
         const reason = controller.signal.reason
         if (reason instanceof ChildLimitError) {

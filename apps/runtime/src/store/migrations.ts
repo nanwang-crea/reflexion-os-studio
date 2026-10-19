@@ -457,6 +457,13 @@ export function runMigrations(db: DatabaseSync, dir: string): void {
         "ALTER TABLE messages ADD COLUMN request_attempts_json TEXT NOT NULL DEFAULT '[]'",
       )
     if (version < 51) migrateModelCapabilities(db)
+    if (
+      version < 52 &&
+      !tableColumns(db, 'runs').some(
+        (column) => column.name === 'performance_json',
+      )
+    )
+      db.exec('ALTER TABLE runs ADD COLUMN performance_json TEXT')
     db.exec('COMMIT')
     // 迁移全部执行完毕才推进版本号；否则下次启动会重复进入迁移分支。
     version = LATEST_SCHEMA_VERSION

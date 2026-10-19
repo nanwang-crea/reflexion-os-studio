@@ -1,0 +1,25 @@
+.run-performance {
+  margin: 8px 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.run-performance summary {
+  cursor: pointer;
+}
+.run-performance dl {
+  display: grid;
+  gap: 4px;
+  max-width: 480px;
+}
+.run-performance dl > div {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.run-performance dd {
+  margin: 0;
+}
+.run-performance p {
+  margin: 8px 0;
+}

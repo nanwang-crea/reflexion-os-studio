@@ -255,6 +255,7 @@ export function ChildAgentTrace({
                       : null
                   }
                   runUsage={run?.usage ?? null}
+                  runPerformance={run?.performance}
                   runFailed={run?.status === 'failed'}
                   canRetry={false}
                   onRetry={() => undefined}

@@ -1,3 +1,7 @@
+import {
+  RunPerformanceSchema,
+  type RunPerformance,
+} from '@reflexion-os-studio/contracts'
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import type { Run, RunStatus, Usage } from '@reflexion-os-studio/contracts'
@@ -150,6 +154,12 @@ export class RunStore {
       )
   }
 
+  setPerformance(id: string, metrics: RunPerformance): void {
+    this.db
+      .prepare('UPDATE runs SET performance_json = ? WHERE id = ?')
+      .run(JSON.stringify(RunPerformanceSchema.parse(metrics)), id)
+  }
+
   activeForSession(sessionId: string): Run | null {
     const row = this.db
       .prepare(
@@ -250,6 +260,7 @@ export class RunStore {
       planId: row.plan_id == null ? null : String(row.plan_id),
       planStepId: row.plan_step_id == null ? null : String(row.plan_step_id),
       usage: parseUsage(row.usage_json),
+      performance: parsePerformance(row.performance_json),
     }
   }
 }
@@ -278,4 +289,14 @@ function parseUsage(value: unknown): Usage | null {
     // 非法数据按未记录处理。
   }
   return null
+}
+
+function parsePerformance(value: unknown): RunPerformance | null {
+  if (value == null) return null
+  try {
+    const parsed = RunPerformanceSchema.safeParse(JSON.parse(String(value)))
+    return parsed.success ? parsed.data : null
+  } catch {
+    return null
+  }
 }

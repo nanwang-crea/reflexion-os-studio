@@ -1,3 +1,4 @@
+import { RunPerformanceSchema } from '../../run-performance.js'
 import { z } from 'zod'
 import { IsoDateTimeSchema } from '../shared.js'
 import { JsonValueSchema } from '../../json-value.js'
@@ -47,6 +48,7 @@ export const RunSchema = z.object({
   agentTemplateId: z.string().min(1).nullable(),
   // 全轮合计 token 用量（各模型轮累加）；进行中/旧数据为 null。
   usage: UsageSchema.nullable(),
+  performance: RunPerformanceSchema.nullable().optional(),
 })
 export type Run = z.infer<typeof RunSchema>
 

@@ -53,6 +53,8 @@ export interface StreamChatOptions {
   attemptTracker?: RequestAttemptTracker
   /** Progress only; incomplete arguments must never execute. */
   onToolCallProgress?: (call: StreamedToolCall) => void
+  /** Protocol-closed arguments only; parseable partial JSON is never sufficient. */
+  onToolCallReady?: (call: StreamedToolCall) => void
 }
 
 export interface StreamChatResult {

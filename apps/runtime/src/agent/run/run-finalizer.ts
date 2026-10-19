@@ -180,7 +180,11 @@ export class RunFinalizer {
         ...new Set([...snapshot.inFlightToolCallIds, ...nonTerminal]),
       ]
       for (const id of cancelledToolCallIds) {
-        this.store.toolCalls.finalize(id, 'cancelled')
+        this.store.toolCalls.finalize(
+          id,
+          'cancelled',
+          this.store.toolCalls.get(id)?.output ?? undefined,
+        )
       }
       // Workflow checkpoint is committed in the same transaction as Run completion.
       if (decision.status === 'completed')

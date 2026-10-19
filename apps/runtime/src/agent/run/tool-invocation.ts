@@ -30,11 +30,21 @@ export async function invokeAdmittedTool(
         code: 'permission_changed',
       })
     input.beforeToolInvoke?.(request.name)
-    return input.registry.call(request, signal, grant, rowId)
+    const started = performance.now()
+    return input.registry.call(request, signal, grant, rowId).finally(() => {
+      const elapsed = performance.now() - started
+      state.metrics?.add('toolExecutionMs', elapsed)
+      if (request.name === 'shell.execute')
+        state.metrics?.add('shellExecutionMs', elapsed)
+    })
   }
   const result =
     input.mutationCoordinator && isMutatingTool(request.name)
-      ? await input.mutationCoordinator.run(invoke)
+      ? await input.mutationCoordinator.run(invoke, {
+          keys: mutationKeys(input, request),
+          signal,
+          onWait: (ms) => state.metrics?.add('mutationWaitMs', ms),
+        })
       : await invoke()
   state.toolCallRowIds.delete(rowId)
   const output = normalizeToolOutput(result, projectId, request.name)
@@ -68,4 +78,18 @@ export async function invokeAdmittedTool(
     })
   }
   return modelResult
+}
+
+function mutationKeys(
+  input: ToolExecutorInput,
+  request: ToolCallRequest,
+): string[] {
+  const validation = input.registry.validateRequest(request)
+  if (!validation.ok || validation.tool.execution?.concurrentSafe !== true)
+    return []
+  try {
+    return validation.tool.execution.resourceKeys?.(validation.args) ?? []
+  } catch {
+    return []
+  }
 }

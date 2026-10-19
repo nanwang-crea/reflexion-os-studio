@@ -211,3 +211,51 @@ test('changed files open snapshot or Git Diff on click, with file fallback only 
     reference('report.md').link,
   ])
 })
+
+test('partial multi-file edits expose only successful canonical child changes', () => {
+  const output = (path) => ({
+    type: 'tool_output',
+    version: 1,
+    content: 'edited',
+    data: null,
+    changedFiles: [{ path, action: 'modified' }],
+    resourceLinks: [],
+    provenance: null,
+  })
+  const batch = {
+    id: 'batch',
+    toolName: 'file.edit_batch',
+    status: 'failed',
+    output: {
+      data: {
+        atomicAcrossFiles: false,
+        results: [
+          {
+            path: 'a.ts',
+            toolCallId: 'a',
+            status: 'completed',
+            output: output('a.ts'),
+          },
+          {
+            path: 'b.ts',
+            toolCallId: 'b',
+            status: 'failed',
+            output: output('b.ts'),
+          },
+          {
+            path: 'c.ts',
+            toolCallId: 'c',
+            status: 'not_executed',
+            output: null,
+          },
+        ],
+      },
+    },
+  }
+  assert.deepEqual(
+    aggregateChangedFiles([item([batch])], null).map((file) => file.path),
+    ['a.ts'],
+  )
+  batch.output.data.results[0].status = 'failed'
+  assert.deepEqual(aggregateChangedFiles([item([batch])], null), [])
+})

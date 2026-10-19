@@ -43,6 +43,28 @@ TS 状态机与既有 Rust 平台原子替换实现。进程崩溃在 Rust begin
 仍由 Loop Guard 收敛：连续四次相同结果后先回传恢复提示，继续重放才终止；
 成功的非幂等变更仍立即防重复执行。
 
+### Agent 调度与耗时观测
+
+模型可在同轮提交多个独立编辑，或通过 `file.edit_batch`（最多 16 个文件）提交。
+Runtime 将批量入口展开为逐文件 `file.edit`，每项独立审批、签发精确 grant、校验 revision，
+保存 canonical ToolOutput 与变更归属。每个文件内操作原子，跨文件允许部分成功；
+父结果保存逐项 canonical 输出，子执行留在审计中而不伪造模型声明。Changed Files
+从成功子结果投影，部分失败不能隐藏已经发生的变更。预算同时计入批量入口与具体编辑。
+
+只读段和明确标记安全的独立单文件写段最多并发 8 项；根级 mutation coordinator
+按规范化路径及父子路径互斥。Shell、移动、删除、目录、分块写入与未知足迹保持全局屏障。
+路径键只是调度提示；符号链接别名仍由 Rust 顺序文件分发和真实 revision 校验守住。
+
+Provider 仅在协议关闭调用后通知提前读取：Responses output item 完成、Anthropic
+content block 结束；Chat Completions 仍走完整响应后的整批预算准入。Runtime 仅提前执行
+自动放行的内置文件查询与时间工具，且只接受模型声明的只读前缀；任务、Skill、MCP、
+浏览器和网络读取均不投机执行。提前执行单独准入工具预算，正常批次不再重复计数或执行；
+断流重试取消并排除旧结果，保留独立审计；最终声明变化时失败关闭。
+
+Run 的数字耗时指标存储在独立 `performance_json` 列（schema v52，旧 Run 为 null），
+终态会话刷新后显示可折叠明细。各项可重叠，不将累计工具工时冒充墙钟总时长。
+详见 [执行效率](docs/AGENT-EXECUTION-PERFORMANCE.md)。
+
 ### 聊天记录导入导出
 
 用户从对话工具菜单导出当前会话到系统选择的目录，或选择 `.reflexion-chat.json`

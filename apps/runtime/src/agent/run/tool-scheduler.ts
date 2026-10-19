@@ -1,3 +1,4 @@
+import { resourcesConflict } from '../delegation/resource-locks.js'
 import type {
   ToolCallRequest,
   ToolDefinition,
@@ -16,13 +17,14 @@ import type { ApprovalGateway, PermissionGate } from '../permissions/index.js'
 /**
  * 副作用感知工具调度器（W3）：
  * 同一模型轮的调用保持声明顺序，切分为执行批次——
- * - 相邻 pure/read 且资源不冲突的调用组成并行批次；
- * - write/shell/state 每个调用单独成串行批次；
+ * - 相邻 pure/read 调用组成最多 8 项的并行批次；
+ * - 可信单文件 write 可按互斥资源键并行，其他 write/shell/state 独占批次；
  * - mutation 完成后，后续 read 才能开始（禁止交叉）；
  * - 结果始终按模型原始调用顺序回填。
  */
 
 export interface SchedulerDeps {
+  completedCalls?: ReadonlyMap<string, ToolResult>
   store: Store
   state: RunExecutionState
   run: Run
@@ -60,6 +62,7 @@ interface PlannedCall {
   request: ToolCallRequest
   effect: 'pure' | 'read' | 'write' | 'shell' | 'state'
   resourceKeys: string[]
+  concurrentSafe?: boolean
   protectReplay?: boolean
 }
 
@@ -89,47 +92,52 @@ function planCall(
     request,
     effect,
     resourceKeys,
+    concurrentSafe: policy?.concurrentSafe,
     protectReplay: policy?.idempotent !== true,
   }
 }
 
-/** 资源键有交集视为冲突（同路径读写互斥）。 */
-function resourcesConflict(a: string[], b: string[]): boolean {
-  if (a.length === 0 || b.length === 0) return false
-  return a.some((key) => b.includes(key))
-}
-
-/**
- * 按声明顺序切分批次：只读段合并并行，mutation 独占批次。
- * 导出供单测直接验证切分语义。
+/** Read segments and explicitly safe disjoint writes share bounded batches.
+ * Read/write, Shell, state and unknown side effects remain ordering barriers.
  */
 export function planBatches(calls: PlannedCall[]): PlannedCall[][] {
   const batches: PlannedCall[][] = []
-  let readRun: PlannedCall[] = []
-  const flushReadRun = (): void => {
-    if (readRun.length > 0) {
-      batches.push(readRun)
-      readRun = []
-    }
+  let pending: PlannedCall[] = []
+  let mode: 'read' | 'write' | null = null
+  const flush = () => {
+    if (pending.length) batches.push(pending)
+    pending = []
+    mode = null
   }
   for (const call of calls) {
-    if (call.effect === 'pure' || call.effect === 'read') {
-      // 与当前只读段内任一调用资源冲突 → 先结算再开新段。
-      if (
-        readRun.some((pending) =>
-          resourcesConflict(pending.resourceKeys, call.resourceKeys),
-        )
-      ) {
-        flushReadRun()
-      }
-      readRun.push(call)
+    const nextMode =
+      call.effect === 'pure' || call.effect === 'read'
+        ? 'read'
+        : call.effect === 'write' &&
+            call.concurrentSafe &&
+            call.resourceKeys.length
+          ? 'write'
+          : null
+    if (nextMode === null) {
+      flush()
+      batches.push([call])
       continue
     }
-    // mutation：独占批次（先结算只读段，保证 read → mutation 顺序）。
-    flushReadRun()
-    batches.push([call])
+    if (
+      mode !== nextMode ||
+      pending.length >= 8 ||
+      pending.some(
+        (item) =>
+          (nextMode === 'write' ||
+            (item.resourceKeys.length > 0 && call.resourceKeys.length > 0)) &&
+          resourcesConflict(item.resourceKeys, call.resourceKeys),
+      )
+    )
+      flush()
+    mode = nextMode
+    pending.push(call)
   }
-  flushReadRun()
+  flush()
   return batches
 }
 
@@ -140,10 +148,16 @@ async function guardedExecuteOne(
   signal: AbortSignal,
   recovery: { warned: boolean },
 ): Promise<ToolResult> {
+  const completed = deps.completedCalls?.get(planned.request.id)
+  if (completed) return completed
+  deps.state.metrics?.add('toolCalls')
   if (deps.guard !== undefined) {
     const admission = deps.guard.admit(planned.request)
     if (admission.verdict === 'block') {
       deps.guard.recordBlocked(planned.request)
+      deps.state.metrics?.add('toolFailures')
+      if (planned.request.name === 'file.edit')
+        deps.state.metrics?.add('editFailures')
       const result = finalizeRejectedTool(
         deps,
         planned.request,
@@ -168,6 +182,11 @@ async function guardedExecuteOne(
     }
   }
   const result = await deps.executeOne(planned.request, signal)
+  if (result.isError) {
+    deps.state.metrics?.add('toolFailures')
+    if (planned.request.name === 'file.edit')
+      deps.state.metrics?.add('editFailures')
+  }
   if (deps.guard !== undefined) {
     deps.guard.recordExecution(
       planned.request,
@@ -215,16 +234,30 @@ export async function executeToolBatch(
         continue
       }
       // 只读并行批次：Promise.all 保持请求顺序回填（结果数组按下标归位）。
-      const settled = await Promise.all(
+      const settled = await Promise.allSettled(
         batch.map((call) => guardedExecuteOne(deps, call, signal, recovery)),
       )
       for (let i = 0; i < batch.length; i += 1) {
-        results[batch[i].index] = settled[i]
+        const entry = settled[i]
+        if (entry.status === 'fulfilled') results[batch[i].index] = entry.value
       }
+      const failed = settled.find((entry) => entry.status === 'rejected')
+      if (failed?.status === 'rejected') throw failed.reason
     }
   } finally {
     // 本轮全部请求已消费预建行；清除映射避免下一轮误用。
     deps.state.precreatedToolCallRows.clear()
   }
   return results
+}
+
+/** Early reads use the same guard/executor without clearing the current batch. */
+export function executeScheduledCall(
+  deps: SchedulerDeps,
+  request: ToolCallRequest,
+  signal: AbortSignal,
+): Promise<ToolResult> {
+  return guardedExecuteOne(deps, planCall(deps, request, 0), signal, {
+    warned: false,
+  })
 }

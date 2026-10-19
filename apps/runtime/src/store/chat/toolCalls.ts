@@ -108,6 +108,22 @@ export class ToolCallStore {
       .map((row) => this.toToolCall(row as Row))
   }
 
+  /** Abandoned speculative reads stay auditable but are not model declarations. */
+  detachFromMessage(id: string): void {
+    this.db
+      .prepare('UPDATE tool_calls SET message_id = NULL WHERE id = ?')
+      .run(id)
+  }
+
+  /** Canonical batch progress survives cancellation or a process crash. */
+  recordProgressOutput(id: string, output: ToolOutput): void {
+    this.db
+      .prepare(
+        "UPDATE tool_calls SET result_json = ? WHERE id = ? AND status IN ('pending', 'running', 'awaiting_approval')",
+      )
+      .run(JSON.stringify(output), id)
+  }
+
   /** 状态推进：进入运行、权限等待或用户输入等待。 */
   markStatus(
     id: string,

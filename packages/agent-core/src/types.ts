@@ -128,12 +128,14 @@ export interface ToolDefinition {
 
 /** 工具副作用分类与资源键：决定同轮调度的并行/串行批次。 */
 export interface ToolExecutionPolicy {
-  /** pure/read 可并行；write/shell/state 串行且阻止后续 read 交叉。 */
+  /** pure/read 可并行；可信单文件 write 可显式声明并发安全，其余副作用串行。 */
   effect: 'pure' | 'read' | 'write' | 'shell' | 'state'
   /** 资源冲突键（如 workspace:path）；同 key 的调用保持声明顺序执行。 */
   resourceKeys?: (args: JsonValue) => string[]
   /** 幂等标记；供 Loop Guard 的重复副作用判断参考。 */
   idempotent?: boolean
+  /** Only trusted single-file implementations may opt into disjoint write batches. */
+  concurrentSafe?: boolean
 }
 
 export interface AgentLoopOptions {

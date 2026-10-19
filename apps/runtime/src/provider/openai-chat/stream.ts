@@ -1,7 +1,7 @@
 import { ChatStreamDiagnostics } from './diagnostics.js'
 import { providerStreamError } from '../provider-error.js'
 import { StreamCallbackError } from '../shared.js'
-import { reportToolProgress } from '../tool-progress.js'
+import { reportToolProgress, reportToolReady } from '../tool-progress.js'
 import type { StreamChatOptions, StreamedToolCall } from '../types.js'
 
 /** Aggregate one physical stream; no incomplete tool call can execute here. */
@@ -115,12 +115,19 @@ export function createChatStream(
         diagnostics.counts.toolArgumentChars += chunk.function.arguments.length
       }
       toolCallByIndex.set(index, existing)
-      if (providerToCanonical.has(existing.name))
+      if (existing.name)
         reportToolProgress(options, {
           ...existing,
           id: existing.id || `index-${index}`,
-          name: providerToCanonical.get(existing.name)!,
+          name: providerToCanonical.get(existing.name) ?? existing.name,
         })
+    }
+    // Chat Completions has no per-call close event; wait for tool_calls finish.
+    if (parsed.choices?.[0]?.finish_reason === 'tool_calls') {
+      for (const call of toolCallByIndex.values()) {
+        const name = providerToCanonical.get(call.name)
+        if (name) reportToolReady(options, { ...call, name })
+      }
     }
     if (parsed.usage) {
       diagnostics.counts.usageEvents += 1

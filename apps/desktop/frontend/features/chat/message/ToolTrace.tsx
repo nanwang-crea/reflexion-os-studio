@@ -1,3 +1,4 @@
+import { FileEditBatchDetails } from '../tools/FileEditBatchDetails'
 import { BrowserScreenshotResults } from '../images/BrowserScreenshotResults'
 import { toolLabel } from '../tools/labels'
 import { PlanSnapshotSchema } from '@reflexion-os-studio/runtime-client'
@@ -103,7 +104,12 @@ function ToolTraceItem(props: {
         <PlanReview snapshot={snapshot.data} historical />
       )}
       {open && <BrowserScreenshotResults call={call} />}
-      {open && detail !== '' && <pre className="trace-detail">{detail}</pre>}
+      {open && call.toolName === 'file.edit_batch' && (
+        <FileEditBatchDetails call={call} />
+      )}
+      {open && call.toolName !== 'file.edit_batch' && detail !== '' && (
+        <pre className="trace-detail">{detail}</pre>
+      )}
     </div>
   )
 }

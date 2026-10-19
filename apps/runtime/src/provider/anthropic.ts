@@ -1,5 +1,5 @@
 import { describeTransportFailure } from './transport-error.js'
-import { reportToolProgress } from './tool-progress.js'
+import { reportToolProgress, reportToolReady } from './tool-progress.js'
 import { ProviderRequestTimeout } from './request-timeout.js'
 import { streamReaderCleanup } from './stream-reader.js'
 import { buildContinuationToolMapping } from './continuation.js'
@@ -254,14 +254,10 @@ export async function streamAnthropic(
           })
         }
         const call = toolCallById.get(currentToolId)
-        if (
-          block?.type === 'tool_use' &&
-          call &&
-          providerToCanonical.has(call.name)
-        )
+        if (block?.type === 'tool_use' && call && call.name)
           reportToolProgress(options, {
             ...call,
-            name: providerToCanonical.get(call.name)!,
+            name: providerToCanonical.get(call.name) ?? call.name,
           })
         return
       }
@@ -293,16 +289,26 @@ export async function streamAnthropic(
           }
           existing.arguments += String(delta.partial_json ?? '')
           toolCallById.set(currentToolId, existing)
-          if (providerToCanonical.has(existing.name))
+          if (existing.name)
             reportToolProgress(options, {
               ...existing,
-              name: providerToCanonical.get(existing.name)!,
+              name: providerToCanonical.get(existing.name) ?? existing.name,
             })
         }
         return
       }
 
       if (eventType === 'content_block_stop') {
+        const call = toolCallById.get(currentToolId)
+        const name = call && providerToCanonical.get(call.name)
+        if (call && name)
+          reportToolReady(options, {
+            ...call,
+            name,
+            arguments: call.arguments || '{}',
+          })
+        currentToolId = ''
+        currentToolName = ''
         return
       }
 

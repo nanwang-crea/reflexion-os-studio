@@ -1,8 +1,10 @@
+import { createFileEditBatchTool } from './file-writing/batch.js'
 import {
   ToolRegistry,
   type ToolDefinition,
 } from '@reflexion-os-studio/agent-core'
 import {
+  FILE_WRITE_POLICY,
   READ_POLICY,
   STATE_POLICY,
   SHELL_POLICY,
@@ -111,6 +113,7 @@ export function createToolRegistry(ctx: ToolContext): ToolRegistry {
             allowed.has(tool.name) ||
             (tool.name === 'shell.output.read' &&
               allowed.has('shell.execute')) ||
+            (tool.name === 'file.edit_batch' && allowed.has('file.edit')) ||
             (tool.name === 'file.write_stream' && allowed.has('file.write')) ||
             (tool.name === 'skill.prepare' && allowed.has('skill.use'))
           )
@@ -149,9 +152,9 @@ const BUILTIN_POLICIES: Record<string, ToolDefinition['execution']> = {
   'file.list': READ_POLICY(),
   'file.glob': READ_POLICY(false),
   'file.grep': READ_POLICY(false),
-  'file.write': WRITE_POLICY,
+  'file.write': FILE_WRITE_POLICY,
   'file.write_stream': WRITE_POLICY,
-  'file.edit': WRITE_POLICY,
+  'file.edit': FILE_WRITE_POLICY,
   'file.delete': WRITE_POLICY,
   'file.move': WRITE_POLICY,
   'file.mkdir': WRITE_POLICY,
@@ -214,6 +217,7 @@ function workspaceTools(
     createFileWriteTool(system, workspaceRoot, readState),
     createFileWriteStreamTool(system, workspaceRoot, readState, fileWrites),
     createFileEditTool(system, workspaceRoot, readState),
+    createFileEditBatchTool(),
     createFileDeleteTool(system, workspaceRoot, readState),
     createFileMoveTool(system, workspaceRoot, readState),
     createFileMkdirTool(system, workspaceRoot),
