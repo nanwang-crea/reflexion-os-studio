@@ -1,3 +1,4 @@
+import type { PermissionPreset } from '@reflexion-os-studio/contracts'
 import { toolImageParts } from '../context/tool-images.js'
 import type {
   ToolCallRequest,
@@ -16,10 +17,18 @@ export async function invokeAdmittedTool(
   grant: string | undefined,
   rowId: string,
   projectId: string | null,
+  admittedPreset: PermissionPreset = input.gate.preset,
 ): Promise<ToolResult> {
   const { store, state, emitter, run } = input
   const invoke = () => {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
+    if (input.gate.preset !== admittedPreset)
+      return Promise.resolve({
+        content:
+          '角色权限已变更，本次调用未执行；请根据当前权限重新发起并完成审批',
+        isError: true,
+        code: 'permission_changed',
+      })
     input.beforeToolInvoke?.(request.name)
     return input.registry.call(request, signal, grant, rowId)
   }

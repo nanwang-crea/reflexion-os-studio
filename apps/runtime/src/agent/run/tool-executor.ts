@@ -58,6 +58,7 @@ export async function executeToolCall(
   signal: AbortSignal,
 ): Promise<ToolResult> {
   const { store, state, run, emitter } = input
+  const admittedPreset = input.gate.preset
   const projectId = store.sessions.get(run.sessionId)?.projectId ?? null
   const finalizeRejected = (result: ToolResult, args: JsonValue): ToolResult =>
     finalizeRejectedTool(input, request, result, args, projectId)
@@ -459,7 +460,15 @@ export async function executeToolCall(
     store.toolCalls.markStatus(row.id, 'running', grant)
   }
 
-  return invokeAdmittedTool(input, request, signal, grant, row.id, projectId)
+  return invokeAdmittedTool(
+    input,
+    request,
+    signal,
+    grant,
+    row.id,
+    projectId,
+    admittedPreset,
+  )
 }
 
 export function parseToolArgs(arguments_: string): JsonValue {

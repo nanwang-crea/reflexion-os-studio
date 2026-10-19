@@ -23,8 +23,8 @@ export function createTeamMutationTool(
     name: `agent_team.${operation}`,
     description:
       operation === 'update'
-        ? '经逐次审批增量修改已有团队。先 inspect 获取 expectedRevision；roles 为完整角色配置，带 id 修改现有成员，不带 id 新增，未提及成员保留。removeRoleIds 显式移除成员：独占模板删除，多团队模板仅解除本团队。domains 可省略团队标签，也可保留 inspect 返回的原有标签；成员关系自动维护，不能手动加入其他团队。共享角色修改会影响其他团队。保留历史和运行中实例。'
-        : '经逐次审批删除指定范围的团队。先 inspect 获取 expectedRevision。独占角色模板删除，多团队角色仅解除本团队关系；保留历史与运行中实例。',
+        ? '经逐次审批增量修改已有团队。先 inspect 获取 expectedRevision；roles 为完整角色配置，带 id 修改现有成员，不带 id 新增，未提及成员保留。removeRoleIds 显式移除成员：独占模板删除，多团队模板仅解除本团队。domains 可省略团队标签，也可保留 inspect 返回的原有标签；成员关系自动维护，不能手动加入其他团队。共享角色修改会影响其他团队。保留实例身份与启动快照；工具、权限上限与继续委派设置对运行中实例生效，模型与职责修改用于新实例。'
+        : '经逐次审批删除指定范围的团队。先 inspect 获取 expectedRevision。独占角色模板删除，多团队角色仅解除本团队关系；保留历史与实例身份；被删除模板的运行中实例停止后续工具调用。',
     parameters: agentTeamToolParameters[operation] as JsonValue,
     execution: { effect: 'state', idempotent: false },
     execute({ args, signal }) {

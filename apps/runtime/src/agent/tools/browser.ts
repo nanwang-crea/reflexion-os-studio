@@ -16,9 +16,12 @@ import {
 import type { ToolDefinition } from '@reflexion-os-studio/agent-core'
 import type { ToolContext } from './shared.js'
 
-export function browserTools(ctx: ToolContext): ToolDefinition[] {
+export function browserTools(
+  ctx: ToolContext,
+  includeDisabled = false,
+): ToolDefinition[] {
   const browser = ctx.browser
-  if (!browser?.enabled) return []
+  if (!browser || (!includeDisabled && !browser.enabled)) return []
   const definitions = [
     [
       'click',

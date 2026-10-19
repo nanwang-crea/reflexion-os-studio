@@ -1,3 +1,4 @@
+import { liveRolePermissions, type RunPermissions } from './live-permissions.js'
 import {
   createDelegationSettlement,
   emitDelegationEvent,
@@ -35,6 +36,7 @@ export interface ChildRunDependencies {
   permissionPreset?: PermissionPreset
   permissionDomainId?: string
   inheritedTools?: ReadonlySet<string>
+  resolveInheritedPermissions?: () => RunPermissions
   mutationCoordinator?: RootMutationCoordinator
   defaultTemplateId?: string
 }
@@ -70,12 +72,16 @@ export function createChildRunStarter(
     const permissionDomainId = deps.permissionDomainId ?? parentSession.id
     const mutationCoordinator =
       deps.mutationCoordinator ?? new RootMutationCoordinator()
-    const parentPreset =
-      deps.permissionPreset ??
-      deps.launcher.permissionPresetOf?.(parentRun.id) ??
-      'workspace-read'
-    const inheritedTools =
-      deps.inheritedTools ?? new Set(INHERITABLE_CHILD_TOOLS)
+    const inherited = () =>
+      deps.resolveInheritedPermissions?.() ?? {
+        permissionPreset:
+          deps.permissionPreset ??
+          deps.launcher.permissionPresetOf?.(parentRun.id) ??
+          'workspace-read',
+        allowedTools: deps.inheritedTools ?? new Set(INHERITABLE_CHILD_TOOLS),
+      }
+    const { permissionPreset: parentPreset, allowedTools: inheritedTools } =
+      inherited()
     const childDepth = deps.launcher.depthOf(parentRun.id) + 1
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
     if (
@@ -137,7 +143,16 @@ export function createChildRunStarter(
     )
       throw new Error('父任务未允许 skill.use，无法使用角色的按需优先技能')
     const lease = budget.acquire()
-    const { permissionPreset, canDelegate } = instance
+    const resolvePermissions = liveRolePermissions({
+      store: deps.store,
+      templateId: instance.templateId,
+      projectId: parentSession.projectId,
+      inherited,
+      canDelegateByDepth:
+        settings.enableChildRuns &&
+        childDepth < Math.min(settings.maxDepth ?? 4, 4),
+    })
+    const { permissionPreset } = instance
     const allowedTools = new Set(instance.allowedTools)
     const execution = {
       version: 3 as const,
@@ -253,21 +268,25 @@ export function createChildRunStarter(
             systemPrompt: instance.instructions,
             assistantMessage: assistant,
             emitter,
-            childRunStarter: canDelegate
-              ? createChildRunStarter(
-                  {
-                    ...childDeps,
-                    ...roleModel,
-                    permissionPreset,
-                    permissionDomainId,
-                    inheritedTools: allowedTools,
-                    mutationCoordinator,
-                  },
-                  run,
-                  session,
-                )
-              : undefined,
+            childRunStarter:
+              settings.enableChildRuns &&
+              childDepth < Math.min(settings.maxDepth ?? 4, 4)
+                ? createChildRunStarter(
+                    {
+                      ...childDeps,
+                      ...roleModel,
+                      permissionPreset,
+                      permissionDomainId,
+                      inheritedTools: allowedTools,
+                      resolveInheritedPermissions: resolvePermissions,
+                      mutationCoordinator,
+                    },
+                    run,
+                    session,
+                  )
+                : undefined,
             allowedTools,
+            resolvePermissions,
             isolatedContext: true,
             parentSignal: controller.signal,
             childTokenBudget: childTokens ?? undefined,

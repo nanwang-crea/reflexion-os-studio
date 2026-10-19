@@ -57,7 +57,6 @@ export type { ToolContext } from './shared.js'
  * childRunStarter 并注册 task，达到上限后自然失去继续委派能力。
  */
 export function createToolRegistry(ctx: ToolContext): ToolRegistry {
-  const registry = new ToolRegistry()
   // 先读后写凭据状态：file.read 记录，file.write/edit 消费，随 Run 生命周期。
   const turnExecutions = ctx.store.turnExecutions
   const latest = turnExecutions?.latestForRun(ctx.runId)
@@ -86,7 +85,7 @@ export function createToolRegistry(ctx: ToolContext): ToolRegistry {
   const shellOutputStore = new ShellOutputStore()
   const tools = [
     ...alwaysAvailableTools(ctx),
-    ...browserTools(ctx),
+    ...browserTools(ctx, true),
     ...mcpTools(ctx),
     ...(ctx.system !== null &&
     ctx.system.available &&
@@ -100,24 +99,26 @@ export function createToolRegistry(ctx: ToolContext): ToolRegistry {
         )
       : []),
   ]
-  for (let tool of tools) {
-    if (
-      ctx.allowedTools != null &&
-      !ctx.allowedTools.has(tool.name) &&
-      !(
-        tool.name === 'shell.output.read' &&
-        ctx.allowedTools.has('shell.execute')
-      ) &&
-      !(
-        tool.name === 'file.write_stream' && ctx.allowedTools.has('file.write')
-      ) &&
-      !(tool.name === 'skill.prepare' && ctx.allowedTools.has('skill.use'))
-    ) {
-      continue
-    }
-    tool = withExecutionPolicy(tool)
-    registry.register(tool)
-  }
+  const registry = new ToolRegistry(() => {
+    const allowed = ctx.resolveAllowedTools?.() ?? ctx.allowedTools
+    return new Set(
+      tools
+        .filter((tool) => {
+          if (tool.name.startsWith('browser.') && !ctx.browser?.enabled)
+            return false
+          return (
+            allowed == null ||
+            allowed.has(tool.name) ||
+            (tool.name === 'shell.output.read' &&
+              allowed.has('shell.execute')) ||
+            (tool.name === 'file.write_stream' && allowed.has('file.write')) ||
+            (tool.name === 'skill.prepare' && allowed.has('skill.use'))
+          )
+        })
+        .map((tool) => tool.name),
+    )
+  })
+  for (const tool of tools) registry.register(withExecutionPolicy(tool))
   return registry
 }
 

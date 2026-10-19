@@ -1,3 +1,6 @@
+import { createRunToolRuntime } from './run/tool-runtime.js'
+export { resolveWorkspaceRoot } from './run/tool-runtime.js'
+import type { RunPermissions } from './delegation/live-permissions.js'
 import { composeSystemPrompt } from './prompts/system-prompt.js'
 export { composeSystemPrompt } from './prompts/system-prompt.js'
 import type {
@@ -21,11 +24,9 @@ import {
   ApprovalGateway,
   DangerLeaseService,
   DEFAULT_PRESET,
-  PermissionGate,
   resolveInputPreset,
 } from './permissions/index.js'
 import type { RunRunner } from './run/runner.js'
-import { createToolRegistry } from './tools/index.js'
 import type { ToolContext } from './tools/shared.js'
 import type { InteractionGateway } from './interactions/index.js'
 import type { RootMutationCoordinator } from './delegation/mutations.js'
@@ -55,8 +56,9 @@ export interface LaunchOptions {
   depth?: number
   /** 子 Run 累计输出 token 预算；超出以 child_token_budget 中止。 */
   childTokenBudget?: number
-  /** 工具白名单：设置后仅注册这些内置/MCP 工具；缺省不限制。 */
+  /** 工具白名单：设置后仅开放这些内置/MCP 工具；缺省不限制。 */
   allowedTools?: ReadonlySet<string> | null
+  resolvePermissions?: () => RunPermissions
   /** 子 Agent 独立上下文：仅 system prompt + 显式任务包，不注入历史/记忆。 */
   isolatedContext?: boolean
   /** Root tree identity for reusable rules; never used for once grants/Danger. */
@@ -102,7 +104,10 @@ export interface LaunchHooks {
 export class RunLauncher {
   private readonly streams = new Map<string, { controller: AbortController }>()
   private readonly runDepth = new Map<string, number>()
-  private readonly runPermissionPresets = new Map<string, PermissionPreset>()
+  private readonly runPermissionPresets = new Map<
+    string,
+    () => PermissionPreset
+  >()
 
   constructor(
     private readonly deps: LaunchDeps,
@@ -116,7 +121,7 @@ export class RunLauncher {
 
   /** 委派边界读取：父 Run 的权限预设（缺省最窄日常档）。 */
   permissionPresetOf(runId: string): PermissionPreset {
-    return this.runPermissionPresets.get(runId) ?? DEFAULT_PRESET
+    return this.runPermissionPresets.get(runId)?.() ?? DEFAULT_PRESET
   }
 
   /** 只有确实在运行中（含等待审批）的 Run 才受理；终态或不存在返回 false。 */
@@ -129,16 +134,8 @@ export class RunLauncher {
 
   /** 后台启动执行：按 Run 装配工具/闸门，历史构建与工具循环共享失败/取消路径。 */
   launch(input: LaunchOptions): void {
-    const {
-      run,
-      session,
-      profile,
-      apiKey,
-      model,
-      sampling,
-      assistantMessage,
-      emitter,
-    } = input
+    const { run, profile, apiKey, model, sampling, assistantMessage, emitter } =
+      input
     const controller = new AbortController()
     const parentSignal = input.parentSignal
     const abortChild = () => controller.abort(parentSignal?.reason)
@@ -151,7 +148,10 @@ export class RunLauncher {
     const preset = resolveInputPreset({
       permissionPreset: input.permissionPreset,
     })
-    this.runPermissionPresets.set(run.id, preset)
+    this.runPermissionPresets.set(
+      run.id,
+      () => input.resolvePermissions?.().permissionPreset ?? preset,
+    )
     const settings = input.runSettings ?? this.deps.store.agentSettings.get()
     const provider: ProviderRuntimeConfig = {
       baseUrl: profile.baseUrl,
@@ -182,37 +182,12 @@ export class RunLauncher {
         ? { timeoutMs: settings.requestTimeoutSec * 1000 }
         : {}),
     }
-    const sessionId = run.sessionId
-    const workspaceRoot = resolveWorkspaceRoot(this.deps.store, session)
-    const registry = createToolRegistry({
-      store: this.deps.store,
-      sessionId,
-      messageId: assistantMessage.id,
-      runId: run.id,
-      emitter,
-      interactions: this.deps.interactions,
-      system: this.deps.system,
-      workspaceRoot,
-      projectId: session.projectId,
-      skills: this.deps.skills,
-      skillTools: this.deps.skillTools,
-      mcp: this.deps.mcp,
-      browser: this.deps.browser,
-      childRunStarter: input.childRunStarter,
-      allowedTools: input.allowedTools,
-    })
-    const gate = new PermissionGate({
-      browserApproval: () =>
-        this.deps.store.browserSettings.get().agentBrowserApproval,
+    const { registry, gate, workspaceRoot } = createRunToolRuntime(
+      this.deps,
+      input,
       preset,
-      hasWorkspace: workspaceRoot !== null,
-      approvalOverride:
-        input.approvalOverride ??
-        this.deps.approvals.approvalOverrideFor(sessionId),
-      dangerActive: () => this.deps.danger.isActive(sessionId),
-      executionMode: () =>
-        this.deps.store.sessions.get(sessionId)?.executionMode ?? 'execute',
-    })
+    )
+    const sessionId = run.sessionId
     void this.deps.runner
       .execute({
         run,
@@ -292,18 +267,6 @@ export class RunLauncher {
       })
   }
 }
-
-/** 会话的工作区根：项目 folderPath；独立会话/空路径返回 null（工具被拒绝）。 */
-export function resolveWorkspaceRoot(
-  store: Store,
-  session: Session,
-): string | null {
-  if (session.projectId === null) return null
-  const project = store.projects.get(session.projectId)
-  if (!project || project.folderPath === '') return null
-  return project.folderPath
-}
-
 /** 门面预建的首轮 assistant 消息（保持 message.send 返回 messageId 的契约）。 */
 export function createPendingAssistantMessage(
   store: Store,

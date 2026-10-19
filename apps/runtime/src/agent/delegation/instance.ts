@@ -46,16 +46,12 @@ function narrowPreset(
   return PRESET_RANK[inherited] <= PRESET_RANK[ceiling] ? inherited : ceiling
 }
 
-export function createAgentInstance(input: {
-  spawn: AgentSpawnSpec
+export function resolveAgentPermissions(input: {
   template: AgentTemplate | null
   inheritedPreset: PermissionPreset
   inheritedTools: ReadonlySet<string>
-  permissionDomainId: string
   canDelegateByDepth: boolean
-  skillInstructions?: string
-  skills?: AgentInstance['skills']
-}): AgentInstance {
+}) {
   const inherited = [...input.inheritedTools].filter(
     (tool) => INHERITABLE_CHILD_TOOLS.includes(tool) || tool.includes('/'),
   )
@@ -76,6 +72,21 @@ export function createAgentInstance(input: {
     effectiveTools.includes('task')
   const allowedTools = new Set(effectiveTools)
   if (!canDelegate) allowedTools.delete('task')
+  return { permissionPreset, allowedTools, canDelegate }
+}
+
+export function createAgentInstance(input: {
+  spawn: AgentSpawnSpec
+  template: AgentTemplate | null
+  inheritedPreset: PermissionPreset
+  inheritedTools: ReadonlySet<string>
+  permissionDomainId: string
+  canDelegateByDepth: boolean
+  skillInstructions?: string
+  skills?: AgentInstance['skills']
+}): AgentInstance {
+  const { permissionPreset, allowedTools, canDelegate } =
+    resolveAgentPermissions(input)
   const instructions = [
     input.template?.systemPrompt,
     input.spawn.role ? `Role: ${input.spawn.role}` : undefined,

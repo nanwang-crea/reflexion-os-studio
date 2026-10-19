@@ -30,8 +30,8 @@ credential access are never inherited.
 - `AgentInstance`: immutable creation snapshot containing its generated id,
   optional template id, effective prompt, tools, permission preset and root
   permission domain.
-- `Delegation`: points at an instance and freezes the execution boundary used by
-  the child Run.
+- `Delegation`: points at an instance and records the launch-time execution
+  boundary. Active authorization follows the live policy below.
 - `permissionDomainId`: shared by a root Run and descendants only for reusable
   workspace-path/shell-prefix rules. Pending approvals and once grants remain
   bound to the concrete child Run/tool call.
@@ -58,3 +58,26 @@ Coordination and persistence are implemented in TypeScript/SQLite and are
 platform-neutral. File and shell execution still cross the existing Rust system
 runtime boundary, so macOS Seatbelt, Linux bwrap and Windows restricted-token
 enforcement continue to define the real OS boundary.
+
+## Live role permissions
+
+Saving a template updates the tool selection, permission-preset ceiling and
+`canDelegate` flag of existing Runs using that template. Each model request gets
+the current tool list. Each tool admission and actual invocation checks current
+availability; calls awaiting approval or mutation coordination cannot use a
+revoked tool. If the effective preset changes during admission, the invocation
+returns `permission_changed` and requires a fresh call and approval.
+
+Every descendant recalculates the intersection with its live parent, bounded by
+the root Run's original permission domain. Changing a role cannot add tools or a
+preset beyond that boundary. Disabling, deleting or moving a template out of the
+current project makes its active instances unavailable. The browser enable switch
+also filters the live list, including when it was off at Run startup.
+
+Changes apply at the next request/execution boundary without restarting the Run.
+An in-progress model response keeps its request's tools, but its proposed calls
+are checked again before execution. Already executing side effects are not rolled
+back or automatically replayed. Instructions, skills, model bindings, provider
+configuration and the persisted creation/execution snapshots remain unchanged.
+Permission checks use synchronous Node state/SQLite reads with no polling or
+platform-specific code; macOS, Windows and Linux share this behavior.

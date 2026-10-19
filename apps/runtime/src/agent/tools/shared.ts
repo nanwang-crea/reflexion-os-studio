@@ -30,8 +30,9 @@ export interface ToolContext {
   skills: SkillRegistry
   /** MCP 管理服务：非空时把可用 server 工具注册进 Run(默认 ask 审批)。 */
   mcp: McpManager | null
-  /** 工具白名单；设置后仅注册名单中的内置/MCP 工具。 */
+  /** 工具白名单；设置后仅开放名单中的内置/MCP 工具。 */
   allowedTools?: ReadonlySet<string> | null
+  resolveAllowedTools?: () => ReadonlySet<string> | null
   /** 启动一个受限子 Run，并等待其结构化结果。 */
   childRunStarter?: (input: {
     task: string

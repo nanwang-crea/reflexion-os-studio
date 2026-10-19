@@ -19,6 +19,10 @@ export class ToolRegistry {
   private readonly validators = new Map<string, ValidateFunction>()
   private readonly ajv = new Ajv2020({ allErrors: true, strict: false })
 
+  constructor(
+    private readonly availableTools?: () => ReadonlySet<string> | null,
+  ) {}
+
   register(definition: ToolDefinition): void {
     if (this.tools.has(definition.name)) {
       throw new Error(`tool already registered: ${definition.name}`)
@@ -31,7 +35,10 @@ export class ToolRegistry {
   }
 
   list(): ToolDefinition[] {
-    return [...this.tools.values()]
+    const allowed = this.availableTools?.()
+    return [...this.tools.values()].filter(
+      (tool) => allowed == null || allowed.has(tool.name),
+    )
   }
 
   specs(): ToolSpec[] {
@@ -43,7 +50,7 @@ export class ToolRegistry {
   }
 
   has(name: string): boolean {
-    return this.tools.has(name)
+    return this.tools.has(name) && (this.availableTools?.()?.has(name) ?? true)
   }
 
   validateRequest(
@@ -52,7 +59,7 @@ export class ToolRegistry {
     | { ok: true; tool: ToolDefinition; args: JsonValue }
     | { ok: false; result: ToolResult } {
     const tool = this.tools.get(request.name)
-    if (!tool) {
+    if (!tool || !this.has(request.name)) {
       return {
         ok: false,
         result: {

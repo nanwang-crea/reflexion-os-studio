@@ -38,7 +38,7 @@ export function RolePermissionsField({
       </label>
       <small>{PERMISSION_PRESET_HINTS[preset]}</small>
       <p className="role-boundary-note">
-        实际能力由上级任务、审批档位和所选工具共同限制。角色只能收窄上级权限；执行目录来自当前任务的工作区。
+        保存后，工具选择、审批档位上限与继续委派设置会应用于使用该角色的运行中任务。下一次模型请求和工具执行前读取最新权限；已经执行中的操作不会回滚。角色仍不能超出上级权限，执行目录来自当前任务的工作区。
       </p>
       <RoleToolPicker
         value={value.allowedTools}

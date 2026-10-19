@@ -55,22 +55,9 @@ export const STATE_POLICY: ToolExecutionPolicy = {
 
 export const PURE_POLICY: ToolExecutionPolicy = { effect: 'pure' }
 
+/** Stateless HTTP reads do not conflict, even on the same origin or URL. */
 export const WEB_READ_POLICY: ToolExecutionPolicy = {
   effect: 'read',
-  resourceKeys: (args) => {
-    const raw =
-      typeof args === 'object' && args !== null && !Array.isArray(args)
-        ? (args as Record<string, unknown>).url
-        : undefined
-    const url = typeof raw === 'string' ? raw : ''
-    let origin = ''
-    if (url !== '') {
-      try {
-        origin = new URL(url).origin
-      } catch {
-        origin = ''
-      }
-    }
-    return origin === '' ? ['web:unknown'] : [`web:${origin}`, `web:${url}`]
-  },
+  resourceKeys: () => [],
+  idempotent: true,
 }
