@@ -1,6 +1,7 @@
 import { Worker } from 'node:worker_threads'
 import { existsSync } from 'node:fs'
 import {
+  DOCUMENT_FILE_EXTENSIONS,
   DocumentExtractionSchema,
   MAX_DOCUMENT_CHARS,
   TEXT_FILE_EXTENSIONS,
@@ -42,10 +43,10 @@ export async function extractDocument(
       )
     return { text: numbered, format: 'text' }
   }
-  if (extension !== 'pdf' && extension !== 'docx')
+  if (!DOCUMENT_FILE_EXTENSIONS.some((item) => item === extension))
     throw new CommandError(
       'invalid_request',
-      '仅支持图片、文本/代码、PDF 与 DOCX；不支持 DOC',
+      '仅支持图片、文本/代码、PDF、DOCX 与 XLSX；不支持 DOC',
     )
   if (activeWorkers >= 2)
     throw new CommandError('invalid_request', '文档解析繁忙，请稍后重试')

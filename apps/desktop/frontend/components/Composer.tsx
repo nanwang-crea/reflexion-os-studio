@@ -1,5 +1,9 @@
-import { ATTACHMENT_ACCEPT } from '@reflexion-os-studio/runtime-client'
+import {
+  ATTACHMENT_ACCEPT,
+  MAX_MESSAGE_ATTACHMENTS,
+} from '@reflexion-os-studio/runtime-client'
 import { useComposerAttachments } from './composer/useComposerAttachments'
+import { useComposerFileDrop } from './composer/useComposerFileDrop'
 import { FileAttachments } from './composer/FileAttachments'
 import { isComposing } from '../lib/keyboard'
 import { Select } from './forms/Select'
@@ -81,9 +85,17 @@ const SLASH_QUERY_RE = /^\/([a-z0-9-]*)$/
 export function Composer(props: ComposerProps): React.JSX.Element {
   const [draft, setDraft] = useState('')
   const attachments = useComposerAttachments()
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const [sendError, setSendError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const dropZoneRef = useRef<HTMLDivElement>(null)
+  // 拖入的文件与选择/粘贴进来的文件走同一条入列与校验链路（attachments.add）。
+  const fileDrop = useComposerFileDrop({
+    zoneRef: dropZoneRef,
+    disabled: (props.disabled ?? false) || sending,
+    remainingSlots: MAX_MESSAGE_ATTACHMENTS - attachments.images.length,
+    onFiles: attachments.add,
+  })
   const [slashIndex, setSlashIndex] = useState(0)
   const [slashDismissed, setSlashDismissed] = useState(false)
   const [agentTemplateId, setAgentTemplateId] = useState('')
@@ -193,7 +205,15 @@ export function Composer(props: ComposerProps): React.JSX.Element {
   }
 
   return (
-    <div className="composer">
+    <div className="composer" ref={dropZoneRef}>
+      {fileDrop.dragging && (
+        <div className="composer-drop-overlay" aria-hidden>
+          <span className="composer-drop-title">松开以添加为附件</span>
+          <span className="composer-drop-hint">
+            图片 · PDF · DOCX · 文本/代码
+          </span>
+        </div>
+      )}
       {slashOpen && (
         <div className="slash-menu" role="listbox" aria-label="可用技能">
           {slashMatches.map((skill, index) => (
@@ -220,9 +240,14 @@ export function Composer(props: ComposerProps): React.JSX.Element {
         disabled={sending}
         onRemove={attachments.remove}
       />
-      {(attachments.error || sendError) && (
+      {(attachments.error || sendError || fileDrop.error) && (
         <div className="composer-image-error" role="alert">
-          {attachments.error || sendError}
+          {attachments.error || sendError || fileDrop.error}
+        </div>
+      )}
+      {fileDrop.reading && (
+        <div className="composer-image-hint" role="status">
+          正在读取拖入的文件…
         </div>
       )}
       {attachments.images.length > 0 && (
@@ -246,6 +271,7 @@ export function Composer(props: ComposerProps): React.JSX.Element {
         multiple
         accept={ATTACHMENT_ACCEPT}
         onChange={(event) => {
+          fileDrop.clearError()
           attachments.add(Array.from(event.target.files ?? []))
           event.target.value = ''
         }}
@@ -265,6 +291,7 @@ export function Composer(props: ComposerProps): React.JSX.Element {
             })
           if (files.length) {
             event.preventDefault()
+            fileDrop.clearError()
             attachments.add(files)
           }
         }}

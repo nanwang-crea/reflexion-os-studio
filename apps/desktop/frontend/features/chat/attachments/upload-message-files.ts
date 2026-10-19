@@ -21,9 +21,11 @@ export function validateAttachmentFile(file: File): void {
     throw new Error('禁止上传凭据或敏感文件')
   if (file.type.startsWith('image/')) return validateImageFile(file)
   if (
-    !['pdf', 'docx', ...TEXT_FILE_EXTENSIONS].some((item) => item === extension)
+    !['pdf', 'docx', 'xlsx', ...TEXT_FILE_EXTENSIONS].some(
+      (item) => item === extension,
+    )
   )
-    throw new Error('仅支持图片、文本/代码、PDF 与 DOCX；不支持 DOC')
+    throw new Error('仅支持图片、文本/代码、PDF、DOCX 与 XLSX；不支持 DOC/XLS')
   if (!file.size || file.size > MAX_DOCUMENT_BYTES)
     throw new Error('每个文档需小于 10MB，且不能为空')
 }

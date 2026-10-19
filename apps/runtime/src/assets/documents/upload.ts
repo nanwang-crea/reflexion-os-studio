@@ -42,7 +42,9 @@ export async function uploadDocumentAsset(
       ? 'application/pdf'
       : extraction.format === 'docx'
         ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        : 'text/plain'
+        : extraction.format === 'xlsx'
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'text/plain'
   const asset: AssetRef = {
     assetId: randomUUID(),
     projectId: session.projectId,

@@ -49,13 +49,14 @@ export const TEXT_FILE_EXTENSIONS = [
   'r',
   'tex',
 ] as const
+/** 需要走文档抽取（而非按纯文本读）的二进制文档扩展名。 */
+export const DOCUMENT_FILE_EXTENSIONS = ['pdf', 'docx', 'xlsx'] as const
 export const ATTACHMENT_ACCEPT = [
   'image/png',
   'image/jpeg',
   'image/webp',
   'image/gif',
-  '.pdf',
-  '.docx',
+  ...DOCUMENT_FILE_EXTENSIONS.map((extension) => `.${extension}`),
   ...TEXT_FILE_EXTENSIONS.map((extension) => `.${extension}`),
 ].join(',')
 export const DocumentUploadSchema = z.object({
@@ -73,7 +74,7 @@ export const DocumentUploadSchema = z.object({
 export type DocumentUpload = z.infer<typeof DocumentUploadSchema>
 export const DocumentExtractionSchema = z.object({
   text: z.string().min(1).max(MAX_DOCUMENT_CHARS),
-  format: z.enum(['text', 'pdf', 'docx']),
+  format: z.enum(['text', 'pdf', 'docx', 'xlsx']),
   pages: z.number().int().positive().optional(),
 })
 export type DocumentExtraction = z.infer<typeof DocumentExtractionSchema>

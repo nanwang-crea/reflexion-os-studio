@@ -1,4 +1,4 @@
-import { DocumentUploadSchema } from '../attachments.js'
+import { DocumentUploadSchema, MAX_DOCUMENT_BYTES } from '../attachments.js'
 import { z } from 'zod'
 import { ImageUploadSchema } from '../images.js'
 import { AssetRefSchema } from '../entities.js'
@@ -21,6 +21,26 @@ export const assetCommands = {
       path: z.string().min(1),
     }),
     result: z.object({ asset: AssetRefSchema }),
+  },
+  // 系统文件管理器拖入窗口的专用入口：把用户拖入的绝对路径读成 base64 字节，
+  // 交给输入框当「待上传附件」（与选择器/粘贴同一条 add → upload 链路，不落
+  // Asset Store）。路径来自用户手势而非模型，但 Runtime 侧仍强制 no-read 清单、
+  // realpath 落盘校验、普通文件与按类型大小上限，见
+  // apps/runtime/src/assets/drop/local-file.ts。
+  'asset.read_dropped_file': {
+    params: z.object({
+      requestId: RequestIdSchema,
+      path: z.string().min(1).max(4096),
+    }),
+    result: z.object({
+      fileName: z.string().min(1).max(255),
+      mimeType: z.string().min(1),
+      base64: z
+        .string()
+        .min(4)
+        .max(Math.ceil(MAX_DOCUMENT_BYTES / 3) * 4),
+      size: z.number().int().nonnegative(),
+    }),
   },
   'asset.list': {
     params: z.object({

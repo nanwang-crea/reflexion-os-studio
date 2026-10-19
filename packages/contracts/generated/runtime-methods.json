@@ -26,6 +26,7 @@
     "asset.import",
     "asset.list",
     "asset.read",
+    "asset.read_dropped_file",
     "asset.upload_document",
     "asset.upload_image",
     "browser_contacts.delete",

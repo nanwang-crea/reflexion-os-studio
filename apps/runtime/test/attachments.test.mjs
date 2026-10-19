@@ -42,6 +42,24 @@ function docx(text) {
     ),
   })
 }
+
+function xlsx(rows) {
+  const shared = `<sst>${rows.shared.map((t) => `<si><t>${t}</t></si>`).join('')}</sst>`
+  return zipSync({
+    '[Content_Types].xml': strToU8('<Types/>'),
+    'xl/workbook.xml': strToU8(
+      '<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="报价单" sheetId="1" r:id="rId1"/></sheets></workbook>',
+    ),
+    'xl/_rels/workbook.xml.rels': strToU8(
+      '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>',
+    ),
+    'xl/sharedStrings.xml': strToU8(shared),
+    'xl/worksheets/sheet1.xml': strToU8(
+      `<worksheet><sheetData>${rows.body}</sheetData></worksheet>`,
+    ),
+  })
+}
+
 function pdf(pages) {
   const objects = [
     '',
@@ -130,6 +148,36 @@ test('PDF preserves page labels and DOCX preserves paragraphs and table text', a
   await assert.rejects(f.upload('scan.pdf', pdf([''])), /OCR/)
   await assert.rejects(f.upload('mixed.pdf', pdf(['Text', ''])), /第 2 页.*OCR/)
   await assert.rejects(f.upload('empty.docx', docx('<w:p/>')), /没有可提取文字/)
+})
+
+test('XLSX extracts sheet names, shared strings, inline text and numbers', async (t) => {
+  const f = fixture(t)
+  const sheet = await f.upload(
+    '报价.xlsx',
+    xlsx({
+      shared: ['名称', '单价'],
+      body:
+        '<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>' +
+        '<row r="2"><c r="A2" t="inlineStr"><is><t>螺母</t></is></c><c r="B2"><v>1.5</v></c></row>' +
+        '<row r="3"><c r="B3" t="b"><v>1</v></c><c r="C3" t="e"><v>#N/A</v></c></row>',
+    }),
+  )
+  const extraction = sheet.metadata.extraction
+  assert.equal(extraction.format, 'xlsx')
+  assert.equal(
+    sheet.mimeType,
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  )
+  assert.match(extraction.text, /【工作表 报价单】/)
+  assert.match(extraction.text, /名称\t单价/)
+  assert.match(extraction.text, /螺母\t1\.5/)
+  assert.match(extraction.text, /\tTRUE/)
+  // 全空表格与伪装成 xlsx 的普通文件都应明确拒绝。
+  await assert.rejects(
+    f.upload('empty.xlsx', xlsx({ shared: [], body: '<row r="1"/>' })),
+    /没有可提取文字/,
+  )
+  await assert.rejects(f.upload('fake.xlsx', 'hello'), /扩展名不符|损坏|解析/)
 })
 
 test('invalid, oversized, sensitive and binary uploads fail without leaving assets', async (t) => {
@@ -303,6 +351,13 @@ test('standalone bundled document worker parses PDF and DOCX without node_module
   for (const [format, bytes] of [
     ['pdf', pdf(['Bundled PDF'])],
     ['docx', docx('<w:p><w:r><w:t>Bundled DOCX</w:t></w:r></w:p>')],
+    [
+      'xlsx',
+      xlsx({
+        shared: ['Bundled XLSX'],
+        body: '<row r="1"><c r="A1" t="s"><v>0</v></c></row>',
+      }),
+    ],
   ]) {
     const worker = new Worker(outfile, {
       workerData: { format, bytes: new Uint8Array(bytes) },

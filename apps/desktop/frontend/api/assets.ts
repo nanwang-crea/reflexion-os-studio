@@ -40,3 +40,21 @@ export function uploadDocument(
 ): Promise<{ asset: AssetRef }> {
   return request('asset.upload_document', input)
 }
+
+/** 拖入文件的字节、MIME 与文件名（base64 与输入框 File 构造同格式）。 */
+export interface DroppedLocalFilePayload {
+  fileName: string
+  mimeType: string
+  base64: string
+  size: number
+}
+
+/**
+ * 读取用户从系统文件管理器拖入窗口的本地文件（绝对路径）。
+ * 路径校验、凭据 no-read 与大小限制在 Runtime 侧执行，前端不做旁路判断。
+ */
+export function readDroppedFile(
+  path: string,
+): Promise<DroppedLocalFilePayload> {
+  return request<DroppedLocalFilePayload>('asset.read_dropped_file', { path })
+}
