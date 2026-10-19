@@ -1,3 +1,4 @@
+import { effectiveProviderModel } from '../provider/models/capabilities.js'
 import { DEFAULT_REASONING_OPTIONS } from '@reflexion-os-studio/contracts'
 import type {
   ProviderProfile,
@@ -52,7 +53,11 @@ export function resolveProvider(
       `Provider 未配置模型：${profile.name}`,
     )
   }
-  const config = store.providerModels.get(profile.id, resolvedModel)
+  const config = effectiveProviderModel(
+    profile,
+    resolvedModel,
+    store.providerModels.get(profile.id, resolvedModel),
+  )
   const effectiveProfile = resolveModelRuntimeConfig(
     profile,
     config,

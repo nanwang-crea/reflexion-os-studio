@@ -126,7 +126,7 @@ test('model commands reject unknown providers/models and support restoring inher
       { providerId: profile.id },
       ctx,
     ).models.length,
-    1,
+    2,
   )
   assert.deepEqual(
     providerModelCommandHandlers['provider.model.delete'](

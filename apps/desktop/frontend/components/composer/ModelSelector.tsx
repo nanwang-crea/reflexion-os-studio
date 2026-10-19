@@ -9,6 +9,7 @@ export interface ComposerModelOption {
   key: string
   label: string
   group: string
+  reasoningUnavailableReason?: string
   reasoningEffortSupported?: boolean
   reasoningOptions?: ProviderModel['reasoningOptions']
   defaultReasoningEffort?: ReasoningEffort | null
@@ -17,6 +18,7 @@ export interface ComposerModelOption {
 export interface ReasoningSelection {
   value: ReasoningEffort | null
   options: ProviderModel['reasoningOptions']
+  unavailableReason?: string
   supported: boolean
   loading: boolean
   error: string | null
@@ -52,7 +54,8 @@ export function ModelSelector(props: {
             props.reasoning.error ??
             (props.reasoning.supported
               ? '当前对话的思考强度'
-              : '当前模型不支持调整思考强度')
+              : (props.reasoning.unavailableReason ??
+                '当前模型不支持调整思考强度'))
           }
         >
           <Select
@@ -71,7 +74,7 @@ export function ModelSelector(props: {
                 : props.reasoning.error
                   ? '加载失败'
                   : !props.reasoning.supported
-                    ? '自动（不支持调整）'
+                    ? `自动（${props.reasoning.unavailableReason ?? '不支持调整'}）`
                     : '服务端默认'}
             </option>
             {props.reasoning.options.map((option) => (

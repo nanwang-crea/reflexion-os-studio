@@ -83,6 +83,7 @@ export function useModelSelection(
   const supported =
     selected?.reasoningEffortSupported === true && !loading && error === null
   const reasoningSelection = {
+    unavailableReason: selected?.reasoningUnavailableReason,
     value: supported ? value : null,
     options: selected?.reasoningOptions ?? [],
     supported,

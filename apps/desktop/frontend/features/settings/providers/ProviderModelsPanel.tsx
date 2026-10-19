@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { ModelCapabilitiesFields } from './ModelCapabilitiesFields'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ProviderModel,
   ProviderProfile,
@@ -16,7 +17,7 @@ import { Select } from '../../../components/forms/Select'
 import { ProviderParametersFields } from './ProviderParametersFields'
 import { parseNumber, type Draft } from '../provider-form'
 
-type ModelDraft = Pick<
+export type ModelDraft = Pick<
   Draft,
   | 'temperature'
   | 'maxTokens'
@@ -24,12 +25,16 @@ type ModelDraft = Pick<
   | 'contextBudget'
   | 'reasoningEffort'
 > & {
+  reasoningMode: NonNullable<ProviderModel['reasoningMode']>
+  thinkingSupported: boolean | null
   reasoningOptionsText: string
   reasoningEffortSupported: boolean
 }
 
 function draftFor(config?: ProviderModel): ModelDraft {
   return {
+    reasoningMode: config?.reasoningMode ?? 'auto',
+    thinkingSupported: config?.thinkingSupported ?? null,
     temperature: config?.temperature == null ? '' : String(config.temperature),
     maxTokens: config?.maxTokens == null ? '' : String(config.maxTokens),
     contextWindow:
@@ -63,7 +68,10 @@ export function ProviderModelsPanel({
   const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [warning, setWarning] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const onSavedRef = useRef(onSaved)
+  onSavedRef.current = onSaved
   const providerId = profile.id
   const models = useMemo(
     () => [
@@ -75,11 +83,13 @@ export function ProviderModelsPanel({
   useEffect(() => {
     let active = true
     setLoaded(false)
-    void listProviderModels(providerId)
-      .then(({ models }) => {
+    void listProviderModels(providerId, true)
+      .then(async ({ models, warning }) => {
         if (!active) return
         setConfigs(models)
+        setWarning(warning ?? null)
         setLoaded(true)
+        await onSavedRef.current()
       })
       .catch((caught) => {
         if (active)
@@ -120,6 +130,8 @@ export function ProviderModelsPanel({
     const payload = {
       providerId,
       model,
+      reasoningMode: draft.reasoningMode,
+      thinkingSupported: draft.thinkingSupported,
       temperature: parseNumber(draft.temperature, false),
       maxTokens: parseNumber(draft.maxTokens, true),
       contextWindow: parseNumber(draft.contextWindow, true),
@@ -154,11 +166,26 @@ export function ProviderModelsPanel({
     }
   }
 
+  const refresh = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const result = await listProviderModels(providerId, true)
+      setConfigs(result.models)
+      setWarning(result.warning ?? null)
+      await onSaved()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <section>
       <h4>模型独立配置</h4>
       <p className="field-hint">
-        仅覆盖所选模型的参数，留空继承供应商默认。对话选择模型后自动使用这里的配置。
+        自动识别模型能力；无法确认时保留未知。参数留空继承供应商默认，手动覆盖优先于自动识别。
       </p>
       <label className="field">
         模型
@@ -176,43 +203,18 @@ export function ProviderModelsPanel({
           ))}
         </Select>
       </label>
-      <label className="field">
-        <span>
-          <input
-            type="checkbox"
-            checked={draft.reasoningEffortSupported}
-            disabled={busy || !loaded || profile.apiFormat === 'anthropic'}
-            onChange={(event) => {
-              setDraft((current) => ({
-                ...current,
-                reasoningEffortSupported: event.target.checked,
-              }))
-              setSaved(false)
-            }}
-          />
-          模型支持思考强度
-        </span>
-      </label>
-      <label className="field">
-        支持的思考等级
-        <textarea
-          aria-label="支持的思考等级"
-          rows={5}
-          value={draft.reasoningOptionsText}
-          disabled={busy || !loaded || profile.apiFormat === 'anthropic'}
-          onChange={(event) => {
-            setDraft((current) => ({
-              ...current,
-              reasoningOptionsText: event.target.value,
-              reasoningEffort: '',
-            }))
-            setSaved(false)
-          }}
-        />
-        <span className="field-hint">
-          每行填写“显示名称=实际发送值”，例如“极高=xhigh”。默认不发送参数；关闭思考需填写服务端明确支持的值。
-        </span>
-      </label>
+      <ModelCapabilitiesFields
+        profile={profile}
+        config={configs.find((config) => config.model === model)}
+        draft={draft}
+        disabled={busy || !loaded}
+        warning={warning}
+        onRefresh={() => void refresh()}
+        onChange={(patch) => {
+          setDraft((current) => ({ ...current, ...patch }))
+          setSaved(false)
+        }}
+      />
       <ProviderParametersFields
         reasoningOptions={reasoningOptions}
         draft={draft}

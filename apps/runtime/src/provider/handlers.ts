@@ -67,6 +67,14 @@ export const providerCommandHandlers: Record<string, CommandHandler> = {
       contextBudget: p.contextBudget as number | null | undefined,
       reasoningEffort: p.reasoningEffort as ReasoningEffort | null | undefined,
     })
+    if (
+      existing &&
+      (existing.baseUrl !== profile.baseUrl ||
+        existing.apiFormat !== profile.apiFormat ||
+        existing.secretRef !== profile.secretRef ||
+        JSON.stringify(existing.headers) !== JSON.stringify(profile.headers))
+    )
+      store.providerModels.clearDetections(profile.id)
     // 换 Key 后清理被替换的旧密钥，secrets.json 不留孤儿条目。
     if (existing && existing.secretRef !== profile.secretRef) {
       deleteSecret(existing.secretRef)

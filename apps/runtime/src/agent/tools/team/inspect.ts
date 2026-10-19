@@ -1,3 +1,4 @@
+import { effectiveProviderModel } from '../../../provider/models/capabilities.js'
 import {
   AgentTeamInspectInputSchema,
   agentTeamToolParameters,
@@ -54,7 +55,11 @@ export function createTeamInspectTool(ctx: ToolContext): ToolDefinition {
         )
         .flatMap((profile) =>
           profile.models.map((model) => {
-            const config = ctx.store.providerModels.get(profile.id, model)
+            const config = effectiveProviderModel(
+              profile,
+              model,
+              ctx.store.providerModels.get(profile.id, model),
+            )
             const supported = Boolean(
               config?.reasoningEffortSupported &&
               profile.apiFormat !== 'anthropic',

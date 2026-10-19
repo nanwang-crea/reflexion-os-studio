@@ -1,3 +1,8 @@
+import { effectiveProviderModel } from './models/capabilities.js'
+import {
+  listEffectiveModels,
+  refreshModelCapabilities,
+} from './models/discovery.js'
 import {
   CommandSchemaRegistry,
   DEFAULT_REASONING_OPTIONS,
@@ -18,8 +23,13 @@ function requireProvider(store: Store, providerId: string): ProviderProfile {
 export const providerModelCommandHandlers: Record<string, CommandHandler> = {
   'provider.model.list': (p, { store }) => {
     const providerId = requireString(p, 'providerId')
-    requireProvider(store, providerId)
-    return { models: store.providerModels.list(providerId) }
+    const profile = requireProvider(store, providerId)
+    if (p.refresh === true)
+      return refreshModelCapabilities(store, profile).then((warning) => ({
+        models: listEffectiveModels(store, requireProvider(store, providerId)),
+        ...(warning ? { warning } : {}),
+      }))
+    return { models: listEffectiveModels(store, profile) }
   },
   'provider.model.configure': (p, { store }) => {
     const input =
@@ -28,7 +38,11 @@ export const providerModelCommandHandlers: Record<string, CommandHandler> = {
     if (!profile.models.includes(input.model)) {
       throw new CommandError('invalid_request', '模型不在 Provider 模型列表中')
     }
-    if (input.reasoningEffortSupported && profile.apiFormat === 'anthropic') {
+    if (
+      input.reasoningMode !== 'auto' &&
+      input.reasoningEffortSupported &&
+      profile.apiFormat === 'anthropic'
+    ) {
       throw new CommandError(
         'invalid_request',
         '当前 Anthropic 适配器不支持思考强度参数',
@@ -46,7 +60,22 @@ export const providerModelCommandHandlers: Record<string, CommandHandler> = {
     if (effort != null && !options.some((option) => option.value === effort)) {
       throw new CommandError('invalid_request', '默认思考等级必须在支持列表中')
     }
-    return { model: store.providerModels.upsert(input) }
+    if (
+      input.thinkingSupported === false &&
+      input.reasoningEffortSupported === true &&
+      input.reasoningMode !== 'auto'
+    )
+      throw new CommandError(
+        'invalid_request',
+        '不支持思考的模型不能启用思考强度',
+      )
+    return {
+      model: effectiveProviderModel(
+        profile,
+        input.model,
+        store.providerModels.upsert(input),
+      ),
+    }
   },
   'provider.model.delete': (p, { store }) => {
     const providerId = requireString(p, 'providerId')

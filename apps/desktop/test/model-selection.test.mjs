@@ -122,3 +122,43 @@ test('choice remains usable when inherited default is outside supported values',
     'xhigh',
   )
 })
+
+test('unknown capabilities and unknown levels remain distinct from unsupported models', () => {
+  const unknown = modelOptionsFor([provider], [])[0]
+  assert.equal(unknown.reasoningUnavailableReason, '能力未知')
+  const levels = modelOptionsFor(
+    [provider],
+    [
+      {
+        ...configs[0],
+        reasoningEffortSupported: false,
+        reasoningCapabilities: {
+          thinking: true,
+          effort: true,
+          options: null,
+          source: 'provider',
+          checkedAt: null,
+        },
+      },
+    ],
+  )[0]
+  assert.equal(levels.reasoningUnavailableReason, '等级未知')
+  assert.equal(levels.defaultReasoningEffort, null)
+  const unsupported = modelOptionsFor(
+    [provider],
+    [
+      {
+        ...configs[0],
+        reasoningEffortSupported: false,
+        reasoningCapabilities: {
+          thinking: false,
+          effort: false,
+          options: null,
+          source: 'provider',
+          checkedAt: null,
+        },
+      },
+    ],
+  )[0]
+  assert.equal(unsupported.reasoningUnavailableReason, '不支持调整')
+})

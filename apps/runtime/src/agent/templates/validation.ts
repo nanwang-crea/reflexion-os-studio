@@ -1,3 +1,4 @@
+import { effectiveProviderModel } from '../../provider/models/capabilities.js'
 import type { AgentTemplateSaveParams } from '@reflexion-os-studio/contracts'
 import type { Store } from '../../store/index.js'
 import { containsSecretLike } from '../instructions/secretGuard.js'
@@ -28,7 +29,11 @@ export function validateRoleTemplate(
     !profile.models.includes(binding.model)
   )
     throw new Error('角色指定的模型不可用，请检查 Provider 配置')
-  const config = store.providerModels.get(profile.id, binding.model)
+  const config = effectiveProviderModel(
+    profile,
+    binding.model,
+    store.providerModels.get(profile.id, binding.model),
+  )
   if (
     binding.reasoningEffort != null &&
     (!config?.reasoningEffortSupported || profile.apiFormat === 'anthropic')

@@ -99,5 +99,11 @@ export const ProviderProfileSchema = z.object({
   updatedAt: IsoDateTimeSchema,
 })
 export type ProviderProfile = z.infer<typeof ProviderProfileSchema>
-export { ProviderModelSchema } from './provider-models.js'
-export type { ProviderModel } from './provider-models.js'
+export {
+  ProviderModelSchema,
+  ModelReasoningCapabilitiesSchema,
+} from './provider-models.js'
+export type {
+  ProviderModel,
+  ModelReasoningCapabilities,
+} from './provider-models.js'

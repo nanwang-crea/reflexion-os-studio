@@ -49,3 +49,15 @@ Chat Completions 将 assistant 的非空思考正文回填为 `reasoning_content
 Provider 错误与重试诊断会先去除本次请求密钥，再截断或发布，避免上游错误回显泄漏完整密钥或其被截断的前缀。
 
 流式请求 timeoutMs 表示建立连接/等待响应头及相邻数据块之间的空闲超时，不是持续输出的总时长上限。请求失败、正常结束、用户取消和重试前都须释放计时器与旧 reader；收到协议终态即结束读取，不等待上游关闭 HTTP 连接。子 Agent 的整体执行上限仍由 maxChildTimeoutSec 控制，失败实例仍计入委派树数量预算，不能自动返还以绕过上限。
+
+## 模型思考能力发现（2026-10-19）
+
+模型配置区打开时读取供应商 Models API，并提供手动刷新。Runtime 通过已保存的供应商地址、协议与请求头读取元数据，不发送补全探测，不读取其他供应商凭据；禁止跟随重定向，整次刷新 10 秒超时，响应体与分页有界。Claude 使用 `/v1/models` 与其原生鉴权，OpenAI 兼容协议在已配置 API 基址追加 `/models`，包括 OpenRouter 的参数元数据。
+
+思考支持、强度调节和等级列表分别记录；未知为 `null`，不能视为“不支持”。优先级为手动覆盖 → 缓存的供应商能力 → 精确模型 ID 与官方域名匹配的内置能力表 → 未知。内置表覆盖部分 OpenAI o 系列、GPT-4.1、GPT-5/5.1/5.2，不按名称前缀猜测其他型号或中转站能力。仅声明 reasoning 参数但没有具体等级的接口仍显示等级未知，不能自动假定 low/medium/high。能力表依据 [OpenAI 模型文档](https://developers.openai.com/api/docs/models/gpt-5.2)；元数据字段依据 [Claude Models](https://platform.claude.com/docs/en/api/models) 与 [OpenRouter Models](https://openrouter.ai/docs/api/api-reference/models/get-models)。
+
+自动检测结果单独缓存于 `provider_models`，不覆盖手动能力或运行参数。v51 迁移将既有配置保留为手动模式；新配置默认自动识别，显式手动字段仍兼容旧调用方。恢复默认会移除该模型覆盖与缓存；重新刷新可再次获取元数据。供应商地址、协议、密钥引用或请求头更改时失效检测缓存；刷新期间供应商变更则丢弃结果。失败保留缓存并显示提示，不回传供应商响应正文。设置、Composer、角色模板与执行使用同一有效配置投影；Anthropic 模型能力可展示，但现有适配器仍不发送思考强度参数。
+
+实现使用跨平台 Node fetch/SQLite，不引入平台分支或新增系统依赖；macOS、Windows、Linux 行为相同，真实供应商与三平台 GUI 仍需单独验收。
+
+本次验证：format、lint、根级/前端 typecheck、build:packages、Rust fmt/test（237 项）、Tauri check 与 macOS .app/DMG 打包通过。契约 83 项、Runtime Client 28 项、供应商/角色/Store 相关 Runtime 71 项通过；前端完整套件最终 86/86（含模型选择 5 项）；首次并行构建期间出现的聊天记录导入菜单超时，单独与完整重跑均通过。macOS 合成供应商 GUI 验证了自动识别、未知状态、手动覆盖、刷新保留覆盖、恢复自动与 Composer 同步。dev 四次采样受到并行构建影响，最终样本宿主/渲染/Runtime CPU 分别为 0%/0.4%/0%；RSS 受热更新及并行构建影响，本次不据此宣称内存无回归，未完成修改前后内存基准和长稳验证。Windows/Linux 与真实供应商调用未验收。

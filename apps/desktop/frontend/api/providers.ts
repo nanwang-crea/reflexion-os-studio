@@ -62,14 +62,18 @@ export function testProvider(input: {
   return request<ProviderTestResult>('provider.test', input)
 }
 
-export function listProviderModels(providerId: string): Promise<{
+export function listProviderModels(
+  providerId: string,
+  refresh = false,
+): Promise<{
   models: ProviderModel[]
+  warning?: string
 }> {
-  return requestList('provider.model.list', { providerId })
+  return requestList('provider.model.list', { providerId, refresh })
 }
 
 export function configureProviderModel(
-  payload: Omit<ProviderModel, 'updatedAt'>,
+  payload: Omit<ProviderModel, 'updatedAt' | 'reasoningCapabilities'>,
 ): Promise<{ model: ProviderModel }> {
   return request('provider.model.configure', payload)
 }

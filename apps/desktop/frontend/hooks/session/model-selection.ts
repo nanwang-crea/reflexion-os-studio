@@ -24,6 +24,18 @@ export function modelOptionsFor(
           key: `${profile.id}::${model}`,
           label: model,
           group: profile.name,
+          reasoningUnavailableReason: supported
+            ? undefined
+            : profile.apiFormat === 'anthropic'
+              ? '适配器暂不支持调整'
+              : config?.reasoningCapabilities?.effort === null ||
+                  config?.reasoningCapabilities?.source === 'unknown' ||
+                  !config
+                ? '能力未知'
+                : config.reasoningCapabilities?.effort === true &&
+                    !config.reasoningCapabilities.options
+                  ? '等级未知'
+                  : '不支持调整',
           reasoningEffortSupported: supported,
           reasoningOptions:
             config?.reasoningOptions ?? DEFAULT_REASONING_OPTIONS,

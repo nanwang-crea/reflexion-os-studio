@@ -4,6 +4,7 @@ import type {
   ReasoningEffort,
 } from '@reflexion-os-studio/contracts'
 import {
+  ModelReasoningCapabilitiesSchema,
   ReasoningEffortSchema,
   ReasoningOptionsSchema,
   DEFAULT_REASONING_OPTIONS,
@@ -42,6 +43,8 @@ export class ProviderModelStore {
     contextBudget?: number | null
     reasoningEffort?: ReasoningEffort | null
     reasoningOptions?: ProviderModel['reasoningOptions']
+    reasoningMode?: ProviderModel['reasoningMode']
+    thinkingSupported?: boolean | null
     reasoningEffortSupported?: boolean
   }): ProviderModel {
     const existing = this.get(input.providerId, input.model)
@@ -105,6 +108,28 @@ export class ProviderModelStore {
         JSON.stringify(reasoningOptions),
         updatedAt,
       )
+    this.db
+      .prepare(
+        `UPDATE provider_models SET reasoning_mode = ?, thinking_supported = ?
+      WHERE provider_id = ? AND model = ?`,
+      )
+      .run(
+        input.reasoningMode ??
+          (input.reasoningEffortSupported !== undefined ||
+          input.thinkingSupported !== undefined ||
+          input.reasoningOptions !== undefined
+            ? 'manual'
+            : (existing?.reasoningMode ?? 'auto')),
+        input.thinkingSupported === undefined
+          ? existing?.thinkingSupported == null
+            ? null
+            : Number(existing.thinkingSupported)
+          : input.thinkingSupported == null
+            ? null
+            : Number(input.thinkingSupported),
+        input.providerId,
+        input.model,
+      )
     const row = this.db
       .prepare(
         'SELECT * FROM provider_models WHERE provider_id = ? AND model = ?',
@@ -112,6 +137,29 @@ export class ProviderModelStore {
       .get(input.providerId, input.model)
     if (!row) throw new Error('provider model not found after upsert')
     return this.toModel(row as Row)
+  }
+
+  clearDetections(providerId: string): void {
+    this.db
+      .prepare(
+        'UPDATE provider_models SET reasoning_capabilities_json = NULL WHERE provider_id = ?',
+      )
+      .run(providerId)
+  }
+
+  saveDetection(
+    providerId: string,
+    model: string,
+    capabilities: NonNullable<ProviderModel['reasoningCapabilities']>,
+  ): void {
+    const parsed = ModelReasoningCapabilitiesSchema.parse(capabilities)
+    if (!this.get(providerId, model))
+      this.upsert({ providerId, model, reasoningMode: 'auto' })
+    this.db
+      .prepare(
+        'UPDATE provider_models SET reasoning_capabilities_json = ? WHERE provider_id = ? AND model = ?',
+      )
+      .run(JSON.stringify(parsed), providerId, model)
   }
 
   delete(providerId: string, model: string): boolean {
@@ -134,7 +182,28 @@ export class ProviderModelStore {
       reasoningEffort: this.parseReasoningEffort(row.reasoning_effort),
       reasoningOptions: this.parseOptions(row.reasoning_options_json),
       reasoningEffortSupported: Number(row.reasoning_effort_supported) === 1,
+      reasoningMode: row.reasoning_mode === 'auto' ? 'auto' : 'manual',
+      thinkingSupported:
+        row.thinking_supported == null
+          ? null
+          : Number(row.thinking_supported) === 1,
+      reasoningCapabilities: this.parseCapabilities(
+        row.reasoning_capabilities_json,
+      ),
       updatedAt: String(row.updated_at),
+    }
+  }
+
+  private parseCapabilities(
+    value: unknown,
+  ): ProviderModel['reasoningCapabilities'] {
+    try {
+      const parsed = ModelReasoningCapabilitiesSchema.safeParse(
+        JSON.parse(String(value)),
+      )
+      return parsed.success ? parsed.data : undefined
+    } catch {
+      return undefined
     }
   }
 

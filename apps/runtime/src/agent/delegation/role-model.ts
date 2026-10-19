@@ -1,3 +1,4 @@
+import { effectiveProviderModel } from '../../provider/models/capabilities.js'
 import type {
   AgentTemplate,
   ProviderProfile,
@@ -34,9 +35,10 @@ export function resolveRoleModel(
     throw new Error(
       `角色“${template!.name}”指定的模型不可用，请在 Agent 页面修改配置`,
     )
-  const modelConfig = store.providerModels.get(
-    binding.providerId,
+  const modelConfig = effectiveProviderModel(
+    configured,
     binding.model,
+    store.providerModels.get(binding.providerId, binding.model),
   )
   if (
     binding.reasoningEffort != null &&

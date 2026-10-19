@@ -49,8 +49,12 @@ export const providerCommands = {
     params: z.object({
       requestId: RequestIdSchema,
       providerId: z.string().min(1),
+      refresh: z.boolean().optional(),
     }),
-    result: z.object({ models: z.array(ProviderModelSchema) }),
+    result: z.object({
+      warning: z.string().optional(),
+      models: z.array(ProviderModelSchema),
+    }),
   },
   'provider.model.configure': {
     params: z.object({
@@ -64,6 +68,8 @@ export const providerCommands = {
       reasoningEffort: ReasoningEffortSchema.nullable().optional(),
       reasoningOptions: ReasoningOptionsSchema.optional(),
       reasoningEffortSupported: z.boolean().optional(),
+      reasoningMode: z.enum(['auto', 'manual']).optional(),
+      thinkingSupported: z.boolean().nullable().optional(),
     }),
     result: z.object({ model: ProviderModelSchema }),
   },
