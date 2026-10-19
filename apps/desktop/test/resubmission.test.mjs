@@ -240,3 +240,68 @@ test('five files are rejected before upload and partial failed uploads are clean
     delete globalThis.FileReader
   }
 })
+
+test('accepted edit keeps uploaded attachments despite either refresh failing; rejected edit cleans once', async () => {
+  const previousReader = globalThis.FileReader
+  globalThis.FileReader = class {
+    readAsDataURL(file) {
+      void file.arrayBuffer().then((buffer) => {
+        this.result = `data:;base64,${Buffer.from(buffer).toString('base64')}`
+        this.onload()
+      })
+    }
+  }
+  try {
+    for (const failure of ['refreshSessionData', 'refreshSessions', 'resend']) {
+      globalThis.__chatRequests = []
+      globalThis.__chatRequestResult = (method) => {
+        if (method === 'asset.upload_document')
+          return { asset: { assetId: 'uploaded' } }
+        if (method === 'message.edit_resend' && failure === 'resend')
+          throw Error('resend failed')
+        return {}
+      }
+      const notices = []
+      const actions = useSessionActions(
+        sendDeps({
+          setNotice: (notice) => notices.push(notice),
+          ...(failure !== 'resend'
+            ? {
+                [failure]: async () => {
+                  throw Error('refresh failed')
+                },
+              }
+            : {}),
+        }),
+      )
+      const result = actions.editResendMessage(
+        'message',
+        'edited',
+        ['retained'],
+        [new File(['text'], 'notes.txt')],
+      )
+      if (failure === 'resend') await assert.rejects(result, /resend failed/)
+      else await result
+      assert.deepEqual(
+        globalThis.__chatRequests
+          .filter((r) => r.method === 'asset.delete')
+          .map((r) => r.params.assetId),
+        failure === 'resend' ? ['uploaded'] : [],
+      )
+      assert.equal(
+        globalThis.__chatRequests.filter(
+          (r) => r.method === 'message.edit_resend',
+        ).length,
+        1,
+      )
+      assert.equal(
+        notices.at(-1),
+        failure === 'resend' ? 'resend failed' : 'refresh failed',
+      )
+    }
+  } finally {
+    globalThis.FileReader = previousReader
+    delete globalThis.__chatRequestResult
+    delete globalThis.__chatRequests
+  }
+})

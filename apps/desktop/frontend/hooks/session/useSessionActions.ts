@@ -264,36 +264,33 @@ export function useSessionActions(deps: SessionActionsDeps): {
     const modelKey = deps.selectedModelKey
     const separator = modelKey ? modelKey.indexOf('::') : -1
     let uploadedImageIds: string[] = []
+    let accepted = false
     try {
       uploadedImageIds =
         images.length > 0 ? await uploadMessageFiles(sessionId, images) : []
-      try {
-        await chatApi.editResendMessage({
-          sessionId,
-          messageId,
-          content,
-          attachmentAssetIds: [...attachmentAssetIds, ...uploadedImageIds],
-          providerId:
-            modelKey && separator > 0
-              ? modelKey.slice(0, separator)
-              : undefined,
-          reasoningEffort: deps.requestedReasoningEffort,
-          model:
-            modelKey && separator > 0
-              ? modelKey.slice(separator + 2)
-              : undefined,
-          permissionPreset: deps.permissionPreset,
-        })
-      } catch (error) {
-        await Promise.allSettled(uploadedImageIds.map(deleteAsset))
-        throw error
-      }
+      await chatApi.editResendMessage({
+        sessionId,
+        messageId,
+        content,
+        attachmentAssetIds: [...attachmentAssetIds, ...uploadedImageIds],
+        providerId:
+          modelKey && separator > 0 ? modelKey.slice(0, separator) : undefined,
+        reasoningEffort: deps.requestedReasoningEffort,
+        model:
+          modelKey && separator > 0 ? modelKey.slice(separator + 2) : undefined,
+        permissionPreset: deps.permissionPreset,
+      })
+      accepted = true
       await deps.refreshSessionData(sessionId)
       await deps.refreshSessions()
     } catch (error) {
-      await Promise.allSettled(uploadedImageIds.map(deleteAsset))
+      if (!accepted) {
+        await Promise.allSettled(uploadedImageIds.map(deleteAsset))
+      }
       fail(error)
-      throw error
+      // Once accepted, refresh failures must not delete referenced assets or
+      // report a resend failure that invites submitting the same edit again.
+      if (!accepted) throw error
     }
   }
 

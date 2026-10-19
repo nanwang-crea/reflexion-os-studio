@@ -88,8 +88,12 @@ test('分次保存超过累计差异预算仍可成功，并保留原始撤销�
       { length: 1100 },
       (_, index) => `${index < count ? 'new' : 'old'}${index}\n`,
     ).join('')
-  const first = preserveLineEndings(original, edit(500), original)
-  const second = preserveLineEndings(original, edit(1100), first)
+  // Exercise cumulative fallback without making any single edit depend on
+  // finishing a 500+ line replacement inside the product's 50ms UI budget.
+  let second = original
+  for (const count of [150, 300, 450, 600, 750, 900, 1050, 1100]) {
+    second = preserveLineEndings(original, edit(count), second)
+  }
   assert.equal(normalizeLineEndings(second), edit(1100))
   assert.deepEqual(second.match(/\r\n|\n/g), original.match(/\r\n|\n/g))
   assert.equal(
