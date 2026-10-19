@@ -13,6 +13,7 @@ import { buildOffsets, anchoredTop, visibleRange } from './virtual-layout'
 interface Props {
   blocks: ChatBlock[]
   scrollRef: RefObject<HTMLDivElement | null>
+  onScrollPositioned?: () => void
   pinned: boolean
   renderBlock: (block: ChatBlock) => ReactNode
 }
@@ -50,6 +51,7 @@ export function VirtualTranscript({
   blocks,
   scrollRef,
   pinned,
+  onScrollPositioned,
   renderBlock,
 }: Props): React.JSX.Element {
   const listRef = useRef<HTMLDivElement>(null)
@@ -101,8 +103,16 @@ export function VirtualTranscript({
   useLayoutEffect(() => {
     const container = scrollRef.current
     if (!container) return
+    const old = previous.current
     if (pinned) container.scrollTop = container.scrollHeight
-    else container.scrollTop = listTop() + top
+    else if (
+      !old ||
+      old.keys !== keys ||
+      old.offsets !== offsets ||
+      old.origin !== listTop()
+    )
+      container.scrollTop = listTop() + top
+    onScrollPositioned?.()
     previous.current = {
       keys,
       offsets,
@@ -114,7 +124,7 @@ export function VirtualTranscript({
       height: container.clientHeight,
       width: container.clientWidth,
     })
-  }, [keys, offsets, pinned, top, listTop, scrollRef])
+  }, [keys, offsets, pinned, top, listTop, scrollRef, onScrollPositioned])
 
   useEffect(() => {
     const container = scrollRef.current

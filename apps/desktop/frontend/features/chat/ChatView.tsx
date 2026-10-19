@@ -1,4 +1,5 @@
 import { ChatBlockView } from './transcript/ChatBlockView'
+import { useTranscriptFollow } from './transcript/useTranscriptFollow'
 import { VirtualTranscript } from './transcript/VirtualTranscript'
 import { HistoryLoader } from './transcript/HistoryLoader'
 import { EmptyState } from '../../components/feedback/EmptyState'
@@ -24,14 +25,8 @@ import type { DraftAttachment } from '../../components/composer/useComposerAttac
 import { MAX_MESSAGE_ATTACHMENTS } from '@reflexion-os-studio/runtime-client'
 import { validateAttachmentFile } from './attachments/upload-message-files'
 
-/** 距底部小于该值视为“贴底”，流式期间继续跟随滚动。 */
-const PIN_THRESHOLD_PX = 80
-
-/** Map 未命中时复用同一空数组，避免每帧给子组件新身份。 */
-
 export function ChatView(props: ChatViewProps): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null)
-  const [pinned, setPinned] = useState(true)
   const [editMessageId, setEditMessageId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState('')
   const [editImageAssetIds, setEditImageAssetIds] = useState<string[]>([])
@@ -40,6 +35,15 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
   const [editImageError, setEditImageError] = useState<string | null>(null)
   const [editSaving, setEditSaving] = useState(false)
   const sessionId = props.sessionData?.session?.id ?? null
+
+  const {
+    pinned,
+    handleScroll,
+    handleWheel,
+    recordPosition,
+    pause,
+    scrollToBottom,
+  } = useTranscriptFollow(scrollRef, sessionId)
 
   const messages = useMemo(
     () => props.sessionData?.messages ?? [],
@@ -194,41 +198,19 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
     [visibleRuns],
   )
 
-  const lastScrollTop = useRef(0)
-  const handleScroll = useCallback((): void => {
-    const el = scrollRef.current
-    if (!el) return
-    const movingUp = el.scrollTop < lastScrollTop.current
-    lastScrollTop.current = el.scrollTop
-    setPinned(
-      !movingUp &&
-        el.scrollHeight - el.scrollTop - el.clientHeight < PIN_THRESHOLD_PX,
-    )
-  }, [])
-
-  // 切换会话时回到贴底状态，并清理旧会话的编辑草稿与临时图片。
+  // 切换会话时清理旧会话的编辑草稿与临时图片。
   useEffect(() => {
-    setPinned(true)
     setEditMessageId(null)
     setEditDraft('')
     setEditImageAssetIds([])
     setEditImages([])
     setEditImageError(null)
-    const el = scrollRef.current
-    if (el) el.scrollTop = el.scrollHeight
     return () => {
       const images = editImagesRef.current
       editImagesRef.current = []
       images.forEach((image) => URL.revokeObjectURL(image.url))
     }
   }, [sessionId])
-
-  // 流式期间仅在贴底时跟随，用户回看历史时不打断。
-  useEffect(() => {
-    if (!pinned) return
-    const el = scrollRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [messages.length, props.streaming, props.streamingReasoning, pinned])
 
   const { onRetry } = props
   const handleRetry = useCallback((): void => {
@@ -329,22 +311,13 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
     clearEditImages()
   }
 
-  const scrollToBottom = (): void => {
-    const el = scrollRef.current
-    if (!el) return
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
-    setPinned(true)
-  }
-
   return (
     <div className="chat-view">
       <div
         className="chat-scroll"
         ref={scrollRef}
         onScroll={handleScroll}
-        onWheel={(event) => {
-          if (event.deltaY < 0) setPinned(false)
-        }}
+        onWheel={handleWheel}
       >
         <div className="transcript">
           {sessionId && props.sessionData?.nextBefore && (
@@ -353,7 +326,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
               sessionId={sessionId}
               before={props.sessionData.nextBefore}
               onLoad={props.onLoadOlder}
-              onStart={() => setPinned(false)}
+              onStart={pause}
             />
           )}
           {messages.length === 0 && (
@@ -370,6 +343,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
             blocks={chatBlocks}
             scrollRef={scrollRef}
             pinned={pinned}
+            onScrollPositioned={recordPosition}
             renderBlock={(block) => (
               <ChatBlockView
                 block={block}
