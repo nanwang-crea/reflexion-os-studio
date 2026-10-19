@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Store } from '../dist/store/index.js'
+import { CHECKPOINT_SCHEMA_VERSION } from '../dist/agent/context/context-checkpoint.js'
 import { ContextBuilder } from '../dist/agent/context/context.js'
 
 test('ContextBuilder.build trims immediately without waiting for checkpoint refresh', async () => {
@@ -98,7 +99,7 @@ test('ContextBuilder.build reuses checkpoint and includes watermark suffix', asy
     },
     tokenEstimate: 10,
     model: 'm',
-    schemaVersion: 1,
+    schemaVersion: CHECKPOINT_SCHEMA_VERSION,
   })
 
   const result = await new ContextBuilder(store).build(
@@ -186,7 +187,7 @@ for (const field of ['constraints', 'knownErrors']) {
       },
       tokenEstimate: 10,
       model: 'm',
-      schemaVersion: 1,
+      schemaVersion: CHECKPOINT_SCHEMA_VERSION,
     })
     let requests = 0
     const fetch = globalThis.fetch

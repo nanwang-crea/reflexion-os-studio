@@ -1,3 +1,4 @@
+import { checkRequestBudget } from '../context/budget.js'
 import { persistRequestAttempt } from './request-attempts.js'
 import { limitSettingsHint } from './budgets.js'
 import { createModelActivityReporter } from './model-activity.js'
@@ -58,6 +59,8 @@ export async function executeModelTurn(
   signal: AbortSignal,
 ): Promise<ModelTurnOutcome> {
   const { store, state, run, provider, registry, emitter } = input
+  const tools = registry.specs()
+  checkRequestBudget(messages, provider, tools)
   const reuseFirst = state.lastAssistantMessageId === null
   const assistantMessage = reuseFirst
     ? input.firstAssistantMessage
@@ -116,7 +119,7 @@ export async function executeModelTurn(
         messages,
         signal,
       ),
-      tools: registry.specs(),
+      tools,
       onToolCallProgress: (call) => {
         markStreaming()
         activity.report(call)

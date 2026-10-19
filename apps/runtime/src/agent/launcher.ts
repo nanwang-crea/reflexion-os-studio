@@ -237,6 +237,7 @@ export class RunLauncher {
                 systemPrompt,
                 provider,
                 signal,
+                registry.specs(),
               )
         },
         registry,

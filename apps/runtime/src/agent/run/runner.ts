@@ -202,6 +202,7 @@ export class RunRunner {
             compactInRun(
               withTaskContext(this.store, run.sessionId, messages),
               input.provider,
+              registry.specs(),
             ),
           maxTurns,
           maxContinuationTurns: budgets.maxContinuationTurns,

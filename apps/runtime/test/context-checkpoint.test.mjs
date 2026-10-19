@@ -136,7 +136,7 @@ test('summary content change invalidates old checkpoint (hash mismatch)', async 
   )
 })
 
-test('summarizer failure caches: same hash does not retry within process', async () => {
+test('summarizer failure cools down: same hash does not immediately retry', async () => {
   const fixture = freshStore()
   let calls = 0
   const make = () =>
@@ -150,7 +150,7 @@ test('summarizer failure caches: same hash does not retry within process', async
   assert.equal(first.failed, true)
   const second = await ensureCheckpoint(make())
   assert.equal(second.failed, true)
-  assert.equal(calls, 1, 'failed hash must not re-request within process')
+  assert.equal(calls, 1, 'failed hash must not immediately re-request')
 })
 
 test('concurrent ensure with same key single-flights the model call', async () => {
@@ -191,10 +191,8 @@ test('sanitizeSummary drops secret-looking lines and clamps to schema', () => {
   assert.equal(filterSecretLine('普通内容'), '普通内容')
 })
 
-test('malformed summary JSON shape falls back to empty summary', () => {
-  const sanitized = sanitizeSummary({ wrong: 'shape' })
-  assert.equal(sanitized.goal, null)
-  assert.deepEqual(sanitized.completed, [])
+test('malformed summary shape is rejected before checkpoint commit', () => {
+  assert.throws(() => sanitizeSummary({ wrong: 'shape' }), /invalid schema/)
 })
 
 test('computeSourceHash differs when tool result content changes', () => {

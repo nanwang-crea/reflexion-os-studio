@@ -1,123 +1,26 @@
-import { createHash } from 'node:crypto'
 import {
-  ContextCheckpointSummarySchema,
-  type ContextCheckpointSummary,
-} from '@reflexion-os-studio/contracts'
-export type { ContextCheckpointSummary } from '@reflexion-os-studio/contracts'
-import type { ContextFrame } from '@reflexion-os-studio/agent-core'
+  estimateTokens,
+  type ContextFrame,
+} from '@reflexion-os-studio/agent-core'
+import type { ContextCheckpointSummary } from '@reflexion-os-studio/contracts'
 import type { Store } from '../../store/index.js'
 import { emptySummary } from '../../store/agents/contextCheckpoints.js'
-import type { ProviderRuntimeConfig } from './context.js'
-import { CHECKPOINT_SUMMARY_SYSTEM_PROMPT } from '../prompts/index.js'
+import type { ProviderRuntimeConfig } from './budget.js'
+import {
+  CHECKPOINT_SCHEMA_VERSION,
+  computeSourceHash,
+} from './checkpoint/source.js'
+import { sanitizeSummary } from './checkpoint/summary.js'
+export {
+  CHECKPOINT_SCHEMA_VERSION,
+  computeSourceHash,
+} from './checkpoint/source.js'
+export { sanitizeSummary, filterSecretLine } from './checkpoint/summary.js'
+export { transcriptOf } from './checkpoint/transcript.js'
+export { summarizeCheckpointFrames } from './checkpoint/request.js'
+export type { ContextCheckpointSummary } from '@reflexion-os-studio/contracts'
 
-/**
- * 增量 Context Checkpoint 服务（W5）：
- * - source hash 覆盖稳定 Frame 内容（message id/role/content、ToolCall 参数/
- *   结果哈希）+ summary schema version；来源变化时旧摘要保留到新摘要成功替换；
- * - 命中相同 hash 直接复用；watermark 后新增稳定 Frame 只做一次增量摘要
- *   （输入 = 旧摘要 + 新增 Frame）；
- * - 相同 sessionId+hash 的并发摘要 single-flight；同 hash 失败后记录失败
- *   缓存，不再请求模型，调用方直接走确定性裁剪；
- * - 摘要经 zod/长度/secret 过滤后 upsert；Checkpoint 非事实源，可随时重建。
- */
-
-/** 摘要 schema 版本：结构变化时递增使全部旧 Checkpoint 失效。 */
-export const CHECKPOINT_SCHEMA_VERSION = 1
-
-/** 简易 secret 过滤：命中即整行丢弃（摘要不应承载凭据）。 */
-const SECRET_PATTERN =
-  /(sk-[A-Za-z0-9_-]{8,}|api[_-]?key\s*[:=]|authorization\s*[:=]|bearer\s+[A-Za-z0-9._-]{8,}|cookie\s*[:=]|token\s*[:=]\s*[A-Za-z0-9._-]{12,})/i
-
-export function filterSecretLine(line: string): string | null {
-  if (SECRET_PATTERN.test(line)) return null
-  return line.trim() === '' ? null : line
-}
-
-export function sanitizeSummary(raw: unknown): ContextCheckpointSummary {
-  const parsed = ContextCheckpointSummarySchema.safeParse(raw)
-  if (!parsed.success) return emptySummary()
-  const data = parsed.data
-  const clean = (lines: string[]): string[] =>
-    lines.map(filterSecretLine).filter((line): line is string => line !== null)
-  return {
-    goal: data.goal === null ? null : (filterSecretLine(data.goal) ?? null),
-    constraints: clean(data.constraints),
-    decisions: clean(data.decisions),
-    completed: clean(data.completed),
-    pending: clean(data.pending),
-    toolFacts: clean(data.toolFacts),
-    knownErrors: clean(data.knownErrors),
-  }
-}
-
-/** source hash：稳定 Frame 内容的确定性摘要（存哈希不存原文）。 */
-export function computeSourceHash(
-  frames: ContextFrame[],
-  schemaVersion = CHECKPOINT_SCHEMA_VERSION,
-): string {
-  const hash = createHash('sha256')
-  hash.update(`v${schemaVersion}|frames=${frames.length}|`)
-  for (const frame of frames) {
-    switch (frame.kind) {
-      case 'system':
-        hash.update(`system|${frame.content.length}|`)
-        break
-      case 'user':
-      case 'assistant_text':
-      case 'runtime_control':
-        hash.update(`${frame.kind}|${frame.content}|`)
-        break
-      case 'tool_round': {
-        hash.update(`tool_round|${frame.assistant.content}|`)
-        for (const call of frame.assistant.toolCalls) {
-          hash.update(
-            `${call.id}|${call.name}|${createHash('sha256').update(call.arguments).digest('hex')}|`,
-          )
-        }
-        for (const result of frame.results) {
-          hash.update(
-            `${result.toolCallId}|${result.isError ? 'err' : 'ok'}|${createHash('sha256').update(result.content).digest('hex')}|`,
-          )
-        }
-        break
-      }
-    }
-  }
-  return hash.digest('hex')
-}
-
-/** 增量摘要 prompt 输入：旧摘要 → JSON；新增 Frame → 轻量 transcript。 */
-function transcriptOf(frames: ContextFrame[]): string {
-  const lines: string[] = []
-  for (const frame of frames) {
-    switch (frame.kind) {
-      case 'user':
-      case 'assistant_text':
-        lines.push(
-          `${frame.kind === 'user' ? 'user' : 'assistant'}: ${frame.content.slice(0, 400)}${frame.kind === 'user' && frame.images?.length ? ` [附带 ${frame.images.length} 张图片，原图已随历史归档]` : ''}`,
-        )
-        break
-      case 'tool_round': {
-        if (frame.assistant.content !== '') {
-          lines.push(`assistant: ${frame.assistant.content.slice(0, 200)}`)
-        }
-        for (const call of frame.assistant.toolCalls) {
-          lines.push(`tool_call: ${call.name}`)
-        }
-        for (const result of frame.results) {
-          lines.push(
-            `tool_result: ${result.isError ? 'error' : 'ok'} ${result.content.slice(0, 200)}`,
-          )
-        }
-        break
-      }
-      default:
-        break
-    }
-  }
-  return lines.join('\n').slice(0, 12_000)
-}
-
+/** Single-flight success cache; failed refreshes never replace an earlier checkpoint. */
 export interface CheckpointOptions {
   store: Store
   sessionId: string
@@ -150,8 +53,10 @@ export interface CheckpointOutcome {
 
 /** Runtime 内 single-flight：相同 sessionId+hash 的并发摘要只发一次。 */
 const inflight = new Map<string, Promise<CheckpointOutcome>>()
-/** 失败缓存：同 hash 在本进程内不再重试摘要。 */
-const failedHashes = new Set<string>()
+/** 同 hash 短时冷却，既限制重试风暴，也允许暂时故障恢复。 */
+const failedHashes = new Map<string, number>()
+export const CHECKPOINT_FAILURE_COOLDOWN_MS = 30_000
+const MAX_FAILED_HASHES = 256
 
 export async function ensureCheckpoint(
   options: CheckpointOptions,
@@ -190,7 +95,8 @@ async function runEnsure(
   if (
     existingRow !== null &&
     existingRow.sourceHash === sourceHash &&
-    existingRow.schemaVersion === CHECKPOINT_SCHEMA_VERSION
+    existingRow.schemaVersion === CHECKPOINT_SCHEMA_VERSION &&
+    usableSummary(existingRow.summary)
   ) {
     return {
       summary: existingRow.summary,
@@ -200,7 +106,7 @@ async function runEnsure(
       summarized: false,
     }
   }
-  if (failedHashes.has(flightKey)) {
+  if ((failedHashes.get(flightKey) ?? 0) > Date.now()) {
     return {
       summary: emptySummary(),
       sourceHash,
@@ -219,6 +125,7 @@ async function runEnsure(
     const canExtendExisting =
       existingRow !== null &&
       existingRow.schemaVersion === CHECKPOINT_SCHEMA_VERSION &&
+      usableSummary(existingRow.summary) &&
       watermarkIndex >= 0 &&
       computeSourceHash(stableFrames.slice(0, watermarkIndex + 1)) ===
         existingRow.sourceHash
@@ -231,7 +138,9 @@ async function runEnsure(
       newFrames,
       signal: options.signal,
     })
+    options.signal.throwIfAborted()
     const summary = sanitizeSummary(raw)
+    failedHashes.delete(flightKey)
     store.contextCheckpoints.upsert({
       sessionId,
       throughMessageId,
@@ -249,8 +158,11 @@ async function runEnsure(
       summarized: true,
     }
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') throw error
-    failedHashes.add(flightKey)
+    if (options.signal.aborted) throw error
+    failedHashes.delete(flightKey)
+    failedHashes.set(flightKey, Date.now() + CHECKPOINT_FAILURE_COOLDOWN_MS)
+    if (failedHashes.size > MAX_FAILED_HASHES)
+      failedHashes.delete(failedHashes.keys().next().value!)
     return {
       summary: emptySummary(),
       sourceHash,
@@ -261,67 +173,15 @@ async function runEnsure(
   }
 }
 
-/** 摘要自身的 token 估算（字段长度近似，供预算展示）。 */
 function estimateSummaryTokens(summary: ContextCheckpointSummary): number {
-  const count = (lines: string[]): number =>
-    lines.reduce((sum, line) => sum + Math.ceil(line.length / 4), 0)
-  return (
-    (summary.goal === null ? 0 : Math.ceil(summary.goal.length / 4)) +
-    count(summary.constraints) +
-    count(summary.decisions) +
-    count(summary.completed) +
-    count(summary.pending) +
-    count(summary.toolFacts) +
-    count(summary.knownErrors)
-  )
+  return estimateTokens(JSON.stringify(summary))
 }
 
-export { transcriptOf, summarizeCheckpointFrames }
-
-/**
- * 结构化摘要调用（默认实现）：CHECKPOINT_SUMMARY_SYSTEM_PROMPT +
- * 旧摘要 JSON + 新增 Frame transcript，一次补全调用。
- */
-async function summarizeCheckpointFrames(
-  provider: ProviderRuntimeConfig,
-  input: {
-    previousSummary: ContextCheckpointSummary | null
-    newFrames: ContextFrame[]
-    signal: AbortSignal
-  },
-): Promise<unknown> {
-  const { streamChatCompletion } = await import('../../provider.js')
-  const userPayload = [
-    input.previousSummary === null
-      ? '旧摘要：null（无既有摘要）'
-      : `旧摘要：${JSON.stringify(input.previousSummary)}`,
-    '新增对话片段：',
-    transcriptOf(input.newFrames),
-  ].join('\n\n')
-  const result = await streamChatCompletion(
-    {
-      baseUrl: provider.baseUrl,
-      apiKey: provider.apiKey,
-      model: provider.model,
-      headers: provider.headers,
-      messages: [
-        { role: 'system', content: CHECKPOINT_SUMMARY_SYSTEM_PROMPT },
-        { role: 'user', content: userPayload },
-      ],
-      signal: input.signal,
-      timeoutMs: provider.timeoutMs ?? 60_000,
-      maxRetries: provider.maxRetries,
-      retryBackoffInitialMs: provider.retryBackoffInitialMs,
-      retryBackoffMaxMs: provider.retryBackoffMaxMs,
-    },
-    () => {},
-  )
-  // 模型可能包 markdown 代码块；提取第一段 JSON。
-  const text = result.content.trim()
-  const start = text.indexOf('{')
-  const end = text.lastIndexOf('}')
-  if (start === -1 || end <= start) {
-    throw new Error('checkpoint summary: no JSON object in response')
+function usableSummary(raw: unknown): boolean {
+  try {
+    sanitizeSummary(raw)
+    return true
+  } catch {
+    return false
   }
-  return JSON.parse(text.slice(start, end + 1))
 }
