@@ -263,8 +263,19 @@ export class RunLauncher {
         onCancel: input.onCancel,
         childTokenBudget: input.childTokenBudget,
       })
-      // runner 自吞全部执行期异常；此处仅保证取消句柄必然清理。
-      .catch(() => {})
+      // Finalization can itself fail; never leave a delegating parent waiting.
+      .catch(() => {
+        process.stderr.write(
+          `[runtime] Run execution escaped (run:${run.id})\n`,
+        )
+        try {
+          input.onFailure?.(new Error('Run 执行或终态收尾异常，请检查运行日志'))
+        } catch {
+          process.stderr.write(
+            `[runtime] Run failure callback failed (run:${run.id})\n`,
+          )
+        }
+      })
       .finally(() => {
         this.deps.browser?.finishRun(run.id, controller.signal.aborted)
         parentSignal?.removeEventListener('abort', abortChild)

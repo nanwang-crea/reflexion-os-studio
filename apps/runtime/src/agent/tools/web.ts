@@ -30,16 +30,15 @@ export function createWebFetchTool(): ToolDefinition {
       required: ['url'],
     },
     execute: async ({ args, signal }) => {
+      const timeout = AbortSignal.timeout(FETCH_TIMEOUT_MS)
       try {
+        signal.throwIfAborted()
         const url = requireString(args, 'url')
         const parsed = new URL(url)
         const maxLength =
           optionalNumber(args, 'maxLength') ?? DEFAULT_MAX_LENGTH
         const fetched = await safeFetch(parsed, {
-          signal: AbortSignal.any([
-            signal,
-            AbortSignal.timeout(FETCH_TIMEOUT_MS),
-          ]),
+          signal: AbortSignal.any([signal, timeout]),
           headers: { 'user-agent': 'ReflexionOS-Studio/0.3 (web-fetch)' },
         })
         const { response } = fetched
@@ -80,7 +79,10 @@ export function createWebFetchTool(): ToolDefinition {
           isError: false,
         }
       } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') throw error
+        // Only the Run signal can cancel the task; request deadlines are tool failures.
+        signal.throwIfAborted()
+        if (timeout.aborted)
+          return failure('网页请求超过 20 秒时限，请换来源或稍后重试')
         return failure(error instanceof Error ? error.message : String(error))
       }
     },

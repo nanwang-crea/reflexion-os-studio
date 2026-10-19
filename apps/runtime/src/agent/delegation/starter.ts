@@ -1,3 +1,7 @@
+import {
+  createDelegationSettlement,
+  emitDelegationEvent,
+} from './settlement.js'
 import { roleSkillsSnapshot } from '../templates/skills.js'
 import { childLimit, limitSettingsHint } from '../run/budgets.js'
 import { resolveRoleModel } from './role-model.js'
@@ -199,8 +203,11 @@ export function createChildRunStarter(
     }
     const { session, delegation, run, assistant, running } = setup
     const emitter = new RunEventEmitter(run.id, deps.notifier)
-    emitter.next({ type: 'delegation.created', delegation })
-    emitter.next({ type: 'delegation.updated', delegation: running })
+    emitDelegationEvent(emitter, { type: 'delegation.created', delegation })
+    emitDelegationEvent(emitter, {
+      type: 'delegation.updated',
+      delegation: running,
+    })
     const controller = new AbortController()
     const abort = (): void => controller.abort(signal.reason)
     signal.addEventListener('abort', abort, { once: true })
@@ -220,81 +227,57 @@ export function createChildRunStarter(
           )
     try {
       return await new Promise<DelegationResult>((resolve, reject) => {
-        deps.launcher.launch({
-          run,
-          session,
-          profile: roleModel.profile,
-          apiKey: roleModel.apiKey,
-          model: roleModel.model,
-          sampling: roleModel.sampling,
-          permissionPreset,
-          permissionDomainId,
-          rootRunId: budget.rootRunId,
-          mutationCoordinator,
-          depth: childDepth,
-          skill: null,
-          systemPrompt: instance.instructions,
-          assistantMessage: assistant,
+        const callbacks = createDelegationSettlement({
+          store: deps.store,
+          runId: run.id,
+          delegationId: delegation.id,
+          parentSignal: signal,
           emitter,
-          childRunStarter: canDelegate
-            ? createChildRunStarter(
-                {
-                  ...childDeps,
-                  ...roleModel,
-                  permissionPreset,
-                  permissionDomainId,
-                  inheritedTools: allowedTools,
-                  mutationCoordinator,
-                },
-                run,
-                session,
-              )
-            : undefined,
-          allowedTools,
-          isolatedContext: true,
-          parentSignal: controller.signal,
-          childTokenBudget: childTokens ?? undefined,
-          onResult: (summary) => {
-            const result = deps.store.delegations.buildStructuredResult(
-              run.id,
-              summary,
-            )
-            const updated = deps.store.delegations.update(
-              delegation.id,
-              'completed',
-              summary,
-              null,
-              result,
-            )
-            emitter.next({ type: 'delegation.updated', delegation: updated })
-            resolve(result)
-          },
-          onFailure: (error) => {
-            const updated = deps.store.delegations.update(
-              delegation.id,
-              'failed',
-              null,
-              error.message,
-            )
-            emitter.next({ type: 'delegation.updated', delegation: updated })
-            const childRun = deps.store.runs.get(run.id)
-            reject(
-              childRun?.errorCode
-                ? new ChildLimitError(childRun.errorCode, error.message)
-                : error,
-            )
-          },
-          onCancel: () => {
-            const updated = deps.store.delegations.update(
-              delegation.id,
-              'cancelled',
-              null,
-              '父 Run 已取消',
-            )
-            emitter.next({ type: 'delegation.updated', delegation: updated })
-            reject(new DOMException('The operation was aborted.', 'AbortError'))
-          },
+          resolve,
+          reject,
         })
+        try {
+          deps.launcher.launch({
+            run,
+            session,
+            profile: roleModel.profile,
+            apiKey: roleModel.apiKey,
+            model: roleModel.model,
+            sampling: roleModel.sampling,
+            permissionPreset,
+            permissionDomainId,
+            rootRunId: budget.rootRunId,
+            mutationCoordinator,
+            depth: childDepth,
+            skill: null,
+            systemPrompt: instance.instructions,
+            assistantMessage: assistant,
+            emitter,
+            childRunStarter: canDelegate
+              ? createChildRunStarter(
+                  {
+                    ...childDeps,
+                    ...roleModel,
+                    permissionPreset,
+                    permissionDomainId,
+                    inheritedTools: allowedTools,
+                    mutationCoordinator,
+                  },
+                  run,
+                  session,
+                )
+              : undefined,
+            allowedTools,
+            isolatedContext: true,
+            parentSignal: controller.signal,
+            childTokenBudget: childTokens ?? undefined,
+            ...callbacks,
+          })
+        } catch (error) {
+          callbacks.onFailure(
+            error instanceof Error ? error : new Error('子 Run 启动失败'),
+          )
+        }
       })
     } finally {
       lease.release()

@@ -136,5 +136,7 @@ for (const status of ['completed', 'failed', 'cancelled']) {
     const history = store.delegations.listByRootRun(parent.id)
     assert.equal(history.length, 5)
     assert.ok(history.every((item) => item.status === status))
+    if (status === 'cancelled')
+      assert.ok(history.every((item) => item.error === '子 Run 已取消'))
   })
 }

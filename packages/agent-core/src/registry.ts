@@ -121,13 +121,14 @@ export class ToolRegistry {
     return { ok: true, tool, args }
   }
 
-  /** 解析并执行一次工具调用；永不抛出，错误折叠为 isError 结果。 */
+  /** 解析并执行一次工具调用；仅任务取消上抛，其余错误折叠为 isError 结果。 */
   async call(
     request: ToolCallRequest,
     signal: AbortSignal,
     grant?: string,
     toolCallId = request.id,
   ): Promise<ToolResult> {
+    signal.throwIfAborted()
     const validated = this.validateRequest(request)
     if (!validated.ok) return validated.result
     const executionArgs: ToolExecutionArgs = {
@@ -140,7 +141,19 @@ export class ToolRegistry {
     try {
       return await validated.tool.execute(executionArgs)
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') throw error
+      signal.throwIfAborted()
+      if (
+        error instanceof Error &&
+        (error.name === 'AbortError' || error.name === 'TimeoutError')
+      ) {
+        return {
+          content:
+            '工具请求已中止或超时，任务仍在运行；请核对结果后选择其他来源或操作，不要自动重复可能已生效的操作',
+          isError: true,
+          code: 'tool_error',
+          replayUnsafe: true,
+        }
+      }
       return {
         content:
           'tool failed because the runtime entered an inconsistent internal state; do not retry unchanged',

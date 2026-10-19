@@ -128,6 +128,12 @@ if (process.platform === 'darwin') {
     join(windows, 'bootstrap.exe'),
     join(target, 'debug/reflexion-desktop-sandbox.exe'),
   )
+  // Tauri validates bundle resource paths even for this preparatory DLL build.
+  // prepare-package.sh stages their contents after CEF preparation completes;
+  // standalone prepare:cef (including tauri dev) also needs the directory.
+  await mkdir(join(root, 'apps/desktop/src-tauri/package-resources'), {
+    recursive: true,
+  })
   run('cargo', [
     'build',
     '--manifest-path',

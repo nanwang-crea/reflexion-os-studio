@@ -334,7 +334,7 @@ export class RunRunner {
         clearTimeout(timeoutHandle)
       }
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (controller.signal.aborted) {
         const reason = controller.signal.reason
         if (reason instanceof ChildLimitError) {
           finalize({
