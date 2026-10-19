@@ -75,6 +75,63 @@ createRoot(document.getElementById('root')).render(<Fixture/>);`,
     await page.evaluate(() => window.fixture.grow())
     await bottom()
 
+    // Scrolling a nested tool output must leave the outer follow state intact.
+    await page.evaluate(() => {
+      const row = document.querySelector('[data-block-id="49"] > div')
+      row.style.position = 'relative'
+      const inner = document.createElement('div')
+      inner.id = 'nested-scroll'
+      inner.style.cssText =
+        'position:absolute;bottom:0;left:0;width:200px;height:80px;overflow:auto;overscroll-behavior:contain'
+      inner.innerHTML = '<div style="height:1000px">tool output</div>'
+      inner.dataset.wheels = '0'
+      inner.addEventListener(
+        'wheel',
+        () => {
+          inner.dataset.wheels = String(Number(inner.dataset.wheels) + 1)
+        },
+        { passive: true },
+      )
+      row.append(inner)
+      inner.scrollTop = 400
+    })
+    const outerTop = await page
+      .locator('#scroll')
+      .evaluate((el) => el.scrollTop)
+    await page.locator('#nested-scroll').hover()
+    await page.mouse.wheel(0, -100)
+    await page.waitForFunction(
+      () => document.querySelector('#nested-scroll').scrollTop < 400,
+    )
+    await bottom()
+    assert.equal(
+      await page.locator('#scroll').evaluate((el) => el.scrollTop),
+      outerTop,
+    )
+    await page.locator('#nested-scroll').evaluate((el) => {
+      el.scrollTop = 0
+    })
+    await page.mouse.wheel(0, -100)
+    await page.waitForFunction(
+      () =>
+        Number(document.querySelector('#nested-scroll').dataset.wheels) >= 2,
+    )
+    await bottom()
+    await page.locator('#nested-scroll').evaluate((el) => {
+      el.style.overscrollBehavior = 'auto'
+    })
+    await page.mouse.wheel(0, -100)
+    await page.waitForFunction(
+      () => document.querySelector('output').textContent === 'false',
+    )
+    await page.waitForFunction(
+      (top) => document.querySelector('#scroll').scrollTop < top,
+      outerTop,
+    )
+    await page.getByText('Bottom', { exact: true }).click()
+    await bottom()
+    await page.locator('#nested-scroll').evaluate((el) => el.remove())
+
     // ResizeObserver must also follow DOM growth without a React/stream update.
     await page.evaluate(() => {
       document.querySelector('[data-block-id="49"] > div').style.height =

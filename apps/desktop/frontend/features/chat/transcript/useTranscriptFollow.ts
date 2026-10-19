@@ -20,7 +20,23 @@ export function useTranscriptFollow(
   const pause = useCallback((): void => setPinned(false), [])
   const handleWheel = useCallback(
     (event: WheelEvent<HTMLDivElement>): void => {
-      if (event.deltaY < 0 && event.currentTarget.scrollTop > 0) pause()
+      if (event.deltaY >= 0 || event.ctrlKey) return
+      const container = event.currentTarget
+      let target = event.target instanceof Element ? event.target : null
+      // Wheel bubbles through nested tool/message scroll areas. Pause only if
+      // the gesture can reach the transcript, including chaining at their edge.
+      while (target && target !== container) {
+        const style = getComputedStyle(target)
+        if (
+          /^(auto|scroll|overlay)$/.test(style.overflowY) &&
+          (target.scrollTop > 0 ||
+            style.overscrollBehaviorY === 'contain' ||
+            style.overscrollBehaviorY === 'none')
+        )
+          return
+        target = target.parentElement
+      }
+      if (container.scrollTop > 0) pause()
     },
     [pause],
   )

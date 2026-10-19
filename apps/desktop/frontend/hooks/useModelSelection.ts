@@ -14,8 +14,10 @@ import {
 } from './session/model-selection'
 import {
   loadReasoningChoice,
+  loadSelectedModelKey,
   saveReasoningChoice,
-} from './session/reasoning-storage'
+  saveSelectedModelKey,
+} from './session/model-selection-storage'
 import type { SessionData } from '../api/sessions'
 
 /**
@@ -38,7 +40,10 @@ export function useModelSelection(
   const [configs, setConfigs] = useState<ProviderModel[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [choice, setChoice] = useState<ReasoningChoice | null>(null)
+  const [selectedModelKey, setModelKey] = useState(loadSelectedModelKey)
+  const [choice, setChoice] = useState<ReasoningChoice | null>(() =>
+    selectedModelKey ? loadReasoningChoice(selectedModelKey) : null,
+  )
   useEffect(() => {
     let active = true
     setLoading(true)
@@ -68,10 +73,10 @@ export function useModelSelection(
     () => modelOptionsFor(profiles, configs),
     [profiles, configs],
   )
-  const [selectedModelKey, setModelKey] = useState<string | null>(null)
-  const setSelectedModelKey = useCallback((key: string | null) => {
+  const setSelectedModelKey = useCallback((key: string) => {
     setModelKey(key)
-    setChoice(key === null ? null : loadReasoningChoice(key))
+    setChoice(loadReasoningChoice(key))
+    saveSelectedModelKey(key)
   }, [])
   const selected = modelOptions.find(
     (option) => option.key === selectedModelKey,
@@ -100,10 +105,9 @@ export function useModelSelection(
   const syncedSessionRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (modelOptions.length === 0) {
-      if (selectedModelKey !== null) setSelectedModelKey(null)
-      return
-    }
+    // Empty options can be the bootstrap loading state; preserve the saved key
+    // until profiles arrive instead of overwriting it before validation.
+    if (modelOptions.length === 0) return
     if (
       selectedModelKey === null ||
       !modelOptions.some((option) => option.key === selectedModelKey)

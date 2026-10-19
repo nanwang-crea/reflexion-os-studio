@@ -17,11 +17,14 @@ test('composer reasoning restores after a page restart and when switching models
     stdin: {
       resolveDir: root,
       loader: 'tsx',
-      contents: `import React from 'react';import {createRoot} from 'react-dom/client';
+      contents: `import React,{useState} from 'react';import {createRoot} from 'react-dom/client';
 import {useModelSelection} from './frontend/hooks/useModelSelection';
 const profiles=[{id:'p',name:'Test',enabled:true,models:['a','b'],apiFormat:'openai-responses',reasoningEffort:'high'}];
-function Fixture(){const state=useModelSelection(profiles,null,null);
-window.fixture={model:state.setSelectedModelKey,effort:state.reasoningSelection.onChange};
+function Fixture(){
+const [available,setAvailable]=useState(window.deferProfiles?[]:profiles);
+const [session,setSession]=useState(null);
+const state=useModelSelection(available,session,session?.session.id??null);
+window.fixture={model:state.setSelectedModelKey,effort:state.reasoningSelection.onChange,enable:()=>setAvailable(profiles),session:()=>setSession({session:{id:"existing"},runs:[{providerId:"p",model:"a"}]})};
 return <output>{JSON.stringify({key:state.selectedModelKey,value:state.reasoningSelection.value,requested:state.requestedReasoningEffort,loading:state.reasoningSelection.loading})}</output>}
 createRoot(document.getElementById('root')).render(<Fixture/>);`,
     },
@@ -51,8 +54,11 @@ createRoot(document.getElementById('root')).render(<Fixture/>);`,
         body: '<div id="root"></div>',
       }),
     )
-    const start = async () => {
+    const start = async (deferProfiles = false) => {
       await page.goto('http://reasoning.test/')
+      await page.evaluate((defer) => {
+        window.deferProfiles = defer
+      }, deferProfiles)
       await page.addScriptTag({ content: built.outputFiles[0].text })
       await page.waitForFunction(() => {
         const value = document.querySelector('output')?.textContent
@@ -81,11 +87,37 @@ createRoot(document.getElementById('root')).render(<Fixture/>);`,
     await check('p::b', 'high')
     await page.evaluate(() => window.fixture.effort(null))
     await check('p::b', null)
-    await start()
+    await start(true)
+    // Bootstrap has not delivered profiles yet; do not discard the saved model.
+    assert.equal(
+      await page
+        .locator('output')
+        .evaluate((el) => JSON.parse(el.textContent).key),
+      'p::b',
+    )
+    await page.evaluate(() => window.fixture.enable())
+    await check('p::b', null)
+    await page.evaluate(() => window.fixture.model('p::a'))
     await check('p::a', 'low')
     await page.evaluate(() => window.fixture.model('p::b'))
     await check('p::b', null)
-    assert.equal(await page.evaluate(() => localStorage.length), 2)
+    // An existing session takes priority, but refreshing it cannot undo a manual switch.
+    await page.evaluate(() => window.fixture.session())
+    await check('p::a', 'low')
+    await page.evaluate(() => window.fixture.model('p::b'))
+    await page.evaluate(() => window.fixture.session())
+    await check('p::b', null)
+    await page.evaluate(() =>
+      localStorage.setItem('reflexion.selected-model.v1', 'p::removed'),
+    )
+    await start()
+    await check('p::a', 'low')
+    assert.equal(
+      await page.evaluate(() =>
+        localStorage.getItem('reflexion.selected-model.v1'),
+      ),
+      'p::a',
+    )
   } finally {
     await browser.close()
   }

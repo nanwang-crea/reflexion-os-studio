@@ -39,3 +39,29 @@ export function saveReasoningChoice(
     // Storage availability must not prevent sending with the current selection.
   }
 }
+
+const MODEL_STORAGE_KEY = 'reflexion.selected-model.v1'
+
+export function loadSelectedModelKey(
+  storage?: PreferenceStorage,
+): string | null {
+  try {
+    return (
+      (storage ?? globalThis.localStorage).getItem(MODEL_STORAGE_KEY) || null
+    )
+  } catch {
+    return null
+  }
+}
+
+export function saveSelectedModelKey(
+  key: string,
+  storage?: PreferenceStorage,
+): void {
+  try {
+    const target = storage ?? globalThis.localStorage
+    target.setItem(MODEL_STORAGE_KEY, key)
+  } catch {
+    // Keep the in-memory selection usable when preferences cannot be written.
+  }
+}

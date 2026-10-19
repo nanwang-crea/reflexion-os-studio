@@ -11,7 +11,7 @@ const outfile = join(directory, 'model-selection.mjs')
 await build({
   absWorkingDir: fileURLToPath(new URL('..', import.meta.url)),
   stdin: {
-    contents: `export * from './frontend/hooks/session/model-selection'; export * from './frontend/hooks/session/reasoning-storage'`,
+    contents: `export * from './frontend/hooks/session/model-selection'; export * from './frontend/hooks/session/model-selection-storage'`,
     resolveDir: fileURLToPath(new URL('..', import.meta.url)),
   },
   bundle: true,
@@ -22,7 +22,9 @@ const {
   modelOptionsFor,
   selectedEffort,
   loadReasoningChoice,
+  loadSelectedModelKey,
   saveReasoningChoice,
+  saveSelectedModelKey,
 } = await import(pathToFileURL(outfile).href)
 
 const provider = {
@@ -222,6 +224,8 @@ test('invalid or unavailable preference storage falls back without blocking sele
     },
   }
   assert.equal(loadReasoningChoice('p::a', storage), null)
+  assert.equal(loadSelectedModelKey(storage), null)
+  assert.doesNotThrow(() => saveSelectedModelKey('p::a', storage))
   assert.doesNotThrow(() =>
     saveReasoningChoice(
       { key: 'p::a', defaultValue: 'high', value: 'low' },
