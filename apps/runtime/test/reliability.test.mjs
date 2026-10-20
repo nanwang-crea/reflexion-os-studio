@@ -221,7 +221,7 @@ test('restart marks unfinished receipts uncertain without reexecuting them', (t)
   )
 })
 
-function stub(t) {
+function stub() {
   const dir = temporary(),
     path = join(dir, 'sidecar.mjs')
   writeFileSync(
@@ -241,7 +241,7 @@ if(m.method==='system.shutdown'){clearTimeout(timer);process.exit(0)}
 }
 
 test('timeout sends cancel, releases listeners and propagates replay protection', async (t) => {
-  const path = stub(t)
+  const path = stub()
   let ready, cancelled
   const started = new Promise((resolve) => (ready = resolve))
   const stopped = new Promise((resolve) => (cancelled = resolve))
@@ -287,7 +287,7 @@ test(
   'ready-then-crash loop exhausts the restart budget',
   { timeout: 12000 },
   async (t) => {
-    const path = stub(t),
+    const path = stub(),
       statuses = []
     const client = new SystemRuntimeClient(
       process.execPath,
@@ -337,7 +337,7 @@ test('sidecar crash preserves uncertain status through tools, workspace calls an
   const started = new Promise((resolve) => (ready = resolve))
   const client = new SystemRuntimeClient(
     process.execPath,
-    [stub(t)],
+    [stub()],
     (status) => {
       if (status === 'ready') ready()
     },
