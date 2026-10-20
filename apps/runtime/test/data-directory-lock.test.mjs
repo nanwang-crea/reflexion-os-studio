@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { test } from 'node:test'
+import { after, test } from 'node:test'
 import { acquireDataDirectoryLock } from '../dist/lifecycle/data-directory-lock.js'
 import { Store } from '../dist/store/index.js'
 
@@ -15,14 +15,30 @@ const lockUrl = new URL(
 )
 const runtimePath = fileURLToPath(new URL('../dist/index.js', import.meta.url))
 
-function directory(t) {
+// 目录清理统一放到文件级 after：node:test 的 after 钩子按注册顺序执行，
+// 若在 directory() 里先注册 rmSync，它会早于用例后注册的 store.close()/release()
+// 运行，Windows 上因句柄未释放而 EBUSY。
+const directories = []
+
+after(() => {
+  for (const dir of directories.splice(0)) {
+    rmSync(dir, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    })
+  }
+})
+
+function directory() {
   const dir = mkdtempSync(join(tmpdir(), 'reflexion-lock-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  directories.push(dir)
   return dir
 }
 
 test('same directory is exclusive and release is idempotent', (t) => {
-  const dir = directory(t)
+  const dir = directory()
   const release = acquireDataDirectoryLock(dir)
   t.after(release)
   assert.throws(() => acquireDataDirectoryLock(dir), /already in use/)
@@ -32,14 +48,14 @@ test('same directory is exclusive and release is idempotent', (t) => {
 })
 
 test('different directories can run together', (t) => {
-  const release = acquireDataDirectoryLock(directory(t))
-  const otherRelease = acquireDataDirectoryLock(directory(t))
+  const release = acquireDataDirectoryLock(directory())
+  const otherRelease = acquireDataDirectoryLock(directory())
   t.after(release)
   t.after(otherRelease)
 })
 
 test('duplicate Runtime exits before recovery modifies an active turn', (t) => {
-  const dir = directory(t)
+  const dir = directory()
   const release = acquireDataDirectoryLock(dir)
   t.after(release)
   const store = new Store(dir)
@@ -68,7 +84,7 @@ test('duplicate Runtime exits before recovery modifies an active turn', (t) => {
 })
 
 test('crashed owner releases its OS lock for restart', async (t) => {
-  const dir = directory(t)
+  const dir = directory()
   const code = `import { acquireDataDirectoryLock } from ${JSON.stringify(lockUrl.href)};
     acquireDataDirectoryLock(process.argv[1]);
     process.stdout.write('locked');

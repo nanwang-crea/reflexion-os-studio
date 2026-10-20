@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { after, test } from 'node:test'
 import { getEventListeners } from 'node:events'
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -18,9 +18,23 @@ import {
   computeSourceHash,
 } from '../dist/agent/context/context-checkpoint.js'
 
-function temporary(t) {
+// 临时目录统一在文件级 after 里删除：测试内的 store.close() 钩子注册得更晚，
+// 若先删目录，Windows 上会因 SQLite 句柄尚未释放而 EBUSY。
+const temporaryDirs = []
+after(() => {
+  for (const dir of temporaryDirs.splice(0)) {
+    rmSync(dir, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    })
+  }
+})
+
+function temporary() {
   const dir = mkdtempSync(join(tmpdir(), 'reflexion-reliability-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  temporaryDirs.push(dir)
   return dir
 }
 const summary = {
@@ -41,7 +55,7 @@ const provider = {
 }
 
 function checkpointFixture(t) {
-  const store = new Store(temporary(t))
+  const store = new Store(temporary())
   t.after(() => store.close())
   const session = store.sessions.create(null)
   const first = store.messages.create({
@@ -153,7 +167,7 @@ test('late tools and superseded watermark invalidate checkpoint; async stale sum
 })
 
 test('five thousand mutations remain usable and old receipts prevent replay after restart', async (t) => {
-  const dir = temporary(t)
+  const dir = temporary()
   let store = new Store(dir)
   let registry = new OperationRegistry(undefined, store.operationReceipts)
   let count = 0
@@ -187,7 +201,7 @@ test('five thousand mutations remain usable and old receipts prevent replay afte
 })
 
 test('restart marks unfinished receipts uncertain without reexecuting them', (t) => {
-  const dir = temporary(t)
+  const dir = temporary()
   let store = new Store(dir)
   store.operationReceipts.save('workspace.write_file:pending', 'hash', {
     requestId: 'pending',
@@ -208,7 +222,7 @@ test('restart marks unfinished receipts uncertain without reexecuting them', (t)
 })
 
 function stub(t) {
-  const dir = temporary(t),
+  const dir = temporary(),
     path = join(dir, 'sidecar.mjs')
   writeFileSync(
     path,
@@ -291,7 +305,7 @@ test(
 )
 
 test('v52 migration preserves canonical history while discarding only rebuildable checkpoints', (t) => {
-  const dir = temporary(t)
+  const dir = temporary()
   let store = new Store(dir)
   const session = store.sessions.create(null)
   const message = store.messages.create({
