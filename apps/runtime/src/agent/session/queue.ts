@@ -17,7 +17,7 @@ export interface QueuedItem {
 export class QueueService {
   /** 会话 → 排队项（内存，重启即丢失）。 */
   private readonly queues = new Map<string, QueuedItem[]>()
-  /** 用户停止 Run 后的会话级暂停标记：暂停期间 pump 不自动出队，等 queue.resume 确认。 */
+  /** 用户停止 Run 或发送入库失败后的暂停标记：暂停期间 pump 不出队，等 queue.resume 确认。 */
   private readonly paused = new Set<string>()
   /** 每会话一个长生命周期发射器（registry 缓存）：queue.changed 的 seq 在会话流内单调。 */
   private readonly emitters: EmitterRegistry
@@ -92,6 +92,10 @@ export class QueueService {
     return true
   }
 
+  peek(sessionId: string): QueuedItem | null {
+    return this.queues.get(sessionId)?.[0] ?? null
+  }
+
   /** 弹出队首(发送成功即出队);返回 null 表示队列空。 */
   dequeue(sessionId: string): QueuedItem | null {
     const queue = this.queues.get(sessionId) ?? []
@@ -102,7 +106,7 @@ export class QueueService {
     return entry
   }
 
-  /** 停止 Run 后暂停自动出队;返回 false 表示此前未处于暂停态。 */
+  /** 停止 Run 或发送入库失败后暂停出队；返回 false 表示已处于暂停态。 */
   pause(sessionId: string): boolean {
     if (this.paused.has(sessionId)) return false
     this.paused.add(sessionId)

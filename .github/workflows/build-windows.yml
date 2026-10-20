@@ -121,7 +121,7 @@ jobs:
         run: node --test scripts/test/windows-crt.test.mjs scripts/test/desktop-bundle.test.mjs
 
       - name: Verify Runtime reliability
-        run: pnpm --filter @reflexion-os-studio/runtime exec node --import ./test/set-test-data-dir.mjs --test test/reliability.test.mjs test/operations.test.mjs test/context/request-budget.test.mjs test/execution/*.test.mjs
+        run: pnpm --filter @reflexion-os-studio/runtime exec node --import ./test/set-test-data-dir.mjs --test test/reliability.test.mjs test/run-admission.test.mjs test/queue.test.mjs test/resubmission.test.mjs test/operations.test.mjs test/context/request-budget.test.mjs test/execution/*.test.mjs
 
       - name: Verify multi-agent collaboration
         run: pnpm --filter @reflexion-os-studio/runtime exec node --import ./test/set-test-data-dir.mjs --test test/agent-roles.test.mjs test/agent-teams.test.mjs

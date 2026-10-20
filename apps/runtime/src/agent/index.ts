@@ -240,12 +240,16 @@ export class ChatAgent {
     if (this.queues.list(sessionId).length === 0) return
     if (this.queues.isPaused(sessionId)) return
     if (this.store.runs.activeForSession(sessionId) !== null) return
-    const entry = this.queues.dequeue(sessionId)
+    const entry = this.queues.peek(sessionId)
     if (!entry) return
     try {
-      this.startSend({ requestId: randomUUID(), sessionId, ...entry.params })
+      this.startSend(
+        { requestId: randomUUID(), sessionId, ...entry.params },
+        () => this.queues.remove(sessionId, entry.id),
+      )
     } catch (error) {
-      // 出队后执行失败(配置被改等):写 stderr,前端经 queue.changed 看到该项已移除。
+      // Admission failures retain the item; post-commit failures cannot requeue it.
+      this.queues.pause(sessionId)
       process.stderr.write(
         `[runtime] queued message send failed: ${error instanceof Error ? error.message : String(error)}\n`,
       )
@@ -253,7 +257,10 @@ export class ChatAgent {
   }
 
   /** 同步创建 user/assistant 消息与 Run 并返回；工具循环在后台继续。 */
-  startSend(params: ChatCommand): { messageId: string; runId: string } {
+  startSend(
+    params: ChatCommand,
+    onAccepted?: () => void,
+  ): { messageId: string; runId: string } {
     const session = requireSession(this.store, params.sessionId)
     // Skill 激活先于 Provider 解析：参数写错立刻反馈，不与配置错误混淆。
     const { skill } = resolveSkillInvocation(
@@ -277,36 +284,42 @@ export class ChatAgent {
       params.content,
       messageAttachmentIds(params),
     )
-    const run = this.store.runs.create({
-      sessionId: params.sessionId,
-      providerId: profile.id,
-      model,
-      skillId: skill?.manifest.id ?? null,
-      agentTemplateId: params.agentTemplateId ?? null,
-    })
-    const userMessage = this.store.messages.create({
-      sessionId: params.sessionId,
-      runId: run.id,
-      role: 'user',
-      content: params.content,
-      parts,
-      status: 'completed',
-    })
     const placeholderTitle =
       session.title === DEFAULT_SESSION_TITLE &&
       this.sessionTitles.shouldGenerate(params.sessionId)
         ? deriveSessionTitle(params.content)
         : null
-    if (placeholderTitle) {
-      this.store.sessions.rename(params.sessionId, placeholderTitle)
-      this.sessionTitles.emitUpdated(params.sessionId)
-    }
-    this.store.sessions.touch(params.sessionId)
-    const assistantMessage = createPendingAssistantMessage(
-      this.store,
-      params.sessionId,
-      run,
+    const { run, userMessage, assistantMessage } = this.store.transaction(
+      () => {
+        const run = this.store.runs.create({
+          sessionId: params.sessionId,
+          providerId: profile.id,
+          model,
+          skillId: skill?.manifest.id ?? null,
+          agentTemplateId: params.agentTemplateId ?? null,
+        })
+        const userMessage = this.store.messages.create({
+          sessionId: params.sessionId,
+          runId: run.id,
+          role: 'user',
+          content: params.content,
+          parts,
+          status: 'completed',
+        })
+        if (placeholderTitle) {
+          this.store.sessions.rename(params.sessionId, placeholderTitle)
+        }
+        this.store.sessions.touch(params.sessionId)
+        const assistantMessage = createPendingAssistantMessage(
+          this.store,
+          params.sessionId,
+          run,
+        )
+        return { run, userMessage, assistantMessage }
+      },
     )
+    onAccepted?.()
+    if (placeholderTitle) this.sessionTitles.emitUpdated(params.sessionId)
 
     const emitter = new RunEventEmitter(run.id, this.notifier)
     emitter.next({ type: 'run.started', run })

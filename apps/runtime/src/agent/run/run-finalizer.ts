@@ -157,12 +157,16 @@ export class RunFinalizer {
             : decision.status === 'failed'
               ? 'failed'
               : 'completed'
+        const pending =
+          decision.pendingMessage?.messageId === draft.id
+            ? decision.pendingMessage
+            : null
         this.store.messages.finalize(
           draft.id,
-          decision.pendingMessage?.content ?? draft.content,
+          pending?.content ?? draft.content,
           status,
-          decision.pendingMessage?.reasoning ?? draft.reasoning,
-          decision.pendingMessage?.parts,
+          pending?.reasoning ?? draft.reasoning,
+          pending?.parts,
         )
       }
       // 2. 未终态 ToolCall 统一取消（in-flight 快照 + 数据库内非终态行）。

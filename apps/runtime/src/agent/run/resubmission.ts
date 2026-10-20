@@ -59,8 +59,8 @@ export class RunResubmissionService {
     )
     requireIdleSession(this.store, original.sessionId)
 
-    const run = this.store.transaction(() =>
-      this.store.runs.replaceWithRetry(
+    const { run, assistantMessage } = this.store.transaction(() => {
+      const run = this.store.runs.replaceWithRetry(
         original.id,
         {
           sessionId: original.sessionId,
@@ -72,15 +72,15 @@ export class RunResubmissionService {
           planStepId: original.planStepId,
         },
         this.store.messages,
-      ),
-    )
-
-    this.store.sessions.touch(original.sessionId)
-    const assistantMessage = createPendingAssistantMessage(
-      this.store,
-      original.sessionId,
-      run,
-    )
+      )
+      this.store.sessions.touch(original.sessionId)
+      const assistantMessage = createPendingAssistantMessage(
+        this.store,
+        original.sessionId,
+        run,
+      )
+      return { run, assistantMessage }
+    })
 
     const emitter = new RunEventEmitter(run.id, this.notifier)
     emitter.next({ type: 'run.started', run })
@@ -202,10 +202,10 @@ export class RunResubmissionService {
           params.sessionId,
           newRun,
         )
+        this.store.sessions.touch(params.sessionId)
         return { newRun, newUserMessage, newAssistantMessage }
       })
 
-    this.store.sessions.touch(params.sessionId)
     const emitter = new RunEventEmitter(newRun.id, this.notifier)
     emitter.next({ type: 'run.started', run: newRun })
     emitter.next({ type: 'message.created', message: newUserMessage })

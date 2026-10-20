@@ -113,7 +113,7 @@ export function QueueBar(props: QueueBarProps): React.JSX.Element {
     <div className="queue-bar">
       {paused ? (
         <div className="queue-paused">
-          <span>回复已停止，队列暂停发送（{items.length} 条待发）</span>
+          <span>队列已暂停发送（{items.length} 条待发）</span>
           <button className="ghost" onClick={() => void resume()}>
             <SendIcon />
             继续发送
