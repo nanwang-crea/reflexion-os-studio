@@ -50,6 +50,7 @@ export function ToolTrace(props: ToolTraceProps): React.JSX.Element {
                   key={call.id}
                   call={call}
                   runActive={props.runActive}
+                  showDetails
                 />
               ))}
             </div>
@@ -63,6 +64,7 @@ export function ToolTrace(props: ToolTraceProps): React.JSX.Element {
 function ToolTraceItem(props: {
   call: ToolCall
   runActive: boolean
+  showDetails?: boolean
 }): React.JSX.Element {
   const { call } = props
   const data = call.output?.data
@@ -71,7 +73,8 @@ function ToolTraceItem(props: {
       ? data.planSnapshot
       : undefined,
   )
-  const [open, setOpen] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  const open = props.showDetails || expanded
   const label = toolLabel(call)
   const inFlight = props.runActive && isInFlight(call)
   // 参数与结果/错误都展示：失败调用的 errorCode 不能被参数遮蔽。
@@ -80,26 +83,38 @@ function ToolTraceItem(props: {
     .join('\n')
   // 只在进行中/等待审批/失败时显示状态文案；完成的靠绿色状态点即可。
   const showStatus =
-    call.errorCode !== null || (props.runActive && isInFlight(call))
+    call.errorCode !== null ||
+    call.status === 'failed' ||
+    call.status === 'cancelled' ||
+    (props.runActive && isInFlight(call))
   const statusText =
     call.errorCode !== null
       ? '失败'
       : (STATUS_LABELS[call.status] ?? call.status)
+  const row = (
+    <>
+      <span className={`trace-dot ${inFlight ? 'pulse' : ''}`} aria-hidden />
+      <span className="trace-name">{label}</span>
+      <span className="trace-summary">
+        {summarizeArgs(call.args, call.toolName)}
+      </span>
+      {showStatus && <span className="trace-status">{statusText}</span>}
+    </>
+  )
   return (
     <div className={`tool-trace-item status-${call.status}`}>
-      <button
-        type="button"
-        className="tool-trace-row"
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-      >
-        <span className={`trace-dot ${inFlight ? 'pulse' : ''}`} aria-hidden />
-        <span className="trace-name">{label}</span>
-        <span className="trace-summary">
-          {summarizeArgs(call.args, call.toolName)}
-        </span>
-        {showStatus && <span className="trace-status">{statusText}</span>}
-      </button>
+      {props.showDetails ? (
+        <div className="tool-trace-row">{row}</div>
+      ) : (
+        <button
+          type="button"
+          className="tool-trace-row"
+          aria-expanded={open}
+          onClick={() => setExpanded((current) => !current)}
+        >
+          {row}
+        </button>
+      )}
       {call.toolName === 'exit_plan_mode' && snapshot.success && (
         <PlanReview snapshot={snapshot.data} historical />
       )}
@@ -172,7 +187,7 @@ function formatResult(call: ToolCall) {
       ? `失败（${call.errorCode}）：${truncate(detail)}`
       : `失败（${call.errorCode}）`
   }
-  const result = call.output?.data ?? call.result
+  const result = call.output?.data ?? call.output?.content ?? call.result
   if (result === null) return null
   const text =
     typeof result === 'string' ? result : JSON.stringify(result, null, 2)

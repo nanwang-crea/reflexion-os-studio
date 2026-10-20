@@ -1,52 +1,64 @@
-import { useState } from 'react'
-import type { Delegation } from '@reflexion-os-studio/runtime-client'
+import type {
+  Delegation,
+  Run,
+  ToolCall,
+} from '@reflexion-os-studio/runtime-client'
 import type { RunActivity } from '../../../hooks/session/useRunActivity'
-import { ChildAgentTrace } from './ChildAgentTrace'
+import type { DelegationAttention } from './DelegationList'
+import { ChevronIcon } from '../../../ui/icons'
+import { runStatusLabel } from './run-status'
+import { formatRetryLabel, useRetryCountdown } from './useRetryCountdown'
 
-export function RunActivityStatus({
-  active,
-  activity,
-  delegations,
-}: {
+export function RunActivityStatus(props: {
   active: boolean
+  status?: Run['status']
   activity?: RunActivity
+  calls: ToolCall[]
   delegations: Delegation[]
+  attention?: ReadonlyMap<string, DelegationAttention>
+  durationMs: number | null
+  hasProcess: boolean
+  open: boolean
+  onToggle: () => void
 }): React.JSX.Element | null {
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const children = delegations.filter(
-    (item) =>
-      active && (item.status === 'pending' || item.status === 'running'),
+  const retry = props.active ? props.activity?.retry : undefined
+  const countdown = useRetryCountdown(retry)
+  const label = runStatusLabel({
+    ...props,
+    retryLabel: formatRetryLabel(retry, countdown),
+  })
+  const completed = props.calls.filter(
+    (call) => call.status === 'completed' && call.errorCode === null,
+  ).length
+  if (!props.active && !props.hasProcess) return null
+  const content = (
+    <>
+      <span className="run-process-label" role="status">
+        {label}
+      </span>
+      {completed > 0 && (
+        <span className="run-process-count">已完成 {completed} 项工具调用</span>
+      )}
+      {props.hasProcess && (
+        <span className={`run-process-chevron${props.open ? ' open' : ''}`}>
+          <ChevronIcon />
+        </span>
+      )}
+    </>
   )
-  const selected = delegations.find((item) => item.id === selectedId)
-  const label =
-    !active || activity?.retry
-      ? null
-      : activity?.phase === 'preparing_tool'
-        ? activity.toolName === 'task'
-          ? `正在准备子任务${activity.taskName ? `：${activity.taskName}` : ''}（参数接收中）`
-          : '正在准备工具调用（参数接收中）'
-        : activity?.phase === 'waiting' && children.length === 0
-          ? '等待模型响应'
-          : null
-  if (!label && children.length === 0 && !selected) return null
   return (
-    <div className="run-activity-status">
-      {label && <div role="status">{label}</div>}
-      {children.length > 0 && (
+    <div className={`run-activity-status${props.active ? ' active' : ''}`}>
+      {props.hasProcess ? (
         <button
           type="button"
-          className="run-child-wait"
-          onClick={() => setSelectedId(children[0].id)}
+          className="run-process-toggle"
+          aria-expanded={props.open}
+          onClick={props.onToggle}
         >
-          等待 {children.length} 个子 Agent 完成 · 查看执行过程
+          {content}
         </button>
-      )}
-      {selected && (
-        <ChildAgentTrace
-          key={selected.id}
-          delegation={selected}
-          onClose={() => setSelectedId(null)}
-        />
+      ) : (
+        <div className="run-process-toggle">{content}</div>
       )}
     </div>
   )

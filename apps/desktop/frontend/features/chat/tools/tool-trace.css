@@ -110,3 +110,31 @@
   font-size: 12px;
   color: var(--text-muted);
 }
+
+/* 一次展开直达组内参数与结果，避免组与单次调用嵌套折叠。 */
+.tool-trace-group > summary {
+  display: list-item;
+  list-style-position: inside;
+  overflow-wrap: anywhere;
+}
+
+.tool-trace-group.edit > summary {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.tool-trace-group-body {
+  padding-left: 8px;
+  border-left: 1px solid var(--border-subtle);
+  margin-left: 8px;
+}
+
+.tool-trace-group-body .tool-trace-row {
+  cursor: default;
+  user-select: text;
+}
+
+.tool-trace-group > summary:focus-visible {
+  outline: 2px solid var(--accent-solid);
+  outline-offset: 2px;
+}

@@ -256,7 +256,7 @@ export function ChildAgentTrace({
                   }
                   runUsage={run?.usage ?? null}
                   runPerformance={run?.performance}
-                  runFailed={run?.status === 'failed'}
+                  runStatus={run?.status}
                   canRetry={false}
                   onRetry={() => undefined}
                   projectId={data?.session?.projectId ?? ''}

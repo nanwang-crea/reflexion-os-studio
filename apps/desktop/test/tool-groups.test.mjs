@@ -213,7 +213,7 @@ test('final answer remains unique while completed message streaming buffers are 
       streamingReasoning: { final: 'UniqueThought' },
       runDurationMs: null,
       runUsage: null,
-      runFailed: false,
+      runStatus: 'completed',
       canRetry: false,
       onRetry() {},
       projectId: 'p',
@@ -242,7 +242,7 @@ test('process commentary resource links use the same controlled file routing as 
     streamingReasoning: {},
     runDurationMs: null,
     runUsage: null,
-    runFailed: false,
+    runStatus: 'completed',
     canRetry: false,
     onRetry() {},
     onResourceClick() {},
@@ -289,7 +289,7 @@ test('historical final messages repair proven line fragments during rendering', 
       streamingReasoning: {},
       runDurationMs: null,
       runUsage: null,
-      runFailed: false,
+      runStatus: 'completed',
       canRetry: false,
       onRetry() {},
       onResourceClick() {},
@@ -342,4 +342,43 @@ test('browser traces distinguish real search navigation from source reads', () =
     runActive: false,
   })
   assert.doesNotMatch(other, /搜索网页/)
+})
+
+test('group expansion contains canonical text results without nested call disclosures', () => {
+  const html = render({
+    items: [
+      {
+        message: { id: 'group', content: '', reasoning: '' },
+        toolCalls: ['a', 'b'].map((path) => ({
+          ...call(path, 'file.read', path),
+          output: { content: '正文 ' + path },
+        })),
+      },
+    ],
+    streaming: {},
+    streamingReasoning: {},
+    runActive: false,
+  })
+  assert.match(html, /正文 a/)
+  assert.match(html, /正文 b/)
+  assert.doesNotMatch(html, /aria-expanded/)
+})
+
+test('failed and cancelled calls keep explicit status text outside groups', () => {
+  const html = render({
+    items: [
+      {
+        message: { id: 'terminal', content: '', reasoning: '' },
+        toolCalls: [
+          call('f', 'file.read', 'a', 'failed'),
+          call('c', 'file.read', 'b', 'cancelled'),
+        ],
+      },
+    ],
+    streaming: {},
+    streamingReasoning: {},
+    runActive: false,
+  })
+  assert.match(html, /trace-status">失败/)
+  assert.match(html, /trace-status">已取消/)
 })

@@ -1,19 +1,18 @@
 import { RunPerformanceDetails } from './RunPerformanceDetails'
 import { RunActivityStatus } from './RunActivityStatus'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type {
   Delegation,
   ResourceLink,
   Usage,
   RunPerformance,
+  Run,
 } from '@reflexion-os-studio/runtime-client'
-import { ChevronIcon } from '../../../ui/icons'
 import type { RunActivity } from '../../../hooks/session/useRunActivity'
 import { AssistantMessage } from '../message/AssistantMessage'
 import { RunProcess, type ProcessItem } from './RunProcess'
 import { ChangedFiles, aggregateChangedFiles } from './ChangedFiles'
 import { DelegationList, type DelegationAttention } from './DelegationList'
-import { formatRetryLabel, useRetryCountdown } from './useRetryCountdown'
 
 interface RunBlockProps {
   processItems: ProcessItem[]
@@ -27,8 +26,7 @@ interface RunBlockProps {
   runDurationMs: number | null
   runUsage: Usage | null
   runPerformance?: RunPerformance | null
-  /** Run 最终状态为 failed（非进行中）时用“运行失败”替代“处理完成”。 */
-  runFailed: boolean
+  runStatus?: Run['status']
   /** 该 Run 的失败事件（含错误码与完整错误信息）；无失败或无记录时为 null。 */
   failureDetail?: string | null
   canRetry: boolean
@@ -52,8 +50,16 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
     () => aggregateChangedFiles(props.processItems, props.finalItem),
     [props.processItems, props.finalItem],
   )
-  const [open, setOpen] = useState(props.runActive)
-  const previousActive = useRef<boolean | null>(null)
+  // 用户操作后保留展开偏好；仅未操作的过程跟随运行状态自动展开/收起。
+  const [openOverride, setOpenOverride] = useState<boolean | null>(null)
+  const open = openOverride ?? props.runActive
+  const calls = useMemo(
+    () => [
+      ...props.processItems.flatMap((item) => item.toolCalls),
+      ...(props.finalItem?.toolCalls ?? []),
+    ],
+    [props.processItems, props.finalItem],
+  )
   const processItems = useMemo(() => {
     if (props.finalItem === null) return props.processItems
     const reasoning =
@@ -81,57 +87,28 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
   }, [props.finalItem, props.streamingReasoning])
   const hasProcess = processItems.length > 0
 
-  useEffect(() => {
-    const wasActive = previousActive.current
-    previousActive.current = props.runActive
-    if (wasActive === null || wasActive !== props.runActive) {
-      setOpen(props.runActive)
-    }
-  }, [props.runActive])
-
-  // 活重试的倒计时：由事件携带的退避时长与本地起始时间戳换算剩余秒数。
-  // 倒计时随流内联在 AssistantMessage 正文断点处；顶部标签只表达阶段，
-  // 仅在无 finalItem 承载内联指示时（第 2 轮请求建立即重试）由本块回退行
-  // 展示并挂心跳（有 finalItem 时把 retry 置空，避免与子组件双计时）。
-  const retry = props.finalItem ? undefined : props.runActivity?.retry
-  const retryCountdown = useRetryCountdown(retry)
-  const retryLabel = formatRetryLabel(retry, retryCountdown)
-  const label = props.runActive
-    ? '正在处理…'
-    : props.runFailed
-      ? '运行失败'
-      : props.runDurationMs !== null
-        ? `工作了 ${formatDuration(props.runDurationMs)}`
-        : '处理完成'
-
   return (
     <div className="run-block">
-      {/* 兜底：无 finalItem 承载内联重试指示时（第 2 轮请求建立即重试），
-          在块顶部展示重试状态行，保证重试状态始终可见。 */}
-      {!props.finalItem && props.runActive && retryLabel !== null && (
+      {(hasProcess || props.runActive) && (
         <div className="run-process">
-          <span className="run-process-label shimmer">{retryLabel}</span>
-        </div>
-      )}
-      {hasProcess && (
-        <div className="run-process">
-          <button
-            type="button"
-            className="run-process-toggle"
-            aria-expanded={open}
-            onClick={() => setOpen((current) => !current)}
-          >
-            <span
-              className={`run-process-label${props.runActive ? ' shimmer' : ''}`}
+          <RunActivityStatus
+            active={props.runActive}
+            status={props.runStatus}
+            activity={props.runActivity}
+            calls={calls}
+            delegations={props.delegations}
+            attention={props.delegationAttention}
+            durationMs={props.runDurationMs}
+            hasProcess={hasProcess}
+            open={open}
+            onToggle={() => setOpenOverride(!open)}
+          />
+          {hasProcess && open && (
+            <div
+              className="run-process-body"
+              onClickCapture={() => setOpenOverride(true)}
+              onFocusCapture={() => setOpenOverride(true)}
             >
-              {label}
-            </span>
-            <span className={`run-process-chevron${open ? ' open' : ''}`}>
-              <ChevronIcon />
-            </span>
-          </button>
-          {open && (
-            <div className="run-process-body">
               <RunProcess
                 items={processItems}
                 streaming={props.streaming}
@@ -154,13 +131,7 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
           message={props.finalItem.message}
           toolCalls={props.finalItem.toolCalls}
           hideReasoning={true}
-          hideActivity={
-            props.runActivity?.phase === 'waiting' ||
-            props.runActivity?.phase === 'preparing_tool' ||
-            props.delegations.some(
-              (item) => item.status === 'pending' || item.status === 'running',
-            )
-          }
+          hideActivity={true}
           runActive={props.runActive}
           runActivity={props.runActivity}
           streamingText={props.streaming[props.finalItem.message.id]}
@@ -175,11 +146,6 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
           onResourceClick={props.onResourceClick}
         />
       )}
-      <RunActivityStatus
-        active={props.runActive}
-        activity={props.runActivity}
-        delegations={props.delegations}
-      />
       {!props.runActive && (
         <RunPerformanceDetails metrics={props.runPerformance} />
       )}
@@ -191,15 +157,4 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
       />
     </div>
   )
-}
-
-function formatDuration(ms: number): string {
-  const seconds = Math.max(0, Math.round(ms / 1000))
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  const secs = seconds % 60
-  if (hours > 0) return `${hours} 小时 ${minutes} 分`
-  if (minutes > 0)
-    return secs > 0 ? `${minutes} 分 ${secs} 秒` : `${minutes} 分`
-  return `${secs} 秒`
 }

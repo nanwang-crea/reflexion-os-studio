@@ -94,7 +94,7 @@ export function ChatBlockView({
           }
           runUsage={run?.usage ?? null}
           runPerformance={run?.performance}
-          runFailed={run?.status === 'failed'}
+          runStatus={run?.status}
           failureDetail={failureDetail?.errorMessage ?? null}
           canRetry={
             lastRetryableRun !== undefined &&

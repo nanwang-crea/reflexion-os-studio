@@ -41,7 +41,7 @@ interface AssistantMessageProps {
   runActivity?: RunActivity
   /** reasoning 已在 Run 过程时间线中展示时隐藏，最终消息只保留正文。 */
   hideReasoning?: boolean
-  /** A concrete Run status replaces the generic spinner and stale text caret. */
+  /** Run 主状态行承载等待与重试提示；仅作答阶段保留正文光标。 */
   hideActivity?: boolean
   /** 该消息的流式正文增量缓存；undefined 表示不在本次流式窗口内。 */
   streamingText: string | undefined
@@ -97,9 +97,11 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
     [structuredParts, props.message.content],
   )
   const reasoningText = props.streamingReasoning ?? props.message.reasoning
-  // 正文流式光标：只看该消息是否仍在流式增量（不参与阶段判断）。
+  // Run 统一展示阶段状态时，正文光标只在当前作答阶段出现。
   const answerStreaming =
-    props.runActive && !props.hideActivity && props.streamingText !== undefined
+    props.runActive &&
+    props.streamingText !== undefined &&
+    (!props.hideActivity || props.runActivity?.phase === 'answering')
   // Run 级阶段由事件驱动（runActivity），不再靠内容有无猜测阶段。
   // 连接 Provider 后首个增量到达前的空窗：用呼吸点告知“没有卡住”；
   // Provider 重试期间改由本组件的内联重试状态行表达，避免双状态指示。
@@ -116,8 +118,11 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
 
   // 活重试的内联状态行：随流断点显示（message.reset 清空正文后落在正文位置），
   // 恢复后 delta 事件覆盖 runActivity.retry 随之自动消失。
-  // 倒计时心跳只挂在本组件（AGENTS.md §11），不由顶层 tick 驱动整棵会话树。
-  const retry = props.runActivity?.retry
+  // 独立消息在此计时；RunBlock 内由主状态行统一计时，避免双心跳。
+  const retry =
+    props.runActive && !props.hideActivity
+      ? props.runActivity?.retry
+      : undefined
   const retryCountdown = useRetryCountdown(retry)
   const retryLabel = formatRetryLabel(retry, retryCountdown)
 
