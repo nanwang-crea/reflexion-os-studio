@@ -1,3 +1,5 @@
+import { RunFinalizer } from './run/run-finalizer.js'
+import { createRunExecutionState } from './run/run-state.js'
 import { createRunToolRuntime } from './run/tool-runtime.js'
 export { resolveWorkspaceRoot } from './run/tool-runtime.js'
 import type { RunPermissions } from './delegation/live-permissions.js'
@@ -152,44 +154,56 @@ export class RunLauncher {
       run.id,
       () => input.resolvePermissions?.().permissionPreset ?? preset,
     )
-    const settings = input.runSettings ?? this.deps.store.agentSettings.get()
-    const provider: ProviderRuntimeConfig = {
-      baseUrl: profile.baseUrl,
-      apiKey,
-      model,
-      apiFormat: profile.apiFormat,
-      headers: profile.headers,
-      ...sampling,
-      ...(profile.reasoningEffort != null
-        ? { reasoningEffort: profile.reasoningEffort }
-        : {}),
-      ...(profile.contextWindow !== null
-        ? { contextWindow: profile.contextWindow }
-        : {}),
-      ...(profile.contextBudget !== null
-        ? { contextBudget: profile.contextBudget }
-        : {}),
-      ...(settings.requestBackoffInitialSec != null
-        ? { retryBackoffInitialMs: settings.requestBackoffInitialSec * 1000 }
-        : {}),
-      ...(settings.requestBackoffMaxSec != null
-        ? { retryBackoffMaxMs: settings.requestBackoffMaxSec * 1000 }
-        : {}),
-      ...(settings.requestRetries !== null
-        ? { maxRetries: settings.requestRetries }
-        : {}),
-      ...(settings.requestTimeoutSec !== null
-        ? { timeoutMs: settings.requestTimeoutSec * 1000 }
-        : {}),
+    let failureDelivered = false
+    const onFailure = (error: Error): void => {
+      if (failureDelivered) return
+      failureDelivered = true
+      try {
+        input.onFailure?.(error)
+      } catch {
+        process.stderr.write('[runtime] Run failure callback failed\n')
+      }
     }
-    const { registry, gate, workspaceRoot } = createRunToolRuntime(
-      this.deps,
-      input,
-      preset,
-    )
-    const sessionId = run.sessionId
-    void this.deps.runner
-      .execute({
+    let enteredRunner = false
+    void (async () => {
+      const settings = input.runSettings ?? this.deps.store.agentSettings.get()
+      const provider: ProviderRuntimeConfig = {
+        baseUrl: profile.baseUrl,
+        apiKey,
+        model,
+        apiFormat: profile.apiFormat,
+        headers: profile.headers,
+        ...sampling,
+        ...(profile.reasoningEffort != null
+          ? { reasoningEffort: profile.reasoningEffort }
+          : {}),
+        ...(profile.contextWindow !== null
+          ? { contextWindow: profile.contextWindow }
+          : {}),
+        ...(profile.contextBudget !== null
+          ? { contextBudget: profile.contextBudget }
+          : {}),
+        ...(settings.requestBackoffInitialSec != null
+          ? { retryBackoffInitialMs: settings.requestBackoffInitialSec * 1000 }
+          : {}),
+        ...(settings.requestBackoffMaxSec != null
+          ? { retryBackoffMaxMs: settings.requestBackoffMaxSec * 1000 }
+          : {}),
+        ...(settings.requestRetries !== null
+          ? { maxRetries: settings.requestRetries }
+          : {}),
+        ...(settings.requestTimeoutSec !== null
+          ? { timeoutMs: settings.requestTimeoutSec * 1000 }
+          : {}),
+      }
+      const { registry, gate, workspaceRoot } = createRunToolRuntime(
+        this.deps,
+        input,
+        preset,
+      )
+      const sessionId = run.sessionId
+      enteredRunner = true
+      await this.deps.runner.execute({
         run,
         provider,
         buildHistory: (signal) => {
@@ -234,17 +248,35 @@ export class RunLauncher {
         onModelResult: input.onModelResult,
         persistResult: input.persistResult,
         onResult: input.onResult,
-        onFailure: input.onFailure,
+        onFailure,
         onCancel: input.onCancel,
         childTokenBudget: input.childTokenBudget,
       })
+    })()
       // Finalization can itself fail; never leave a delegating parent waiting.
-      .catch(() => {
+      .catch((error: unknown) => {
+        if (!enteredRunner) {
+          try {
+            new RunFinalizer(this.deps.store).finalize(
+              { ...input, onFailure, state: createRunExecutionState() },
+              {
+                status: 'failed',
+                errorCode: 'run_setup_failed',
+                errorMessage:
+                  error instanceof Error ? error.message : 'Run setup failed',
+                pendingMessage: null,
+              },
+            )
+            return
+          } catch {
+            process.stderr.write('[runtime] Run setup finalization failed\n')
+          }
+        }
         process.stderr.write(
           `[runtime] Run execution escaped (run:${run.id})\n`,
         )
         try {
-          input.onFailure?.(new Error('Run 执行或终态收尾异常，请检查运行日志'))
+          onFailure(new Error('Run 执行或终态收尾异常，请检查运行日志'))
         } catch {
           process.stderr.write(
             `[runtime] Run failure callback failed (run:${run.id})\n`,
@@ -252,7 +284,11 @@ export class RunLauncher {
         }
       })
       .finally(() => {
-        this.deps.browser?.finishRun(run.id, controller.signal.aborted)
+        try {
+          this.deps.browser?.finishRun(run.id, controller.signal.aborted)
+        } catch {
+          process.stderr.write('[runtime] Browser Run cleanup failed\n')
+        }
         parentSignal?.removeEventListener('abort', abortChild)
         this.streams.delete(run.id)
         this.runDepth.delete(run.id)
@@ -263,7 +299,11 @@ export class RunLauncher {
         } catch {
           process.stderr.write('[runtime] Skill resource cleanup failed\n')
         }
-        this.hooks.onRunSettled(run.sessionId)
+        try {
+          this.hooks.onRunSettled(run.sessionId)
+        } catch {
+          process.stderr.write('[runtime] Run settled hook failed\n')
+        }
       })
   }
 }

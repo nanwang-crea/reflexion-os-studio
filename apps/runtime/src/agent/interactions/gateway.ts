@@ -61,8 +61,15 @@ export class InteractionGateway {
     return new Promise<UserQuestionAnswer[]>((resolve, reject) => {
       const onAbort = (): void => {
         this.pending.delete(interactionId)
-        this.store.interactions.removePending(interactionId)
-        reject(new DOMException('The operation was aborted.', 'AbortError'))
+        try {
+          this.store.interactions.removePending(interactionId)
+        } catch {
+          process.stderr.write(
+            '[runtime] interaction abort persistence failed\n',
+          )
+        } finally {
+          reject(new DOMException('The operation was aborted.', 'AbortError'))
+        }
       }
       if (input.signal.aborted) {
         onAbort()
@@ -76,32 +83,40 @@ export class InteractionGateway {
         settle: (answers) => {
           input.signal.removeEventListener('abort', onAbort)
           this.pending.delete(interactionId)
-          this.store.runs.setIntermediateStatus(input.runId, 'running')
-          this.store.toolCalls.markStatus(input.toolCallId, 'running')
-          const turn = this.store.turnExecutions.latestForRun(input.runId)
-          if (turn !== null && turn.completedAt === null) {
-            this.store.turnExecutions.transition(turn.id, 'executing_tools', {
-              pendingInteractionId: null,
-            })
-          }
-          input.emitter.next({
-            type: 'interaction.resolved',
-            interactionId,
-            toolCallId: input.toolCallId,
-            answers,
-          })
           resolve(answers)
+          try {
+            input.emitter.next({
+              type: 'interaction.resolved',
+              interactionId,
+              toolCallId: input.toolCallId,
+              answers,
+            })
+          } catch {
+            process.stderr.write(
+              '[runtime] interaction resolved notification failed\n',
+            )
+          }
         },
       })
-      input.emitter.next({
-        type: 'interaction.required',
-        interactionId,
-        toolCallId: input.toolCallId,
-        sessionId: input.sessionId,
-        kind: input.kind ?? 'user_question',
-        questions: input.questions,
-        ...(agent ? { agent } : {}),
-      })
+      try {
+        input.emitter.next({
+          type: 'interaction.required',
+          interactionId,
+          toolCallId: input.toolCallId,
+          sessionId: input.sessionId,
+          kind: input.kind ?? 'user_question',
+          questions: input.questions,
+          ...(agent ? { agent } : {}),
+        })
+      } catch (error) {
+        input.signal.removeEventListener('abort', onAbort)
+        this.pending.delete(interactionId)
+        try {
+          this.store.interactions.removePending(interactionId)
+        } finally {
+          reject(error)
+        }
+      }
     })
   }
 
@@ -119,7 +134,17 @@ export class InteractionGateway {
     }
     const entry = this.pending.get(interactionId)
     if (entry) {
-      this.store.interactions.resolve(interactionId, answers)
+      this.store.transaction(() => {
+        this.store.interactions.resolve(interactionId, answers)
+        this.store.runs.setIntermediateStatus(entry.runId, 'running')
+        this.store.toolCalls.markStatus(entry.toolCallId, 'running')
+        const turn = this.store.turnExecutions.latestForRun(entry.runId)
+        if (turn !== null && turn.completedAt === null) {
+          this.store.turnExecutions.transition(turn.id, 'executing_tools', {
+            pendingInteractionId: null,
+          })
+        }
+      })
       entry.settle(answers)
       return { accepted: true, recovered: null }
     }

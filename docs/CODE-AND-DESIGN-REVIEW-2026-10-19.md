@@ -211,3 +211,15 @@ CI Rust 缓存还没有包含 `apps/desktop/src-tauri/target`。这可以解释�
 第四轮验证：格式、lint、根级与前端类型检查通过；完整 Runtime 1049 项通过、17 项按既有条件跳过，桌面 100 项通过。本轮未修改 Rust 或审批/权限策略，不重跑 Rust 全套、不宣称 Windows/Linux 真机完成。
 
 第四轮 packages 构建与自包含 macOS debug `.app` 打包、嵌入前端资源检查通过；未覆盖用户正在运行的 release 应用。
+
+## 第五轮复核与修复（2026-10-20）
+
+- **用户回答的状态更新缺少原子性**：原先先将交互标为 resolved，再从内存移除等待项，随后推进 Run/Tool/Turn；中途写入失败会留下答案已消耗但运行未恢复的状态。现在将所有持久化变更纳入同一事务，提交成功后才移除内存等待并结算 Promise；失败保持可重试的原等待状态。
+- **交互通知和取消异常导致悬挂**：resolved 通知先于 Promise 结算，通知器抛错会阻断结算；required 通知失败可能遗留未送达的问题与 abort 监听；取消时删除交互失败也会阻断 Promise 拒绝。现分别确保已接受答案正常结算、未送达问题清理、取消 Promise 必定拒绝，不吞掉原始 required 通知错误。
+- **Run 准备阶段绕过正常收尾**：工具环境或设置读取在 Runner 启动前抛错时，原代码可能遗留 running Run 和取消句柄。现将准备阶段纳入异步异常路径，使用现有 Finalizer 记录 run_setup_failed 并收尾 pending 消息与工具；失败回调只投递一次。浏览器清理、Skill 清理与 settled hook 相互隔离，单项抛错不阻断运行注册表和父信号监听的释放。
+
+新增回归覆盖回答事务中不同写入点失败、resolved/required 通知异常、取消时持久化异常，以及准备阶段失败与清理/回调异常的组合。定向 19 项通过，新增用例纳入 Runtime 全套与跨平台 CI；未新增权限限制或改动审批策略。
+
+第五轮验证：格式、lint、根级与前端类型检查通过；完整 Runtime 1057 项通过、17 项按既有条件跳过。本轮只修改 Runtime，不重复执行未变化的桌面 UI / Rust 全套；Windows/Linux 未真机验收。
+
+第五轮 packages 构建、自包含 macOS debug `.app` 打包与嵌入前端资源检查通过；用户现有 release 应用未被覆盖。
