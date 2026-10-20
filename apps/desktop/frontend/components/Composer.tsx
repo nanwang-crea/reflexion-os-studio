@@ -6,7 +6,6 @@ import { useComposerAttachments } from './composer/useComposerAttachments'
 import { useComposerFileDrop } from './composer/useComposerFileDrop'
 import { FileAttachments } from './composer/FileAttachments'
 import { isComposing } from '../lib/keyboard'
-import { Select } from './forms/Select'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
   AgentTemplate,
@@ -16,23 +15,11 @@ import type {
   ApprovalOverride,
   PermissionPreset,
 } from '@reflexion-os-studio/runtime-client'
-import {
-  PERMISSION_PRESET_HINTS,
-  PERMISSION_PRESET_LABELS,
-} from '../hooks/permissions/usePermissionPreset'
-import {
-  ChevronIcon,
-  PlusIcon,
-  SendIcon,
-  ShieldIcon,
-  StopIcon,
-} from '../ui/icons'
-import { ComposerRunConfig } from './ComposerRunConfig'
+import { ComposerToolbar } from './composer/ComposerToolbar'
 
-import {
-  ModelSelector,
-  type ComposerModelOption,
-  type ReasoningSelection,
+import type {
+  ComposerModelOption,
+  ReasoningSelection,
 } from './composer/ModelSelector'
 export type { ComposerModelOption } from './composer/ModelSelector'
 
@@ -45,7 +32,7 @@ export interface ComposerAdvancedState {
   onOpenDanger: () => void
 }
 
-interface ComposerProps {
+export interface ComposerProps {
   placeholder: string
   disabled?: boolean
   /**
@@ -99,8 +86,6 @@ export function Composer(props: ComposerProps): React.JSX.Element {
   const [slashIndex, setSlashIndex] = useState(0)
   const [slashDismissed, setSlashDismissed] = useState(false)
   const [agentTemplateId, setAgentTemplateId] = useState('')
-  const [plusOpen, setPlusOpen] = useState(false)
-  const plusMenuRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const busy = props.busy ?? false
@@ -108,10 +93,6 @@ export function Composer(props: ComposerProps): React.JSX.Element {
   // 按钮在停止/发送间切换，发送在 busy 下的语义是入队排队。
   const hasDraft = draft.trim().length > 0 || attachments.images.length > 0
   const showStop = busy && !hasDraft
-  const showModelSelect =
-    props.modelOptions !== undefined &&
-    props.modelOptions.length > 0 &&
-    props.onModelChange !== undefined
   const enabledAgentTemplates = useMemo(
     () => props.agentTemplates?.filter((template) => template.enabled) ?? [],
     [props.agentTemplates],
@@ -125,26 +106,6 @@ export function Composer(props: ComposerProps): React.JSX.Element {
       setAgentTemplateId('')
     }
   }, [agentTemplateId, enabledAgentTemplates])
-
-  useEffect(() => {
-    if (!plusOpen) return
-    const onPointerDown = (event: MouseEvent): void => {
-      if (!plusMenuRef.current?.contains(event.target as Node)) {
-        setPlusOpen(false)
-      }
-    }
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') {
-        setPlusOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [plusOpen])
 
   const slashMatches = useMemo(() => {
     if (props.skills === undefined) return []
@@ -337,141 +298,18 @@ export function Composer(props: ComposerProps): React.JSX.Element {
           }
         }}
       />
-      <div className="composer-bar">
-        <div className="composer-controls">
-          <div className="composer-plus-menu" ref={plusMenuRef}>
-            <button
-              type="button"
-              className="composer-plus-trigger"
-              aria-label="添加功能"
-              aria-haspopup="menu"
-              aria-expanded={plusOpen}
-              disabled={props.disabled || sending}
-              title="添加附件、上下文或技能"
-              onClick={() => setPlusOpen((value) => !value)}
-            >
-              <PlusIcon size={17} />
-            </button>
-            {plusOpen && (
-              <div className="composer-plus-panel" role="menu">
-                <button
-                  type="button"
-                  className="composer-plus-item actionable"
-                  role="menuitem"
-                  disabled={props.disabled || sending}
-                  onClick={() => {
-                    setPlusOpen(false)
-                    fileInputRef.current?.click()
-                  }}
-                >
-                  <span className="composer-plus-symbol">⌕</span>
-                  <span>添加文件</span>
-                </button>
-                <div className="composer-plus-item" role="menuitem">
-                  <span className="composer-plus-symbol">@</span>
-                  <span>使用 @ 添加上下文</span>
-                </div>
-                <div className="composer-plus-item" role="menuitem">
-                  <span className="composer-plus-symbol">/</span>
-                  <span>使用 / 选择能力</span>
-                </div>
-                <div className="composer-plus-item" role="menuitem">
-                  <span className="composer-plus-symbol">$</span>
-                  <span>使用 $ 选择技能</span>
-                </div>
-                {(props.advanced || enabledAgentTemplates.length > 0) && (
-                  <>
-                    <div className="composer-plus-divider" />
-                    <ComposerRunConfig
-                      advanced={props.advanced}
-                      agentTemplates={enabledAgentTemplates}
-                      agentTemplateId={agentTemplateId}
-                      onAgentTemplateChange={setAgentTemplateId}
-                    />
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-          {props.permissionValue !== undefined && props.onPermissionChange && (
-            <label
-              className="composer-select permission"
-              title={
-                props.permissionValue !== undefined
-                  ? PERMISSION_PRESET_HINTS[props.permissionValue]
-                  : ''
-              }
-            >
-              <ShieldIcon />
-              <Select
-                aria-label="权限档位"
-                value={props.permissionValue}
-                onValueChange={(value) =>
-                  props.onPermissionChange?.(value as PermissionPreset)
-                }
-              >
-                <option value="workspace-read">
-                  {PERMISSION_PRESET_LABELS['workspace-read']}
-                </option>
-                <option value="workspace-write">
-                  {PERMISSION_PRESET_LABELS['workspace-write']}
-                </option>
-                <option value="workspace-full">
-                  {PERMISSION_PRESET_LABELS['workspace-full']}
-                </option>
-              </Select>
-              <ChevronIcon />
-            </label>
-          )}
-          {agentTemplateId !== '' && (
-            <button
-              type="button"
-              className="composer-delegation-chip"
-              title="清除本次任务的委派模板"
-              onClick={() => setAgentTemplateId('')}
-            >
-              委派：
-              {enabledAgentTemplates.find(
-                (template) => template.id === agentTemplateId,
-              )?.name ?? agentTemplateId}
-              <span aria-hidden>×</span>
-            </button>
-          )}
-          <span className="bar-spacer" />
-          {showModelSelect && (
-            <ModelSelector
-              options={props.modelOptions ?? []}
-              selectedKey={props.selectedModelKey ?? null}
-              onModelChange={(key) => props.onModelChange?.(key)}
-              reasoning={props.reasoningSelection}
-            />
-          )}
-          {props.modelOptions !== undefined &&
-            props.modelOptions.length === 0 && (
-              <span className="composer-no-model">未配置模型</span>
-            )}
-        </div>
-        {showStop && props.onStop ? (
-          <button
-            className="composer-stop"
-            aria-label="停止"
-            title="停止当前回复（队列将暂停，稍后需确认继续发送）"
-            onClick={() => void props.onStop?.()}
-          >
-            <StopIcon />
-          </button>
-        ) : (
-          <button
-            className="composer-send"
-            aria-label="发送"
-            title={busy ? '正在回复，发送的消息将进入队列' : '发送'}
-            disabled={props.disabled || !hasDraft || sending}
-            onClick={() => void submit()}
-          >
-            <SendIcon />
-          </button>
-        )}
-      </div>
+      <ComposerToolbar
+        {...props}
+        busy={busy}
+        enabledAgentTemplates={enabledAgentTemplates}
+        agentTemplateId={agentTemplateId}
+        onAgentTemplateChange={setAgentTemplateId}
+        hasDraft={hasDraft}
+        sending={sending}
+        showStop={showStop}
+        onChooseFiles={() => fileInputRef.current?.click()}
+        onSubmit={() => void submit()}
+      />
     </div>
   )
 }

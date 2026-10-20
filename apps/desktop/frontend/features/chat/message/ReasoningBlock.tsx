@@ -6,7 +6,7 @@ interface ReasoningBlockProps {
   active?: boolean
 }
 
-const SUMMARY_MAX_CHARS = 180
+const SUMMARY_MAX_CHARS = 72
 
 function summarize(text: string): string {
   const compact = text.replace(/\s+/g, ' ').trim()
@@ -23,6 +23,7 @@ export function ReasoningBlock(props: ReasoningBlockProps): React.JSX.Element {
       <button
         type="button"
         className={`reasoning-toggle${props.active ? ' active' : ''}`}
+        aria-label={open ? '收起思考过程' : '展开思考过程'}
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
       >

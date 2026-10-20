@@ -6,6 +6,7 @@ import { SparkIcon } from '../ui/icons'
 import type { ComposerAdvancedState } from './Composer'
 
 interface ComposerRunConfigProps {
+  disabled?: boolean
   advanced?: ComposerAdvancedState
   agentTemplates: AgentTemplate[]
   agentTemplateId: string
@@ -74,9 +75,11 @@ export function ComposerRunConfig(
       <button
         ref={triggerRef}
         type="button"
+        disabled={props.disabled}
         className={`composer-run-config-trigger${
           props.advanced?.dangerActive ? ' danger-on' : ''
         }`}
+        aria-label="运行配置"
         aria-haspopup="dialog"
         aria-expanded={open}
         title="运行配置"

@@ -382,3 +382,28 @@ test('failed and cancelled calls keep explicit status text outside groups', () =
   assert.match(html, /trace-status">失败/)
   assert.match(html, /trace-status">已取消/)
 })
+
+test('search summaries show the expression and scope while keeping full parameters in details', () => {
+  const html = render({
+    items: [
+      {
+        message: { id: 'search', content: '', reasoning: '' },
+        toolCalls: [
+          {
+            ...call('grep', 'file.grep', ''),
+            args: {
+              pattern: 'reasoning',
+              glob: 'apps/runtime/**/*.ts',
+              maxResults: 50,
+            },
+          },
+        ],
+      },
+    ],
+    streaming: {},
+    streamingReasoning: {},
+    runActive: false,
+  })
+  assert.match(html, /reasoning · apps\/runtime\/\*\*\/\*\.ts/)
+  assert.doesNotMatch(html, /maxResults/)
+})

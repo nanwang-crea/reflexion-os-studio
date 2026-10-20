@@ -1,6 +1,11 @@
-import { useState } from 'react'
-import type { ReasoningEffort } from '@reflexion-os-studio/runtime-client'
+import { Profiler, useRef, useState } from 'react'
+import type {
+  Project,
+  Session,
+  ReasoningEffort,
+} from '@reflexion-os-studio/runtime-client'
 import { createRoot } from 'react-dom/client'
+import { Composer } from '../../frontend/components/Composer'
 import { Sidebar } from '../../frontend/components/Sidebar'
 import { TopBar } from '../../frontend/components/TopBar'
 import { LandingView } from '../../frontend/features/landing/LandingView'
@@ -21,26 +26,77 @@ import '../../frontend/styles/themes.css'
 const noop = () => {}
 const done = async () => {}
 const query = new URLSearchParams(location.search)
+const timestamp = '2026-10-20T00:00:00.000Z'
+const project: Project = {
+  id: 'project',
+  name: 'ReflexionOS Studio 长项目名称',
+  folderPath: '/synthetic/project',
+  createdAt: timestamp,
+  updatedAt: timestamp,
+}
+const session: Session = {
+  id: 'session',
+  projectId: project.id,
+  gitBranch: null,
+  title: '检查项目权限与聊天时间线的完整长标题',
+  status: 'active',
+  executionMode: 'execute',
+  createdAt: timestamp,
+  updatedAt: timestamp,
+}
+
 initializeTheme()
 setThemePreference(query.get('theme') === 'light' ? 'light' : 'dark')
 
 function Fixture() {
+  const releaseSend = useRef<(() => void) | null>(null)
+  const [sent, setSent] = useState('')
+  const [stopped, setStopped] = useState(false)
   const [modelKey, setModelKey] = useState('demo')
   const [effort, setEffort] = useState<ReasoningEffort | null>('high')
   const reasoning = query.get('reasoning')
   const [settings, setSettings] = useState(false)
   const [panel, setPanel] = useState(true)
+  if (query.has('busy-composer'))
+    return (
+      <div className="composer-wrap">
+        <Composer
+          placeholder="输入排队消息"
+          busy={!stopped}
+          onStop={() => setStopped(true)}
+          permissionValue="workspace-write"
+          onPermissionChange={noop}
+          advanced={{
+            approvalOverride: 'default',
+            onApprovalOverrideChange: noop,
+            dangerActive: false,
+            onOpenDanger: noop,
+          }}
+          onSend={async (content) => {
+            setSent(content)
+            if (query.has('hold-send'))
+              await new Promise<void>((resolve) => {
+                releaseSend.current = resolve
+              })
+          }}
+        />
+        <output aria-label="已加入队列的消息">{sent}</output>
+        {query.has('hold-send') && (
+          <button onClick={() => releaseSend.current?.()}>完成发送</button>
+        )}
+      </div>
+    )
   return (
     <div className="app-shell">
       <Sidebar
         open
         width={224}
         mode="chat"
-        projects={[]}
-        allSessions={[]}
+        projects={query.has('dense-sidebar') ? [project] : []}
+        allSessions={query.has('dense-sidebar') ? [session] : []}
         standaloneSessions={[]}
-        activeProjectId={null}
-        activeSessionId={null}
+        activeProjectId={query.has('dense-sidebar') ? project.id : null}
+        activeSessionId={query.has('dense-sidebar') ? session.id : null}
         creatingProject={false}
         view={settings ? 'settings' : 'chat'}
         systemReady
@@ -170,4 +226,15 @@ function Fixture() {
     </div>
   )
 }
-createRoot(document.getElementById('root')!).render(<Fixture />)
+createRoot(document.getElementById('root')!).render(
+  <Profiler
+    id="product-ui"
+    onRender={() => {
+      document.documentElement.dataset.uiCommits = String(
+        Number(document.documentElement.dataset.uiCommits ?? 0) + 1,
+      )
+    }}
+  >
+    <Fixture />
+  </Profiler>,
+)

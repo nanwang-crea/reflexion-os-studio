@@ -75,7 +75,7 @@ button.run-process-toggle:hover:not(:disabled) {
 .run-process-timeline {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 18px;
 }
 
 .run-process-part {
@@ -86,7 +86,8 @@ button.run-process-toggle:hover:not(:disabled) {
 
 .run-process-text {
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 14px;
+  line-height: 1.7;
 }
 
 .reasoning-block {
@@ -104,7 +105,7 @@ button.run-process-toggle:hover:not(:disabled) {
   background: transparent;
   color: var(--text-muted);
   text-align: left;
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
 }
 
@@ -167,6 +168,7 @@ button.run-process-toggle:hover:not(:disabled) {
 
 .reasoning-preview {
   min-width: 0;
+  max-width: 42ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -205,4 +207,9 @@ button.run-process-toggle:hover:not(:disabled) {
 .run-process-toggle:focus-visible {
   outline: 2px solid var(--accent-solid);
   outline-offset: 3px;
+}
+
+.run-process-part + .run-process-part {
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
 }

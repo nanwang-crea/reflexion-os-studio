@@ -102,9 +102,10 @@
   gap: 2px;
 }
 
-/* 行整体高亮，行尾操作按钮仅在悬停/激活时出现 */
+/* 行尾操作浮在标题上方，仅在悬停或键盘聚焦时占位。 */
 .project-row,
 .session-row {
+  position: relative;
   display: flex;
   align-items: center;
   border-radius: 8px;
@@ -185,6 +186,8 @@
 }
 
 .session-actions {
+  position: absolute;
+  right: 2px;
   display: flex;
   align-items: center;
   gap: 0;
@@ -250,15 +253,15 @@
   color: var(--text-muted);
   border-radius: 6px;
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.12s ease-in-out;
 }
 
 .project-row:hover .row-action,
-.project-row.active .row-action,
 .session-row:hover .row-action,
-.session-row.active .row-action,
 .row-action:focus-visible {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .row-action:hover:not(:disabled) {
@@ -302,8 +305,8 @@
 }
 
 .nested-list {
-  margin: 2px 0 6px 14px;
-  padding-left: 8px;
+  margin: 2px 0 6px 6px;
+  padding-left: 4px;
   border-left: 1px solid var(--border-subtle);
   /* 项目会话很多时列表过长：一次展示约 10 条，其余内部滚动下滑。
      355px ≈ 10 × (行高 19.5 + 上下 padding 14 + 间距 2) px。 */
@@ -341,6 +344,7 @@
 
 .row-label {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -404,4 +408,31 @@
 
 .nav-label {
   flex: 1;
+}
+
+.session-status:empty {
+  display: none;
+}
+
+.project-row > .row-action {
+  position: absolute;
+  right: 2px;
+  margin: 0;
+}
+.project-row > .row-action:nth-last-child(2) {
+  right: 28px;
+}
+.project-row > .row-action:nth-last-child(3) {
+  right: 54px;
+}
+.project-row:is(:hover, :focus-within) .project-select {
+  padding-right: 84px;
+}
+.session-row:is(:hover, :focus-within) .session-main {
+  padding-right: 58px;
+}
+.project-row:focus-within .row-action,
+.session-row:focus-within .row-action {
+  opacity: 1;
+  pointer-events: auto;
 }

@@ -208,3 +208,28 @@ test('旧历史页不会写入其他会话或覆盖已移动的分页游标', as
   )
   assert.equal(data.nextBefore, null)
 })
+
+test('workspace starts closed without a saved preference, honors explicit choices and opens files on demand', () => {
+  for (const [stored, expected] of [
+    [null, false],
+    ['0', false],
+    ['1', true],
+  ]) {
+    globalThis.localStorage = {
+      getItem: (key) => (key === 'reflexion.workspacePanel' ? stored : null),
+    }
+    const h = harness()
+    const render = () => h.render(() => useWorkspacePanel('project-a'))
+    let state = render()
+    assert.equal(state.workspaceOpen, expected)
+    state.setWorkspaceOpen(true)
+    assert.equal(render().workspaceOpen, true)
+    state.setWorkspaceOpen(false)
+    state.openFile('a.ts')
+    state = render()
+    assert.equal(state.workspaceOpen, true)
+    state.setWorkspaceOpen(false)
+    state.openDiff('b.ts')
+    assert.equal(render().workspaceOpen, true)
+  }
+})

@@ -191,7 +191,7 @@ export function ChatsPanel(props: ChatsPanelProps): React.JSX.Element {
                 <div className={`project-row${active ? ' active' : ''}`}>
                   <button
                     className="row project-select"
-                    title={project.folderPath || '未关联文件夹'}
+                    title={`${project.name}\n${project.folderPath || '未关联文件夹'}`}
                     aria-expanded={expanded}
                     onClick={() => handleProjectRowClick(project.id)}
                   >

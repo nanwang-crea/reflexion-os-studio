@@ -216,6 +216,134 @@ test('composer actions remain aligned in both themes and narrow split layouts', 
         state === 'loading' ? /加载中/ : /加载失败/,
       )
     }
+    // 隐藏操作不再挤压长标题；键盘聚焦后仍可访问原有操作。
+    await page.goto(`${url}?theme=light&dense-sidebar=1`)
+    await page.locator('.nested-list .session-main').waitFor()
+    await page.mouse.move(900, 100)
+    const label = page.locator('.nested-list .row-label')
+    const idleWidth = (await label.boundingBox()).width
+    assert.ok(idleWidth > 150)
+    const title = '检查项目权限与聊天时间线的完整长标题'
+    assert.equal(
+      await page.locator('.session-main').getAttribute('title'),
+      title,
+    )
+    assert.match(
+      await page.locator('.project-select').getAttribute('title'),
+      /ReflexionOS Studio 长项目名称/,
+    )
+    await page.locator('.session-main').focus()
+    assert.ok((await label.boundingBox()).width < idleWidth)
+    await page.keyboard.press('Tab')
+    await page.waitForFunction(
+      () => document.activeElement?.getAttribute('aria-label') === '重命名会话',
+    )
+    await page.keyboard.press('Enter')
+    await page.locator('.rename-input').waitFor()
+    await page.keyboard.press('Escape')
+    assert.equal(await page.locator('.rename-input').count(), 0)
+    if (process.env.UI_REVIEW_OUTPUT)
+      await page.screenshot({
+        path: join(process.env.UI_REVIEW_OUTPUT, 'sidebar-readable.png'),
+      })
+
+    // “＋”仅将可操作项暴露为菜单项，Escape 返回触发器。
+    await page.goto(`${url}?theme=dark&busy-composer=1`)
+    await page.getByRole('button', { name: '停止', exact: true }).waitFor()
+    const plus = page.getByRole('button', { name: '添加功能', exact: true })
+    await plus.focus()
+    await page.keyboard.press('Enter')
+    await page
+      .getByRole('menuitem', { name: '添加文件', exact: true })
+      .waitFor()
+    assert.equal(await page.getByRole('menuitem').count(), 1)
+    await page.getByText('快捷输入', { exact: true }).waitFor()
+    const menu = await page.locator('.composer-plus-panel').boundingBox()
+    assert.ok(menu.x >= 0 && menu.y >= 0 && menu.x + menu.width <= 940)
+    await page.keyboard.press('Escape')
+    await page.waitForFunction(
+      () => document.activeElement?.getAttribute('aria-label') === '添加功能',
+    )
+    await page.getByRole('button', { name: '运行配置', exact: true }).click()
+    await page.getByRole('dialog', { name: '运行配置', exact: true }).waitFor()
+    await page
+      .getByRole('checkbox', { name: '所有操作均询问', exact: false })
+      .waitFor()
+    await page.keyboard.press('Escape')
+    await page.waitForFunction(
+      () => document.activeElement?.getAttribute('aria-label') === '运行配置',
+    )
+    await page.locator('.composer textarea').fill('稍后处理这个任务')
+    await page.getByRole('button', { name: '加入队列', exact: true }).click()
+    await page
+      .getByLabel('已加入队列的消息', { exact: true })
+      .getByText('稍后处理这个任务', { exact: true })
+      .waitFor()
+    await page.getByRole('button', { name: '停止', exact: true }).waitFor()
+    for (const width of [600, 320]) {
+      await page.setViewportSize({ width, height: 700 })
+      await page.locator('.composer textarea').fill('继续排队')
+      assert.equal(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth > innerWidth,
+        ),
+        false,
+      )
+      const permissionBox = await page
+        .locator('.composer-select.permission')
+        .boundingBox()
+      const queueBox = await page
+        .getByRole('button', { name: '加入队列', exact: true })
+        .boundingBox()
+      assert.ok(permissionBox.x + permissionBox.width <= queueBox.x)
+      if (process.env.UI_REVIEW_OUTPUT && width === 320)
+        await page.screenshot({
+          path: join(process.env.UI_REVIEW_OUTPUT, 'composer-queue-narrow.png'),
+        })
+      await plus.click()
+      const bounds = await page.locator('.composer-plus-panel').boundingBox()
+      assert.ok(
+        bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= width,
+      )
+      await page.keyboard.press('Escape')
+    }
+    await page.getByRole('button', { name: '加入队列', exact: true }).click()
+    await page.getByRole('button', { name: '停止', exact: true }).click()
+    await page.getByRole('button', { name: '发送', exact: true }).waitFor()
+    await page.goto(`${url}?theme=dark&busy-composer=1&hold-send=1`)
+    await page.locator('.composer textarea').fill('发送中的消息')
+    await page.getByRole('button', { name: '加入队列', exact: true }).click()
+    await page.getByRole('button', { name: '运行配置', exact: true }).waitFor()
+    assert.equal(
+      await page
+        .getByRole('button', { name: '运行配置', exact: true })
+        .isDisabled(),
+      true,
+    )
+    assert.equal(
+      await page
+        .getByRole('button', { name: '添加功能', exact: true })
+        .isDisabled(),
+      true,
+    )
+    await page.getByRole('button', { name: '完成发送', exact: true }).click()
+    await page.getByRole('button', { name: '停止', exact: true }).waitFor()
+    assert.equal(
+      await page
+        .getByRole('button', { name: '运行配置', exact: true })
+        .isEnabled(),
+      true,
+    )
+    await page.waitForTimeout(200)
+    const commits = await page.locator('html').getAttribute('data-ui-commits')
+    await page.waitForTimeout(400)
+    assert.equal(
+      await page.locator('html').getAttribute('data-ui-commits'),
+      commits,
+      'closed menus must not keep committing React updates',
+    )
+    await page.setViewportSize({ width: 940, height: 860 })
+    await page.goto(`${url}?theme=dark`)
     await page.getByRole('button', { name: '设置', exact: true }).click()
     await page.getByRole('navigation', { name: '设置分类' }).waitFor()
     await page.getByRole('radio', { name: /^浅色/ }).check()

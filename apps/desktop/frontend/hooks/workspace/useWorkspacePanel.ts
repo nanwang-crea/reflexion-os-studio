@@ -51,7 +51,7 @@ export function useWorkspacePanel(
   projectId: string | null,
 ): WorkspacePanelState {
   const [workspaceOpen, setWorkspaceOpen] = useState(
-    () => localStorage.getItem('reflexion.workspacePanel') !== '0',
+    () => localStorage.getItem('reflexion.workspacePanel') === '1',
   )
   const [workspaceWidth, setWorkspaceWidth] = useState(() => {
     const stored = Number(localStorage.getItem('reflexion.workspaceWidth'))

@@ -1,4 +1,5 @@
 import { toolLabel } from '../tools/labels'
+import { summarizeToolArgs } from '../tools/summaries'
 import { useEffect, useRef, useState } from 'react'
 import type { JsonValue, ToolCall } from '@reflexion-os-studio/runtime-client'
 import type { RunPhase } from '../../../hooks/session/useRunActivity'
@@ -157,7 +158,7 @@ function ToolTraceItem(props: {
       >
         <span className={`trace-dot ${inFlight ? 'pulse' : ''}`} aria-hidden />
         <span className="trace-name">{label}</span>
-        <span className="trace-summary">{summarizeArgs(call.args)}</span>
+        <span className="trace-summary">{summarizeToolArgs(call)}</span>
         {showStatus && <span className="trace-status">{statusText}</span>}
       </button>
       {open && detail !== '' && <pre className="trace-detail">{detail}</pre>}
@@ -184,28 +185,6 @@ function formatDuration(ms: number): string {
   if (minutes > 0)
     return secs > 0 ? `${minutes} 分 ${secs} 秒` : `${minutes} 分`
   return `${secs} 秒`
-}
-
-/** 一行摘要：文件显示路径，shell 显示命令，其余回退参数 JSON。 */
-function summarizeArgs(args: JsonValue): string {
-  if (
-    typeof args === 'object' &&
-    args !== null &&
-    !Array.isArray(args) &&
-    typeof (args as Record<string, unknown>).path === 'string'
-  ) {
-    return (args as Record<string, string>).path
-  }
-  if (
-    typeof args === 'object' &&
-    args !== null &&
-    !Array.isArray(args) &&
-    typeof (args as Record<string, unknown>).command === 'string'
-  ) {
-    return (args as Record<string, string>).command
-  }
-  const text = JSON.stringify(args)
-  return text.length > 120 ? `${text.slice(0, 120)}…` : text
 }
 
 function formatArgs(args: JsonValue): string | null {
