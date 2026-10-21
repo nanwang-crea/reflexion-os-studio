@@ -13,7 +13,8 @@
 .right-surface {
   flex-shrink: 0;
   min-width: 0;
-  max-width: 70%;
+  /* 分栏时给聊天保留可用宽度；更窄的窗口由两侧平分。 */
+  max-width: min(70%, calc(100% - min(360px, 50%)));
 }
 .right-surface-content {
   display: flex;

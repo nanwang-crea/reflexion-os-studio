@@ -4,6 +4,8 @@
 .terminal-panel {
   flex: none;
   min-height: 0;
+  /* 窗口缩小时同步收敛已保存的高度，为消息输入保留空间。 */
+  max-height: 50%;
   display: flex;
   flex-direction: column;
   background: var(--bg-editor);

@@ -50,48 +50,50 @@ export function LandingView(props: LandingViewProps): React.JSX.Element {
     <div className="landing">
       <div className="landing-center">
         <div className="landing-content">
-          {props.project ? (
-            <div className="landing-project">
-              <h1 className="landing-title">{props.project.name}</h1>
-              <div
-                className="landing-path"
-                title={props.project.folderPath || '未关联文件夹'}
-              >
-                {props.project.folderPath || '未关联文件夹'}
-              </div>
-              {props.sessions.length > 0 && (
-                <div className="landing-sessions">
-                  {props.sessions.map((session) => (
-                    <SessionRow
-                      key={session.id}
-                      session={session}
-                      active={false}
-                      onSelect={() => props.onSelectSession(session.id)}
-                      onRename={(title) =>
-                        props.onRenameSession(session.id, title)
-                      }
-                      onDelete={() => props.onDeleteSession(session.id)}
-                    />
-                  ))}
+          <div className="landing-intro">
+            {props.project ? (
+              <div className="landing-project">
+                <h1 className="landing-title">{props.project.name}</h1>
+                <div
+                  className="landing-path"
+                  title={props.project.folderPath || '未关联文件夹'}
+                >
+                  {props.project.folderPath || '未关联文件夹'}
                 </div>
-              )}
-            </div>
-          ) : (
-            <div className="landing-hero">
-              <h1 className="landing-title">有什么可以帮你？</h1>
-              <p className="landing-hint">
-                描述你的任务，或选择一个项目后开始协作。
-              </p>
-            </div>
-          )}
-          {!props.hasEnabledProvider && (
-            <div className="inline-banner">
-              <span>连接一个模型，即可开始对话。</span>
-              <button className="ghost" onClick={props.onGoSettings}>
-                配置模型
-              </button>
-            </div>
-          )}
+                {props.sessions.length > 0 && (
+                  <div className="landing-sessions">
+                    {props.sessions.map((session) => (
+                      <SessionRow
+                        key={session.id}
+                        session={session}
+                        active={false}
+                        onSelect={() => props.onSelectSession(session.id)}
+                        onRename={(title) =>
+                          props.onRenameSession(session.id, title)
+                        }
+                        onDelete={() => props.onDeleteSession(session.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="landing-hero">
+                <h1 className="landing-title">有什么可以帮你？</h1>
+                <p className="landing-hint">
+                  描述你的任务，或选择一个项目后开始协作。
+                </p>
+              </div>
+            )}
+            {!props.hasEnabledProvider && (
+              <div className="inline-banner">
+                <span>连接一个模型，即可开始对话。</span>
+                <button className="ghost" onClick={props.onGoSettings}>
+                  配置模型
+                </button>
+              </div>
+            )}
+          </div>
           <div className="landing-context-selectors">
             <label className="composer-select" title="新会话项目">
               <span>项目</span>

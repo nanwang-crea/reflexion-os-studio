@@ -120,7 +120,8 @@
   resize: none;
   line-height: 1.5;
   padding: 1px 4px 3px;
-  max-height: 200px;
+  /* 跟随聊天区域高度收敛，多行内容在输入框内部滚动。 */
+  max-height: min(200px, 30cqh);
   overflow-y: auto;
 }
 

@@ -74,7 +74,9 @@ export function TerminalPanel(props: TerminalPanelProps): React.JSX.Element {
           event.currentTarget.setPointerCapture(event.pointerId)
           dragRef.current = {
             startY: event.clientY,
-            startHeight: snapshot.heightPx,
+            startHeight:
+              event.currentTarget.parentElement?.getBoundingClientRect()
+                .height ?? snapshot.heightPx,
           }
           setDragging(true)
         }}
