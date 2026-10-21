@@ -1,12 +1,14 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import type { RefObject } from 'react'
-import type { ResourceLink } from '@reflexion-os-studio/runtime-client'
+import type { Project, ResourceLink } from '@reflexion-os-studio/runtime-client'
 import { setBrowserPanelOpen } from '../features/browser/panel-state'
 import { openBrowserUrl } from '../api/browser'
+import { resolveWorkspaceResource } from '../features/workspace/navigation/resolve-resource'
 import type { WorkspaceOpenRequest } from '../features/workspace/types'
 
 interface ResourceRouterOptions {
   activeProjectRef: RefObject<string | null>
+  projects: readonly Project[]
   setWorkspaceRequest: (request: WorkspaceOpenRequest) => void
   setWorkspaceOpen: (open: boolean) => void
   setNotice: (notice: string | null) => void
@@ -20,8 +22,12 @@ export function useResourceRouter(
   // （ref + setState setters）身份恒定，回调因此全程稳定。
   const { activeProjectRef, setWorkspaceRequest, setWorkspaceOpen, setNotice } =
     options
+  const projectsRef = useRef(options.projects)
+  projectsRef.current = options.projects
+  const requestRef = useRef(0)
   return useCallback(
     (link: ResourceLink): void => {
+      const request = ++requestRef.current
       if (link.kind === 'externalUrl') {
         void openBrowserUrl(link.uri).catch((error: unknown) =>
           setNotice(
@@ -32,21 +38,39 @@ export function useResourceRouter(
       }
       const activeProjectId = activeProjectRef.current
       if (link.kind === 'workspaceFile') {
-        const projectId =
-          link.projectId === '' ? activeProjectId : link.projectId
-        if (projectId === null || projectId !== activeProjectId) {
-          setNotice('资源不属于当前项目')
-          return
-        }
-        setWorkspaceRequest({
-          nonce: Date.now(),
-          kind: 'file',
-          path: link.path,
-          line: link.line,
-        })
+        void resolveWorkspaceResource(
+          link,
+          activeProjectId,
+          projectsRef.current,
+        )
+          .then((resolved) => {
+            if (
+              request !== requestRef.current ||
+              activeProjectRef.current !== activeProjectId
+            )
+              return
+            setWorkspaceRequest({
+              nonce: request,
+              kind: 'file',
+              projectId: resolved.projectId,
+              path: resolved.path,
+              line: resolved.line,
+            })
+          })
+          .catch((error: unknown) => {
+            if (
+              request !== requestRef.current ||
+              activeProjectRef.current !== activeProjectId
+            )
+              return
+            setNotice(
+              error instanceof Error ? error.message : '打开文件链接失败',
+            )
+          })
+        return
       } else {
         setWorkspaceRequest({
-          nonce: Date.now(),
+          nonce: request,
           kind: 'asset',
           assetId: link.assetId,
         })

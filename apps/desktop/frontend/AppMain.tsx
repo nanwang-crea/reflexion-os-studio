@@ -25,6 +25,7 @@ import { TerminalPanel } from './features/terminal/TerminalPanel'
 import { isTerminalEntryDisabled } from './features/terminal/entry-switch'
 import { ResizeHandle } from './components/ResizeHandle'
 import { SurfacePanelTabs } from './components/surfaces/SurfacePanelTabs'
+import { tabIdOf } from './features/workspace/types'
 
 export interface AppMainProps {
   view: ViewName
@@ -77,10 +78,13 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
   const [browserWidth, setBrowserWidth] = useState<number | null>(null)
   const { open: browserOpen } = useBrowserPanelState()
   const [surfaceExpanded, setSurfaceExpanded] = useState(false)
+  const fileNavigationNonce = workspace.panel.openTabs.find(
+    (tab) => tabIdOf(tab) === workspace.panel.activeTabId,
+  )?.nonce
   useEffect(() => {
     setBrowserPanelOpen(false)
     setCollaborationOpen(false)
-  }, [workspace.panel.activeTabId, view])
+  }, [workspace.panel.activeTabId, fileNavigationNonce, view])
   useEffect(() => {
     setSurfaceExpanded(false)
   }, [activeSessionId])

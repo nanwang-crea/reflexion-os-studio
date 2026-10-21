@@ -201,15 +201,31 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
     }
   }, [path, projectId])
 
-  // 定位到目标行
-  useEffect(() => {
-    if (initialLine === undefined) return
+  // 首次异步挂载与同一行重复点击都使用最新定位请求，不重建编辑器。
+  const pendingLineRef = useRef(initialLine)
+  const revealTargetLine = useCallback((): void => {
     const editor = editorRef.current
-    if (editor) {
-      editor.revealLineInCenter(initialLine)
-      editor.setPosition({ lineNumber: initialLine, column: 1 })
-    }
-  }, [initialLine, initialLineNonce, loading])
+    const line = pendingLineRef.current
+    const node = editor?.getDomNode()
+    if (
+      !editor ||
+      line === undefined ||
+      !node ||
+      node.offsetHeight === 0 ||
+      node.offsetWidth === 0
+    )
+      return
+    // 浏览器/协作面板切回时可能先更新行号、后显示编辑器；保留请求到布局就绪。
+    pendingLineRef.current = undefined
+    // 从隐藏标签切回时先同步尺寸，再计算居中位置。
+    editor.layout()
+    editor.setPosition({ lineNumber: line, column: 1 })
+    editor.revealLineInCenter(line)
+  }, [])
+  useEffect(() => {
+    pendingLineRef.current = initialLine
+    if (!loading) revealTargetLine()
+  }, [initialLine, initialLineNonce, loading, revealTargetLine])
 
   // 状态上抛（去重，避免宿主随键击重渲染）。
   useEffect(() => {
@@ -297,14 +313,19 @@ export function MonacoSurface(props: MonacoSurfaceProps): React.JSX.Element {
   const handleSaveRef = useRef(handleSave)
   handleSaveRef.current = handleSave
 
-  const handleEditorMount: OnMount = useCallback((editor, monaco) => {
-    editorRef.current = editor
-    registerThemes(monaco)
-    monaco.editor.setTheme(`reflexion-${getResolvedTheme()}`)
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-      void handleSaveRef.current()
-    })
-  }, [])
+  const handleEditorMount: OnMount = useCallback(
+    (editor, monaco) => {
+      editorRef.current = editor
+      editor.onDidLayoutChange(revealTargetLine)
+      revealTargetLine()
+      registerThemes(monaco)
+      monaco.editor.setTheme(`reflexion-${getResolvedTheme()}`)
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+        void handleSaveRef.current()
+      })
+    },
+    [revealTargetLine],
+  )
 
   const handleCopy = useCallback(async (): Promise<void> => {
     if (content === null) return

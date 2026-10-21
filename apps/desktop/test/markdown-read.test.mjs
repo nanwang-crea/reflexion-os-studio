@@ -14,6 +14,7 @@ await build({
   absWorkingDir: root,
   stdin: {
     contents: `export { messageResourceUri } from './frontend/features/chat/message/resource-links'
+      export { relativeWorkspaceResource } from './frontend/features/workspace/preview/links'
       export { parseResourceLink } from './frontend/components/markdown/md-core-types'
       export { splitReadLines } from './frontend/features/workspace/preview/read-lines'
       export { createMdChunkerState, feedMdLines, flushMdChunks } from './frontend/features/workspace/preview/md-chunks'`,
@@ -25,6 +26,7 @@ await build({
 })
 const {
   parseResourceLink,
+  relativeWorkspaceResource,
   messageResourceUri,
   splitReadLines,
   createMdChunkerState,
@@ -107,4 +109,30 @@ test('message links recover only line fragments proven by the original Markdown'
     parseResourceLink('https://example.com/file%23L197').uri,
     'https://example.com/file%23L197',
   )
+})
+
+test('Markdown relative references preserve line fragments and decode path characters once', () => {
+  for (const [target, path, line] of [
+    ['../src/a.ts#L47-L51', 'src/a.ts', 47],
+    ['../src/a%20b.ts#L8', 'src/a b.ts', 8],
+    ['../src/%20a%20.ts#L8', 'src/ a .ts', 8],
+    ['../src/file%23L197.ts', 'src/file#L197.ts', undefined],
+    ['/src/a.ts#L12', 'src/a.ts', 12],
+    ['notes.md#heading', 'docs/notes.md', undefined],
+  ]) {
+    const resource = relativeWorkspaceResource('p', 'docs/guide.md', target)
+    assert.equal(resource.path, path)
+    assert.equal(resource.line, line)
+    assert.equal(parseResourceLink(resource.uri).path, path)
+  }
+  for (const target of [
+    '../../outside.ts',
+    '/%2e%2e/outside.ts',
+    'file:///tmp/a.ts',
+    'https://example.com/a.ts',
+    '//server/share/a.ts',
+    '%',
+  ]) {
+    assert.equal(relativeWorkspaceResource('p', 'docs/guide.md', target), null)
+  }
 })

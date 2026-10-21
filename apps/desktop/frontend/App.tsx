@@ -328,6 +328,7 @@ export default function App() {
   )
 
   const handleResourceClick = useResourceRouter({
+    projects,
     activeProjectRef,
     setWorkspaceRequest,
     setWorkspaceOpen,
@@ -337,7 +338,9 @@ export default function App() {
   useEffect(() => {
     const request = workspaceRequest
     if (request === null) return
+    setWorkspaceRequest(null)
     if (request.kind === 'file') {
+      if (request.projectId !== activeProjectId) return
       openFile(request.path, request.line)
     } else {
       setSidebarMode('files')
@@ -346,6 +349,8 @@ export default function App() {
     }
   }, [
     workspaceRequest,
+    activeProjectId,
+    setWorkspaceRequest,
     openFile,
     setFilesFocusAssetId,
     setSidebarMode,

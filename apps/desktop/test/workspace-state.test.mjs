@@ -233,3 +233,23 @@ test('workspace starts closed without a saved preference, honors explicit choice
     assert.equal(render().workspaceOpen, true)
   }
 })
+
+test('repeated file navigation changes the request identity without remounting or retaining an old line request', () => {
+  globalThis.localStorage = { getItem: () => null }
+  const h = harness()
+  const render = () => h.render(() => useWorkspacePanel('project-a'))
+  let state = render()
+  state.openFile('a.ts', 47)
+  state = render()
+  const first = state.openTabs[0]
+  state.openFile('a.ts', 47)
+  state = render()
+  assert.equal(state.openTabs.length, 1)
+  assert.notEqual(state.openTabs[0].nonce, first.nonce)
+  assert.equal(state.openTabs[0].line, 47)
+  assert.equal(state.openTabs[0].reloadNonce, first.reloadNonce)
+  state.openFile('a.ts')
+  state = render()
+  assert.equal(state.openTabs[0].line, undefined)
+  assert.notEqual(state.openTabs[0].nonce, first.nonce)
+})

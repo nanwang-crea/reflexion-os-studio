@@ -1,3 +1,9 @@
+import {
+  workspaceFileUri,
+  parseResourceUri,
+  type ResourceLink,
+} from '@reflexion-os-studio/runtime-client'
+
 /**
  * 预览内相对路径链接 → 工作区路径换算（纯逻辑）：
  * - `./`、`../`、`sub/x.md` 相对当前 md 文件所在目录解析；
@@ -9,13 +15,20 @@ export function normalizeRelativePath(
   base: string,
   target: string,
 ): string | null {
-  const cleaned = target.replace(/\\/g, '/').split(/[?#]/)[0].trim()
+  let cleaned: string
+  try {
+    cleaned = decodeURIComponent(target.split(/[?#]/)[0].trim()).replaceAll(
+      '\\',
+      '/',
+    )
+  } catch {
+    return null
+  }
   if (cleaned === '') return null
   if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(cleaned)) return null
   if (/^[a-zA-Z]:\//.test(cleaned)) return null
-  if (cleaned.startsWith('/')) return cleaned.slice(1)
   const dir = base.includes('/') ? base.slice(0, base.lastIndexOf('/')) : ''
-  const stack = dir === '' ? [] : dir.split('/')
+  const stack = cleaned.startsWith('/') || dir === '' ? [] : dir.split('/')
   for (const segment of cleaned.split('/')) {
     if (segment === '' || segment === '.') continue
     if (segment === '..') {
@@ -26,4 +39,24 @@ export function normalizeRelativePath(
     }
   }
   return stack.length === 0 ? null : stack.join('/')
+}
+
+/** Markdown 文件中的相对引用保留行号；普通标题锚点仍按文件打开。 */
+export function relativeWorkspaceResource(
+  projectId: string,
+  base: string,
+  target: string,
+): ResourceLink | null {
+  const path = normalizeRelativePath(base, target)
+  if (path === null) return null
+  const uri = workspaceFileUri(projectId, path)
+  const hash = target.indexOf('#')
+  if (hash >= 0) {
+    try {
+      return parseResourceUri(uri + target.slice(hash))
+    } catch {
+      // 非行号的标题锚点沿用既有行为：打开文件，暂不定位标题。
+    }
+  }
+  return parseResourceUri(uri)
 }

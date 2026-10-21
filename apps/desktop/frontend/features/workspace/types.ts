@@ -43,5 +43,11 @@ export function tabIdOf(tab: OpenFileTab): string {
 }
 
 export type WorkspaceOpenRequest =
-  | { nonce: number; kind: 'file'; path: string; line?: number }
+  | {
+      nonce: number
+      kind: 'file'
+      projectId: string
+      path: string
+      line?: number
+    }
   | { nonce: number; kind: 'asset'; assetId: string }

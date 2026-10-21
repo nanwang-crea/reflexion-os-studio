@@ -105,13 +105,10 @@ export function useWorkspacePanel(
         (tab) => tab.path === path && tab.mode !== 'diff',
       )
       if (!existing) return [...tabs, { path, line, nonce }]
-      // 已打开：仅更新跳转定位（若提供），供 ContentView 重新应用 initialLine。
-      if (line !== undefined) {
-        return tabs.map((tab) =>
-          tab === existing ? { ...tab, line, nonce } : tab,
-        )
-      }
-      return tabs
+      // 每次打开都发出导航意图；无行号时保留编辑器位置，不沿用旧定位请求。
+      return tabs.map((tab) =>
+        tab === existing ? { ...tab, line, nonce } : tab,
+      )
     })
     setActiveTabId(path)
     setWorkspaceOpen(true)
@@ -119,7 +116,7 @@ export function useWorkspacePanel(
 
   const openDiff = useCallback(
     (path: string, options: DiffOpenOptions = {}): void => {
-      const nonce = Date.now()
+      const nonce = ++navigationNonceRef.current
       setOpenTabs((tabs) => {
         const existing = tabs.find(
           (tab) => tab.path === path && tab.mode === 'diff',

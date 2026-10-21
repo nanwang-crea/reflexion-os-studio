@@ -151,6 +151,7 @@ export function MonacoEditor({
         projectId={props.projectId}
         path={props.path}
         initialLine={props.initialLine}
+        initialLineNonce={props.initialLineNonce}
         readOnly={props.readOnly}
         ref={surfaceRef}
         onStateChange={handleStateChange}

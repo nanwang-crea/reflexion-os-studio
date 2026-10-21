@@ -1,6 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type { ResourceLink } from '@reflexion-os-studio/runtime-client'
-import { workspaceFileUri } from '@reflexion-os-studio/runtime-client'
 import type { ConfirmDialogState } from '../../../components/ConfirmDialog'
 import { MarkdownCore } from '../../../components/markdown/md-core'
 import {
@@ -8,7 +7,7 @@ import {
   type MonacoSurfaceHandle,
   type MonacoSurfaceState,
 } from '../editor/MonacoSurface'
-import { normalizeRelativePath } from './links'
+import { relativeWorkspaceResource } from './links'
 import { friendlyReadError, MD_PREVIEW_MAX_LINES } from './preview'
 import { IS_MAC } from '../../../lib/platform'
 import { useMdIncrementalFeed } from './useMdIncrementalFeed'
@@ -155,8 +154,7 @@ export function MarkdownFilePreview(
     setReloadTick((tick) => tick + 1)
   }, [surfaceState?.externalReloadVersion])
 
-  // 资源引用分发：workspace:// 缺省项目 / 指向其他项目时归一到当前
-  // 项目再交给宿主路由器（与聊天消息同一条分发链路）。
+  // 缺省项目绑定当前项目；显式其他项目引用仍交给路由器校验。
   const handleResourceClick = useCallback(
     (link: ResourceLink): void => {
       if (link.kind !== 'workspaceFile') {
@@ -187,16 +185,11 @@ export function MarkdownFilePreview(
         event.preventDefault()
         return
       }
-      const resolved = normalizeRelativePath(path, href)
+      const resolved = relativeWorkspaceResource(projectId, path, href)
       if (resolved === null) return
       event.preventDefault()
       event.stopPropagation()
-      handleResourceClick({
-        kind: 'workspaceFile',
-        uri: workspaceFileUri(projectId, resolved),
-        projectId,
-        path: resolved,
-      })
+      handleResourceClick(resolved)
     },
     [handleResourceClick, path, projectId],
   )
