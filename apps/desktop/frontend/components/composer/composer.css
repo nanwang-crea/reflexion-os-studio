@@ -131,6 +131,8 @@
 
 .composer textarea::placeholder {
   color: var(--text-muted);
+  /* 提示文案保持单行：字号缩放或窄宽度下换行会与下方工具栏交错（垂直错位）。 */
+  white-space: nowrap;
 }
 
 .composer-bar {
@@ -147,6 +149,15 @@
   align-items: center;
   gap: 6px;
   min-height: 30px;
+}
+/* 模型与思考选择器作为一个不可拆分的右簇参与换行，
+   避免工具栏换行时模型孤悬上一行、思考掉到下一行的阶梯错位。 */
+.composer-model-cluster {
+  min-width: 0;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
 }
 
 .composer-controls .bar-spacer {

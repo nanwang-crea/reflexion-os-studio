@@ -38,7 +38,7 @@ export function ModelSelector(props: {
     groups.set(option.group, options)
   }
   return (
-    <>
+    <span className="composer-model-cluster">
       <span className="composer-select model" title="对话使用的模型">
         <GroupedSelect
           aria-label="对话模型"
@@ -85,6 +85,6 @@ export function ModelSelector(props: {
           </Select>
         </label>
       )}
-    </>
+    </span>
   )
 }

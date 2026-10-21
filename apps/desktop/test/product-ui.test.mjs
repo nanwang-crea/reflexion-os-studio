@@ -199,6 +199,50 @@ test('composer actions remain aligned in both themes and narrow split layouts', 
         .innerText(),
       /长模型名称-49-/,
     )
+    // 窄宽度（对应用户截图场景）：提示文案必须单行；工具栏换行时
+    // 模型/思考选择器必须同处一行并与发送按钮底对齐，不出现阶梯错位。
+    await page.setViewportSize({ width: 460, height: 860 })
+    await page.goto(`${url}?theme=light`)
+    await page.waitForSelector('.composer-send')
+    const narrow = await page.evaluate(() => {
+      const rect = (selector) => {
+        const el = document.querySelector(selector)
+        if (!el) return null
+        const r = el.getBoundingClientRect()
+        return { top: r.top, bottom: r.bottom, left: r.left, right: r.right }
+      }
+      return {
+        placeholderWhiteSpace: getComputedStyle(
+          document.querySelector('.composer textarea'),
+          '::placeholder',
+        ).whiteSpace,
+        permission: rect('.composer-select.permission'),
+        model: rect('.composer-select.model'),
+        reasoning: rect('.composer-select.reasoning'),
+        send: rect('.composer-send'),
+      }
+    })
+    assert.equal(narrow.placeholderWhiteSpace, 'nowrap')
+    assert.ok(
+      narrow.reasoning.top - narrow.permission.top > 16,
+      'toolbar wraps into two rows at this width',
+    )
+    assert.ok(
+      narrow.model &&
+        narrow.reasoning &&
+        Math.abs(narrow.model.top - narrow.reasoning.top) <= 1,
+      'model and reasoning selectors share one row',
+    )
+    assert.ok(
+      Math.abs(narrow.send.bottom - narrow.reasoning.bottom) <= 2,
+      'send button bottom-aligns with the model row',
+    )
+    assert.ok(
+      narrow.send.left >= narrow.model.right,
+      'send button stays right of the model cluster',
+    )
+    // 恢复后续 reasoning / dense-sidebar 断言所需的常规视口。
+    await page.setViewportSize({ width: 940, height: 860 })
     await page.goto(`${url}?theme=light&reasoning=supported`)
     const reasoning = page.getByRole('combobox', { name: '对话思考强度' })
     await reasoning.waitFor()

@@ -249,7 +249,13 @@ async function verifyTimeline(page) {
     .getByText(/正在重试/)
     .waitFor()
   assert.equal(await page.locator('.assistant-retrying').count(), 0)
-  await page.waitForTimeout(600)
+  // 归零提交（“…秒后自动重试”→“正在重试…”）与最后一次心跳可能因 CI
+  // 计时抖动落在固定偏移采样之后；先等倒计时收敛到终态标签，再断言静止。
+  await page
+    .locator('.run-process-label')
+    .getByText('正在重试…', { exact: true })
+    .waitFor()
+  await page.waitForTimeout(300)
   const commits = await page.evaluate(() => window.activityCommits)
   await page.waitForTimeout(400)
   assert.equal(await page.evaluate(() => window.activityCommits), commits)
