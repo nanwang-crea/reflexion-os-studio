@@ -1,9 +1,11 @@
-import type { ComponentProps } from 'react'
-import type { ChatView } from '../../frontend/features/chat/ChatView'
+import type { RuntimeEvent } from '@reflexion-os-studio/runtime-client'
 
-type ChatProps = ComponentProps<typeof ChatView>
+type EventPayload<T extends RuntimeEvent['type']> = Omit<
+  Extract<RuntimeEvent, { type: T }>,
+  'type' | 'protocolVersion' | 'eventId' | 'scope' | 'seq' | 'occurredAt'
+>
 
-export const approval: ChatProps['pendingApprovals'][number] = {
+export const approval = {
   runId: 'r',
   toolCallId: 'tool',
   operation: 'file.edit',
@@ -39,9 +41,9 @@ export const approval: ChatProps['pendingApprovals'][number] = {
       label: '拒绝',
     },
   ],
-}
+} satisfies EventPayload<'approval.required'>
 
-export const interaction: ChatProps['pendingInteractions'][number] = {
+export const interaction = {
   runId: 'r',
   toolCallId: 'question-tool',
   interactionId: 'question',
@@ -60,4 +62,4 @@ export const interaction: ChatProps['pendingInteractions'][number] = {
       })),
     },
   ],
-}
+} satisfies EventPayload<'interaction.required'>
