@@ -254,6 +254,9 @@ window.clearUI=()=>root.render(null);window.showRoles();
     await page
       .getByRole('button', { name: 'Nested Reviewer · 执行中', exact: true })
       .waitFor()
+    await page.waitForFunction(
+      () => document.querySelectorAll('.react-flow__edge').length === 2,
+    )
     assert.equal(await page.locator('.react-flow__edge').count(), 2)
     await page
       .getByRole('button', { name: 'Review Agent · 已完成', exact: true })
