@@ -1,10 +1,15 @@
 import { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { AppMain } from '../../frontend/AppMain'
+import { approval, interaction } from './chat-layout-data'
+import { FloatingLayout } from './floating-layout'
 import '../../frontend/styles/style.css'
 import '../../frontend/features/chat/chat.css'
 import '../../frontend/features/browser/browser.css'
 import '../../frontend/features/terminal/terminal.css'
+import '../../frontend/features/settings/settings.css'
+import '../../frontend/styles/sidebar.css'
+import '../../frontend/features/workspace/workspace.css'
 import '../../frontend/styles/product-surfaces.css'
 
 const noop = () => {}
@@ -34,6 +39,9 @@ function Fixture() {
   const [width, setWidth] = useState(600)
   const [terminalOpen, setTerminalOpen] = useState(true)
   const [sent, setSent] = useState('')
+  const [resolved, setResolved] = useState('')
+  const crowded = query.has('crowded')
+  const [danger, setDanger] = useState(query.has('danger'))
   const common = {
     hasEnabledProvider: !query.has('no-provider'),
     permissionValue: 'workspace-write' as const,
@@ -50,7 +58,7 @@ function Fixture() {
     <div className="app-shell">
       <aside style={{ width: 224, flexShrink: 0 }} aria-label="侧栏" />
       <AppMain
-        view="chat"
+        view={query.has('settings') ? 'settings' : 'chat'}
         activeSessionId={query.has('chat') ? 's' : null}
         topBar={{
           sidebarOpen: true,
@@ -62,7 +70,16 @@ function Fixture() {
         onDismissNotice={noop}
         chat={{
           ...common,
-          sessionData: null,
+          sessionData: crowded
+            ? ({
+                session: { ...sessions[0], id: 's' },
+                messages: [],
+                runs: [{ id: 'r', status: 'running', supersededByRunId: null }],
+                toolCalls: [],
+                runEvents: [],
+                plans: [],
+              } as never)
+            : null,
           onLoadOlder: done,
           delegations: [],
           streaming: {},
@@ -74,15 +91,20 @@ function Fixture() {
             dangerActive: false,
             onOpenDanger: noop,
           },
-          dangerLease: null,
-          onDisableDanger: noop,
+          dangerLease: danger
+            ? ({ provider: 'test', expiresAt: Date.now() + 600000 } as never)
+            : null,
+          onDisableDanger: () => setDanger(false),
           onStop: done,
           onRetry: done,
           onExecutionModeChange: done,
-          pendingApprovals: [],
-          onResolveApproval: noop,
-          pendingInteractions: [],
-          onInteractionSubmit: async () => true,
+          pendingApprovals: crowded ? [approval] : [],
+          onResolveApproval: (_id, choice) => setResolved(choice),
+          pendingInteractions: crowded ? [interaction] : [],
+          onInteractionSubmit: async () => {
+            setResolved('answer')
+            return true
+          },
           onEditResend: done,
         }}
         landing={{
@@ -96,7 +118,12 @@ function Fixture() {
           onRenameSession: done,
           onDeleteSession: done,
         }}
-        settings={{} as never}
+        settings={{
+          profiles: [],
+          onSaved: done,
+          onBackToChat: noop,
+          confirm: async () => true,
+        }}
         instructions={{} as never}
         onUseSkill={noop}
         workspace={{
@@ -116,8 +143,17 @@ function Fixture() {
       <output hidden id="sent">
         {sent}
       </output>
+      <output hidden id="resolved">
+        {resolved}
+      </output>
     </div>
   )
 }
 
-createRoot(document.getElementById('root')!).render(<Fixture />)
+createRoot(document.getElementById('root')!).render(
+  new URLSearchParams(location.search).has('floating') ? (
+    <FloatingLayout />
+  ) : (
+    <Fixture />
+  ),
+)

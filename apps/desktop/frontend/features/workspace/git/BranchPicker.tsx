@@ -1,6 +1,7 @@
 import { isComposing } from '../../../lib/keyboard'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import type { GitRemote } from '../../../api/workspace'
+import { Popover } from '../../../components/forms/Popover'
 import { GitRemotesSection } from './GitRemotesSection'
 
 interface BranchPickerProps {
@@ -28,7 +29,6 @@ export function BranchPicker(props: BranchPickerProps): React.JSX.Element {
   const [newName, setNewName] = useState('')
   const [checkout, setCheckout] = useState(true)
   const [startRef, setStartRef] = useState<string | null>(null)
-  const rootRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const closeMenu = useCallback((): void => {
@@ -39,24 +39,7 @@ export function BranchPicker(props: BranchPickerProps): React.JSX.Element {
     setCheckout(true)
   }, [])
 
-  useEffect(() => {
-    if (!open) return
-    const onPointerDown = (event: MouseEvent): void => {
-      if (!rootRef.current?.contains(event.target as Node)) closeMenu()
-    }
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') closeMenu()
-    }
-    document.addEventListener('mousedown', onPointerDown)
-    window.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown)
-      window.removeEventListener('keydown', onKeyDown)
-    }
-  }, [open, closeMenu])
-
-  const toggle = (): void => {
-    const next = !open
+  const changeOpen = (next: boolean): void => {
     if (!next) {
       closeMenu()
       return
@@ -83,127 +66,129 @@ export function BranchPicker(props: BranchPickerProps): React.JSX.Element {
   }
 
   return (
-    <div className="git-branch-picker" ref={rootRef}>
-      <button
-        type="button"
-        className="git-branch-chip"
-        disabled={props.busy}
-        aria-expanded={open}
-        title="分支：切换 / 新建"
-        onClick={toggle}
+    <div className="git-branch-picker">
+      <Popover
+        open={open}
+        onOpenChange={changeOpen}
+        label="分支与远程管理"
+        className="git-branch-menu"
+        trigger={
+          <button
+            type="button"
+            className="git-branch-chip"
+            disabled={props.busy}
+            aria-expanded={open}
+            title="分支：切换 / 新建"
+          >
+            <span className="git-branch-icon">⑂</span>
+            <span className="git-branch-name">{props.branch ?? '—'}</span>
+            {props.behind ? (
+              <span className="git-branch-count">↓{props.behind}</span>
+            ) : null}
+            {props.ahead ? (
+              <span className="git-branch-count">↑{props.ahead}</span>
+            ) : null}
+            <span className="git-branch-caret">▾</span>
+          </button>
+        }
       >
-        <span className="git-branch-icon">⑂</span>
-        <span className="git-branch-name">{props.branch ?? '—'}</span>
-        {props.behind ? (
-          <span className="git-branch-count">↓{props.behind}</span>
-        ) : null}
-        {props.ahead ? (
-          <span className="git-branch-count">↑{props.ahead}</span>
-        ) : null}
-        <span className="git-branch-caret">▾</span>
-      </button>
-      {open && (
-        <div className="git-branch-menu" role="menu">
-          <div className="git-branch-section">本地分支</div>
-          <ul className="git-branch-list">
-            {props.branches.length === 0 && (
-              <li className="git-branch-empty">暂无分支</li>
-            )}
-            {props.branches.map((name) => (
-              <li key={name}>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="git-branch-item"
-                  disabled={name === props.branch || props.busy}
-                  onClick={() => {
-                    closeMenu()
-                    props.onSwitch(name)
-                  }}
-                >
-                  <span className="git-branch-check">
-                    {name === props.branch ? '✓' : ''}
-                  </span>
-                  <span className="git-branch-item-name">{name}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          <div className="git-branch-section">远程分支</div>
-          <ul className="git-branch-list">
-            {props.remoteBranches.length === 0 && (
-              <li className="git-branch-empty">暂无远程分支</li>
-            )}
-            {props.remoteBranches.map((ref) => (
-              <li key={ref}>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="git-branch-item"
-                  disabled={props.busy}
-                  title={`基于 ${ref} 创建本地分支`}
-                  onClick={() => prefillFromRemote(ref)}
-                >
-                  <span className="git-branch-check">⭳</span>
-                  <span className="git-branch-item-name">{ref}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          <div className="git-branch-create">
-            {startRef !== null && (
-              <div className="git-branch-start-ref">
-                <span>基于 {startRef}</span>
-                <button
-                  type="button"
-                  className="git-branch-start-clear"
-                  title="清除起点，改回基于当前 HEAD"
-                  onClick={() => setStartRef(null)}
-                >
-                  ×
-                </button>
-              </div>
-            )}
-            <input
-              ref={inputRef}
-              className="git-branch-input"
-              placeholder="新分支名称"
-              value={newName}
-              disabled={props.busy}
-              onChange={(event) => setNewName(event.target.value)}
-              onKeyDown={(event) => {
-                if (isComposing(event.nativeEvent)) return
-                if (event.key === 'Enter') create()
-              }}
-            />
-            <div className="git-branch-create-actions">
-              <label className="git-branch-checkout">
-                <input
-                  type="checkbox"
-                  checked={checkout}
-                  disabled={props.busy}
-                  onChange={(event) => setCheckout(event.target.checked)}
-                />
-                创建并切换
-              </label>
+        <div className="git-branch-section">本地分支</div>
+        <ul className="git-branch-list">
+          {props.branches.length === 0 && (
+            <li className="git-branch-empty">暂无分支</li>
+          )}
+          {props.branches.map((name) => (
+            <li key={name}>
               <button
                 type="button"
-                className="ghost"
-                disabled={trimmed === '' || props.busy}
-                onClick={create}
+                className="git-branch-item"
+                disabled={name === props.branch || props.busy}
+                onClick={() => {
+                  closeMenu()
+                  props.onSwitch(name)
+                }}
               >
-                创建
+                <span className="git-branch-check">
+                  {name === props.branch ? '✓' : ''}
+                </span>
+                <span className="git-branch-item-name">{name}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+        <div className="git-branch-section">远程分支</div>
+        <ul className="git-branch-list">
+          {props.remoteBranches.length === 0 && (
+            <li className="git-branch-empty">暂无远程分支</li>
+          )}
+          {props.remoteBranches.map((ref) => (
+            <li key={ref}>
+              <button
+                type="button"
+                className="git-branch-item"
+                disabled={props.busy}
+                title={`基于 ${ref} 创建本地分支`}
+                onClick={() => prefillFromRemote(ref)}
+              >
+                <span className="git-branch-check">⭳</span>
+                <span className="git-branch-item-name">{ref}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+        <div className="git-branch-create">
+          {startRef !== null && (
+            <div className="git-branch-start-ref">
+              <span>基于 {startRef}</span>
+              <button
+                type="button"
+                className="git-branch-start-clear"
+                title="清除起点，改回基于当前 HEAD"
+                onClick={() => setStartRef(null)}
+              >
+                ×
               </button>
             </div>
-          </div>
-          <GitRemotesSection
-            remotes={props.remotes}
-            busy={props.busy}
-            onRemoteAdd={props.onRemoteAdd}
-            onRemoteRemove={props.onRemoteRemove}
+          )}
+          <input
+            ref={inputRef}
+            className="git-branch-input"
+            placeholder="新分支名称"
+            value={newName}
+            disabled={props.busy}
+            onChange={(event) => setNewName(event.target.value)}
+            onKeyDown={(event) => {
+              if (isComposing(event.nativeEvent)) return
+              if (event.key === 'Enter') create()
+            }}
           />
+          <div className="git-branch-create-actions">
+            <label className="git-branch-checkout">
+              <input
+                type="checkbox"
+                checked={checkout}
+                disabled={props.busy}
+                onChange={(event) => setCheckout(event.target.checked)}
+              />
+              创建并切换
+            </label>
+            <button
+              type="button"
+              className="ghost"
+              disabled={trimmed === '' || props.busy}
+              onClick={create}
+            >
+              创建
+            </button>
+          </div>
         </div>
-      )}
+        <GitRemotesSection
+          remotes={props.remotes}
+          busy={props.busy}
+          onRemoteAdd={props.onRemoteAdd}
+          onRemoteRemove={props.onRemoteRemove}
+        />
+      </Popover>
     </div>
   )
 }

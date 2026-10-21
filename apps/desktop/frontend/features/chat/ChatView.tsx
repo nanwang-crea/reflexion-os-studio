@@ -4,6 +4,8 @@ import { VirtualTranscript } from './transcript/VirtualTranscript'
 import { HistoryLoader } from './transcript/HistoryLoader'
 import { EmptyState } from '../../components/feedback/EmptyState'
 import type { ChatViewProps } from './chat-view-types'
+import { ChatComposerContext } from './composer/ChatComposerContext'
+import { DangerLeaseBanner } from './approvals/DangerLeaseBanner'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   Run,
@@ -14,13 +16,8 @@ import type {
 import { Composer } from '../../components/Composer'
 import { ArrowDownIcon, SparkIcon } from '../../ui/icons'
 import './approvals/approvals.css'
-import { ApprovalQueue } from './approvals/ApprovalQueue'
-import { DangerLeaseBanner } from './approvals/DangerLeaseBanner'
 import type { DelegationAttention } from './run/DelegationList'
-import { QueueBar } from './QueueBar'
-import { PlanCard } from './run/PlanCard'
 import { buildChatBlocks } from './chat-blocks'
-import { InteractionQueue } from './interactions/InteractionQueue'
 import type { DraftAttachment } from '../../components/composer/useComposerAttachments'
 import { MAX_MESSAGE_ATTACHMENTS } from '@reflexion-os-studio/runtime-client'
 import { validateAttachmentFile } from './attachments/upload-message-files'
@@ -375,51 +372,19 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
         </div>
       </div>
 
-      {!props.hasEnabledProvider && (
-        <div className="inline-banner" role="status" aria-live="polite">
-          <span>
-            尚未配置模型 Provider：请先在设置中填写 API Key 后再开始对话。
-          </span>
-          <button type="button" className="ghost" onClick={props.onGoSettings}>
-            去配置
-          </button>
-        </div>
-      )}
-
-      {sessionId !== null && (
-        <QueueBar sessionId={sessionId} agentTemplates={props.agentTemplates} />
-      )}
-
       <div className="composer-wrap">
-        {currentPlan && <PlanCard key={currentPlan.id} plan={currentPlan} />}
-        {props.sessionData?.session?.executionMode === 'plan' && (
-          <div className="plan-mode-banner" role="status">
-            <span>计划模式 · 仅允许只读调研，批准计划后才能执行修改</span>
-            <button
-              type="button"
-              className="ghost"
-              disabled={runActive}
-              title={runActive ? '运行中请通过计划审批退出' : '退出计划模式'}
-              onClick={() => void props.onExecutionModeChange('execute')}
-            >
-              退出
-            </button>
-          </div>
-        )}
         {props.dangerLease !== null && (
           <DangerLeaseBanner
             lease={props.dangerLease}
             onDisable={props.onDisableDanger}
           />
         )}
-        <ApprovalQueue
+        <ChatComposerContext
+          view={props}
+          plan={currentPlan}
+          runActive={runActive}
           approvals={sessionApprovals}
-          onChoose={props.onResolveApproval}
-        />
-        <InteractionQueue
-          onResourceClick={props.onResourceClick}
           interactions={sessionInteractions}
-          onSubmit={props.onInteractionSubmit}
         />
         {!pinned && messages.length > 0 && (
           <button

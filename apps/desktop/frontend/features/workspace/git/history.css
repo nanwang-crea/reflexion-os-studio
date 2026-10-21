@@ -68,10 +68,15 @@
 }
 
 .git-hist-menu {
-  left: auto;
-  right: 4px;
   min-width: 180px;
   max-width: 240px;
+  max-height: min(260px, var(--radix-dropdown-menu-content-available-height));
+}
+
+.git-hist-menu .git-branch-item[data-highlighted] {
+  outline: none;
+  background: var(--bg-hover);
+  color: var(--text);
 }
 
 .git-hist-files {

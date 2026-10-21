@@ -1,0 +1,7 @@
+.ui-popover {
+  z-index: 40;
+  max-width: calc(100vw - 16px);
+  max-height: var(--radix-popover-content-available-height);
+  overflow: auto;
+  overscroll-behavior: contain;
+}

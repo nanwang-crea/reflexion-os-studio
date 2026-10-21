@@ -1,5 +1,6 @@
 import { isComposing } from '../../../lib/keyboard'
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import type { GitCommitFile, GitLogEntry } from '../../../api/workspace'
 import { copyTextToClipboard } from '../../../lib/clipboard'
 import { showToast } from '../../../components/Toast'
@@ -30,26 +31,8 @@ export function GitHistoryRow(props: GitHistoryRowProps): React.JSX.Element {
   const { commit, menuOpen, onMenuClose } = props
   const [branchName, setBranchName] = useState('')
   const [branchCheckout, setBranchCheckout] = useState(true)
-  const entryRef = useRef<HTMLDivElement | null>(null)
-  // 菜单外点/Escape 关闭（BranchPicker 同款，自含在本行 entry 上）。
-  useEffect(() => {
-    if (!menuOpen) return
-    const onPointerDown = (event: MouseEvent): void => {
-      if (!entryRef.current?.contains(event.target as Node)) {
-        onMenuClose()
-      }
-    }
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onMenuClose()
-    }
-    document.addEventListener('mousedown', onPointerDown)
-    window.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown)
-      window.removeEventListener('keydown', onKeyDown)
-    }
-  }, [menuOpen, onMenuClose])
-
+  const openingFormRef = useRef(false)
+  const branchInputRef = useRef<HTMLInputElement>(null)
   const create = (): void => {
     const name = branchName.trim()
     if (name === '') return
@@ -68,7 +51,7 @@ export function GitHistoryRow(props: GitHistoryRowProps): React.JSX.Element {
 
   return (
     <li className="git-hist-item">
-      <div className="git-hist-entry" ref={entryRef}>
+      <div className="git-hist-entry">
         <button
           type="button"
           className="git-hist-row"
@@ -89,51 +72,69 @@ export function GitHistoryRow(props: GitHistoryRowProps): React.JSX.Element {
             {commit.shortHash}
           </span>
         </button>
-        <button
-          type="button"
-          className="git-row-action"
-          disabled={props.busy}
-          title="更多操作"
-          aria-label="更多操作"
-          onClick={() => props.onMenuToggle(commit.hash)}
+        <DropdownMenu.Root
+          open={menuOpen}
+          onOpenChange={(open) =>
+            open ? props.onMenuToggle(commit.hash) : onMenuClose()
+          }
         >
-          ⋯
-        </button>
-        {menuOpen && (
-          <div className="git-branch-menu git-hist-menu" role="menu">
+          <DropdownMenu.Trigger asChild>
             <button
               type="button"
-              role="menuitem"
-              className="git-branch-item"
-              onClick={copyHash}
-            >
-              复制哈希
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="git-branch-item"
-              title="基于该提交创建新分支"
-              onClick={() => props.onOpenForm(commit.hash)}
-            >
-              基于此建分支…
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="git-branch-item"
+              className="git-row-action"
               disabled={props.busy}
-              title="进入分离头指针（工作树切换到该提交快照）"
-              onClick={() => props.onCheckout(commit.hash)}
+              title="更多操作"
+              aria-label="更多操作"
             >
-              切换到该提交
+              ⋯
             </button>
-          </div>
-        )}
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content
+              className="git-branch-menu git-hist-menu"
+              sideOffset={4}
+              align="end"
+              collisionPadding={8}
+              onCloseAutoFocus={(event) => {
+                // 新建表单已 autofocus，避免菜单关闭时把焦点抢回触发器。
+                if (openingFormRef.current) {
+                  event.preventDefault()
+                  openingFormRef.current = false
+                  branchInputRef.current?.focus()
+                }
+              }}
+            >
+              <DropdownMenu.Item
+                className="git-branch-item"
+                onSelect={copyHash}
+              >
+                复制哈希
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                className="git-branch-item"
+                onSelect={() => {
+                  openingFormRef.current = true
+                  props.onOpenForm(commit.hash)
+                }}
+              >
+                基于此建分支…
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                className="git-branch-item"
+                disabled={props.busy}
+                title="进入分离头指针（工作树切换到该提交快照）"
+                onSelect={() => props.onCheckout(commit.hash)}
+              >
+                切换到该提交
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
       </div>
       {props.formOpen && (
         <div className="git-branch-create git-hist-form">
           <input
+            ref={branchInputRef}
             className="git-branch-input"
             placeholder="新分支名称"
             value={branchName}

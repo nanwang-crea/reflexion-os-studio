@@ -196,34 +196,43 @@ export function Composer(props: ComposerProps): React.JSX.Element {
           ))}
         </div>
       )}
-      <FileAttachments
-        images={attachments.images}
-        disabled={sending}
-        onRemove={attachments.remove}
-      />
-      {(attachments.error || sendError || fileDrop.error) && (
-        <div className="composer-image-error" role="alert">
-          {attachments.error || sendError || fileDrop.error}
-        </div>
-      )}
-      {fileDrop.reading && (
-        <div className="composer-image-hint" role="status">
-          正在读取拖入的文件…
-        </div>
-      )}
-      {attachments.images.length > 0 && (
-        <div className="composer-image-hint">
-          最多 4 个文件（含图片）· 图片 4MB / 文档 10MB · PDF、DOCX 仅提取文字
-        </div>
-      )}
-      {attachments.images.some((item) =>
-        item.file.type.startsWith('image/'),
-      ) && <div className="composer-image-hint">图片请使用支持视觉的模型</div>}
-      {sending && attachments.images.length > 0 && (
-        <div className="composer-image-hint" role="status">
-          正在上传并解析附件…
-        </div>
-      )}
+      <div
+        className="composer-supplement"
+        role="region"
+        aria-label="附件与发送提示"
+        tabIndex={attachments.images.length > 0 ? 0 : undefined}
+      >
+        <FileAttachments
+          images={attachments.images}
+          disabled={sending}
+          onRemove={attachments.remove}
+        />
+        {(attachments.error || sendError || fileDrop.error) && (
+          <div className="composer-image-error" role="alert">
+            {attachments.error || sendError || fileDrop.error}
+          </div>
+        )}
+        {fileDrop.reading && (
+          <div className="composer-image-hint" role="status">
+            正在读取拖入的文件…
+          </div>
+        )}
+        {attachments.images.length > 0 && (
+          <div className="composer-image-hint">
+            最多 4 个文件（含图片）· 图片 4MB / 文档 10MB · PDF、DOCX 仅提取文字
+          </div>
+        )}
+        {attachments.images.some((item) =>
+          item.file.type.startsWith('image/'),
+        ) && (
+          <div className="composer-image-hint">图片请使用支持视觉的模型</div>
+        )}
+        {sending && attachments.images.length > 0 && (
+          <div className="composer-image-hint" role="status">
+            正在上传并解析附件…
+          </div>
+        )}
+      </div>
       <input
         ref={fileInputRef}
         type="file"
