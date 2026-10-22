@@ -407,18 +407,10 @@
 }
 
 @container (max-width: 420px) {
-  .composer-bar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .composer-controls {
-    display: contents;
-  }
-
+  /* Keep the action in its own grid column across font metrics and labels.
+     Only the controls wrap; the model group occupies their final row. */
   .composer-model-cluster {
-    flex: 1 1 50%;
+    flex: 1 1 100%;
   }
 }
 

@@ -8,6 +8,10 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { browserWorkerPaths } from '../../runtime/dist/browser/agent/paths.js'
+import {
+  assertComposerAlignment,
+  assertComposerMetricBoundaries,
+} from './composer-ui/alignment.mjs'
 
 const desktop = fileURLToPath(new URL('..', import.meta.url))
 const require = createRequire(
@@ -101,22 +105,7 @@ test('composer actions remain aligned in both themes and narrow split layouts', 
           colors.fill[2] > colors.fill[1] && colors.fill[1] > colors.fill[0],
           'primary action uses sky blue',
         )
-        const boxes = await page.evaluate(() => {
-          const box = (selector) => {
-            const r = document.querySelector(selector).getBoundingClientRect()
-            return { left: r.left, right: r.right, bottom: r.bottom }
-          }
-          return {
-            composer: box('.composer'),
-            send: box('.composer-send'),
-            controls: box('.composer-controls'),
-            overflow: document.documentElement.scrollWidth > innerWidth,
-          }
-        })
-        assert.equal(boxes.overflow, false)
-        assert.ok(boxes.send.right <= boxes.composer.right)
-        assert.ok(boxes.send.right >= boxes.composer.right - 18)
-        assert.ok(boxes.controls.right <= boxes.send.left)
+        await assertComposerAlignment(page, `${theme} / ${width}px`)
         assert.equal(
           await page
             .getByRole('combobox', { name: '对话思考强度' })
@@ -165,6 +154,12 @@ test('composer actions remain aligned in both themes and narrow split layouts', 
           })
         }
       }
+    for (const theme of ['light', 'dark']) {
+      await page.goto(`${url}?theme=${theme}`)
+      await page.waitForSelector('.composer-send')
+      await assertComposerMetricBoundaries(page)
+    }
+    await page.setViewportSize({ width: 940, height: 860 })
     await page.getByRole('button', { name: '对话模型', exact: true }).click()
     await page.getByRole('menuitem', { name: '备用供应商' }).hover()
     await page
