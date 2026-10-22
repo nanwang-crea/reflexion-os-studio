@@ -65,6 +65,14 @@ Run 的数字耗时指标存储在独立 `performance_json` 列（schema v52，�
 终态会话刷新后显示可折叠明细。各项可重叠，不将累计工具工时冒充墙钟总时长。
 详见 [执行效率](docs/AGENT-EXECUTION-PERFORMANCE.md)。
 
+### 开发者页面
+
+开发者页面通过 `developer.*` 只读查询展示用量、Run 和工具详情，复用
+Runtime / runtime-client / Tauri 既有通道。schema v54 添加数值模型调用记录
+和单工具阶段耗时；主调用明细与 Run 累计用量在同一事务写入，标题与摘要
+单独归属会话，汇总不重复计算父子任务或主调用明细。旧记录保持兼容，
+缺失用量与阶段耗时显示未知。详见 [开发者页面](docs/DEVELOPER-SURFACE.md)。
+
 ### 聊天记录导入导出
 
 用户从对话工具菜单导出当前会话到系统选择的目录，或选择 `.reflexion-chat.json`

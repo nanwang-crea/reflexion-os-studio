@@ -168,6 +168,7 @@ export class RunLauncher {
     void (async () => {
       const settings = input.runSettings ?? this.deps.store.agentSettings.get()
       const provider: ProviderRuntimeConfig = {
+        providerId: profile.id,
         baseUrl: profile.baseUrl,
         apiKey,
         model,

@@ -96,6 +96,7 @@ export async function requestToolApproval(
 ): Promise<ApprovalOutcome> {
   const { store, state, run } = input
   const toolCallId = request.toolCallId
+  const approvalStarted = performance.now()
   store.runs.setIntermediateStatus(run.id, 'awaiting_approval')
   if (state.currentTurnId !== null) {
     store.turnExecutions.transition(
@@ -111,6 +112,11 @@ export async function requestToolApproval(
         )
       : input.approvals.request(request))
   } finally {
+    store.toolCalls.addTiming(
+      toolCallId.replace(/:network$/, ''),
+      'approvalWaitMs',
+      performance.now() - approvalStarted,
+    )
     // 并行工具轮次:还有其它调用在等审批时保持 awaiting_approval，
     // 否则才回置 running，避免 Run 状态错报。
     if (!input.approvals.hasPendingRun(run.id)) {

@@ -173,7 +173,11 @@ export class ContextBuilder {
         store: this.store,
         sessionId,
         provider,
-        summarize: (input) => summarizeCheckpointFrames(provider, input),
+        summarize: (input) =>
+          summarizeCheckpointFrames(provider, {
+            ...input,
+            diagnostics: { store: this.store, sessionId },
+          }),
         stableFrames: stable,
         stableIds,
         throughMessageId,

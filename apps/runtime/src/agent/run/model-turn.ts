@@ -1,6 +1,10 @@
 import { precreateToolCalls } from './tool-call-rows.js'
 import type { StreamingReadCoordinator } from './streaming/reads.js'
-import { checkRequestBudget } from '../context/budget.js'
+import {
+  checkRequestBudget,
+  estimateRequestInputTokens,
+} from '../context/budget.js'
+import { observeModelInvocation } from '../../diagnostics/model-invocation.js'
 import { persistRequestAttempt } from './request-attempts.js'
 import { limitSettingsHint } from './budgets.js'
 import { createModelActivityReporter } from './model-activity.js'
@@ -211,13 +215,26 @@ export async function executeModelTurn(
       },
     )
 
+  const observedRequest = () =>
+    observeModelInvocation(
+      store,
+      {
+        sessionId: run.sessionId,
+        runId: run.id,
+        messageId: draft.id,
+        providerId: run.providerId,
+        model: provider.model,
+        purpose: 'chat',
+        signal,
+        estimatedInputTokens: estimateRequestInputTokens(messages, tools),
+        contextWindow: provider.contextWindow,
+      },
+      requestModel,
+    )
   const result = state.metrics
-    ? await state.metrics.measure('modelMs', requestModel)
-    : await requestModel()
+    ? await state.metrics.measure('modelMs', observedRequest)
+    : await observedRequest()
   await input.streaming?.finish(result.toolCalls, result.finishReason)
-
-  if (input.onModelResult && result.usage)
-    store.runs.addUsage(run.id, result.usage)
   input.onModelResult?.(
     result.usage ?? {
       promptTokens: new TextEncoder().encode(JSON.stringify(messages)).length,
@@ -287,9 +304,6 @@ export async function executeModelTurn(
         continuationReason: 'content_filtered',
       })
     }
-    if (result.usage && !input.onModelResult) {
-      store.runs.addUsage(run.id, result.usage)
-    }
     return {
       turn: {
         content: result.content,
@@ -324,9 +338,6 @@ export async function executeModelTurn(
     usage: result.usage,
     parts: normalized.parts,
   })
-  if (result.usage && !input.onModelResult) {
-    store.runs.addUsage(run.id, result.usage)
-  }
   // W3 ToolCall 批量预建：provider 返回合法 tool_calls 后，一个事务内
   // 按声明顺序创建全部 ToolCall（初始 pending）并在提交后发 tool.requested。
   // 即使进程在第一个工具开始前退出，全部声明过的调用仍可审计。

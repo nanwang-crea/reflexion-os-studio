@@ -1,4 +1,6 @@
 import { OperationReceiptStore } from './chat/operationReceipts.js'
+import { ModelInvocationStore } from './diagnostics/modelInvocations.js'
+import { DeveloperStore } from './diagnostics/index.js'
 import { WorkflowDraftStore } from './workflows/authoring/drafts.js'
 import { WorkflowGenerationStore } from './workflows/authoring/generations.js'
 import { recoverWorkflows } from './workflows/execution/recovery.js'
@@ -48,6 +50,8 @@ export { DEFAULT_SESSION_TITLE, resolveDataDir } from './shared.js'
 export class Store {
   private readonly db: DatabaseSync
   readonly operationReceipts: OperationReceiptStore
+  readonly modelInvocations: ModelInvocationStore
+  readonly developer: DeveloperStore
   readonly projects: ProjectStore
   readonly sessions: SessionStore
   readonly chatArchives: ChatArchiveStore
@@ -92,6 +96,8 @@ export class Store {
     this.db.exec('PRAGMA journal_mode = WAL')
     this.db.exec(SCHEMA)
     runMigrations(this.db, dir)
+    this.modelInvocations = new ModelInvocationStore(this.db)
+    this.modelInvocations.recover()
 
     this.operationReceipts = new OperationReceiptStore(this.db)
     this.operationReceipts.recover()
@@ -101,6 +107,7 @@ export class Store {
     this.messages = new MessageStore(this.db)
     this.runs = new RunStore(this.db)
     this.toolCalls = new ToolCallStore(this.db)
+    this.developer = new DeveloperStore(this.db, this.runs, this.toolCalls)
     this.interactions = new UserInteractionStore(this.db)
     this.turnExecutions = new TurnExecutionStore(this.db)
     this.providers = new ProviderStore(this.db)

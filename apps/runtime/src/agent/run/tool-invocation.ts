@@ -30,9 +30,11 @@ export async function invokeAdmittedTool(
         code: 'permission_changed',
       })
     input.beforeToolInvoke?.(request.name)
+    store.toolCalls.startExecution(rowId)
     const started = performance.now()
     return input.registry.call(request, signal, grant, rowId).finally(() => {
       const elapsed = performance.now() - started
+      store.toolCalls.addTiming(rowId, 'executionMs', elapsed)
       state.metrics?.add('toolExecutionMs', elapsed)
       if (request.name === 'shell.execute')
         state.metrics?.add('shellExecutionMs', elapsed)
@@ -43,7 +45,10 @@ export async function invokeAdmittedTool(
       ? await input.mutationCoordinator.run(invoke, {
           keys: mutationKeys(input, request),
           signal,
-          onWait: (ms) => state.metrics?.add('mutationWaitMs', ms),
+          onWait: (ms) => {
+            state.metrics?.add('mutationWaitMs', ms)
+            store.toolCalls.addTiming(rowId, 'mutationWaitMs', ms)
+          },
         })
       : await invoke()
   state.toolCallRowIds.delete(rowId)

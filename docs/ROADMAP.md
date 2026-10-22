@@ -33,6 +33,8 @@ Rust File/Shell Service、Workspace 边界、read-only/workspace Profile、Chat 
 
 ## Phase 2：Agent Platform（进行中）
 
+- **开发者页面（2026-10-22）**：用量概览、分页 Run / 工具记录、父子 Run 导航、canonical 工具详情、逐轮模型用量与标题 / 摘要辅助用量、单工具阶段耗时；设计与统计口径见 [开发者页面](DEVELOPER-SURFACE.md)。Windows/Linux 真机验收待执行。
+
 - **已完成子集**：Skills（4 个内置技能、斜杠激活、skill.use）；Plugin Foundation（标准 `SKILL.md` 包 + 可选 `plugin.json` v1 扩展契约、能力/权限/兼容范围声明、本地文件与目录/工作区/Git HTTPS 安装、拖拽、预览确认、版本更新、原子替换与回滚、启停/卸载/隔离/状态持久化与管理 UI；旧 `<dataDir>/skills` 包启动迁移）；MCP（stdio 协议 client、管理服务、工具桥默认 ask 审批、设置页面板）。
 - **已完成（2026-09，Memory V2 文件即记忆）**：AGENTS.md/MEMORY.md 四层注入 + memory.remember 免审批工具 + 指令页；A2 自动提取-合并-召回链路整体移除（v23 迁移删 memories/FTS/memory_jobs 表，不搬迁数据）；检索式记忆（mem0 直连原始对话数据）列为候选后续项。
 - **已完成（2026-09，Agent Loop Hardening 与 Context Engine V2）**：完成状态机（只有 stop 且无工具才算完成；length 限次续写；provider_protocol 如实失败）、Atomic Run Finalizer（单事务终态收敛）、Atomic Frames 与请求前校验、副作用感知调度（read 并行/mutation 串行/ToolCall 批量预建）、Loop Guard（重复/无进展拦截）、Run 预算（时长/token/工具数/续写）、增量 Context Checkpoint（source hash/single-flight）、AgentSettings 新预算字段与设置页循环分组。

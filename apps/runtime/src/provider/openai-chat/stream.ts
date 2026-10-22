@@ -129,14 +129,18 @@ export function createChatStream(
         if (name) reportToolReady(options, { ...call, name })
       }
     }
-    if (parsed.usage) {
+    if (
+      parsed.usage &&
+      typeof parsed.usage.prompt_tokens === 'number' &&
+      typeof parsed.usage.completion_tokens === 'number'
+    ) {
       diagnostics.counts.usageEvents += 1
       const cachedTokens =
         parsed.usage.prompt_cache_hit_tokens ??
         parsed.usage.prompt_tokens_details?.cached_tokens
       usage = {
-        promptTokens: parsed.usage.prompt_tokens ?? 0,
-        completionTokens: parsed.usage.completion_tokens ?? 0,
+        promptTokens: parsed.usage.prompt_tokens,
+        completionTokens: parsed.usage.completion_tokens,
         ...(typeof cachedTokens === 'number'
           ? { cachedPromptTokens: cachedTokens }
           : {}),

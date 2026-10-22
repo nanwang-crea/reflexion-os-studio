@@ -2,6 +2,8 @@ import type { ProviderProfile } from '@reflexion-os-studio/contracts'
 import { EmitterRegistry, type EventNotifier } from '../../events.js'
 import { DEFAULT_SESSION_TITLE, type Store } from '../../store/index.js'
 import { generateSessionTitle } from './title.js'
+import { observeModelInvocation } from '../../diagnostics/model-invocation.js'
+import type { Usage } from '@reflexion-os-studio/contracts'
 
 export class SessionTitleService {
   private readonly emitters: EmitterRegistry
@@ -31,11 +33,30 @@ export class SessionTitleService {
     this.attempted.add(input.sessionId)
     const controller = new AbortController()
     this.jobs.set(input.sessionId, controller)
-    void generateSessionTitle(input.content, {
-      ...input,
-      signal: controller.signal,
-    })
-      .then((title) => {
+    void observeModelInvocation(
+      this.store,
+      {
+        sessionId: input.sessionId,
+        runId: null,
+        messageId: null,
+        providerId: input.profile.id,
+        model: input.model,
+        purpose: 'title',
+        signal: controller.signal,
+      },
+      async () => {
+        let usage: Usage | undefined
+        const title = await generateSessionTitle(input.content, {
+          ...input,
+          signal: controller.signal,
+          onUsage: (value) => {
+            usage = value
+          },
+        })
+        return { title, usage }
+      },
+    )
+      .then(({ title }) => {
         if (!title || controller.signal.aborted) return
         const current = this.store.sessions.get(input.sessionId)
         if (

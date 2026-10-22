@@ -2,6 +2,7 @@ import {
   OPERATION_RECEIPTS_SCHEMA,
   CHECKPOINT_INVALIDATION_SCHEMA,
 } from './migrations/runtime-reliability.js'
+import { DEVELOPER_SCHEMA } from './migrations/developer.js'
 import { WORKFLOW_AUTHORING_SCHEMA } from './migrations/workflow-authoring.js'
 import {
   WORKFLOW_SCHEMA,
@@ -145,7 +146,8 @@ CREATE TABLE IF NOT EXISTS tool_calls (
   error_code TEXT,
   approval_grant_id TEXT,
   created_at TEXT NOT NULL,
-  completed_at TEXT
+  completed_at TEXT,
+  timing_json TEXT
 );
 CREATE TABLE IF NOT EXISTS user_interactions (
   id TEXT PRIMARY KEY,
@@ -340,7 +342,8 @@ CREATE INDEX IF NOT EXISTS idx_tool_calls_run ON tool_calls(run_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_run_events_run ON run_events(run_id, created_at);
 ${OPERATION_RECEIPTS_SCHEMA}
 ${CHECKPOINT_INVALIDATION_SCHEMA}
+${DEVELOPER_SCHEMA}
 `
 
 /** 当前 schema 版本；递增时必须在 runMigrations 中补充对应升级路径。 */
-export const LATEST_SCHEMA_VERSION = 53
+export const LATEST_SCHEMA_VERSION = 54

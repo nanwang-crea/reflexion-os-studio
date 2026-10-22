@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { developerCommands } from './commands/developer.js'
 import { operationCommands } from './operations.js'
 import { runtimeCommands } from './commands/runtime.js'
 import { chatArchiveCommands } from './commands/chat-archive.js'
@@ -24,6 +25,7 @@ import { terminalCommands } from './commands/terminal.js'
 export * from './commands/params.js'
 
 export const CommandSchemaRegistry = {
+  ...developerCommands,
   ...runtimeCommands,
   ...operationCommands,
   ...chatCommands,

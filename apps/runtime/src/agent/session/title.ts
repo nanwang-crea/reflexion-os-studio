@@ -1,6 +1,7 @@
 import type { ProviderProfile } from '@reflexion-os-studio/contracts'
 import { streamChatCompletion } from '../../provider.js'
 import { TITLE_SYSTEM_PROMPT } from '../prompts/index.js'
+import type { Usage } from '@reflexion-os-studio/contracts'
 
 const TITLE_MAX_LENGTH = 24
 const TITLE_LLM_MAX_LENGTH = 30
@@ -24,6 +25,7 @@ export async function generateSessionTitle(
     apiKey: string
     model: string
     signal: AbortSignal
+    onUsage?: (usage: Usage | undefined) => void
   },
 ): Promise<string | null> {
   // 输入截断到约 500 字，避免标题请求比对话还贵
@@ -48,6 +50,7 @@ export async function generateSessionTitle(
     },
     () => {},
   )
+  provider.onUsage?.(result.usage)
   const cleaned = result.content
     .trim()
     .replace(/^["'“”‘’]+|["'“”‘’]+$/g, '')

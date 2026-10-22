@@ -52,6 +52,15 @@ export function ReadyApp(props: ReadyAppProps): React.JSX.Element {
         },
       }}
       main={{
+        developer: {
+          projects: props.projects,
+          profiles: props.profiles,
+          onConversation: (sessionId, projectId) => {
+            if (projectId)
+              props.handleSelectProjectSession(projectId, sessionId)
+            else props.handleSelectStandaloneSession(sessionId)
+          },
+        },
         view: props.view,
         activeSessionId: props.activeSessionId,
         notice: props.notice,

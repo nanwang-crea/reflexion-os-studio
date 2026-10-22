@@ -90,6 +90,10 @@ const TerminalEnvelopeSchema = RuntimeEventEnvelopeSchema.extend({
 
 export const RuntimeEventSchema = z.discriminatedUnion('type', [
   RuntimeEventEnvelopeSchema.extend({
+    type: z.literal('developer.updated'),
+    scope: z.literal('runtime'),
+  }),
+  RuntimeEventEnvelopeSchema.extend({
     type: z.literal('workflow.generation.updated'),
     stateVersion: z.number().int().nonnegative(),
     scope: z.literal('workflow'),

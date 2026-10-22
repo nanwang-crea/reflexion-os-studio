@@ -1,4 +1,5 @@
 import { HostBrowserTransport } from './browser/agent/embedded/host.js'
+import { registerDeveloperNotifications } from './diagnostics/events.js'
 import { BrowserAgentService } from './browser/agent/service.js'
 import { OperationRegistry, registerOperations } from './operations/index.js'
 import { cleanupPlanDocuments } from './agent/tools/plan-documents.js'
@@ -146,6 +147,9 @@ const dataDir = resolveDataDir()
 const releaseDataDirectoryLock = acquireDataDirectoryLock(dataDir)
 process.once('exit', releaseDataDirectoryLock)
 const store = new Store(dataDir)
+registerDeveloperNotifications(store, () =>
+  statusEmitter.next({ type: 'developer.updated' }),
+)
 registerOperations(
   store,
   new OperationRegistry(

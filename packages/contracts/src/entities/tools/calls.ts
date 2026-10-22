@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ToolCallTimingSchema } from '../../tool-timing.js'
 import { IsoDateTimeSchema } from '../shared.js'
 import { JsonValueSchema } from '../../json-value.js'
 import { ToolOutputSchema } from '../../tool-output.js'
@@ -40,5 +41,6 @@ export const ToolCallSchema = z.object({
   approvalGrantId: z.string().nullable(),
   createdAt: IsoDateTimeSchema,
   completedAt: IsoDateTimeSchema.nullable(),
+  timing: ToolCallTimingSchema.nullable().optional(),
 })
 export type ToolCall = z.infer<typeof ToolCallSchema>

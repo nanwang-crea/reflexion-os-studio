@@ -26,9 +26,14 @@ import { isTerminalEntryDisabled } from './features/terminal/entry-switch'
 import { ResizeHandle } from './components/ResizeHandle'
 import { SurfacePanelTabs } from './components/surfaces/SurfacePanelTabs'
 import { tabIdOf } from './features/workspace/types'
+import type { DeveloperView as DeveloperViewType } from './features/developer/DeveloperView'
+const DeveloperView = lazy(async () => ({
+  default: (await import('./features/developer/DeveloperView')).DeveloperView,
+}))
 
 export interface AppMainProps {
   view: ViewName
+  developer: ComponentProps<typeof DeveloperViewType>
   activeSessionId: string | null
   /** TopBar 全部 props（contextTitle / 面板开关除外，本组件内推导）。 */
   topBar: Omit<
@@ -94,19 +99,21 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
     if (!surfaceOpen) setSurfaceExpanded(false)
   }, [surfaceOpen])
   const contextTitle =
-    view === 'settings'
-      ? '设置'
-      : view === 'skills'
-        ? '技能'
-        : view === 'agents'
-          ? 'Agent 角色'
-          : view === 'instructions'
-            ? '指令'
-            : activeSessionId
-              ? (props.chat.sessionData?.session?.title ?? '对话')
-              : props.landing.project
-                ? props.landing.project.name
-                : '新对话'
+    view === 'developer'
+      ? '开发者'
+      : view === 'settings'
+        ? '设置'
+        : view === 'skills'
+          ? '技能'
+          : view === 'agents'
+            ? 'Agent 角色'
+            : view === 'instructions'
+              ? '指令'
+              : activeSessionId
+                ? (props.chat.sessionData?.session?.title ?? '对话')
+                : props.landing.project
+                  ? props.landing.project.name
+                  : '新对话'
 
   return (
     <div
@@ -162,7 +169,11 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
         )}
         <div className="content-area">
           <div className="content-main">
-            {view === 'settings' ? (
+            {view === 'developer' ? (
+              <Suspense fallback={<p>正在加载开发者页面…</p>}>
+                <DeveloperView {...props.developer} />
+              </Suspense>
+            ) : view === 'settings' ? (
               <SettingsView {...props.settings} />
             ) : view === 'skills' ? (
               <SkillsView onUseSkill={props.onUseSkill} />

@@ -197,8 +197,8 @@ export async function streamAnthropic(
     let reasoning = ''
     let finishReason: StreamChatResult['finishReason'] | null = null
     let rawStopReason: string | undefined
-    let inputTokens = 0
-    let outputTokens = 0
+    let inputTokens: number | undefined
+    let outputTokens: number | undefined
     let cachedTokens: number | undefined
     const toolCalls: StreamedToolCall[] = []
     const toolCallById = new Map<
@@ -420,13 +420,16 @@ export async function streamAnthropic(
       providerContinuation,
       finishReason,
       rawStopReason,
-      usage: {
-        promptTokens: inputTokens,
-        completionTokens: outputTokens,
-        ...(typeof cachedTokens === 'number'
-          ? { cachedPromptTokens: cachedTokens }
-          : {}),
-      },
+      usage:
+        inputTokens === undefined || outputTokens === undefined
+          ? undefined
+          : {
+              promptTokens: inputTokens,
+              completionTokens: outputTokens,
+              ...(typeof cachedTokens === 'number'
+                ? { cachedPromptTokens: cachedTokens }
+                : {}),
+            },
       toolCalls,
     }
   }

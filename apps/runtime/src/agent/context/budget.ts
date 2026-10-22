@@ -19,6 +19,7 @@ import { ProviderError } from '../../provider/provider-error.js'
 export const DEFAULT_CONTEXT_BUDGET_LIMIT = 64_000
 
 export interface ProviderRuntimeConfig {
+  providerId?: string
   baseUrl: string
   apiKey: string
   model: string

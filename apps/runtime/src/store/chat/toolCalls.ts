@@ -7,6 +7,8 @@ import {
   type ToolCall,
   type ToolCallStatus,
   type ToolOutput,
+  ToolCallTimingSchema,
+  type ToolCallTiming,
 } from '@reflexion-os-studio/contracts'
 import { nowIso, type Row } from '../shared.js'
 
@@ -147,6 +149,54 @@ export class ToolCallStore {
       .run(status, approvalGrantId ?? null, id)
   }
 
+  startExecution(id: string): void {
+    this.updateTiming(id, (timing) => ({
+      ...timing,
+      version: 1,
+      executionStartedAt: nowIso(),
+    }))
+  }
+
+  addTiming(
+    id: string,
+    phase: 'approvalWaitMs' | 'mutationWaitMs' | 'executionMs',
+    ms: number,
+  ): void {
+    this.updateTiming(id, (timing) => ({
+      ...timing,
+      version: 1,
+      [phase]: (timing?.[phase] ?? 0) + Math.max(0, ms),
+    }))
+  }
+
+  private updateTiming(
+    id: string,
+    update: (timing: ToolCallTiming | null) => ToolCallTiming,
+  ): void {
+    try {
+      const row = this.db
+        .prepare('SELECT timing_json FROM tool_calls WHERE id = ?')
+        .get(id)
+      const timing = update(this.parseTiming(row?.timing_json))
+      this.db
+        .prepare('UPDATE tool_calls SET timing_json = ? WHERE id = ?')
+        .run(JSON.stringify(ToolCallTimingSchema.parse(timing)), id)
+    } catch {
+      // Optional measurements must never hide an operation that already ran.
+      process.stderr.write('[runtime] tool timing persistence unavailable\n')
+    }
+  }
+
+  private parseTiming(value: unknown): ToolCallTiming | null {
+    if (value == null) return null
+    try {
+      const parsed = ToolCallTimingSchema.safeParse(JSON.parse(String(value)))
+      return parsed.success ? parsed.data : null
+    } catch {
+      return null
+    }
+  }
+
   /** 终态写入：结果、错误码与完成时间一并落库（由门面保证事务）。 */
   finalize(
     id: string,
@@ -206,6 +256,7 @@ export class ToolCallStore {
         row.approval_grant_id == null ? null : String(row.approval_grant_id),
       createdAt: String(row.created_at),
       completedAt: row.completed_at == null ? null : String(row.completed_at),
+      timing: this.parseTiming(row.timing_json),
     }
   }
 

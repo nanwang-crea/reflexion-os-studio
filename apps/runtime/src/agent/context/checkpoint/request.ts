@@ -13,6 +13,8 @@ import {
 import { CHECKPOINT_SUMMARY_SYSTEM_PROMPT } from '../../prompts/index.js'
 import { sanitizeSummary } from './summary.js'
 import { transcriptChunks } from './transcript.js'
+import { observeModelInvocation } from '../../../diagnostics/model-invocation.js'
+import type { Store } from '../../../store/index.js'
 
 const SUMMARY_MAX_OUTPUT_TOKENS = 4096
 const SUMMARY_MAX_INPUT_TOKENS = 32_000
@@ -44,6 +46,7 @@ export async function summarizeCheckpointFrames(
     previousSummary: ContextCheckpointSummary | null
     newFrames: ContextFrame[]
     signal: AbortSignal
+    diagnostics?: { store: Store; sessionId: string }
   },
 ): Promise<unknown> {
   const maxTokens = Math.min(
@@ -76,23 +79,41 @@ export async function summarizeCheckpointFrames(
       maxTokens,
       contextBudget: SUMMARY_MAX_INPUT_TOKENS,
     })
-    const result = await streamChat(
-      {
-        baseUrl: provider.baseUrl,
-        apiKey: provider.apiKey,
-        model: provider.model,
-        headers: provider.headers,
-        messages,
-        signal,
-        maxTokens,
-        timeoutMs: Math.min(provider.timeoutMs ?? 60_000, 60_000),
-        maxRetries: Math.min(provider.maxRetries ?? 1, 1),
-        retryBackoffInitialMs: provider.retryBackoffInitialMs,
-        retryBackoffMaxMs: provider.retryBackoffMaxMs,
-      },
-      provider.apiFormat,
-      () => {},
-    )
+    const request = () =>
+      streamChat(
+        {
+          baseUrl: provider.baseUrl,
+          apiKey: provider.apiKey,
+          model: provider.model,
+          headers: provider.headers,
+          messages,
+          signal,
+          maxTokens,
+          timeoutMs: Math.min(provider.timeoutMs ?? 60_000, 60_000),
+          maxRetries: Math.min(provider.maxRetries ?? 1, 1),
+          retryBackoffInitialMs: provider.retryBackoffInitialMs,
+          retryBackoffMaxMs: provider.retryBackoffMaxMs,
+        },
+        provider.apiFormat,
+        () => {},
+      )
+    const result = input.diagnostics
+      ? await observeModelInvocation(
+          input.diagnostics.store,
+          {
+            sessionId: input.diagnostics.sessionId,
+            runId: null,
+            messageId: null,
+            providerId: provider.providerId ?? null,
+            model: provider.model,
+            purpose: 'summary',
+            signal,
+            estimatedInputTokens: estimateMessageTokens(messages),
+            contextWindow: provider.contextWindow,
+          },
+          request,
+        )
+      : await request()
     signal.throwIfAborted()
     if (result.finishReason !== 'stop' || result.toolCalls.length > 0)
       throw new Error('checkpoint summary: response did not complete as text')
