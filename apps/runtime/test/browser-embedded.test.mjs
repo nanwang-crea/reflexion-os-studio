@@ -74,6 +74,11 @@ test('private host responses stay isolated and do not expose untrusted error tex
   const pending = host.request({ kind: 'check', lease: randomUUID() })
   host.dispose()
   await assert.rejects(pending, /browser_closed/)
+  await assert.rejects(
+    host.request({ kind: 'close', lease: randomUUID() }),
+    /browser_closed/,
+  )
+  assert.equal(sent.length, 3)
 })
 
 test('control handoff notifications validate identity and unsubscribe', () => {

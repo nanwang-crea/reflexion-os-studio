@@ -8,7 +8,6 @@ import {
   PROTOCOL_VERSION,
   lookupCommandSchema,
   summarizeZodIssuesForLog,
-  type JsonRpcMessage,
   type JsonRpcRequest,
   type JsonRpcResponse,
   type RuntimeEvent,
@@ -28,6 +27,8 @@ import { AssetService } from './assets/service.js'
 import { TerminalService } from './terminal/service.js'
 import { SkillPluginService } from './skills/service.js'
 import { acquireDataDirectoryLock } from './lifecycle/data-directory-lock.js'
+import { createHostConnection } from './lifecycle/host-connection.js'
+import { createRuntimeShutdown } from './lifecycle/shutdown.js'
 
 const RUNTIME_VERSION = '0.1.0'
 
@@ -56,9 +57,17 @@ function routeSystemNotification(method: string, params: unknown): void {
   // 其他通知目前无消费者（system.ready 走 status，其余为请求响应）。
 }
 
-function write(message: JsonRpcMessage, onFlush?: () => void): void {
-  process.stdout.write(`${JSON.stringify(message)}\n`, onFlush)
-}
+const write = createHostConnection(
+  {
+    input: process.stdin,
+    output: process.stdout,
+    diagnostics: process.stderr,
+  },
+  () => {
+    browserHost?.dispose()
+    void shutdown.run()
+  },
+)
 
 function sendResponse(
   id: string | number,
@@ -179,6 +188,24 @@ const terminalService = new TerminalService({
   notify,
 })
 terminalServiceBox.current = terminalService
+const shutdown = createRuntimeShutdown(
+  {
+    terminal: () => terminalService.shutdown(),
+    system: () => systemRuntime.shutdown(),
+    browser: () => browser.shutdown(),
+    browserHost: () => browserHost?.dispose(),
+    agent: () => agent.dispose(),
+    skills: () => skillPlugins.dispose(),
+    workspaceWatch: () => workspaceWatch.clear(),
+    mcp: () => mcpManager.dispose(),
+  },
+  (step, error) => {
+    process.stderr.write(`[runtime] ${step} shutdown error: ${String(error)}\n`)
+  },
+  () => process.exit(0),
+)
+process.once('SIGTERM', () => void shutdown.run())
+process.once('SIGINT', () => void shutdown.run())
 const commandContext = {
   browser,
   store,
@@ -200,6 +227,7 @@ const commandContext = {
 const userShellEnvReady = applyUserShellEnv()
 void userShellEnvReady
   .then(async () => {
+    if (shutdown.started) return
     systemRuntime.start()
     // MCP:按配置连接全部已启用 server(失败标记 failed,不阻塞 Chat)。
     await mcpManager.reload()
@@ -241,27 +269,8 @@ async function handleRequestAsync(request: JsonRpcRequest): Promise<void> {
   }
 
   if (request.method === 'runtime.shutdown') {
-    // 先收终端（对每个 shell 发协议 close），再协议关停 Rust 子进程，最后退自身；
-    // 宿主侧另有进程树兜底收割。顺序保持：terminal → system → mcp dispose → exit。
     sendResponse(request.id, { ok: true }, () => {
-      void terminalService
-        .shutdown()
-        .catch((error: unknown) => {
-          process.stderr.write(
-            `[runtime] terminal shutdown error: ${String(error)}\n`,
-          )
-        })
-        .finally(() => {
-          void systemRuntime.shutdown().finally(async () => {
-            await browser.shutdown()
-            browserHost?.dispose()
-            agent.dispose()
-            skillPlugins.dispose()
-            workspaceWatch.clear()
-            mcpManager.dispose()
-            process.exit(0)
-          })
-        })
+      void shutdown.run()
     })
     return
   }
@@ -353,6 +362,7 @@ write({
 
 const input = createInterface({ input: process.stdin })
 input.on('line', (line) => {
+  if (shutdown.started) return
   let value: unknown
   try {
     value = JSON.parse(line)

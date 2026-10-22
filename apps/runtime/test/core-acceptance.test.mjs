@@ -219,14 +219,19 @@ test(
           .entries.length,
         0,
       )
-      assert.equal(
+      assert.deepEqual(
         (
           await runtime.call('operation.get', {
             method: 'workspace.git_commit',
             targetRequestId: commitId,
           })
         ).operation,
-        null,
+        {
+          requestId: commitId,
+          method: 'workspace.git_commit',
+          phase: 'succeeded',
+          error: null,
+        },
       )
     } finally {
       if (runtime) await runtime.stop()

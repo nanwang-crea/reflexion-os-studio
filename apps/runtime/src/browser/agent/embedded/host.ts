@@ -8,6 +8,7 @@ import {
 
 /** Private stdio peer; endpoint responses never enter frontend events or history. */
 export class HostBrowserTransport {
+  private closed = false
   private readonly listeners = new Set<
     (lease: string, paused: boolean) => void
   >()
@@ -25,6 +26,7 @@ export class HostBrowserTransport {
   >()
   constructor(private readonly write: (message: JsonRpcMessage) => void) {}
   request(raw: HostBrowserRequest): Promise<unknown> {
+    if (this.closed) return Promise.reject(new Error('browser_closed'))
     const params = HostBrowserRequestSchema.parse(raw)
     const id = `host-browser:${randomUUID()}`
     return new Promise((resolve, reject) => {
@@ -73,6 +75,7 @@ export class HostBrowserTransport {
     return true
   }
   dispose(): void {
+    this.closed = true
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer)
       pending.reject(new Error('browser_closed'))
