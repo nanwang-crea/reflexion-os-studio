@@ -25,6 +25,7 @@ import type { ApprovalGateway, PermissionGate } from '../permissions/index.js'
 import { createRunExecutionState } from './run-state.js'
 import { RunFinalizer, type RunTerminalDecision } from './run-finalizer.js'
 import { executeToolCall } from './tool-executor.js'
+import { FAILURE_TRACKING_POLICY } from './tool-policies.js'
 import { executeToolBatch, type SchedulerDeps } from './tool-scheduler.js'
 import type { RootMutationCoordinator } from '../delegation/mutations.js'
 
@@ -120,7 +121,7 @@ export class RunRunner {
     )
     state.metrics = metrics
     const finalizer = new RunFinalizer(this.store)
-    const guard = new LoopGuard()
+    const guard = new LoopGuard(FAILURE_TRACKING_POLICY)
     const budgets = {
       maxRunTimeoutSec: runLimit(input.settings, 'maxRunTimeoutSec', 7200),
       maxRunTotalTokens: runLimit(

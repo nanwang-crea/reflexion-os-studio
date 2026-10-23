@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 export const RuntimeErrorCodeSchema = z.enum([
+  'run_finalization_failed',
   'configuration',
   'authentication',
   'rate_limit',

@@ -29,7 +29,8 @@ data/JSON/DONE、注释/其他行、usage/choice/非零 index、终止字段、�
 断流仍保留这些统计，并维持网络错误分类；已观察到不支持终止值时优先按协议错误处理。
 
 - **完成状态机**：只有 `finish_reason=stop` 且无工具调用的轮次才能完成 Run；`length` 在续写预算内（默认 2 轮）继续，耗尽为 `output_truncated`；`content_filter` 失败且草稿落 failed（不伪造 completed）；finish reason 缺失/未知或与 toolCalls 不一致失败为 `provider_protocol`；其中流已收尾但从未出现合法终止原因（缺 finish_reason / 缺 stop_reason / 缺 response.completed）视为可重试的流异常，复用传输层重试预算，重试耗尽才失败，错误消息附带 done/已收数据/内容长度/工具调用数诊断；出现未知非空终止值属于方言不匹配，立即失败。稳定错误码：`max_turns` / `output_truncated` / `content_filtered` / `provider_protocol` / `no_progress` / `run_timeout` / `run_token_budget` / `tool_call_budget`。
-- **Atomic Run Finalizer**：全部 Run 终态唯一生产入口，单个 SQLite 事务内收尾 pending 消息（含首轮失败悬挂的草稿清扫）、取消未终态 ToolCall（预建行一并收敛）、收敛活动 Plan（含未完成步骤）、写 Run 终态与失败事件；提交后按序发事件并执行回调（回调最多一次，通知器抛错不吞回调）。事务失败受控重试一次。终态不再创建自动记忆任务，Memory V2 以文件即记忆为准。
+- **Atomic Run Finalizer**：全部 Run 终态唯一生产入口，单个 SQLite 事务内收尾 pending 消息（含首轮失败悬挂的草稿清扫）、取消未终态 ToolCall（预建行一并收敛）、写 Run 终态与失败事件；计划只由 `manage_plan` 更新，不随 Run 终态收敛。提交后按序发事件并执行回调（回调最多一次，通知器或回调抛错不再触发另一轮终态保存）。事务失败受控重试一次；重试仍失败时发 `run.failed`（`run_finalization_failed`）并执行一次失败回调，不伪造已提交的 ToolCall 事件。未提交草稿保留，数据库非终态行交给既有启动恢复流程判定恢复或中断，不能把失败通知理解为终态已落库。终态不再创建自动记忆任务，Memory V2 以文件即记忆为准。
+- **审批取消**：已中止的请求不发审批卡；已发出的卡在中止时通过 `approval.resolved`（`decision: cancelled`，无 `choiceId`）清除，不生成任何一次或会话授权。pending 在通知前注册，通知器同步取消/回复也能正确收尾；通知异常不阻断 Promise 结算。
 - **ToolCall 批量预建**：Provider 返回合法 tool_calls 后，模型轮事务内按声明顺序创建全部行（初始 pending），提交后发 `tool.requested`；进程在工具执行前退出时全部调用可审计，启动恢复统一 cancelled。
 - **副作用调度**：相邻 pure/read 且资源不冲突的调用并行成批；write/shell/state 串行独占批，mutation 完成前后续 read 不交叉；结果按声明顺序回填；审批按声明顺序弹出，不允许后批准操作越过前一操作。
 - **Loop Guard**：调用指纹 = 工具名 + canonicalJson(args) + freshness epoch（mutation 成功/Plan 变化/新消息递增）；相同指纹连续四次相同结果后，下一次返回 `no_progress` 工具错误（不执行），让模型调整策略或说明阻碍；继续重放才终止 Run（同一模型轮批量声明的重复只反馈，下一轮仍重复才终止）。摘要变化重置连续计数；已成功非幂等 mutation 立即重放拦截（`duplicate_side_effect` 工具错误），模型仍重复一次失败 `no_progress`。

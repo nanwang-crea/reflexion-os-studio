@@ -10,6 +10,46 @@ const REQ = (name, args) => ({
 const OK = (content) => ({ content, isError: false, code: undefined })
 const ERR = (content, code = 'tool_error') => ({ content, isError: true, code })
 
+test('malformed argument fingerprints hash the entire input with a distinct raw namespace', () => {
+  const guard = new LoopGuard()
+  const prefix = 'x'.repeat(80)
+  const first = { id: 'a', name: 'tool', arguments: prefix + 'a' }
+  const second = { ...first, arguments: prefix + 'b' }
+  assert.notEqual(guard.fingerprint(first), guard.fingerprint(second))
+  assert.notEqual(
+    guard.fingerprint(first),
+    guard.fingerprint(REQ('tool', { __unparsed: first.arguments })),
+  )
+  guard.recordExecution(first, OK('applied'), true)
+  assert.equal(guard.admit(first).code, 'duplicate_side_effect')
+  assert.equal(guard.admit(second).verdict, 'allow')
+})
+
+test('obsolete epochs are discarded while the newest mutation remains protected', () => {
+  const guard = new LoopGuard()
+  let latest
+  for (let i = 0; i < 1000; i++) {
+    const read = REQ('read', { path: `file-${i}` })
+    for (let n = 0; n < 4; n++) guard.recordExecution(read, OK('same'), false)
+    guard.recordBlocked(read)
+    latest = REQ('write', { path: `file-${i}` })
+    guard.recordExecution(latest, OK('written'), true)
+    assert.equal(guard.admit(read).verdict, 'allow')
+    assert.equal(guard.admit(latest).code, 'duplicate_side_effect')
+    guard.recordBlocked(latest)
+    assert.equal(guard.admit(latest).terminal, true)
+  }
+  // Test retained storage, not elapsed time or noisy process memory estimates.
+  assert.equal(guard.repetitions.size, 0)
+  assert.equal(guard.recoveryWarnings.size, 0)
+  assert.equal(guard.protectedMutations.size, 1)
+  assert.equal(guard.blockedMutations.size, 1)
+  guard.bumpEpoch()
+  assert.equal(guard.admit(latest).verdict, 'allow')
+  assert.equal(guard.protectedMutations.size, 0)
+  assert.equal(guard.blockedMutations.size, 0)
+})
+
 test('canonicalJson sorts object keys, keeps array order', () => {
   assert.equal(
     canonicalJson({ b: 1, a: [2, 1], c: { z: 1, y: 2 } }),
@@ -99,7 +139,7 @@ test('identical failures allow four executions then one recovery opportunity', (
 })
 
 test('changed anchors and unchanged reads cannot bypass resource failure limit', () => {
-  const guard = new LoopGuard()
+  const guard = new LoopGuard({ stateOnlyTools: new Set(['manage_plan']) })
   const read = REQ('file.read', { path: './a.ts' })
   const snapshot = OK(JSON.stringify({ revision: { sha256: 'same' } }))
   guard.recordExecution(read, snapshot, false)
@@ -221,7 +261,9 @@ test('declared idempotent state changes do not trigger duplicate side effects', 
 })
 
 test('successful browser navigation permits recovery from prior tab read failures', () => {
-  const guard = new LoopGuard()
+  const guard = new LoopGuard({
+    invalidateToolPrefixes: { 'browser.navigate': ['browser.'] },
+  })
   const read = REQ('browser.read', { tabId: 'tab', pageVersion: 'old' })
   for (let i = 0; i < 4; i++)
     guard.recordExecution(read, ERR('loading', 'browser_page_loading'), false)

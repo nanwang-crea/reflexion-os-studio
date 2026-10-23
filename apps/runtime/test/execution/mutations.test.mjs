@@ -1,12 +1,53 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { RootMutationCoordinator } from '../../dist/agent/delegation/mutations.js'
+import {
+  RootMutationCoordinator,
+  isMutatingTool,
+} from '../../dist/agent/delegation/mutations.js'
+import { LoopGuard } from '@reflexion-os-studio/agent-core'
+import { FAILURE_TRACKING_POLICY } from '../../dist/agent/run/tool-policies.js'
 import {
   resourcesConflict,
   fileResourceKeys,
 } from '../../dist/agent/delegation/resource-locks.js'
 import { planBatches } from '../../dist/agent/run/tool-scheduler.js'
 import { deferred, tick } from './fixture.mjs'
+
+test('batch editing is classified as a mutation before expansion', () => {
+  assert.equal(isMutatingTool('file.edit_batch'), true)
+  assert.equal(isMutatingTool('file.edit'), true)
+  assert.equal(isMutatingTool('file.read'), false)
+})
+
+for (const tool of ['browser.navigate', 'browser.close']) {
+  test(`${tool} invalidates only browser failures using the Runtime policy`, () => {
+    const guard = new LoopGuard(FAILURE_TRACKING_POLICY)
+    const read = {
+      id: 'read',
+      name: 'browser.read',
+      arguments: '{"tabId":"tab"}',
+    }
+    const edit = { id: 'edit', name: 'file.edit', arguments: '{"path":"file"}' }
+    for (let i = 0; i < 4; i++) {
+      guard.recordExecution(read, { isError: true, content: 'loading' }, false)
+      guard.recordExecution(edit, { isError: true, content: 'conflict' }, true)
+      guard.recordExecution(
+        { id: 'plan', name: 'manage_plan', arguments: '{"path":"file"}' },
+        { isError: false, content: 'updated' },
+        true,
+      )
+    }
+    assert.equal(guard.admit(read).code, 'no_progress')
+    guard.recordExecution(
+      { id: 'change', name: tool, arguments: '{}' },
+      { isError: false, content: 'done' },
+      true,
+      false,
+    )
+    assert.equal(guard.admit(read).verdict, 'allow')
+    assert.equal(guard.admit(edit).code, 'no_progress')
+  })
+}
 
 test('disjoint edits overlap; same path and Shell barriers preserve admission order', async () => {
   const lock = new RootMutationCoordinator()

@@ -39,18 +39,15 @@ export class DelegationBudgetCoordinator {
       )
     }
     this.active += 1
-    let active = true
+    let released = false
+    const release = (): void => {
+      if (released) return
+      released = true
+      this.active -= 1
+    }
     return {
-      release: () => {
-        if (!active) return
-        active = false
-        this.active -= 1
-      },
-      rollback: () => {
-        if (!active) return
-        active = false
-        this.active -= 1
-      },
+      release,
+      rollback: release,
     }
   }
 }

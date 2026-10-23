@@ -68,6 +68,7 @@ export function isMutatingTool(toolName: string): boolean {
       'file.write',
       'file.write_stream',
       'file.edit',
+      'file.edit_batch',
       'file.delete',
       'file.move',
       'file.mkdir',

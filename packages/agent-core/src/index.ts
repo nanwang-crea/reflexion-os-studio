@@ -24,6 +24,7 @@ export {
 } from './disposition.js'
 export { runAgentLoop } from './loop.js'
 export { LoopGuard, canonicalJson } from './loop-guard.js'
+export type { FailureTrackingPolicy } from './failure-tracker.js'
 export { ToolRegistry } from './registry.js'
 export type {
   AgentLoopOptions,

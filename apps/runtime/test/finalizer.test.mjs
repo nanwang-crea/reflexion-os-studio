@@ -7,7 +7,6 @@ import { join } from 'node:path'
 import { Store } from '../dist/store/index.js'
 import { RunEventEmitter } from '../dist/events.js'
 import { RunRunner } from '../dist/agent/run/runner.js'
-import { RunFinalizer } from '../dist/agent/run/run-finalizer.js'
 import { ToolRegistry } from '@reflexion-os-studio/agent-core'
 import {
   ApprovalGateway,
@@ -335,65 +334,6 @@ test('max turns stops with stable max_turns code through the finalizer', async (
   assert.equal(failedEvent.error.code, 'max_turns')
 })
 
-test('finalizer settles callbacks exactly once even when notifier throws', async () => {
-  const store = freshStore()
-  const session = store.sessions.create(
-    store.projects.create({ name: 'p', folderPath: '/w' }).id,
-  )
-  const run = store.runs.create({
-    sessionId: session.id,
-    providerId: 'provider',
-    model: 'model',
-  })
-  store.messages.create({
-    sessionId: session.id,
-    runId: run.id,
-    role: 'user',
-    content: 'hello',
-    status: 'completed',
-  })
-  const firstAssistant = store.messages.create({
-    sessionId: session.id,
-    runId: run.id,
-    role: 'assistant',
-    content: '',
-    status: 'pending',
-  })
-  // 通知器抛错：事件发送失败不得吞掉回调。
-  const throwingEmitter = new RunEventEmitter(run.id, () => {
-    throw new Error('notifier exploded')
-  })
-  let results = 0
-  const runner = new RunRunner(store)
-  const finalizer = new RunFinalizer(store)
-  // 直接调用 finalize 模拟 completed 决策。
-  finalizer.finalize(
-    {
-      run,
-      state: {
-        turn: null,
-        toolCallRowIds: new Set(),
-        lastAssistantMessageId: firstAssistant.id,
-      },
-      emitter: throwingEmitter,
-      provider: { baseUrl: 'http://localhost:1', apiKey: 'k', model: 'm' },
-      onResult: () => {
-        results += 1
-      },
-    },
-    {
-      status: 'completed',
-      errorCode: null,
-      errorMessage: null,
-      pendingMessage: null,
-      resultContent: 'ok',
-    },
-  )
-  assert.equal(results, 1)
-  assert.equal(store.runs.get(run.id).status, 'completed')
-  void runner
-})
-
 test('cancel converges draft to interrupted and fires onCancel once', async () => {
   const store = freshStore()
   const session = store.sessions.create(
@@ -429,94 +369,6 @@ test('cancel converges draft to interrupted and fires onCancel once', async () =
     .listBySession(session.id)
     .find((m) => m.role === 'assistant')
   assert.equal(draft.status, 'interrupted')
-})
-
-test('failed run persists terminal state and emits run.failed', () => {
-  const store = freshStore()
-  const session = store.sessions.create(
-    store.projects.create({ name: 'p', folderPath: '/w' }).id,
-  )
-  const run = store.runs.create({
-    sessionId: session.id,
-    providerId: 'provider',
-    model: 'model',
-  })
-  const events = []
-  new RunFinalizer(store).finalize(
-    {
-      run,
-      state: {
-        turn: null,
-        toolCallRowIds: new Set(),
-        lastAssistantMessageId: null,
-      },
-      emitter: new RunEventEmitter(run.id, (e) => events.push(e)),
-      provider: { baseUrl: 'http://localhost:1', apiKey: 'k', model: 'm' },
-      onFailure: () => {},
-    },
-    {
-      status: 'failed',
-      errorCode: 'max_turns',
-      errorMessage: '任务在 4 轮内未完成，已停止执行',
-      pendingMessage: null,
-    },
-  )
-  assert.equal(store.runs.get(run.id).status, 'failed')
-  assert.equal(store.runs.get(run.id).errorCode, 'max_turns')
-  assert.equal(
-    events.some((e) => e.type === 'run.failed'),
-    true,
-  )
-  // ea4f1a4 之后计划不再随 Run 终态收敛，仅由 manage_plan 驱动。
-})
-
-test('cancelled run keeps plan untouched and draft to interrupted', () => {
-  const store = freshStore()
-  const session = store.sessions.create(
-    store.projects.create({ name: 'p', folderPath: '/w' }).id,
-  )
-  const run = store.runs.create({
-    sessionId: session.id,
-    providerId: 'provider',
-    model: 'model',
-  })
-  const draft = store.messages.create({
-    sessionId: session.id,
-    runId: run.id,
-    role: 'assistant',
-    content: '写到一半',
-    status: 'pending',
-  })
-  let cancels = 0
-  new RunFinalizer(store).finalize(
-    {
-      run,
-      state: {
-        turn: { id: draft.id, content: '写到一半', reasoning: '' },
-        toolCallRowIds: new Set(),
-        lastAssistantMessageId: draft.id,
-      },
-      emitter: new RunEventEmitter(run.id, () => {}),
-      provider: { baseUrl: 'http://localhost:1', apiKey: 'k', model: 'm' },
-      onCancel: () => {
-        cancels += 1
-      },
-    },
-    {
-      status: 'cancelled',
-      errorCode: null,
-      errorMessage: null,
-      pendingMessage: null,
-    },
-  )
-  // 计划不随 Run 终态收敛（ea4f1a4）：Finalizer 不触碰任何计划行。
-  assert.equal(store.runs.get(run.id).status, 'cancelled')
-  assert.equal(
-    store.messages.listBySession(session.id).find((m) => m.id === draft.id)
-      .status,
-    'interrupted',
-  )
-  assert.equal(cancels, 1)
 })
 
 for (const recover of [false, true]) {

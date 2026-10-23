@@ -1,5 +1,17 @@
 import { fileResourceKeys } from '../delegation/resource-locks.js'
-import type { ToolExecutionPolicy } from '@reflexion-os-studio/agent-core'
+import type {
+  FailureTrackingPolicy,
+  ToolExecutionPolicy,
+} from '@reflexion-os-studio/agent-core'
+
+/** One managed browser per Run; navigation/close invalidate its previous failures. */
+export const FAILURE_TRACKING_POLICY: FailureTrackingPolicy = {
+  invalidateToolPrefixes: {
+    'browser.navigate': ['browser.'],
+    'browser.close': ['browser.'],
+  },
+  stateOnlyTools: new Set(['manage_plan']),
+}
 
 /**
  * 内置工具的副作用调度策略（W3）：

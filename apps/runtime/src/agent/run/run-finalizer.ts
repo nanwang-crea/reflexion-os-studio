@@ -44,17 +44,21 @@ interface CommittedOutcome {
  * 回调最多执行一次；通知器抛错不吞回调，避免子 Run Promise 永久 pending。
  */
 export class RunFinalizer {
+  private readonly settled = new WeakSet<RunExecutionState>()
+
   constructor(private readonly store: Store) {}
 
   finalize(context: FinalizeContext, decision: RunTerminalDecision): void {
     const { run, state, emitter } = context
+    if (this.settled.has(state)) return
+    this.settled.add(state)
     // 提交前对内存态做快照：事务回滚不丢失已流式累积的内容，
     // 受控重试可以复用同一快照；提交成功后才清理内存态。
     const snapshot = {
       turn: state.turn,
       inFlightToolCallIds: [...state.toolCallRowIds],
     }
-    let committed: CommittedOutcome
+    let committed: CommittedOutcome | undefined
     try {
       committed = this.commitTerminalState(
         run,
@@ -67,57 +71,72 @@ export class RunFinalizer {
       process.stderr.write(
         `[runtime] run finalization failed (${run.id}): ${describeError(firstError)}; retrying once\n`,
       )
-      committed = this.commitTerminalState(
-        run,
-        snapshot,
-        decision,
-        context.persistResult,
-      )
+      try {
+        committed = this.commitTerminalState(
+          run,
+          snapshot,
+          decision,
+          context.persistResult,
+        )
+      } catch (retryError) {
+        // 保留未提交的草稿与非终态行，启动恢复仍可识别；不能伪称落库成功。
+        process.stderr.write(
+          `[runtime] run finalization retry failed (${run.id}): ${describeError(retryError)}; terminal state was not persisted\n`,
+        )
+        decision = {
+          status: 'failed',
+          errorCode: 'run_finalization_failed',
+          errorMessage: 'Run 终态保存失败，未提交记录将由重启恢复处理',
+          pendingMessage: null,
+        }
+      }
     }
     // 提交成功：清理内存态。
-    state.turn = null
-    state.toolCallRowIds.clear()
+    if (committed) {
+      state.turn = null
+      state.toolCallRowIds.clear()
+    }
 
-    // 事务已提交：按序发出终态事件（通知器抛错只记 stderr，不阻断回调）。
-    try {
-      for (const toolCallId of committed.cancelledToolCallIds) {
-        emitter.next({
-          type: 'tool.completed',
-          toolCallId,
-          status: 'cancelled',
-          errorCode: null,
-        })
-      }
-      if (decision.status === 'completed') {
-        emitter.next({ type: 'run.completed' })
-      } else if (decision.status === 'cancelled') {
-        emitter.next({ type: 'run.cancelled' })
-      } else {
-        emitter.next({
-          type: 'run.failed',
-          error: {
-            code: decision.errorCode ?? 'internal',
-            message: decision.errorMessage ?? 'Run failed',
-          },
-        })
-      }
-    } catch (error) {
-      process.stderr.write(
-        `[runtime] terminal event emission failed (${run.id}): ${describeError(error)}\n`,
-      )
+    // 按序通知；连续保存失败时只报告 Run 失败，不伪造 ToolCall 已提交事件。
+    for (const toolCallId of committed?.cancelledToolCallIds ?? []) {
+      emitTerminalEvent(emitter, {
+        type: 'tool.completed',
+        toolCallId,
+        status: 'cancelled',
+        errorCode: null,
+      })
+    }
+    if (decision.status === 'completed') {
+      emitTerminalEvent(emitter, { type: 'run.completed' })
+    } else if (decision.status === 'cancelled') {
+      emitTerminalEvent(emitter, { type: 'run.cancelled' })
+    } else {
+      emitTerminalEvent(emitter, {
+        type: 'run.failed',
+        error: {
+          code: decision.errorCode ?? 'internal',
+          message: decision.errorMessage ?? 'Run failed',
+        },
+      })
     }
 
     // settled 语义：回调最多执行一次且必须执行（异常也不跳过其它收尾）。
-    if (decision.status === 'completed') {
-      context.onResult?.(decision.resultContent ?? '')
-    } else if (decision.status === 'cancelled') {
-      context.onCancel?.()
-    } else {
-      context.onFailure?.(
-        new Error(
-          decision.errorMessage ??
-            `run failed: ${decision.errorCode ?? 'internal'}`,
-        ),
+    try {
+      if (decision.status === 'completed') {
+        context.onResult?.(decision.resultContent ?? '')
+      } else if (decision.status === 'cancelled') {
+        context.onCancel?.()
+      } else {
+        context.onFailure?.(
+          new Error(
+            decision.errorMessage ??
+              `run failed: ${decision.errorCode ?? 'internal'}`,
+          ),
+        )
+      }
+    } catch (error) {
+      process.stderr.write(
+        `[runtime] terminal callback failed (${run.id}): ${describeError(error)}\n`,
       )
     }
   }
@@ -227,4 +246,17 @@ export class RunFinalizer {
 
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function emitTerminalEvent(
+  emitter: RunEventEmitter,
+  event: Parameters<RunEventEmitter['next']>[0],
+): void {
+  try {
+    emitter.next(event)
+  } catch (error) {
+    process.stderr.write(
+      `[runtime] terminal event emission failed (${emitter.runId}): ${describeError(error)}\n`,
+    )
+  }
 }

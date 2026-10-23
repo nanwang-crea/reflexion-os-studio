@@ -88,7 +88,7 @@ test('user text beginning with continuation prefix is not a runtime control fram
   assert.equal(frames[0].kind, 'user')
 })
 
-test('continuation restores the task after preceding tool rounds trimmed it', async () => {
+test('continuation restores the task after failed tools, reflection and history trimming', async () => {
   const seen = []
   let calls = 0
   const outcome = await runAgentLoop({
@@ -101,7 +101,7 @@ test('continuation restores the task after preceding tool rounds trimmed it', as
           ...messages.filter((message) => message.content !== task.content),
         ]
       return framesToMessages(
-        boundFramesForModel(messagesToFrames(messages), 128),
+        boundFramesForModel(messagesToFrames(messages), 256),
       )
     },
     callModel: async (messages) => {
@@ -111,19 +111,25 @@ test('continuation restores the task after preceding tool rounds trimmed it', as
         return {
           content: '',
           finishReason: 'tool_calls',
-          toolCalls: [{ id: 'c', name: 'probe', arguments: '{}' }],
+          toolCalls: [
+            { id: 'c', name: 'probe', arguments: '{}' },
+            { id: 'd', name: 'probe', arguments: '{}' },
+          ],
         }
       if (calls === 2) return { ...assistant, finishReason: 'length' }
       return { content: 'done', finishReason: 'stop', toolCalls: [] }
     },
-    executeToolBatch: async () => [{ content: 'ok', isError: false }],
+    executeToolBatch: async (requests) =>
+      requests.map(() => ({ content: 'failed', isError: true })),
   })
   assert.equal(outcome.status, 'completed')
+  assert.ok(seen[1].some((message) => message.control === 'reflection'))
   assert.ok(seen[2].some((message) => message.content === task.content))
   assert.ok(
     seen[2].some(
       (message) =>
         message.role === 'assistant' && message.content.endsWith(tail),
     ),
+    JSON.stringify(seen[2]),
   )
 })

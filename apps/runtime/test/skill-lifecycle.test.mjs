@@ -3,7 +3,8 @@ import fs from 'node:fs'
 import { syncBuiltinESMExports } from 'node:module'
 import { basename, join } from 'node:path'
 import { test } from 'node:test'
-import { fixture } from './fixtures/skill-packages.mjs'
+import { fixture, input } from './fixtures/skill-packages.mjs'
+import { SkillPluginService } from '../dist/skills/service.js'
 import { materializeBuiltinSkills } from '../dist/skills/builtin/packages.js'
 
 function mockFs(t, name, implementation, run) {
@@ -16,6 +17,125 @@ function mockFs(t, name, implementation, run) {
     syncBuiltinESMExports()
   }
 }
+
+test('partial uninstall cleanup stays quarantined across rescan and startup recovery', async (t) => {
+  const f = fixture(t)
+  const plugin = await f.service.save(input())
+  f.service.toggle(plugin.id, false)
+  const remove = fs.rmSync
+  let quarantine
+  mockFs(
+    t,
+    'rmSync',
+    (path, ...args) => {
+      if (basename(path).startsWith('.remove-')) {
+        quarantine = path
+        remove(join(path, 'SKILL.md'), { force: true })
+        throw new Error('file busy during recursive removal')
+      }
+      return remove(path, ...args)
+    },
+    () => assert.equal(f.service.uninstall(plugin.id), true),
+  )
+  assert.equal(fs.existsSync(plugin.installPath), false)
+  assert.equal(fs.existsSync(quarantine), true)
+  assert.equal(f.store.plugins.get(plugin.id), null)
+  f.service.rescan()
+  assert.equal(f.store.plugins.get(plugin.id), null)
+  assert.equal(f.service.registry.has(plugin.id), false)
+  const restarted = new SkillPluginService(f.store, f.data, () => {})
+  t.after(() => restarted.dispose())
+  assert.equal(fs.existsSync(quarantine), false)
+  assert.equal(f.store.plugins.get(plugin.id), null)
+})
+
+test('uninstall database failure restores the existing disabled package', async (t) => {
+  const f = fixture(t)
+  const plugin = await f.service.save(input())
+  f.service.toggle(plugin.id, false)
+  t.mock.method(f.store.plugins, 'remove', () => {
+    throw new Error('database failed')
+  })
+  assert.throws(() => f.service.uninstall(plugin.id), /database failed/)
+  assert.equal(fs.existsSync(plugin.installPath), true)
+  f.service.rescan()
+  assert.equal(f.store.plugins.get(plugin.id).enabled, false)
+})
+
+test('startup removes incomplete old quarantine after the same skill is reinstalled', async (t) => {
+  const f = fixture(t)
+  const plugin = await f.service.save(input())
+  const remove = fs.rmSync
+  let quarantine
+  mockFs(
+    t,
+    'rmSync',
+    (path, ...args) => {
+      if (basename(path).startsWith('.remove-')) {
+        quarantine = path
+        remove(join(path, 'SKILL.md'), { force: true })
+        throw new Error('file is busy')
+      }
+      return remove(path, ...args)
+    },
+    () => f.service.uninstall(plugin.id),
+  )
+  const replacement = await f.service.save({
+    ...input(),
+    instructions: 'Replacement instructions',
+  })
+  const restarted = new SkillPluginService(f.store, f.data, () => {})
+  t.after(() => restarted.dispose())
+  assert.equal(fs.existsSync(quarantine), false)
+  assert.equal(
+    fs
+      .readFileSync(join(replacement.installPath, 'SKILL.md'), 'utf8')
+      .includes('Replacement instructions'),
+    true,
+  )
+  assert.equal(f.store.plugins.get(plugin.id).status, 'enabled')
+  assert.ok(restarted.registry.get(plugin.id))
+})
+
+test('uninstall preserves both the database and restoration errors', async (t) => {
+  const f = fixture(t)
+  const plugin = await f.service.save(input())
+  const original = new Error('database failed')
+  t.mock.method(f.store.plugins, 'remove', () => {
+    throw original
+  })
+  const rename = fs.renameSync
+  mockFs(
+    t,
+    'renameSync',
+    (source, ...args) => {
+      if (basename(source).startsWith('.remove-'))
+        throw new Error('restore failed')
+      return rename(source, ...args)
+    },
+    () =>
+      assert.throws(
+        () => f.service.uninstall(plugin.id),
+        (error) => {
+          assert.equal(error.cause, original)
+          assert.equal(error.errors[0], original)
+          assert.match(error.errors[1].message, /restore failed/)
+          return true
+        },
+      ),
+  )
+})
+
+test('project removal cascades metadata, preserves disk files and rescan creates no invalid orphan', async (t) => {
+  const f = fixture(t)
+  const plugin = await f.service.save(input(f.project.id))
+  f.store.projects.delete(f.project.id)
+  f.service.projectDeleted(f.project.id)
+  f.service.rescan()
+  assert.equal(f.store.plugins.get(plugin.id), null)
+  assert.equal(f.service.registry.has(plugin.id), false)
+  assert.equal(fs.existsSync(join(plugin.installPath, 'SKILL.md')), true)
+})
 
 test('busy snapshots release active budget and retry cleanup on disposal', (t) => {
   const { service } = fixture(t)

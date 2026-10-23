@@ -1,10 +1,18 @@
 import path from 'node:path'
 import type { ToolCallRequest, ToolResult } from './types.js'
 
+/** Host-owned tool semantics; the core only applies declared invalidations. */
+export interface FailureTrackingPolicy {
+  invalidateToolPrefixes?: Readonly<Record<string, readonly string[]>>
+  stateOnlyTools?: ReadonlySet<string>
+}
+
 /** 同一操作/资源/错误累计四次后拦截；参数变化不代表进展。 */
 export class FailureTracker {
   private readonly failures = new Map<string, Map<string, number>>()
   private readonly revisions = new Map<string, string>()
+
+  constructor(private readonly policy: FailureTrackingPolicy = {}) {}
 
   clear(): void {
     this.failures.clear()
@@ -30,6 +38,17 @@ export class FailureTracker {
     result: ToolResult,
     mutation: boolean,
   ): void {
+    if (!result.isError) {
+      const invalidations = this.policy.invalidateToolPrefixes
+      const prefixes =
+        invalidations && Object.hasOwn(invalidations, request.name)
+          ? invalidations[request.name]
+          : []
+      for (const operation of this.failures.keys()) {
+        if (prefixes.some((prefix) => operation.startsWith(prefix)))
+          this.failures.delete(operation)
+      }
+    }
     const resource = resourceFor(request)
     if (resource === null) return
     const key = `${request.name}:${resource}`
@@ -39,15 +58,6 @@ export class FailureTracker {
       categories.set(category, (categories.get(category) ?? 0) + 1)
       this.failures.set(key, categories)
       return
-    }
-    // 单个 Run 只拥有一个受管浏览器；重导航/关闭使该浏览器旧失败失效。
-    if (
-      request.name === 'browser.navigate' ||
-      request.name === 'browser.close'
-    ) {
-      for (const operation of this.failures.keys()) {
-        if (operation.startsWith('browser.')) this.failures.delete(operation)
-      }
     }
     let revision: string | undefined
     try {
@@ -60,7 +70,7 @@ export class FailureTracker {
     const previousRevision = this.revisions.get(resource)
     if (revision !== undefined) this.revisions.set(resource, revision)
     if (
-      (mutation && request.name !== 'manage_plan') ||
+      (mutation && !this.policy.stateOnlyTools?.has(request.name)) ||
       (revision !== undefined &&
         previousRevision !== undefined &&
         revision !== previousRevision)

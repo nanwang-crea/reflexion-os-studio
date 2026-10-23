@@ -1,4 +1,5 @@
 import { FailureTracker } from './failure-tracker.js'
+import type { FailureTrackingPolicy } from './failure-tracker.js'
 import { createHash } from 'node:crypto'
 import type { ToolCallRequest, ToolResult } from './types.js'
 
@@ -8,7 +9,7 @@ import type { ToolCallRequest, ToolResult } from './types.js'
  * freshness epoch 在成功变更、计划变化或用户新消息后递增。
  */
 export class LoopGuard {
-  private readonly failures = new FailureTracker()
+  private readonly failures: FailureTracker
   private epoch = 0
   private readonly repetitions = new Map<
     string,
@@ -20,9 +21,13 @@ export class LoopGuard {
   /** 基础指纹 → 连续被拦截次数（duplicate → no_progress 传导）。 */
   private readonly blockedMutations = new Map<string, number>()
 
+  constructor(policy: FailureTrackingPolicy = {}) {
+    this.failures = new FailureTracker(policy)
+  }
+
   /** fresh epoch：mutation 成功、Plan 变化、用户新消息后调用。 */
   bumpEpoch(): void {
-    this.epoch += 1
+    this.advanceEpoch()
     this.failures.clear()
   }
 
@@ -105,11 +110,9 @@ export class LoopGuard {
     if (mutation && (!result.isError || result.replayUnsafe)) {
       // 成功或结果不明的 mutation 绑定新 epoch；只读核对不解除重放保护。
       // 立即重放被拦（duplicate），其它原因推进 epoch 后重跑视为新鲜。
-      if (protectReplay) {
-        this.protectedMutations.set(baseFingerprint(request), this.epoch + 1)
-      }
-      this.blockedMutations.delete(baseFingerprint(request))
-      this.epoch += 1
+      this.advanceEpoch()
+      if (protectReplay)
+        this.protectedMutations.set(baseFingerprint(request), this.epoch)
     }
     return { repeated }
   }
@@ -137,6 +140,14 @@ export class LoopGuard {
       : this.fingerprint(request)
   }
 
+  private advanceEpoch(): void {
+    this.epoch += 1
+    this.repetitions.clear()
+    this.recoveryWarnings.clear()
+    this.protectedMutations.clear()
+    this.blockedMutations.clear()
+  }
+
   private noProgress(key: string, message: string) {
     return {
       verdict: 'block' as const,
@@ -151,9 +162,13 @@ export class LoopGuard {
 
 /** 基础指纹：工具名 + canonicalJson(args)（不含 epoch）。 */
 function baseFingerprint(request: ToolCallRequest): string {
-  return `${request.name}:${createHash('sha256')
-    .update(canonicalJson(parseLoose(request.arguments)))
-    .digest('hex')}`
+  let args: string
+  try {
+    args = `json:${canonicalJson(JSON.parse(request.arguments.trim() === '' ? '{}' : request.arguments))}`
+  } catch {
+    args = `raw:${request.arguments}`
+  }
+  return `${request.name}:${createHash('sha256').update(args).digest('hex')}`
 }
 
 /** 对对象 key 排序的 canonical JSON；数组保持原顺序。 */
@@ -169,12 +184,4 @@ export function canonicalJson(value: unknown): string {
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`)
   return `{${entries.join(',')}}`
-}
-
-function parseLoose(text: string): unknown {
-  try {
-    return JSON.parse(text.trim() === '' ? '{}' : text)
-  } catch {
-    return { __unparsed: text.slice(0, 64) }
-  }
 }

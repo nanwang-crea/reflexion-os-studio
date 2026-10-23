@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, renameSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import type { Store } from '../store/index.js'
 import { inspectPackage } from './package.js'
 import { cleanupTemporary } from './sources.js'
@@ -53,6 +53,15 @@ function recoverBackup(path: string, root: string, store: Store): void {
 }
 
 function recoverRemoval(path: string, root: string, store: Store): void {
+  // A failed recursive removal may already have deleted its manifest.
+  const id =
+    /^\.remove-([a-z0-9][a-z0-9-]*)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.exec(
+      basename(path),
+    )?.[1]
+  if (id && (store.plugins.get(id) === null || existsSync(join(root, id)))) {
+    cleanupTemporary(path)
+    return
+  }
   const manifest = inspectPackage(path)
   const target = join(root, manifest.id)
   if (store.plugins.get(manifest.id) === null) {

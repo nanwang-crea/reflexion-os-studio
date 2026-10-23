@@ -116,28 +116,25 @@ export class ApprovalGateway {
 
   request(input: ApprovalRequestInput): Promise<ApprovalOutcome> {
     const { toolCallId, emitter, signal, scope } = input
+    if (signal.aborted) {
+      return Promise.reject(
+        new DOMException('The operation was aborted.', 'AbortError'),
+      )
+    }
     if (input.choices.some((spec) => spec.choice.id === '')) {
       throw new Error('approval choice id must be non-empty')
     }
-    emitter.next({
-      type: 'approval.required',
-      toolCallId,
-      sessionId: scope.sessionId,
-      operation: input.operation,
-      summary: input.summary,
-      subject: input.subject,
-      risk: input.risk,
-      context: input.context,
-      choices: input.choices.map((spec) => spec.choice),
-    })
     return new Promise<ApprovalOutcome>((resolve, reject) => {
       const onAbort = (): void => {
+        signal.removeEventListener('abort', onAbort)
         this.pending.delete(toolCallId)
+        notifyResolution(emitter, {
+          type: 'approval.resolved',
+          toolCallId,
+          decision: 'cancelled',
+          grantScope: 'once',
+        })
         reject(new DOMException('The operation was aborted.', 'AbortError'))
-      }
-      if (signal.aborted) {
-        onAbort()
-        return
       }
       signal.addEventListener('abort', onAbort, { once: true })
       this.pending.set(toolCallId, {
@@ -176,7 +173,7 @@ export class ApprovalGateway {
               }
             }
           }
-          emitter.next({
+          notifyResolution(emitter, {
             type: 'approval.resolved',
             toolCallId,
             decision: outcome.decision,
@@ -186,6 +183,23 @@ export class ApprovalGateway {
           resolve(outcome)
         },
       })
+      try {
+        emitter.next({
+          type: 'approval.required',
+          toolCallId,
+          sessionId: scope.sessionId,
+          operation: input.operation,
+          summary: input.summary,
+          subject: input.subject,
+          risk: input.risk,
+          context: input.context,
+          choices: input.choices.map((spec) => spec.choice),
+        })
+      } catch (error) {
+        signal.removeEventListener('abort', onAbort)
+        this.pending.delete(toolCallId)
+        reject(error)
+      }
     })
   }
 
@@ -236,5 +250,16 @@ export class ApprovalGateway {
       if (entry.runId === runId) return true
     }
     return false
+  }
+}
+
+function notifyResolution(
+  emitter: RunEventEmitter,
+  event: Parameters<RunEventEmitter['next']>[0],
+): void {
+  try {
+    emitter.next(event)
+  } catch {
+    process.stderr.write('[runtime] approval resolution notification failed\n')
   }
 }

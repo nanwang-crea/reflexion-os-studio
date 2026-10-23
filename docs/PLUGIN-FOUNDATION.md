@@ -60,6 +60,8 @@ Skill 安装目录为 `<dataDir>/skills/<id>/` 或 `<workspace>/.reflexion-os-st
 - `plugin.task.list` / `plugin.task.cancel`：查询本次 Runtime 生命周期内的任务，以及取消尚未结束的任务；`plugin.task.changed` 持续报告 phase、百分比、终态和错误。
 - `plugin.toggle` / `plugin.uninstall` / `plugin.rescan`：启停、卸载和磁盘对账。
 
+卸载先把目录改名为 `.remove-<id>-<uuid>`，数据库删除失败时恢复目录并保留原始错误。数据库删除成功后卸载即生效；物理清理失败时目录继续隔离，不能恢复为可发现包。启动恢复按隔离目录身份重试清理，即使递归删除已移除 manifest 也能完成。删除项目会级联删除该项目的插件记录并卸载其 Registry 条目，只保留用户工作区里的文件；后续 rescan 不为已删除项目创建记录。
+
 安装时必须选择作用域：`global` 安装到全局 Skill 目录；`project` 绑定明确的 `projectId` 并安装到项目 `.reflexion-os-studio/skills/` 目录。Registry、system prompt、显式 `$skill`/`/skill` 解析和 `skill.use` 均按会话项目过滤，禁止把项目 Skill 泄漏到其他项目或独立会话。
 
 更新顺序：

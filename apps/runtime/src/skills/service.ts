@@ -6,9 +6,8 @@ import type {
   SkillSaveParams,
 } from '@reflexion-os-studio/contracts'
 import { BUILTIN_SKILLS } from './builtin/index.js'
-import { existsSync, readdirSync, renameSync } from 'node:fs'
-import { basename, join, relative, resolve } from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { existsSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   PluginPackageManifestSchema,
   type PluginInstallSource,
@@ -22,7 +21,7 @@ import {
   loadSkillPackage,
   packageManifestForBuiltin,
 } from '../plugins/package.js'
-import { cleanupTemporary } from '../plugins/sources.js'
+import { uninstallSkill } from './lifecycle/uninstall.js'
 import { PluginPackageInstaller } from '../plugins/installer.js'
 import { skillRoot } from './locations.js'
 import { migrateSkillLocations } from './catalog/migration.js'
@@ -193,7 +192,7 @@ export class SkillPluginService {
   }
 
   projectDeleted(projectId: string): void {
-    // Project packages belong to the user's workspace and survive project removal.
+    // DB records cascade on deletion; only workspace packages survive on disk.
     void projectId
     this.reloadRegistry()
   }
@@ -214,29 +213,10 @@ export class SkillPluginService {
   uninstall(id: string): boolean {
     const current = this.store.plugins.get(id)
     if (!current) return false
-    const target = this.assertManagedInstallPath(current)
-    const quarantine = join(
-      skillRoot(this.store, this.pluginsRoot, current.projectId),
-      `.remove-${id}-${randomUUID()}`,
-    )
-    let moved = false
-    try {
-      if (target !== null && existsSync(target)) {
-        renameSync(target, quarantine)
-        moved = true
-      }
-      const removed = this.store.plugins.remove(id)
-      if (!removed) throw new Error(`plugin could not be removed: ${id}`)
-      cleanupTemporary(quarantine)
-      this.reloadRegistry()
-      this.emit(null, id)
-      return true
-    } catch (error) {
-      if (moved && target !== null && !existsSync(target)) {
-        renameSync(quarantine, target)
-      }
-      throw error
-    }
+    uninstallSkill(this.store, this.pluginsRoot, current)
+    this.reloadRegistry()
+    this.emit(null, id)
+    return true
   }
 
   rescan(): PluginRecord[] {
@@ -339,20 +319,6 @@ export class SkillPluginService {
         )
       }
     }
-  }
-
-  private assertManagedInstallPath(plugin: PluginRecord): string | null {
-    if (plugin.installPath === null) return null
-    const target = resolve(plugin.installPath)
-    const root = resolve(
-      skillRoot(this.store, this.pluginsRoot, plugin.projectId),
-    )
-    const relativeTarget = relative(root, target)
-    const expected = plugin.id
-    if (relativeTarget !== expected || basename(target) !== plugin.id) {
-      throw new Error(`refusing to remove unmanaged plugin path: ${target}`)
-    }
-    return target
   }
 
   private emit(plugin: PluginRecord | null, id = plugin?.id ?? ''): void {

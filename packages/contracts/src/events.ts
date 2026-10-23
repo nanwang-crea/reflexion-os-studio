@@ -230,7 +230,7 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
   RunEnvelopeSchema.extend({
     type: z.literal('approval.resolved'),
     toolCallId: z.string().min(1),
-    decision: z.enum(['approved', 'denied']),
+    decision: z.enum(['approved', 'denied', 'cancelled']),
     // 原 payload 字段名 scope（once/session）改名 grantScope：
     // 避免与信封 scope 在 .extend() 合并时静默互相覆盖。
     grantScope: z.enum(['once', 'session']),
