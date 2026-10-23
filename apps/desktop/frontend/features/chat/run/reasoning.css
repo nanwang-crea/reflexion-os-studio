@@ -167,10 +167,12 @@ button.run-process-toggle:hover:not(:disabled) {
 }
 
 .reasoning-preview {
+  flex: 1;
   min-width: 0;
-  max-width: 42ch;
   overflow: hidden;
+  /* 从开头省略以保留最新思考，bdi 保持内容自身的文字方向。 */
   text-overflow: ellipsis;
+  text-align: left;
   white-space: nowrap;
 }
 

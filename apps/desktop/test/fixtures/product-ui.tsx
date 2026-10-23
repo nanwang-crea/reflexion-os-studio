@@ -57,6 +57,7 @@ function Fixture() {
   const reasoning = query.get('reasoning')
   const [settings, setSettings] = useState(false)
   const [panel, setPanel] = useState(true)
+  const [projectId, setProjectId] = useState<string | null>(null)
   if (query.has('busy-composer'))
     return (
       <div className="composer-wrap">
@@ -151,10 +152,10 @@ function Fixture() {
           <div className="content-area">
             <div className="content-main">
               <LandingView
-                project={null}
-                projects={[]}
-                selectedProjectId={null}
-                onProjectChange={noop}
+                project={projectId ? project : null}
+                projects={[project]}
+                selectedProjectId={projectId}
+                onProjectChange={setProjectId}
                 sessions={[]}
                 hasEnabledProvider
                 permissionValue="workspace-write"

@@ -25,6 +25,7 @@
   align-items: center;
   gap: 5px;
   max-width: 100%;
+  min-height: 32px;
   padding: 4px 8px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -87,6 +88,7 @@
   align-items: center;
   gap: 6px;
   width: 100%;
+  min-height: 32px;
   padding: 4px 8px;
   border-radius: 6px;
   background: transparent;

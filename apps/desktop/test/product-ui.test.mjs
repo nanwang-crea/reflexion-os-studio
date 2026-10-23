@@ -12,6 +12,7 @@ import {
   assertComposerAlignment,
   assertComposerMetricBoundaries,
 } from './composer-ui/alignment.mjs'
+import { verifyComposerControls } from './composer-ui/controls.mjs'
 
 const desktop = fileURLToPath(new URL('..', import.meta.url))
 const require = createRequire(
@@ -172,6 +173,7 @@ test('composer actions remain aligned in both themes and narrow split layouts', 
       /备用模型/,
     )
     assert.equal(await page.locator('.ui-grouped-menu').count(), 0)
+    await verifyComposerControls(page, url)
     await page.goto(`${url}?theme=light&many-models=1`)
     await page.getByRole('button', { name: '对话模型', exact: true }).click()
     await page.getByRole('menuitem', { name: '备用供应商' }).focus()

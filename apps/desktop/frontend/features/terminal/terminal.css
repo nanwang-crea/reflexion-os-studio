@@ -33,8 +33,9 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 3px 6px 0;
+  gap: 4px;
+  min-height: 38px;
+  padding: 4px 8px 0;
   background: var(--bg-sidebar);
   user-select: none;
   -webkit-user-select: none;
@@ -84,6 +85,7 @@
 
 .terminal-tab-main {
   min-width: 0;
+  min-height: 32px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -158,9 +160,12 @@
 
 .terminal-tab-close {
   flex: none;
-  display: inline-flex;
+  display: inline-grid;
   align-items: center;
-  padding: 3px 7px;
+  justify-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
   border-radius: 4px;
   background: transparent;
   color: inherit;
@@ -175,8 +180,9 @@
 
 .terminal-new-tab {
   flex: none;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   display: grid;
   place-items: center;
   background: transparent;
@@ -203,8 +209,9 @@
 /* 收起面板（不终止 shell）。尺寸/配色与 .terminal-new-tab 同族。 */
 .terminal-collapse {
   flex: none;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   display: grid;
   place-items: center;
   background: transparent;

@@ -48,7 +48,7 @@ export function ModelSelector(props: {
         />
       </span>
       {props.reasoning && (
-        <label
+        <span
           className="composer-select reasoning"
           title={
             props.reasoning.error ??
@@ -74,8 +74,8 @@ export function ModelSelector(props: {
                 : props.reasoning.error
                   ? '加载失败'
                   : !props.reasoning.supported
-                    ? `自动（${props.reasoning.unavailableReason ?? '不支持调整'}）`
-                    : '服务端默认'}
+                    ? '思考：自动'
+                    : '思考：默认'}
             </option>
             {props.reasoning.options.map((option) => (
               <option key={option.value} value={option.value}>
@@ -83,7 +83,7 @@ export function ModelSelector(props: {
               </option>
             ))}
           </Select>
-        </label>
+        </span>
       )}
     </span>
   )

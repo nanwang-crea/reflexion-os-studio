@@ -1,25 +1,30 @@
-import {
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  realpathSync,
-  lstatSync,
-} from 'node:fs'
+import { mkdtempSync, readdirSync, realpathSync, lstatSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative, isAbsolute } from 'node:path'
-import type {
-  PluginRecord,
-  SkillPrepared,
+import {
+  MAX_SKILL_RESOURCE_PAGE_BYTES,
+  SkillResourceReadOptionsSchema,
+  type PluginRecord,
+  type SkillPrepared,
+  type SkillResourcePage,
+  type SkillResourceReadOptions,
 } from '@reflexion-os-studio/contracts'
 import { cleanupTemporaryBestEffort } from '../../plugins/cleanup.js'
 import { copyPackage } from '../../plugins/sources.js'
 import { inspectPackage } from '../../plugins/package.js'
+import { readSnapshotText } from './content.js'
+import { fingerprintResource, type ResourceFingerprint } from './files.js'
 
 /** Only copies validated managed packages. Execution belongs to the existing Shell tool. */
 export class SkillResourceStager {
   private readonly snapshots = new Map<
     string,
-    { temporary: string; prepared: SkillPrepared; text: Map<string, string> }
+    {
+      temporary: string
+      prepared: SkillPrepared
+      fingerprints: Map<string, ResourceFingerprint>
+      pages: Map<string, SkillResourcePage>
+    }
   >()
 
   private readonly pendingCleanup = new Set<string>()
@@ -34,7 +39,9 @@ export class SkillResourceStager {
     managedRoot: string,
     runId: string,
     resource?: string,
+    options: SkillResourceReadOptions = {},
   ): SkillPrepared {
+    options = SkillResourceReadOptionsSchema.parse(options)
     if (!plugin.installPath || !plugin.enabled || plugin.status !== 'enabled')
       throw new Error('Skill 不可用')
     const key = JSON.stringify([runId, plugin.id])
@@ -52,41 +59,30 @@ export class SkillResourceStager {
         throw new Error('Skill 文件已变化，请重新加载技能')
       const temporary = mkdtempSync(join(tmpdir(), 'reflexion-skill-'))
       try {
-        const directory = join(temporary, plugin.id)
-        copyPackage(source, directory)
+        const copied = join(temporary, plugin.id)
+        copyPackage(source, copied)
+        const directory = realpathSync(copied)
         inspectPackage(directory)
         const resources: string[] = []
-        const text = new Map<string, string>()
-        let textBytes = 0
+        const fingerprints = new Map<string, ResourceFingerprint>()
         const walk = (folder: string, prefix: string): void => {
           for (const entry of readdirSync(folder, { withFileTypes: true })) {
             const name = prefix ? `${prefix}/${entry.name}` : entry.name
             if (entry.isDirectory()) walk(join(folder, entry.name), name)
             else if (entry.isFile()) {
               resources.push(name)
-              const bytes = readFileSync(join(folder, entry.name))
-              if (
-                bytes.length <= 100000 &&
-                textBytes + bytes.length <= 2000000 &&
-                !bytes.includes(0)
-              ) {
-                try {
-                  text.set(
-                    name,
-                    new TextDecoder('utf-8', { fatal: true }).decode(bytes),
-                  )
-                  textBytes += bytes.length
-                } catch {
-                  /* Binary resources remain available to sandboxed scripts. */
-                }
-              }
+              fingerprints.set(
+                name,
+                fingerprintResource(join(folder, entry.name)),
+              )
             } else throw new Error('资源必须为普通文件')
           }
         }
         walk(directory, '')
         snapshot = {
           temporary,
-          text,
+          fingerprints,
+          pages: new Map(),
           prepared: {
             skillId: plugin.id,
             version: manifest.version,
@@ -110,11 +106,25 @@ export class SkillResourceStager {
         .some((part) => part.startsWith('.') || /[\\:\x00-\x1f]/.test(part))
     )
       throw new Error('资源路径不存在或越界')
-    // Scripts never turn this tool into a privileged reader by modifying the snapshot.
-    const content = snapshot.text.get(resource)
-    if (content === undefined)
-      throw new Error('资源过大或为二进制，请通过脚本使用快照文件')
-    return { ...snapshot.prepared, resource: { path: resource, content } }
+    const cacheKey = JSON.stringify([
+      resource,
+      options.offset ?? 0,
+      options.limit ?? MAX_SKILL_RESOURCE_PAGE_BYTES,
+    ])
+    let page = snapshot.pages.get(cacheKey)
+    if (page === undefined) {
+      page = readSnapshotText(
+        snapshot.prepared.directory,
+        resource,
+        snapshot.fingerprints.get(resource)!,
+        options,
+      )
+      // Cache at most 2MB; eviction never prevents an on-demand resource read.
+      if (snapshot.pages.size >= 20)
+        snapshot.pages.delete(snapshot.pages.keys().next().value!)
+      snapshot.pages.set(cacheKey, page)
+    }
+    return { ...snapshot.prepared, resource: { ...page } }
   }
 
   releaseRun(runId: string): void {

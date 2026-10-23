@@ -266,8 +266,8 @@ input:is([type='checkbox'], [type='radio']):disabled {
 
 /* 侧栏收起/展开切换（桌面版 Codex 式，左侧「«」）。 */
 .topbar-toggle {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   display: grid;
   place-items: center;

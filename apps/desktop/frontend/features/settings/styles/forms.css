@@ -120,7 +120,7 @@
   line-height: 1.45;
 }
 
-.danger-text {
+button.danger-text {
   flex: 0 0 auto;
   min-height: 34px;
   padding: 6px 10px;
@@ -131,7 +131,7 @@
   font-weight: 500;
 }
 
-.danger-text:hover:not(:disabled) {
+button.danger-text:hover:not(:disabled) {
   border-color: var(--danger);
   background: color-mix(in srgb, var(--danger) 10%, transparent);
 }

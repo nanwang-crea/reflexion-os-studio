@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import * as Menu from '@radix-ui/react-dropdown-menu'
+import { ChevronIcon } from '../../ui/icons'
 import './controls.css'
 import './grouped-select.css'
 
@@ -30,9 +31,11 @@ export function GroupedSelect(props: {
           disabled={props.groups.size === 0}
           title={selected?.label}
         >
-          <span>{selected?.label ?? '选择模型'}</span>
+          <span className="ui-select-value">
+            {selected?.label ?? '选择模型'}
+          </span>
           <span className="ui-select-arrow" aria-hidden="true">
-            ⌄
+            <ChevronIcon />
           </span>
         </button>
       </Menu.Trigger>
@@ -53,7 +56,7 @@ export function GroupedSelect(props: {
                   <span aria-hidden="true">✓</span>
                 )}
                 <span className="ui-grouped-chevron" aria-hidden="true">
-                  ›
+                  <ChevronIcon />
                 </span>
               </Menu.SubTrigger>
               <Menu.Portal container={container}>

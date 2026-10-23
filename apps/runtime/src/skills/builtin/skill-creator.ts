@@ -36,7 +36,7 @@ name 使用最多 64 字符的小写英文、数字和连字符；description �
 更新时先 skill.prepare 读取现有包与 version，理解原有约定和调用者；传 mode=update、expectedVersion，保持 id 和作用范围。未提供的旧资源保留，同路径资源替换；不能覆盖内置 Skill，也不改名创建重复技能来规避更新。二进制资源通过工作区文件工具准备完整包，再使用既有安装入口。
 
 ## 脚本执行与验证
-脚本按任务需要自动调用，安装和加载说明不执行脚本。先 skill.prepare 获取快照 directory、resources、nodeExecutable，必要时指定 resource 读取参考资料或脚本源码。通过 shell.execute 执行已检查的脚本，正确引用路径、cwd 使用工作区相对路径（通常为 .）；Node 使用返回的 nodeExecutable，其他解释器先验证是否可用。使用跨平台 Node API，避免假定 Bash、POSIX 路径或某个系统预装软件。
+脚本按任务需要自动调用，安装和加载说明不执行脚本。先 skill.prepare 获取快照 directory、resources、nodeExecutable，必要时指定 resource 分页读取参考资料或脚本源码；每页默认最多 100000 字节，hasMore=true 时用返回的 nextOffset 作为 offset 继续读取，不把第一页当作完整文件。通过 shell.execute 执行已检查的脚本，正确引用路径、cwd 使用工作区相对路径（通常为 .）；Node 使用返回的 nodeExecutable，其他解释器先验证是否可用。使用跨平台 Node API，避免假定 Bash、POSIX 路径或某个系统预装软件。
 脚本执行沿用会话权限、工具上限、沙箱、网络审批、取消和超时；包声明不是授权，不读取凭据、不请求绕过权限。确需网络时使用 requires_network。输出保存到用户指定或项目约定位置，临时包不是交付目录。角色没有 shell.execute 时不能用 Skill 扩张权限。
 实际运行脚本的正常输入、代表性的错误输入，检查产物和退出状态；不要用只检查文字存在的测试代替功能验证。没有工作空间或可用解释器时如实说明未验证项，不能宣称成功。只执行相关脚本，不遍历运行包内所有程序。
 

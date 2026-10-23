@@ -85,6 +85,7 @@
 
 .file-tab-main {
   min-width: 0;
+  min-height: 32px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -101,9 +102,12 @@
 
 .file-tab-close {
   flex: none;
-  display: inline-flex;
+  display: inline-grid;
   align-items: center;
-  padding: 3px 7px;
+  justify-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
   border-radius: 4px;
   background: transparent;
   color: inherit;
@@ -131,7 +135,7 @@
 
 .file-tab.dirty:hover .file-tab-close,
 .file-tab.dirty:focus-within .file-tab-close {
-  display: inline-flex;
+  display: inline-grid;
 }
 
 .file-tab.dirty:hover .file-tab-dirty,

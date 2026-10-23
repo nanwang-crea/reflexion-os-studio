@@ -1,6 +1,7 @@
 import type {
   PluginRecord,
   SkillPrepared,
+  SkillResourceReadOptions,
   SkillSaveParams,
 } from '@reflexion-os-studio/contracts'
 
@@ -12,6 +13,7 @@ export interface SkillToolServices {
     projectId: string | null,
     runId: string,
     resource?: string,
+    options?: SkillResourceReadOptions,
   ): SkillPrepared
   releaseRun(runId: string): void
 }

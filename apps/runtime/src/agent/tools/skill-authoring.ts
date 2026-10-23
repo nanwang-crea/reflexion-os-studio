@@ -4,10 +4,12 @@ import {
   SkillPrepareInputSchema,
   skillAuthoringParameters,
   type JsonValue,
+  type SkillPrepared,
 } from '@reflexion-os-studio/contracts'
 import type { ToolDefinition } from '@reflexion-os-studio/agent-core'
 import type { ToolContext } from './shared.js'
 import { validateAuthoredSkill } from '../../skills/authoring/validation.js'
+import { MODEL_TOOL_RESULT_MAX_CHARS } from '../run/toolResults.js'
 
 export function skillSaveReview(
   ctx: Pick<ToolContext, 'store' | 'projectId'>,
@@ -67,20 +69,80 @@ export function createSkillPrepareTool(ctx: ToolContext): ToolDefinition {
   return {
     name: 'skill.prepare',
     description:
-      '准备当前项目可见且已启用 Skill 的 Run 临时资源快照，返回 scripts/references/assets 文件清单、快照目录和实际 Node 解释器路径；resource 可按需读文本。仅复制资源，不执行脚本。使用 shell.execute 按现有会话权限运行，cwd 使用工作区相对路径（通常为 .），产物写工作区而非快照；退出当前 Run 后快照失效。',
+      '准备当前项目可见且已启用 Skill 的 Run 临时资源快照，返回 scripts/references/assets 文件清单、快照目录和实际 Node 解释器路径；resource 按需分页读 UTF-8 文本，offset 为字节偏移，limit 默认且最多 100000 字节。大文件自动返回第一页；hasMore=true 时用 nextOffset 继续读取，不要把第一页当全文。仅复制资源，不执行脚本。使用 shell.execute 按现有会话权限运行，cwd 使用工作区相对路径（通常为 .），产物写工作区而非快照；退出当前 Run 后快照失效。',
     parameters: skillAuthoringParameters.prepare as JsonValue,
     execution: { effect: 'read', resourceKeys: () => [] },
     execute({ args, signal }) {
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
-      const input = SkillPrepareInputSchema.parse(args)
-      if (!ctx.skillTools) throw new Error('Skill 资源服务不可用')
-      const data = ctx.skillTools.prepare(
-        input.skillId,
-        ctx.projectId,
-        ctx.runId,
-        input.resource,
-      )
-      return { content: JSON.stringify(data), data, isError: false }
+      try {
+        const input = SkillPrepareInputSchema.parse(args)
+        if (!ctx.skillTools) throw new Error('Skill 资源服务不可用')
+        const data = fitResourcePage(
+          ctx.skillTools.prepare(
+            input.skillId,
+            ctx.projectId,
+            ctx.runId,
+            input.resource,
+            { offset: input.offset, limit: input.limit },
+          ),
+        )
+        return { content: serializePrepared(data), data, isError: false }
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') throw error
+        const message = error instanceof Error ? error.message : String(error)
+        return {
+          content: `Skill 资源准备失败：${message}`,
+          isError: true,
+          code: 'tool_error',
+        }
+      }
     },
   }
+}
+
+/** Snapshot metadata is available separately; keep page feedback focused. */
+function serializePrepared(data: SkillPrepared): string {
+  if (data.resource === null) return JSON.stringify(data)
+  return JSON.stringify({
+    skillId: data.skillId,
+    version: data.version,
+    resource: data.resource,
+  })
+}
+
+/** Keep complete page text inside model feedback; truncation would skip bytes. */
+function fitResourcePage(data: SkillPrepared): SkillPrepared {
+  if (
+    data.resource === null ||
+    serializePrepared(data).length <= MODEL_TOOL_RESULT_MAX_CHARS
+  )
+    return data
+  const page = data.resource
+  const bomBytes = page.bytesRead - Buffer.byteLength(page.content, 'utf8')
+  const prefix = (length: number): SkillPrepared => {
+    const content = page.content
+      .slice(0, length)
+      .replace(/[\uD800-\uDBFF]$/, '')
+    const bytesRead = bomBytes + Buffer.byteLength(content, 'utf8')
+    const nextOffset = page.offset + bytesRead
+    return {
+      ...data,
+      resource: {
+        ...page,
+        content,
+        bytesRead,
+        hasMore: nextOffset < page.totalBytes,
+        nextOffset: nextOffset < page.totalBytes ? nextOffset : null,
+      },
+    }
+  }
+  let low = 0
+  let high = page.content.length
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2)
+    if (serializePrepared(prefix(middle)).length <= MODEL_TOOL_RESULT_MAX_CHARS)
+      low = middle
+    else high = middle - 1
+  }
+  return prefix(low)
 }

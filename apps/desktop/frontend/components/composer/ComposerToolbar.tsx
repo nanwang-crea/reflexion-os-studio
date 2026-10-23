@@ -4,7 +4,7 @@ import type {
   PermissionPreset,
 } from '@reflexion-os-studio/runtime-client'
 import { Select } from '../forms/Select'
-import { ChevronIcon, SendIcon, ShieldIcon, StopIcon } from '../../ui/icons'
+import { SendIcon, ShieldIcon, StopIcon } from '../../ui/icons'
 import {
   PERMISSION_PRESET_HINTS,
   PERMISSION_PRESET_LABELS,
@@ -57,7 +57,7 @@ export function ComposerToolbar(props: Props): React.JSX.Element {
           />
         )}
         {props.permissionValue !== undefined && props.onPermissionChange && (
-          <label
+          <span
             className="composer-select permission"
             title={
               props.permissionValue !== undefined
@@ -65,9 +65,9 @@ export function ComposerToolbar(props: Props): React.JSX.Element {
                 : ''
             }
           >
-            <ShieldIcon />
             <Select
               aria-label="权限档位"
+              icon={<ShieldIcon />}
               value={props.permissionValue}
               onValueChange={(value) =>
                 props.onPermissionChange?.(value as PermissionPreset)
@@ -83,8 +83,7 @@ export function ComposerToolbar(props: Props): React.JSX.Element {
                 {PERMISSION_PRESET_LABELS['workspace-full']}
               </option>
             </Select>
-            <ChevronIcon />
-          </label>
+          </span>
         )}
         {props.agentTemplateId !== '' && (
           <button

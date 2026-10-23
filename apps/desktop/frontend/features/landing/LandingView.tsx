@@ -1,5 +1,6 @@
 import type { ReasoningSelection } from '../../components/composer/ModelSelector'
 import { Select } from '../../components/forms/Select'
+import { FolderIcon } from '../../ui/icons'
 import type {
   Project,
   Session,
@@ -95,9 +96,10 @@ export function LandingView(props: LandingViewProps): React.JSX.Element {
             )}
           </div>
           <div className="landing-context-selectors">
-            <label className="composer-select" title="新会话项目">
-              <span>项目</span>
+            <span className="composer-select" title="新会话项目">
               <Select
+                aria-label="新会话项目"
+                icon={<FolderIcon />}
                 value={props.selectedProjectId ?? ''}
                 onValueChange={(value) => props.onProjectChange(value || null)}
               >
@@ -108,7 +110,7 @@ export function LandingView(props: LandingViewProps): React.JSX.Element {
                   </option>
                 ))}
               </Select>
-            </label>
+            </span>
           </div>
           <Composer
             autoFocus

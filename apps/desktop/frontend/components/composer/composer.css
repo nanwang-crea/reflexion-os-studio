@@ -200,10 +200,11 @@
    避免工具栏换行时模型孤悬上一行、思考掉到下一行的阶梯错位。 */
 .composer-model-cluster {
   min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .composer-controls .bar-spacer {
@@ -299,33 +300,36 @@
   min-width: 0;
 }
 
-.composer-select.permission svg:first-child {
+.composer-select.permission .ui-select-icon {
   color: var(--warning-text);
-  flex-shrink: 0;
 }
 
 .composer-select .ui-select {
   appearance: none;
   background: transparent;
-  border: none;
-  color: var(--text);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  min-height: 32px;
+  gap: 6px;
+  color: var(--text-secondary);
   font: inherit;
   font-size: 13px;
-  padding: 2px 2px 2px 0;
+  padding: 5px 8px;
   cursor: pointer;
   max-width: min(190px, 100%);
   text-overflow: ellipsis;
 }
 
+.composer-select .ui-select:hover:not(:disabled),
+.composer-select .ui-select[data-state='open'] {
+  background: var(--bg-hover);
+  border-color: var(--border-subtle);
+  color: var(--text);
+}
+
 .composer-select .ui-select:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-}
-
-.composer-select > svg:last-child {
-  display: none;
-  color: var(--text-muted);
-  flex-shrink: 0;
 }
 
 .composer-no-model {
@@ -411,6 +415,15 @@
      Only the controls wrap; the model group occupies their final row. */
   .composer-model-cluster {
     flex: 1 1 100%;
+  }
+  .composer-send.queued {
+    width: 32px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 50%;
+  }
+  .composer-send.queued > span {
+    display: none;
   }
 }
 

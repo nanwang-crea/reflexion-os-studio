@@ -33,7 +33,8 @@
   cursor: pointer;
 }
 .instructions-toolbar .ui-select:focus-visible {
-  outline: 1px solid var(--border);
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 .instructions-toolbar .primary {
   background: var(--info);

@@ -1,5 +1,6 @@
 import { Children, isValidElement, useState, type ReactNode } from 'react'
 import * as SelectPrimitive from '@radix-ui/react-select'
+import { ChevronIcon } from '../../ui/icons'
 import './controls.css'
 
 interface Props {
@@ -8,6 +9,7 @@ interface Props {
   onValueChange: (value: string) => void
   children: ReactNode
   disabled?: boolean
+  icon?: ReactNode
   'aria-label'?: string
 }
 
@@ -64,9 +66,12 @@ export function Select(props: Props) {
         className="ui-select"
         aria-label={props['aria-label']}
       >
-        <SelectPrimitive.Value />
+        {props.icon && <span className="ui-select-icon">{props.icon}</span>}
+        <span className="ui-select-value">
+          <SelectPrimitive.Value />
+        </span>
         <SelectPrimitive.Icon className="ui-select-arrow">
-          ⌄
+          <ChevronIcon />
         </SelectPrimitive.Icon>
       </SelectPrimitive.Trigger>
       <SelectPrimitive.Portal
@@ -81,13 +86,15 @@ export function Select(props: Props) {
           onEscapeKeyDown={(event) => event.stopPropagation()}
         >
           <SelectPrimitive.ScrollUpButton className="ui-select-scroll">
-            ⌃
+            <span className="ui-select-scroll-up">
+              <ChevronIcon />
+            </span>
           </SelectPrimitive.ScrollUpButton>
           <SelectPrimitive.Viewport>
             {renderOptions(props.children)}
           </SelectPrimitive.Viewport>
           <SelectPrimitive.ScrollDownButton className="ui-select-scroll">
-            ⌄
+            <ChevronIcon />
           </SelectPrimitive.ScrollDownButton>
         </SelectPrimitive.Content>
       </SelectPrimitive.Portal>

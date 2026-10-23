@@ -27,19 +27,30 @@ async function assertComposerAccessible(page) {
     return {
       composer: rect('.composer'),
       textarea: rect('.composer textarea'),
+      send: rect('.composer-send'),
+      controls: rect('.composer-controls'),
       terminal: rect('.terminal-panel'),
       column: rect('.main-chat-column'),
+      scenario: `${location.search} / ${innerWidth}×${innerHeight}`,
+      hitTarget: document.elementFromPoint(
+        r.x + r.width / 2,
+        r.y + r.height / 2,
+      )?.className,
       hit: send.contains(
         document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2),
       ),
       overflow: document.documentElement.scrollWidth > innerWidth,
     }
   })
+  if (!boxes.hit && process.env.UI_REVIEW_OUTPUT)
+    await page.screenshot({
+      path: join(process.env.UI_REVIEW_OUTPUT, 'composer-obstructed.png'),
+    })
   assert.ok(boxes.composer.top >= boxes.column.top, JSON.stringify(boxes))
   assert.ok(boxes.composer.bottom <= boxes.terminal.top, JSON.stringify(boxes))
   assert.ok(boxes.composer.right <= boxes.column.right, JSON.stringify(boxes))
   assert.ok(boxes.textarea.bottom > boxes.textarea.top, JSON.stringify(boxes))
-  assert.equal(boxes.hit, true, 'send button must remain unobstructed')
+  assert.equal(boxes.hit, true, JSON.stringify(boxes))
   assert.equal(boxes.overflow, false)
 }
 
@@ -239,6 +250,13 @@ test('composer stays accessible while browser, terminal and window are resized',
         await assertComposerAccessible(page)
       }
       if (mode.includes('danger')) {
+        assert.equal(
+          await page
+            .locator('.danger-lease-banner .danger-text')
+            .evaluate((el) => getComputedStyle(el).borderTopWidth),
+          '0px',
+          'danger status text must not inherit the settings delete-button style',
+        )
         const disable = page.getByRole('button', {
           name: '立即关闭',
           exact: true,

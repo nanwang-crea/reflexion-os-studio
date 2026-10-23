@@ -1,7 +1,10 @@
 import { materializeBuiltinSkills } from './builtin/packages.js'
 import { saveAuthoredSkill } from './authoring/save.js'
 import { SkillResourceStager } from './resources/stager.js'
-import type { SkillSaveParams } from '@reflexion-os-studio/contracts'
+import type {
+  SkillResourceReadOptions,
+  SkillSaveParams,
+} from '@reflexion-os-studio/contracts'
 import { BUILTIN_SKILLS } from './builtin/index.js'
 import { existsSync, readdirSync, renameSync } from 'node:fs'
 import { basename, join, relative, resolve } from 'node:path'
@@ -144,6 +147,7 @@ export class SkillPluginService {
     projectId: string | null,
     runId: string,
     resource?: string,
+    options?: SkillResourceReadOptions,
   ) {
     if (!this.registry.get(skillId, projectId))
       throw new Error('Skill 不可用或不属于当前项目')
@@ -158,6 +162,7 @@ export class SkillPluginService {
       skillRoot(this.store, this.pluginsRoot, plugin.projectId),
       runId,
       resource,
+      options,
     )
   }
   releaseRun(runId: string): void {

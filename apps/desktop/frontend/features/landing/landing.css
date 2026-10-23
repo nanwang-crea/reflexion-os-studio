@@ -3,36 +3,24 @@
 .landing-context-selectors {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 8px;
   flex-wrap: wrap;
-  margin: 0 0 -10px 2px;
-  position: relative;
-  z-index: 1;
+  margin: 0;
 }
 
 .landing-context-selectors .composer-select {
-  min-height: 20px;
-  padding: 1px 2px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
-.landing-context-selectors .composer-select:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
-.landing-context-selectors .composer-select:has(.ui-select:disabled) {
-  opacity: 0.78;
+  max-width: 100%;
 }
 
 .landing-context-selectors .composer-select .ui-select {
-  max-width: 180px;
-  color: inherit;
-  font-size: 12px;
+  max-width: min(280px, 100%);
+  min-height: 34px;
+  padding: 6px 10px;
+  gap: 8px;
+  border-color: var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .landing-branch-hint {
@@ -66,7 +54,7 @@
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto minmax(0, auto);
   align-items: stretch;
-  gap: 24px;
+  gap: 12px;
 }
 
 /* 落地页是 flex 列容器：composer 基础样式的 margin: 0 auto 会关闭
@@ -85,6 +73,7 @@
 }
 
 .landing-intro {
+  margin-bottom: 12px;
   min-height: 0;
   overflow-y: auto;
   display: flex;

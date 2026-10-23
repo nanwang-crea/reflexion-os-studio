@@ -167,6 +167,10 @@ button.settings-primary,
 .instructions-toolbar button.primary,
 .instruction-actions button.primary,
 .approval-actions button.primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   min-height: var(--control-height);
   padding: 7px 14px;
   border: 1px solid var(--accent-solid);
@@ -232,6 +236,11 @@ textarea::placeholder {
 
 /* Quiet secondary actions keep the pale blue reserved for the next step. */
 button.ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
   border-color: var(--border-subtle);
   border-radius: var(--radius-md);
 }
