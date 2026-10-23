@@ -16,6 +16,7 @@ const groups = [
       { id: 'runtime', label: 'Agent 运行时', icon: GearIcon },
       { id: 'agent-browser', label: 'Agent 浏览器', icon: BoxIcon },
       { id: 'mcp', label: 'MCP 服务器', icon: BoxIcon },
+      { id: 'developer', label: '开发者', icon: GearIcon },
     ],
   },
 ] as const

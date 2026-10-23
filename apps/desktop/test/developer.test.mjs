@@ -5,6 +5,11 @@ import { openDeveloperPage } from './fixtures/developer-harness.mjs'
 test('developer page filters, pages, drills into child Runs/tools, cleans subscriptions and fits narrow windows', async () => {
   const { browser, page, errors } = await openDeveloperPage()
   try {
+    assert.equal(
+      await page.getByRole('button', { name: '开发者', exact: true }).count(),
+      0,
+    )
+    await page.getByRole('button', { name: '设置', exact: true }).click()
     await page.getByRole('button', { name: '开发者', exact: true }).click()
     await page.getByRole('heading', { name: '开发者', exact: true }).waitFor()
     await page.getByText('输入 tokens', { exact: true }).waitFor()
@@ -122,6 +127,7 @@ test('developer page filters, pages, drills into child Runs/tools, cleans subscr
 test('refreshes serialize slow queries and ignore old filter responses', async () => {
   const { browser, page, errors } = await openDeveloperPage()
   try {
+    await page.getByRole('button', { name: '设置', exact: true }).click()
     await page.getByRole('button', { name: '开发者', exact: true }).click()
     await page.getByText('输入 tokens', { exact: true }).waitFor()
     await page.evaluate(() => {
@@ -180,6 +186,7 @@ test('refreshes serialize slow queries and ignore old filter responses', async (
 test('returning from Run and tool details preserves pagination and local filters', async () => {
   const { browser, page, errors } = await openDeveloperPage()
   try {
+    await page.getByRole('button', { name: '设置', exact: true }).click()
     await page.getByRole('button', { name: '开发者', exact: true }).click()
     await page.getByRole('button', { name: '运行记录', exact: true }).click()
     await page.getByRole('button', { name: '下一页', exact: true }).click()

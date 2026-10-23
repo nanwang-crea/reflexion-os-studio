@@ -22,14 +22,16 @@ async function assertComposerAccessible(page) {
       const r = document.querySelector(selector).getBoundingClientRect()
       return { top: r.top, bottom: r.bottom, left: r.left, right: r.right }
     }
-    const send = document.querySelector('.composer-send')
+    const send = document.querySelector('.composer-send, .composer-stop')
     const r = send.getBoundingClientRect()
     return {
       composer: rect('.composer'),
       textarea: rect('.composer textarea'),
-      send: rect('.composer-send'),
+      send: rect('.composer-send, .composer-stop'),
       controls: rect('.composer-controls'),
-      terminal: rect('.terminal-panel'),
+      terminal: document.querySelector('.terminal-panel')
+        ? rect('.terminal-panel')
+        : { top: innerHeight },
       column: rect('.main-chat-column'),
       scenario: `${location.search} / ${innerWidth}×${innerHeight}`,
       hitTarget: document.elementFromPoint(
@@ -52,6 +54,28 @@ async function assertComposerAccessible(page) {
   assert.ok(boxes.textarea.bottom > boxes.textarea.top, JSON.stringify(boxes))
   assert.equal(boxes.hit, true, JSON.stringify(boxes))
   assert.equal(boxes.overflow, false)
+  const project = page.getByRole('combobox', { name: '新会话项目' })
+  if (await project.count()) {
+    const bounds = await project.boundingBox()
+    assert.ok(
+      bounds.y + bounds.height <= boxes.composer.top,
+      JSON.stringify({
+        project: bounds,
+        composer: boxes.composer,
+        scenario: boxes.scenario,
+      }),
+    )
+    assert.equal(
+      await project.evaluate((el) => {
+        const r = el.getBoundingClientRect()
+        return el.contains(
+          document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2),
+        )
+      }),
+      true,
+      'the project selector must remain clickable above the composer',
+    )
+  }
 }
 
 test('composer stays accessible while browser, terminal and window are resized', async () => {
@@ -146,6 +170,27 @@ test('composer stays accessible while browser, terminal and window are resized',
     })
     page.setDefaultTimeout(10000)
     const url = `http://127.0.0.1:${server.address().port}`
+    await page.goto(url + '?no-terminal&short-history')
+    for (const size of [
+      { width: 800, height: 680 },
+      { width: 940, height: 600 },
+      { width: 1440, height: 900 },
+    ]) {
+      await page.setViewportSize(size)
+      await assertComposerAccessible(page)
+      await page.getByRole('combobox', { name: '新会话项目' }).click()
+      await page
+        .getByRole('option', { name: '独立对话', exact: true })
+        .waitFor()
+      await page.keyboard.press('Escape')
+      if (size.width === 800 && process.env.UI_REVIEW_OUTPUT)
+        await page.screenshot({
+          path: join(
+            process.env.UI_REVIEW_OUTPUT,
+            'landing-project-selector.png',
+          ),
+        })
+    }
     for (const mode of [
       '',
       '?standalone',
@@ -162,6 +207,7 @@ test('composer stays accessible while browser, terminal and window are resized',
       await page
         .getByRole('menuitemcheckbox', { name: '网页浏览', exact: true })
         .click()
+      await assertComposerAccessible(page)
       const draft = Array.from(
         { length: 12 },
         (_, i) => `第 ${i + 1} 行输入内容`,

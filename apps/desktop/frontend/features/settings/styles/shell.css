@@ -134,6 +134,13 @@
 .settings-content-models {
   max-width: 940px;
 }
+.settings-content-developer {
+  max-width: 1100px;
+}
+.settings-content-developer .developer-view {
+  padding: 0;
+  overflow: visible;
+}
 .settings-panel {
   width: 100%;
   min-width: 0;

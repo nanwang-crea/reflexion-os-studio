@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import type { ComponentProps } from 'react'
+import type { DeveloperView as DeveloperViewType } from '../developer/DeveloperView'
 import type { ProviderProfile } from '@reflexion-os-studio/runtime-client'
 import type { ConfirmDialogState } from '../../components/ConfirmDialog'
 import { SettingsNavigation, type SettingsSection } from './SettingsNavigation'
@@ -10,7 +12,12 @@ import { AppearancePanel } from './appearance/AppearancePanel'
 import { AgentBrowserSettingsPanel } from './agent-browser/AgentBrowserSettingsPanel'
 import { BrowserSettingsPanel } from '../../components/browser-settings/BrowserSettingsPanel'
 
+const DeveloperView = lazy(async () => ({
+  default: (await import('../developer/DeveloperView')).DeveloperView,
+}))
+
 interface SettingsViewProps {
+  developer: ComponentProps<typeof DeveloperViewType>
   profiles: ProviderProfile[]
   onSaved: () => Promise<void>
   onBackToChat: () => void
@@ -52,6 +59,11 @@ export function SettingsView(props: SettingsViewProps): React.JSX.Element {
             {section === 'appearance' && <AppearancePanel />}
             {section === 'browser' && <BrowserSettingsPanel />}
             {section === 'agent-browser' && <AgentBrowserSettingsPanel />}
+            {section === 'developer' && (
+              <Suspense fallback={<p>正在加载开发者页面…</p>}>
+                <DeveloperView {...props.developer} />
+              </Suspense>
+            )}
             {section === 'models' && (
               <>
                 <div className="settings-panel-head settings-page-heading">

@@ -52,7 +52,8 @@
   min-height: 0;
   max-height: 100%;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto minmax(0, auto);
+  /* 项目选择行保留完整高度，空间不足时由介绍和输入区收缩。 */
+  grid-template-rows: minmax(0, 1fr) max-content minmax(0, auto);
   align-items: stretch;
   gap: 12px;
 }
@@ -67,8 +68,7 @@
 }
 
 /* 输入区保留自然高度，上方介绍和历史列表让出空间。 */
-.landing-content > .composer,
-.landing-content > .landing-context-selectors {
+.landing-content > .composer {
   min-height: 0;
 }
 

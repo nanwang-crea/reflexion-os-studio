@@ -39,13 +39,13 @@ export async function openDeveloperPage() {
       loader: 'tsx',
       contents: `
 import React,{useState} from 'react';import {createRoot} from 'react-dom/client';
-import {DeveloperView} from './frontend/features/developer/DeveloperView';
+import {SettingsView} from './frontend/features/settings/SettingsView';import './frontend/features/settings/settings.css';
 import {Sidebar} from './frontend/components/Sidebar';import './frontend/styles/style.css';import './frontend/styles/sidebar.css';
 window.calls=[];window.listeners=new Set();window.opened=[];
 const root=createRoot(document.getElementById('root'));window.unmount=()=>root.unmount();
 function App(){const [view,setView]=useState('chat');return <>
 <Sidebar open width={220} mode="chat" projects={[]} allSessions={[]} standaloneSessions={[]} view={view} systemReady={false} onSelectView={setView}/>
-<main style={{display:'flex',flex:1,minWidth:0}}>{view==='developer'&&<DeveloperView projects={[{id:'project',name:'测试项目'}]} profiles={[{id:'provider',name:'测试供应商'}]} onConversation={(sessionId,projectId)=>window.opened.push({sessionId,projectId})}/>}</main></>}
+<main style={{display:'flex',flex:1,minWidth:0}}>{view==='settings'&&<SettingsView profiles={[]} onSaved={async()=>{}} onBackToChat={()=>setView('chat')} confirm={async()=>true} developer={{projects:[{id:'project',name:'测试项目'}],profiles:[{id:'provider',name:'测试供应商'}],onConversation:(sessionId,projectId)=>window.opened.push({sessionId,projectId})}}/>}</main></>}
 root.render(<App/>);`,
     },
   })

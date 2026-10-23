@@ -193,12 +193,6 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
 
       <footer className="sidebar-footer">
         <NavItem
-          label="开发者"
-          icon={<span aria-hidden="true">{'{ }'}</span>}
-          active={props.view === 'developer'}
-          onClick={() => props.onSelectView('developer')}
-        />
-        <NavItem
           label="设置"
           icon={<GearIcon size={15} />}
           active={props.view === 'settings'}

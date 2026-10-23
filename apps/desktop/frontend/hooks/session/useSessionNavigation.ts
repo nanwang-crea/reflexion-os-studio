@@ -4,7 +4,7 @@ import type { SessionData } from '../../api/sessions'
 import type { SidebarMode } from '../useSidebarPanel'
 
 export type ViewName =
-  'chat' | 'settings' | 'skills' | 'agents' | 'instructions' | 'developer'
+  'chat' | 'settings' | 'skills' | 'agents' | 'instructions'
 
 export interface SessionNavigationDeps {
   activeProjectId: string | null

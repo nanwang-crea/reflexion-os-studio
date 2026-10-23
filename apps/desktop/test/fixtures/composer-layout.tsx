@@ -37,7 +37,7 @@ function Fixture() {
   const query = new URLSearchParams(location.search)
   const [open, setOpen] = useState(false)
   const [width, setWidth] = useState(600)
-  const [terminalOpen, setTerminalOpen] = useState(true)
+  const [terminalOpen, setTerminalOpen] = useState(!query.has('no-terminal'))
   const [sent, setSent] = useState('')
   const [resolved, setResolved] = useState('')
   const crowded = query.has('crowded')
@@ -113,12 +113,15 @@ function Fixture() {
           projects: [project],
           selectedProjectId: query.has('standalone') ? null : 'p',
           onProjectChange: noop,
-          sessions,
+          sessions: query.has('short-history')
+            ? sessions.slice(0, 2)
+            : sessions,
           onSelectSession: noop,
           onRenameSession: done,
           onDeleteSession: done,
         }}
         settings={{
+          developer: { projects: [], profiles: [], onConversation: noop },
           profiles: [],
           onSaved: done,
           onBackToChat: noop,
