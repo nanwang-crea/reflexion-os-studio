@@ -53,6 +53,7 @@ export interface AppMainProps {
   workspace: {
     open: boolean
     setOpen: Dispatch<SetStateAction<boolean>>
+    /** 工作区、浏览器与协作共用的右侧面板宽度。 */
     width: number
     setWidth: Dispatch<SetStateAction<number>>
     panel: ComponentProps<typeof FileViewerPanel>
@@ -75,7 +76,6 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
   const navigation = useBrowserNavigationFailure(activeSessionId)
   const surfaceRef = useRef<HTMLDivElement>(null)
   const [collaborationOpen, setCollaborationOpen] = useState(false)
-  const [browserWidth, setBrowserWidth] = useState<number | null>(null)
   const { open: browserOpen } = useBrowserPanelState()
   const [surfaceExpanded, setSurfaceExpanded] = useState(false)
   const fileNavigationNonce = workspace.panel.openTabs.find(
@@ -198,11 +198,7 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
         className="right-surface"
         style={{
           display: surfaceOpen ? 'flex' : 'none',
-          width: surfaceExpanded
-            ? '100%'
-            : browserOpen
-              ? (browserWidth ?? '50%')
-              : workspace.width,
+          width: surfaceExpanded ? '100%' : workspace.width,
         }}
       >
         <ResizeHandle
@@ -216,8 +212,7 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
                   delta,
               ),
             )
-            if (browserOpen) setBrowserWidth(nextWidth)
-            else workspace.setWidth(nextWidth)
+            workspace.setWidth(nextWidth)
           }}
         />
         <div className="right-surface-content">

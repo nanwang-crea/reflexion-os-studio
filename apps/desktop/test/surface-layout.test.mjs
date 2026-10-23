@@ -145,6 +145,28 @@ test('shared surface expands files, retains drafts across browser switches and r
       460,
     )
     assert.equal(await page.locator('.main-chat-column').isVisible(), true)
+    await nav.getByRole('button', { name: '浏览器', exact: true }).click()
+    assert.equal(
+      Math.round((await page.locator('.right-surface').boundingBox()).width),
+      460,
+      'switching to browser retains the displayed panel width',
+    )
+    const separator = page.getByRole('separator', { name: '调整面板宽度' })
+    await separator.focus()
+    await page.keyboard.press('ArrowLeft')
+    assert.equal(
+      Math.round((await page.locator('.right-surface').boundingBox()).width),
+      472,
+    )
+    for (const surface of ['工作区', '协作', '浏览器']) {
+      await nav.getByRole('button', { name: surface, exact: true }).click()
+      assert.equal(
+        Math.round((await page.locator('.right-surface').boundingBox()).width),
+        472,
+        `${surface} shares the width adjusted in browser`,
+      )
+    }
+    await nav.getByRole('button', { name: '工作区', exact: true }).click()
     await nav.getByRole('button', { name: '放大右侧面板' }).click()
     await page.evaluate(() => window.changeSession())
     await nav.getByRole('button', { name: '放大右侧面板' }).waitFor()
