@@ -19,7 +19,7 @@
   gap: 12px;
   padding: 14px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 16px;
   background: var(--bg-elevated);
 }
 
@@ -53,7 +53,7 @@
   gap: 8px;
   padding: 9px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
 }
 

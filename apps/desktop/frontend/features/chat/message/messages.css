@@ -13,10 +13,10 @@
 
 .user-bubble {
   position: relative;
-  background: var(--bg-elevated);
+  background: var(--bg-inset);
   border: 1px solid transparent;
-  border-radius: 18px;
-  padding: 10px 16px;
+  border-radius: 20px;
+  padding: 12px 18px;
   max-width: 80%;
   line-height: 1.6;
   white-space: pre-wrap;

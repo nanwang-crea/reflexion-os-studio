@@ -18,7 +18,7 @@ a:focus-visible {
 
 .topbar {
   min-height: 56px;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid transparent;
 }
 
 .sidebar-head {
@@ -27,13 +27,15 @@ a:focus-visible {
 }
 
 .brand-mark {
-  background: var(--accent-solid);
-  color: var(--on-accent);
+  background: var(--text);
+  color: var(--bg-elevated);
 }
 
 .panel-search {
-  height: 38px;
-  border-color: var(--border-subtle);
+  height: 36px;
+  border-color: transparent;
+  border-radius: var(--radius-md);
+  background: var(--bg-hover);
 }
 
 .panel-search input:not([type='checkbox']):not([type='radio']) {
@@ -50,9 +52,9 @@ a:focus-visible {
 .session-row.active,
 .project-row.active,
 .nav-item.active {
-  background: var(--accent-soft);
+  background: var(--bg-active);
   color: var(--text);
-  box-shadow: inset 2px 0 var(--accent);
+  box-shadow: none;
 }
 
 .session-row:focus-within .row-action,
@@ -62,6 +64,7 @@ a:focus-visible {
 
 .nav-item {
   min-height: 38px;
+  border-radius: var(--radius-md);
 }
 
 .skills-view,
@@ -82,7 +85,7 @@ a:focus-visible {
 .skills-view h1,
 .instructions-view header h2 {
   font-size: 28px;
-  font-weight: 600;
+  font-weight: 550;
   letter-spacing: -0.025em;
   line-height: 1.35;
 }
@@ -102,9 +105,9 @@ a:focus-visible {
 .instruction-pane,
 .plugin-installer,
 .placeholder-card {
-  background: var(--bg-inset);
+  background: var(--bg-elevated);
   border-color: var(--border-subtle);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   padding: 24px;
 }
 
@@ -126,12 +129,12 @@ a:focus-visible {
 
 .delegation-row {
   border: 1px solid var(--border-subtle);
-  border-radius: 10px;
+  border-radius: 14px;
   background: var(--bg-inset);
 }
 
 .workspace-panel {
-  background: var(--bg-inset);
+  background: var(--bg-elevated);
 }
 
 @media (max-width: 760px) {
@@ -175,7 +178,7 @@ button.settings-primary,
   border-radius: var(--radius-md);
   background: var(--accent-solid);
   color: var(--on-accent);
-  font-weight: 600;
+  font-weight: 500;
 }
 button.primary:hover:not(:disabled),
 button.settings-primary:hover:not(:disabled),
@@ -232,7 +235,7 @@ textarea::placeholder {
   overflow: auto;
 }
 
-/* Quiet secondary actions keep the pale blue reserved for the next step. */
+/* Neutral secondary actions leave blue for the main action. */
 button.ghost {
   display: inline-flex;
   align-items: center;
@@ -253,7 +256,7 @@ button.settings-primary:active:not(:disabled),
 
 .agent-roles-heading h1 {
   font-size: 24px;
-  font-weight: 600;
+  font-weight: 550;
   letter-spacing: -0.025em;
 }
 .agent-roles-heading p {

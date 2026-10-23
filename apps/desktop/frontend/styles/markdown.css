@@ -75,10 +75,10 @@
 .md-pre {
   position: relative;
   margin: 0 0 10px;
-  padding: 10px 12px;
+  padding: 14px 16px;
   background: var(--bg-inset);
   border: 1px solid var(--border-subtle);
-  border-radius: 10px;
+  border-radius: 14px;
   overflow-x: auto;
   font-family: var(--mono);
   font-size: 13px;
@@ -112,7 +112,7 @@
   opacity: 0;
   background: var(--bg-hover);
   border: 1px solid var(--border-subtle);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.24);
+  box-shadow: var(--shadow-sm);
 }
 
 .md-code-block:hover .md-block-copy,

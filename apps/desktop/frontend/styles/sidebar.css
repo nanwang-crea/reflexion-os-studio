@@ -6,7 +6,7 @@
   max-width: min(560px, 30%);
   flex-shrink: 0;
   background: var(--bg-sidebar);
-  border-right: 1px solid var(--border-subtle);
+  border-right: 1px solid transparent;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -30,7 +30,7 @@
 .brand-mark {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: #ececec;
   color: #171717;
   font-weight: 700;
@@ -58,7 +58,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 0 8px;
+  padding: 0 10px;
 }
 
 .panel-search {
@@ -70,7 +70,7 @@
   height: 34px;
   background: var(--bg-inset);
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--text-muted);
   flex-shrink: 0;
 }
@@ -108,7 +108,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   min-height: 34px;
 }
 
@@ -323,7 +323,7 @@
   background: transparent;
   color: var(--text-secondary);
   padding: 7px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 13px;
 }
 
@@ -383,7 +383,7 @@
   gap: 10px;
   width: 100%;
   padding: 7px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-secondary);
   text-align: left;

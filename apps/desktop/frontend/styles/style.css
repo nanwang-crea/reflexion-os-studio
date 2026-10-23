@@ -6,8 +6,8 @@
   --space-5: 20px;
   --space-6: 24px;
   --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  --radius-md: 10px;
+  --radius-lg: 20px;
   --font-caption: 13px;
   --font-body: 14px;
   --font-title: 24px;
@@ -17,33 +17,33 @@
   --on-danger: #ffffff;
 
   color-scheme: dark;
-  --bg: #171e27;
-  --bg-sidebar: #111821;
-  --bg-elevated: #202b38;
-  --bg-hover: #283645;
-  --bg-active: #2d4053;
-  --bg-inset: #141c26;
+  --bg: #1b1b1c;
+  --bg-sidebar: #202021;
+  --bg-elevated: #252526;
+  --bg-hover: #2d2d30;
+  --bg-active: #38383c;
+  --bg-inset: #222224;
   /* active 标签与编辑器背景融合；必须与
      features/workspace/editor/monaco.ts 的 editor.background 保持同值 */
   --bg-editor: #1e1e1e;
   --surface-overlay: rgba(23, 23, 23, 0.72);
   --surface-translucent: rgba(23, 23, 23, 0.45);
   --scrim: rgba(0, 0, 0, 0.6);
-  --border: #3b4b5e;
-  --border-subtle: #2b3949;
-  --text: #e8eef5;
-  --text-secondary: #b8c6d5;
-  --text-muted: #93a7bc;
-  --accent: #96d3f5;
-  --accent-hover: #bae5fc;
-  --accent-solid: #96d3f5;
-  --accent-solid-hover: #bae5fc;
-  --on-accent: #142c3d;
-  --focus-ring: #96d3f5;
-  --accent-soft: rgba(150, 211, 245, 0.1);
-  --accent-border: rgba(150, 211, 245, 0.48);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.18);
-  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.22);
+  --border: #444448;
+  --border-subtle: #333336;
+  --text: #ededee;
+  --text-secondary: #b8b8be;
+  --text-muted: #9999a2;
+  --accent: #a2beff;
+  --accent-hover: #c0d2ff;
+  --accent-solid: #316ce5;
+  --accent-solid-hover: #275dcc;
+  --on-accent: #ffffff;
+  --focus-ring: #a2beff;
+  --accent-soft: rgba(126, 165, 255, 0.1);
+  --accent-border: rgba(162, 190, 255, 0.48);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.3);
   --danger: #f87171;
   --warning-bg: rgba(251, 191, 36, 0.12);
   --warning-text: #fbbf24;
@@ -82,7 +82,7 @@ button {
   color: var(--text);
   background: var(--bg-elevated);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 6px 14px;
   cursor: pointer;
   transition:
@@ -118,8 +118,8 @@ textarea {
   background: var(--bg-elevated);
   color: var(--text);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
 }
 
 input:not([type='checkbox']):not([type='radio']):focus-visible,
@@ -149,7 +149,7 @@ input:is([type='checkbox'], [type='radio']) {
 input[type='checkbox']:checked {
   background-color: var(--accent-solid);
   border-color: var(--accent-solid);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m3 8 3 3 7-7' fill='none' stroke='%23142c3d' stroke-width='2'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m3 8 3 3 7-7' fill='none' stroke='%23ffffff' stroke-width='2'/%3E%3C/svg%3E");
 }
 
 input[type='radio'] {
@@ -258,7 +258,7 @@ input:is([type='checkbox'], [type='radio']):disabled {
 .topbar-title {
   flex: 0 1 auto;
   min-width: 0;
-  font-weight: 600;
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

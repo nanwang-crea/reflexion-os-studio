@@ -14,7 +14,7 @@
   margin: 0 12px 8px;
   padding: 9px 12px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 16px;
   background: var(--bg-elevated);
   color: var(--text);
   outline: none;
@@ -266,7 +266,7 @@
   gap: 10px;
   margin: 0 12px 8px;
   padding: 8px 12px;
-  border-radius: 10px;
+  border-radius: 16px;
   border: 1px solid var(--danger);
   background: rgba(248, 113, 113, 0.14);
   color: var(--text);
@@ -318,7 +318,7 @@
   border-radius: 14px;
   background: var(--bg-elevated);
   padding: 18px 20px;
-  box-shadow: 0 24px 64px rgb(0 0 0 / 50%);
+  box-shadow: var(--shadow-lg);
 }
 .danger-dialog-title {
   margin: 0 0 12px;

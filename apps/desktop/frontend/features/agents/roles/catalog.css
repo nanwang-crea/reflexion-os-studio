@@ -73,8 +73,8 @@
 .agent-role-filters > button,
 .agent-role-card footer button {
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  background: var(--bg);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
   color: var(--text-secondary);
   cursor: pointer;
   transition:
@@ -88,8 +88,8 @@
   white-space: nowrap;
 }
 .agent-role-heading-actions .role-create-button {
-  background: var(--text);
-  color: var(--bg);
+  background: var(--accent-solid);
+  color: var(--on-accent);
   border-color: transparent;
   font-weight: 600;
 }
@@ -107,10 +107,15 @@
   opacity: 0.45;
   cursor: default;
 }
+.agent-role-heading-actions .role-create-button:hover:not(:disabled) {
+  background: var(--accent-solid-hover);
+  border-color: transparent;
+  color: var(--on-accent);
+}
 .agent-role-filters {
   padding: 12px;
   border: 1px solid var(--border-subtle);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--bg-sidebar);
 }
 .role-catalog-toolbar {
@@ -119,8 +124,8 @@
 }
 .agent-role-card,
 .agent-role-card:last-child {
-  background: var(--bg);
-  border-radius: 10px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-lg);
 }
 .agent-role-card p {
   line-height: 1.6;

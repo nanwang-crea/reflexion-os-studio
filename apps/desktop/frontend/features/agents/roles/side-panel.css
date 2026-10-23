@@ -10,7 +10,7 @@
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  padding: 16px 20px;
+  padding: clamp(20px, 3vh, 36px) clamp(20px, 3vw, 40px);
   container: role-library / inline-size;
 }
 .agent-role-side-panel {
@@ -19,7 +19,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid var(--border);
+  border-left: 1px solid var(--border-subtle);
   background: var(--bg-sidebar);
   color: var(--text);
 }
