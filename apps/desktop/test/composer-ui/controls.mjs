@@ -18,16 +18,29 @@ export async function verifyComposerControls(page, url) {
       () => document.activeElement?.getAttribute('aria-label') === '新会话项目',
     )
     assert.match(await project.innerText(), /ReflexionOS Studio 长项目名称/)
-    const gap = await page.evaluate(() => {
-      const trigger = document
-        .querySelector('.landing-context-selectors')
+    const layout = await page.evaluate(() => {
+      const header = document
+        .querySelector('.landing-composer-header')
+        .getBoundingClientRect()
+      const project = document
+        .querySelector('[aria-label="新会话项目"]')
         .getBoundingClientRect()
       const composer = document
         .querySelector('.composer')
         .getBoundingClientRect()
-      return composer.top - trigger.bottom
+      return {
+        gap: composer.top - header.bottom,
+        inset: header.left - composer.left,
+        projectBottom: project.bottom,
+        composerTop: composer.top,
+      }
     })
-    assert.ok(gap >= 8, 'project selector has room above the input')
+    assert.ok(layout.gap <= 0 && layout.gap >= -12, 'header joins the input')
+    assert.ok(layout.inset > 0, 'header is inset above the rounded input')
+    assert.ok(
+      layout.projectBottom <= layout.composerTop,
+      'the input does not cover the project selector',
+    )
     await project.click()
     await page.getByRole('option', { name: '独立对话', exact: true }).click()
 
@@ -52,5 +65,7 @@ export async function verifyComposerControls(page, url) {
     assert.ok(menu.x >= 0 && menu.x + menu.width <= 940)
     assert.ok(menu.y >= 0 && menu.y + menu.height <= 860)
     await page.keyboard.press('Escape')
+    await page.getByRole('button', { name: '打开设置', exact: true }).click()
+    await page.locator('.settings-view').waitFor()
   }
 }

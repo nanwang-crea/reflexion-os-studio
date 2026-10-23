@@ -1,32 +1,61 @@
 /* ---------- 落地页（新对话） ---------- */
 
-.landing-context-selectors {
+.landing-composer-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 0;
+  gap: 16px;
+  min-width: 0;
+  min-height: 48px;
+  margin: 0 14px -8px;
+  padding: 4px 8px 12px;
+  border-radius: 18px 18px 0 0;
+  background: color-mix(in srgb, var(--text) 5%, var(--bg-elevated));
+  color: var(--text);
 }
 
-.landing-context-selectors .composer-select {
+.landing-composer-header .composer-select {
+  max-width: min(280px, 50%);
+  color: var(--text);
+}
+
+.landing-composer-header .composer-select .ui-select {
   max-width: 100%;
+  padding: 4px 6px;
+  gap: 8px;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 400;
 }
 
-.landing-context-selectors .composer-select .ui-select {
-  max-width: min(280px, 100%);
-  min-height: 34px;
-  padding: 6px 10px;
+.landing-composer-header .ui-select-icon path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+}
+
+.landing-composer-device {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
   gap: 8px;
-  border-color: var(--border-subtle);
-  background: var(--bg-elevated);
-  color: var(--text-secondary);
   font-size: 13px;
 }
 
-.landing-branch-hint {
+.landing-composer-device svg {
+  width: 18px;
+  height: 18px;
+}
+
+.landing-composer-settings {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  margin-left: auto;
+  padding: 0;
+  background: transparent;
   color: var(--text-muted);
-  font-size: 11px;
-  padding: 4px 6px;
 }
 
 .landing {
@@ -52,10 +81,10 @@
   min-height: 0;
   max-height: 100%;
   display: grid;
-  /* 项目选择行保留完整高度，空间不足时由介绍和输入区收缩。 */
+  /* 顶栏与输入框相接；空间不足时由介绍和输入区收缩。 */
   grid-template-rows: minmax(0, 1fr) max-content minmax(0, auto);
   align-items: stretch;
-  gap: 12px;
+  gap: 0;
 }
 
 /* 落地页是 flex 列容器：composer 基础样式的 margin: 0 auto 会关闭
@@ -73,7 +102,7 @@
 }
 
 .landing-intro {
-  margin-bottom: 12px;
+  margin-bottom: 24px;
   min-height: 0;
   overflow-y: auto;
   display: flex;
@@ -133,8 +162,16 @@
   .landing-center {
     padding: 12px 16px;
   }
+}
 
-  .landing-content {
-    gap: 12px;
+@container (max-width: 420px) {
+  .landing-composer-header {
+    gap: 6px;
+    margin-inline: 8px;
+  }
+
+  .landing-composer-device {
+    gap: 5px;
+    font-size: 12px;
   }
 }

@@ -72,6 +72,24 @@ test('composer actions remain aligned in both themes and narrow split layouts', 
         await page.setViewportSize({ width, height: 860 })
         await page.goto(`${url}?theme=${theme}`)
         await page.waitForSelector('.composer-send')
+        if (process.env.UI_REVIEW_OUTPUT && width === 1440) {
+          const header = await page
+            .locator('.landing-composer-header')
+            .boundingBox()
+          const composer = await page.locator('.composer').boundingBox()
+          await page.screenshot({
+            path: join(
+              process.env.UI_REVIEW_OUTPUT,
+              `composer-reference-${theme}.png`,
+            ),
+            clip: {
+              x: composer.x - 4,
+              y: header.y - 4,
+              width: composer.width + 8,
+              height: composer.y + composer.height - header.y + 8,
+            },
+          })
+        }
         await page
           .locator('.composer textarea')
           .fill('帮我梳理这个项目，先给出清晰的实现方案。')
@@ -244,10 +262,10 @@ test('composer actions remain aligned in both themes and narrow split layouts', 
     const reasoning = page.getByRole('combobox', { name: '对话思考强度' })
     await reasoning.waitFor()
     assert.equal(await reasoning.isEnabled(), true)
-    assert.match(await reasoning.innerText(), /思考：高/)
+    assert.equal(await reasoning.innerText(), '高')
     await reasoning.click()
-    await page.getByRole('option', { name: '思考：低', exact: true }).click()
-    assert.match(await reasoning.innerText(), /思考：低/)
+    await page.getByRole('option', { name: '低', exact: true }).click()
+    assert.equal(await reasoning.innerText(), '低')
     for (const state of ['loading', 'error']) {
       await page.goto(`${url}?theme=dark&reasoning=${state}`)
       await reasoning.waitFor()

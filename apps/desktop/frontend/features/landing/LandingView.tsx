@@ -1,6 +1,5 @@
 import type { ReasoningSelection } from '../../components/composer/ModelSelector'
-import { Select } from '../../components/forms/Select'
-import { FolderIcon } from '../../ui/icons'
+import { LandingComposerHeader } from './LandingComposerHeader'
 import type {
   Project,
   Session,
@@ -95,31 +94,18 @@ export function LandingView(props: LandingViewProps): React.JSX.Element {
               </div>
             )}
           </div>
-          <div className="landing-context-selectors">
-            <span className="composer-select" title="新会话项目">
-              <Select
-                aria-label="新会话项目"
-                icon={<FolderIcon />}
-                value={props.selectedProjectId ?? ''}
-                onValueChange={(value) => props.onProjectChange(value || null)}
-              >
-                <option value="">独立对话</option>
-                {props.projects.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </Select>
-            </span>
-          </div>
+          <LandingComposerHeader
+            projects={props.projects}
+            selectedProjectId={props.selectedProjectId}
+            onProjectChange={props.onProjectChange}
+            onGoSettings={props.onGoSettings}
+          />
           <Composer
             autoFocus
             placeholder={
               !props.hasEnabledProvider
                 ? '请先在设置中配置 API Key…'
-                : props.project
-                  ? `在“${props.project.name}”中开始新会话…`
-                  : '输入消息，Enter 发送…'
+                : '随心输入'
             }
             disabled={!props.hasEnabledProvider}
             permissionValue={props.permissionValue}

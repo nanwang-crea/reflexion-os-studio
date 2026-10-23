@@ -74,12 +74,12 @@ export function ModelSelector(props: {
                 : props.reasoning.error
                   ? '加载失败'
                   : !props.reasoning.supported
-                    ? '思考：自动'
-                    : '思考：默认'}
+                    ? '自动'
+                    : '默认'}
             </option>
             {props.reasoning.options.map((option) => (
               <option key={option.value} value={option.value}>
-                思考：{option.label}
+                {option.label}
               </option>
             ))}
           </Select>

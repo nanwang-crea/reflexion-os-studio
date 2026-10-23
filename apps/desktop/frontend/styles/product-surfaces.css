@@ -109,16 +109,14 @@ a:focus-visible {
 }
 
 .composer {
-  border-radius: 18px;
+  border-radius: 24px;
   border-color: var(--border-subtle);
   box-shadow: var(--shadow-sm);
 }
 
 .composer:focus-within {
-  border-color: var(--accent-border);
-  box-shadow:
-    0 0 0 2px var(--accent-soft),
-    var(--shadow-lg);
+  border-color: var(--border);
+  box-shadow: var(--shadow-sm);
 }
 
 .landing-title {
