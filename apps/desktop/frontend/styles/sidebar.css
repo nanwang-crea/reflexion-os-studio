@@ -1,6 +1,8 @@
 /* ---------- 单列侧边栏（桌面版 Codex 式：品牌 → 搜索 → 列表 → 底部导航） ---------- */
 
 .sidebar {
+  --sidebar-hover: color-mix(in srgb, var(--text) 3%, var(--bg-sidebar));
+  --sidebar-selected: color-mix(in srgb, var(--text) 6%, var(--bg-sidebar));
   width: 272px;
   /* 窗口缩小或 DPI 改变时，保留主区空间；内联宽度只代表用户偏好。 */
   max-width: min(560px, 30%);
@@ -108,19 +110,29 @@
   position: relative;
   display: flex;
   align-items: center;
-  border-radius: var(--radius-md);
+  border-radius: 6px;
   min-height: 34px;
 }
 
 .project-row:hover,
 .session-row:hover {
-  background: var(--bg-hover);
+  background: var(--sidebar-hover);
 }
 
 .project-row.active,
-.session-row.active {
-  background: var(--bg-active);
+.session-row.active,
+.nav-item.active {
+  background: var(--sidebar-selected);
+  color: var(--text);
   box-shadow: none;
+}
+
+.project-row.active:has(+ .nested-list .session-row.active) {
+  background: transparent;
+}
+
+.project-row.active:has(+ .nested-list .session-row.active):hover {
+  background: var(--sidebar-hover);
 }
 
 .project-row .row,
@@ -305,9 +317,7 @@
 }
 
 .nested-list {
-  margin: 2px 0 6px 6px;
-  padding-left: 4px;
-  border-left: 1px solid var(--border-subtle);
+  margin: 2px 0 6px 10px;
   /* 项目会话很多时列表过长：一次展示约 10 条，其余内部滚动下滑。
      355px ≈ 10 × (行高 19.5 + 上下 padding 14 + 间距 2) px。 */
   max-height: 355px;
@@ -323,17 +333,17 @@
   background: transparent;
   color: var(--text-secondary);
   padding: 7px 10px;
-  border-radius: var(--radius-md);
+  border-radius: 6px;
   font-size: 13px;
 }
 
 .row:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: var(--sidebar-hover);
   color: var(--text);
 }
 
 .row.active {
-  background: var(--bg-elevated);
+  background: var(--sidebar-selected);
   color: var(--text);
 }
 
@@ -383,7 +393,7 @@
   gap: 10px;
   width: 100%;
   padding: 7px 10px;
-  border-radius: var(--radius-md);
+  border-radius: 6px;
   background: transparent;
   color: var(--text-secondary);
   text-align: left;
@@ -391,15 +401,25 @@
 }
 
 .nav-item:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: var(--sidebar-hover);
   color: var(--text);
 }
 
 .nav-item.active {
-  background: var(--bg-active);
-  color: var(--text);
-  font-weight: 600;
-  box-shadow: inset 3px 0 0 var(--text-muted);
+  font-weight: 500;
+}
+
+.sidebar
+  :is(
+    .project-select,
+    .session-main,
+    .nav-item,
+    .row-action,
+    .icon-btn
+  ):focus-visible {
+  outline: 1px solid var(--text-muted);
+  outline-offset: -2px;
+  box-shadow: none;
 }
 
 .nav-item svg {

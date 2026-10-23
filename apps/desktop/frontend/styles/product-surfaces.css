@@ -49,14 +49,6 @@ a:focus-visible {
   border-color: var(--accent-border);
 }
 
-.session-row.active,
-.project-row.active,
-.nav-item.active {
-  background: var(--bg-active);
-  color: var(--text);
-  box-shadow: none;
-}
-
 .session-row:focus-within .row-action,
 .project-row:focus-within .row-action {
   opacity: 1;
@@ -64,7 +56,6 @@ a:focus-visible {
 
 .nav-item {
   min-height: 38px;
-  border-radius: var(--radius-md);
 }
 
 .skills-view,
