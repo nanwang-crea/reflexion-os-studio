@@ -1,9 +1,22 @@
-import type { RuntimeEvent } from '@reflexion-os-studio/runtime-client'
+import type { Plan, RuntimeEvent } from '@reflexion-os-studio/runtime-client'
 
 type EventPayload<T extends RuntimeEvent['type']> = Omit<
   Extract<RuntimeEvent, { type: T }>,
   'type' | 'protocolVersion' | 'eventId' | 'scope' | 'seq' | 'occurredAt'
 >
+
+export const plan: Plan = {
+  id: 'plan',
+  sessionId: 's',
+  messageId: null,
+  goal: '验证待处理区域的动态布局',
+  status: 'active',
+  summary: null,
+  createdAt: '2026-10-21T00:00:00.000Z',
+  updatedAt: '2026-10-21T00:00:00.000Z',
+  completedAt: null,
+  steps: [],
+}
 
 export const approval = {
   runId: 'r',

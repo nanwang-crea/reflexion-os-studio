@@ -3,19 +3,23 @@ import { test } from 'node:test'
 import { build } from 'esbuild'
 import { createServer } from 'node:http'
 import { createRequire } from 'node:module'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { browserWorkerPaths } from '../../runtime/dist/browser/agent/paths.js'
 import { verifyPendingApprovals } from './composer-ui/approvals.mjs'
+import { verifyConfirmationDialog } from './composer-ui/dialogs.mjs'
 
 const desktop = fileURLToPath(new URL('..', import.meta.url))
 const require = createRequire(
   new URL('../../runtime/package.json', import.meta.url),
 )
-process.env.PLAYWRIGHT_BROWSERS_PATH = browserWorkerPaths().browsers
-const { chromium } = require('playwright')
+process.env.PLAYWRIGHT_BROWSERS_PATH =
+  process.env.UI_TEST_BROWSERS_PATH ?? browserWorkerPaths().browsers
+const { chromium, webkit } = require('playwright')
+// 系统 WKWebView 的零高布局缓存问题未在 Playwright WebKit 中复现。
+// macOS 原生窗口对照验收见 docs/APPROVAL-VISIBILITY-2026-10-24.md。
 
 async function assertComposerAccessible(page) {
   const boxes = await page.evaluate(() => {
@@ -147,6 +151,11 @@ test('composer stays accessible while browser, terminal and window are resized',
     })
     const script = await readFile(join(directory, 'app.js'))
     const css = await readFile(join(directory, 'app.css'))
+    if (process.env.UI_REVIEW_OUTPUT)
+      await Promise.all([
+        writeFile(join(process.env.UI_REVIEW_OUTPUT, 'fixture.js'), script),
+        writeFile(join(process.env.UI_REVIEW_OUTPUT, 'fixture.css'), css),
+      ])
     server.on('request', (request, response) => {
       response.setHeader(
         'content-type',
@@ -165,12 +174,18 @@ test('composer stays accessible while browser, terminal and window are resized',
       )
     })
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
-    browser = await chromium.launch({ headless: true })
+    browser = await (
+      process.env.UI_TEST_ENGINE === 'webkit' ? webkit : chromium
+    ).launch({ headless: true })
     const page = await browser.newPage({
       viewport: { width: 1440, height: 800 },
     })
     page.setDefaultTimeout(10000)
     const url = `http://127.0.0.1:${server.address().port}`
+    if (process.env.UI_TEST_APPROVALS_ONLY) {
+      await verifyPendingApprovals(page, url)
+      return
+    }
     await page.goto(url + '?no-terminal&short-history')
     for (const size of [
       { width: 800, height: 680 },
@@ -460,15 +475,7 @@ test('composer stays accessible while browser, terminal and window are resized',
     await page.waitForFunction(
       () => document.activeElement?.getAttribute('aria-label') === '运行配置',
     )
-    await page.getByRole('button', { name: '打开确认框', exact: true }).click()
-    await page.locator('.confirm-dialog-modal[open]').waitFor()
-    assert.equal(
-      await page
-        .locator('.dialog')
-        .evaluate((el) => el.scrollWidth > el.clientWidth),
-      false,
-    )
-    await page.getByRole('button', { name: '取消', exact: true }).click()
+    await verifyConfirmationDialog(page)
     if (process.env.UI_REVIEW_OUTPUT)
       await page.screenshot({
         path: join(

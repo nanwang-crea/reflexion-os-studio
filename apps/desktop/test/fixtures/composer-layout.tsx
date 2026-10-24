@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { AppMain } from '../../frontend/AppMain'
-import { approval, interaction } from './chat-layout-data'
+import { approval, interaction, plan } from './chat-layout-data'
 import { FloatingLayout } from './floating-layout'
 import '../../frontend/styles/style.css'
 import '../../frontend/features/chat/chat.css'
@@ -43,6 +43,7 @@ function Fixture() {
   const crowded = query.has('crowded')
   const awaitingApproval = query.has('approval')
   const awaitingInteraction = query.has('interaction')
+  const [pendingVisible, setPendingVisible] = useState(!query.has('delayed'))
   const [snapshotLoaded, setSnapshotLoaded] = useState(!query.has('stale-run'))
   const [danger, setDanger] = useState(query.has('danger'))
   const common = {
@@ -74,7 +75,10 @@ function Fixture() {
         chat={{
           ...common,
           sessionData:
-            crowded || awaitingApproval || awaitingInteraction
+            crowded ||
+            awaitingApproval ||
+            awaitingInteraction ||
+            query.has('plan')
               ? ({
                   session: { ...sessions[0], id: 's' },
                   messages: [],
@@ -87,7 +91,7 @@ function Fixture() {
                   ],
                   toolCalls: [],
                   runEvents: [],
-                  plans: [],
+                  plans: pendingVisible && query.has('plan') ? [plan] : [],
                 } as never)
               : null,
           onLoadOlder: done,
@@ -108,33 +112,37 @@ function Fixture() {
           onStop: done,
           onRetry: done,
           onExecutionModeChange: done,
-          pendingApprovals: crowded
-            ? [approval]
-            : awaitingApproval
-              ? [
-                  {
-                    ...approval,
-                    sessionId: query.has('legacy-approval')
-                      ? undefined
-                      : query.has('other-session')
+          pendingApprovals: !pendingVisible
+            ? []
+            : crowded
+              ? [approval]
+              : awaitingApproval
+                ? [
+                    {
+                      ...approval,
+                      sessionId: query.has('legacy-approval')
+                        ? undefined
+                        : query.has('other-session')
+                          ? 'other-session'
+                          : 's',
+                    },
+                  ]
+                : [],
+          onResolveApproval: (_id, choice) => setResolved(choice),
+          pendingInteractions: !pendingVisible
+            ? []
+            : crowded
+              ? [interaction]
+              : awaitingInteraction
+                ? [
+                    {
+                      ...interaction,
+                      sessionId: query.has('other-session')
                         ? 'other-session'
                         : 's',
-                  },
-                ]
-              : [],
-          onResolveApproval: (_id, choice) => setResolved(choice),
-          pendingInteractions: crowded
-            ? [interaction]
-            : awaitingInteraction
-              ? [
-                  {
-                    ...interaction,
-                    sessionId: query.has('other-session')
-                      ? 'other-session'
-                      : 's',
-                  },
-                ]
-              : [],
+                    },
+                  ]
+                : [],
           onInteractionSubmit: async () => {
             setResolved('answer')
             return true
@@ -185,6 +193,12 @@ function Fixture() {
       </output>
       <button hidden id="load-snapshot" onClick={() => setSnapshotLoaded(true)}>
         更新会话快照
+      </button>
+      <button hidden id="show-pending" onClick={() => setPendingVisible(true)}>
+        收到待处理请求
+      </button>
+      <button hidden id="hide-pending" onClick={() => setPendingVisible(false)}>
+        待处理请求已解决
       </button>
     </div>
   )

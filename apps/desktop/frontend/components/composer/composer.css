@@ -4,25 +4,19 @@
   position: relative;
   padding: 10px 20px 18px;
   display: grid;
-  grid-template-rows: auto minmax(min(40px, 15cqh), 1fr) minmax(0, auto);
+  grid-template-rows: auto minmax(0, 1fr) minmax(0, auto);
   min-height: 0;
   max-height: 100%;
   flex: none;
 }
 
-.composer-wrap:has(> .chat-composer-context:empty) {
-  grid-template-rows: auto 0 minmax(0, auto);
-}
-
+/* 按内容直接参与布局，避免 WebKit 缓存 :has(:empty) 对应的零高网格行。
+   审批异步到达后必须立即撑开；空内容自然为零高，不依赖关系选择器。 */
 .chat-composer-context {
   grid-row: 2;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior-y: contain;
-}
-
-.chat-composer-context:empty {
-  display: none;
 }
 
 .composer {
