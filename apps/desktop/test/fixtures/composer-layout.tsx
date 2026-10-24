@@ -41,6 +41,9 @@ function Fixture() {
   const [sent, setSent] = useState('')
   const [resolved, setResolved] = useState('')
   const crowded = query.has('crowded')
+  const awaitingApproval = query.has('approval')
+  const awaitingInteraction = query.has('interaction')
+  const [snapshotLoaded, setSnapshotLoaded] = useState(!query.has('stale-run'))
   const [danger, setDanger] = useState(query.has('danger'))
   const common = {
     hasEnabledProvider: !query.has('no-provider'),
@@ -70,16 +73,23 @@ function Fixture() {
         onDismissNotice={noop}
         chat={{
           ...common,
-          sessionData: crowded
-            ? ({
-                session: { ...sessions[0], id: 's' },
-                messages: [],
-                runs: [{ id: 'r', status: 'running', supersededByRunId: null }],
-                toolCalls: [],
-                runEvents: [],
-                plans: [],
-              } as never)
-            : null,
+          sessionData:
+            crowded || awaitingApproval || awaitingInteraction
+              ? ({
+                  session: { ...sessions[0], id: 's' },
+                  messages: [],
+                  runs: [
+                    {
+                      id: snapshotLoaded ? 'r' : 'previous-run',
+                      status: snapshotLoaded ? 'running' : 'completed',
+                      supersededByRunId: null,
+                    },
+                  ],
+                  toolCalls: [],
+                  runEvents: [],
+                  plans: [],
+                } as never)
+              : null,
           onLoadOlder: done,
           delegations: [],
           streaming: {},
@@ -98,9 +108,33 @@ function Fixture() {
           onStop: done,
           onRetry: done,
           onExecutionModeChange: done,
-          pendingApprovals: crowded ? [approval] : [],
+          pendingApprovals: crowded
+            ? [approval]
+            : awaitingApproval
+              ? [
+                  {
+                    ...approval,
+                    sessionId: query.has('legacy-approval')
+                      ? undefined
+                      : query.has('other-session')
+                        ? 'other-session'
+                        : 's',
+                  },
+                ]
+              : [],
           onResolveApproval: (_id, choice) => setResolved(choice),
-          pendingInteractions: crowded ? [interaction] : [],
+          pendingInteractions: crowded
+            ? [interaction]
+            : awaitingInteraction
+              ? [
+                  {
+                    ...interaction,
+                    sessionId: query.has('other-session')
+                      ? 'other-session'
+                      : 's',
+                  },
+                ]
+              : [],
           onInteractionSubmit: async () => {
             setResolved('answer')
             return true
@@ -149,6 +183,9 @@ function Fixture() {
       <output hidden id="resolved">
         {resolved}
       </output>
+      <button hidden id="load-snapshot" onClick={() => setSnapshotLoaded(true)}>
+        更新会话快照
+      </button>
     </div>
   )
 }

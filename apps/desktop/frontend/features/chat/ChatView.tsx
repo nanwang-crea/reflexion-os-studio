@@ -83,25 +83,27 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
     }
     return groups
   }, [toolCalls])
-  // 当前父会话统一承载根 Run 及其整棵委派树的审批与结构化提问。
+  // 会话事件先于分页快照到达时也立即显示；旧事件与子 Agent 仍按 Run 归属匹配。
   const sessionApprovals = useMemo(
     () =>
       props.pendingApprovals.filter(
         (entry) =>
+          entry.sessionId === sessionId ||
           runIds.has(entry.runId) ||
           (entry.context?.agent !== undefined &&
             runIds.has(entry.context.agent.rootRunId)),
       ),
-    [props.pendingApprovals, runIds],
+    [props.pendingApprovals, runIds, sessionId],
   )
   const sessionInteractions = useMemo(
     () =>
       props.pendingInteractions.filter(
         (entry) =>
+          entry.sessionId === sessionId ||
           runIds.has(entry.runId) ||
           (entry.agent !== undefined && runIds.has(entry.agent.rootRunId)),
       ),
-    [props.pendingInteractions, runIds],
+    [props.pendingInteractions, runIds, sessionId],
   )
   const delegationAttention = useMemo(() => {
     const attention = new Map<string, DelegationAttention>()

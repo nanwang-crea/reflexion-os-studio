@@ -3,8 +3,7 @@ import type { RuntimeEvent } from '@reflexion-os-studio/runtime-client'
 
 /**
  * 等待用户审批的工具调用（approval.required → approval.resolved 之间可见）。
- * 载荷字段从 contracts 事件类型派生（权限模型 V2：subject/risk/context/
- * choices），不手写平行类型；信封字段另行剥离，runId 为前端消费所需。
+ * 载荷字段从 contracts 事件类型派生，保留前端归属匹配所需的 runId。
  */
 type ApprovalRequiredPayload = Omit<
   Extract<RuntimeEvent, { type: 'approval.required' }>,
@@ -21,70 +20,84 @@ export interface PendingApproval extends ApprovalRequiredPayload {
   runId: string
 }
 
-/** 审批等待队列：bootstrap 事件回调驱动（approval.required / resolved）。 */
+/** 审批等待队列；ref 同步接收事件，React state 只承载渲染快照。 */
 export function usePendingApprovals(): {
   pendingApprovals: PendingApproval[]
   onApprovalRequired: (entry: PendingApproval) => void
-  /** 乐观摘卡：记下原位，命令失败时 restore 能插回。 */
+  /** 乐观隐藏卡片，失败时仍可按原顺序恢复。 */
   removePending: (toolCallId: string) => void
-  /** 事件确认：位置不再需要；卡若仍在队列则一并摘除（幂等）。 */
+  /** Runtime 已结算后彻底移除，迟到失败不可恢复。 */
   onApprovalResolved: (toolCallId: string) => void
-  /** 审批命令失败时按原队列位置恢复整条 PendingApproval（协议数据不丢）。 */
   restorePending: (entry: PendingApproval) => void
-  /** Run 终态时清理该 Run 遗留的审批等待（取消/失败路径的兜底）。 */
+  /** Run 终态清理可见及提交中的审批。 */
   clearForRun: (runId: string) => void
 } {
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>(
     [],
   )
-  // 摘除时的队列位置：失败恢复要回到原位（审批语义与顺序相关，不重排）。
-  // 同时记下 runId：乐观摘卡后条目已不在队列，Run 终态若没等到
-  // approval.resolved，仍要按 runId 清掉位置，避免 Map 无界增长。
-  const positions = useRef(new Map<string, { index: number; runId: string }>())
-  const onApprovalRequired = useCallback((entry: PendingApproval): void => {
-    setPendingApprovals((pending) => [
-      ...pending.filter((item) => item.toolCallId !== entry.toolCallId),
-      entry,
-    ])
-  }, [])
-  const removePending = useCallback((toolCallId: string): void => {
-    setPendingApprovals((pending) => {
-      const index = pending.findIndex((item) => item.toolCallId === toolCallId)
-      const item = pending[index]
-      if (item !== undefined) {
-        positions.current.set(toolCallId, { index, runId: item.runId })
-      }
-      return pending.filter((entry) => entry.toolCallId !== toolCallId)
-    })
-  }, [])
-  const onApprovalResolved = useCallback((toolCallId: string): void => {
-    positions.current.delete(toolCallId)
-    setPendingApprovals((pending) =>
-      pending.filter((item) => item.toolCallId !== toolCallId),
+  // 乐观提交只隐藏条目，保留 Map 插入顺序；多个失败乱序返回也不会重排。
+  // Runtime 结算或 Run 结束才删除，迟到失败无法恢复已删除的卡片。
+  const queue = useRef(
+    new Map<string, { entry: PendingApproval; hidden: boolean }>(),
+  )
+  const publish = useCallback((): void => {
+    setPendingApprovals(
+      [...queue.current.values()]
+        .filter((item) => !item.hidden)
+        .map((item) => item.entry),
     )
   }, [])
-  const restorePending = useCallback((entry: PendingApproval): void => {
-    const remembered = positions.current.get(entry.toolCallId)
-    positions.current.delete(entry.toolCallId)
-    setPendingApprovals((pending) => {
-      if (pending.some((item) => item.toolCallId === entry.toolCallId)) {
-        return pending
+
+  const onApprovalRequired = useCallback(
+    (entry: PendingApproval): void => {
+      if (queue.current.get(entry.toolCallId)?.hidden) return
+      queue.current.set(entry.toolCallId, { entry, hidden: false })
+      publish()
+    },
+    [publish],
+  )
+
+  const removePending = useCallback(
+    (toolCallId: string): void => {
+      const item = queue.current.get(toolCallId)
+      if (!item || item.hidden) return
+      item.hidden = true
+      publish()
+    },
+    [publish],
+  )
+
+  const onApprovalResolved = useCallback(
+    (toolCallId: string): void => {
+      if (queue.current.delete(toolCallId)) publish()
+    },
+    [publish],
+  )
+
+  const restorePending = useCallback(
+    (entry: PendingApproval): void => {
+      const item = queue.current.get(entry.toolCallId)
+      if (!item?.hidden) return
+      queue.current.set(entry.toolCallId, { entry, hidden: false })
+      publish()
+    },
+    [publish],
+  )
+
+  const clearForRun = useCallback(
+    (runId: string): void => {
+      let changed = false
+      for (const [toolCallId, item] of queue.current) {
+        if (item.entry.runId === runId) {
+          queue.current.delete(toolCallId)
+          changed = true
+        }
       }
-      const next = [...pending]
-      const at = Math.min(remembered?.index ?? next.length, next.length)
-      next.splice(at, 0, entry)
-      return next
-    })
-  }, [])
-  const clearForRun = useCallback((runId: string): void => {
-    setPendingApprovals((pending) => {
-      const next = pending.filter((entry) => entry.runId !== runId)
-      for (const [toolCallId, remembered] of positions.current) {
-        if (remembered.runId === runId) positions.current.delete(toolCallId)
-      }
-      return next
-    })
-  }, [])
+      if (changed) publish()
+    },
+    [publish],
+  )
+
   return {
     pendingApprovals,
     onApprovalRequired,

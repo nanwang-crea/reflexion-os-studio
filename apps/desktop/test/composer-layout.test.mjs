@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { browserWorkerPaths } from '../../runtime/dist/browser/agent/paths.js'
+import { verifyPendingApprovals } from './composer-ui/approvals.mjs'
 
 const desktop = fileURLToPath(new URL('..', import.meta.url))
 const require = createRequire(
@@ -97,7 +98,7 @@ test('composer stays accessible while browser, terminal and window are resized',
           setup(build) {
             build.onLoad({ filter: /api[\\/]queue\.ts$/ }, () => ({
               contents: `
-                let items = Array.from({length: 20}, (_, i) => ({id: 'queue-'+i, content: '排队消息 '+i, permissionPreset: 'workspace-write', agentTemplateId: 'long-template-name-that-must-wrap'}));
+                let items = new URLSearchParams(location.search).has('empty-queue') ? [] : Array.from({length: 20}, (_, i) => ({id: 'queue-'+i, content: '排队消息 '+i, permissionPreset: 'workspace-write', agentTemplateId: 'long-template-name-that-must-wrap'}));
                 const listeners = new Set();
                 const notify = () => {for(const fn of listeners) fn('s', items, true)};
                 export const listQueue = async () => ({items, paused: true});
@@ -342,6 +343,7 @@ test('composer stays accessible while browser, terminal and window are resized',
         )
       }
     }
+    await verifyPendingApprovals(page, url)
     await page.goto(url + '?settings')
     await page
       .getByRole('button', { name: '对话工具菜单', exact: true })

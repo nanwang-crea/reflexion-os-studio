@@ -359,6 +359,8 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
         ) {
           // 三种终态都结算侧边栏运行计数；cancelled 只递减，不闪完成/失败标。
           sessionTracking.onRunSettled(event.type, event.runId)
+          approvals.clearForRun(event.runId)
+          interactions.clearForRun(event.runId)
           // 继续进入统一刷新路径，确保失败/取消时持久化的消息状态及时落到前端。
         }
         // 委派事件：更新当前会话对应的委派树（task 子 Run 创建/状态推进）。
@@ -385,8 +387,6 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           // run.failed 已在上方完成状态更新；这里仅负责刷新会话数据。
           // Run 结束后标题可能已被自动命名，会话列表一并刷新。
           void deps.refreshSessions()
-          approvals.clearForRun(event.runId)
-          interactions.clearForRun(event.runId)
           refreshAndPrune(
             event.runId,
             event.type === 'message.completed' ? event.messageId : undefined,
@@ -407,9 +407,18 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
       const snapshot = await invoke<BootstrapSnapshot>('bootstrap_get_state')
       if (disposed) return
       latest.current.setBootstrap(snapshot)
-      const pending = await listPendingInteractions()
+      const restoreInteractions = latest.current.interactions.beginRestore()
+      try {
+        const pending = await listPendingInteractions()
+        restoreInteractions(disposed ? null : pending.interactions)
+      } catch (error) {
+        restoreInteractions(null)
+        if (!disposed)
+          latest.current.deps.setNotice(
+            `恢复待回答问题失败：${error instanceof Error ? error.message : String(error)}`,
+          )
+      }
       if (disposed) return
-      latest.current.interactions.replaceAll(pending.interactions)
       latest.current.loadInitialData()
     }
 
