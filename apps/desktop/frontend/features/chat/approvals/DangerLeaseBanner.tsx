@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { DangerAccessLease } from '@reflexion-os-studio/runtime-client'
+import './danger.css'
 
 /** 常驻红色状态条：Danger 租约激活期间不可忽略，显示剩余时间与立即关闭。 */
 export function DangerLeaseBanner({

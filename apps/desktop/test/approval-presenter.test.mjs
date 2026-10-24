@@ -160,6 +160,11 @@ test('Shell 审批：命令主体 + 档位/网络 chips；无会话 choice 时�
   assert.equal(display.subject.value, 'pnpm test --filter runtime')
   assert.ok(display.chips.includes('批准后沙箱只读'))
   assert.ok(display.chips.includes('不联网'))
+  assert.ok(
+    display.details.some(
+      (item) => item.label === '沙箱实现' && item.value === 'seatbelt',
+    ),
+  )
   assert.equal(display.ruleNote, null)
 })
 

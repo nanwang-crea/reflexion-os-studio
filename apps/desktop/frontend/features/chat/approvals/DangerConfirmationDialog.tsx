@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import './danger.css'
 import { useModalDialog } from '../../../hooks/ui/useModalDialog'
 import {
   dangerDisable,

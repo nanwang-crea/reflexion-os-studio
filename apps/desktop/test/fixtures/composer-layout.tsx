@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { AppMain } from '../../frontend/AppMain'
-import { approval, interaction, plan } from './chat-layout-data'
+import { approval, shellApproval, interaction, plan } from './chat-layout-data'
 import { FloatingLayout } from './floating-layout'
 import '../../frontend/styles/style.css'
 import '../../frontend/features/chat/chat.css'
@@ -11,6 +11,12 @@ import '../../frontend/features/settings/settings.css'
 import '../../frontend/styles/sidebar.css'
 import '../../frontend/features/workspace/workspace.css'
 import '../../frontend/styles/product-surfaces.css'
+import '../../frontend/styles/themes.css'
+
+document.documentElement.dataset.theme =
+  new URLSearchParams(location.search).get('theme') === 'light'
+    ? 'light'
+    : 'dark'
 
 const noop = () => {}
 const done = async () => {}
@@ -42,6 +48,7 @@ function Fixture() {
   const [resolved, setResolved] = useState('')
   const crowded = query.has('crowded')
   const awaitingApproval = query.has('approval')
+  const pendingApproval = query.has('shell') ? shellApproval : approval
   const awaitingInteraction = query.has('interaction')
   const [pendingVisible, setPendingVisible] = useState(!query.has('delayed'))
   const [snapshotLoaded, setSnapshotLoaded] = useState(!query.has('stale-run'))
@@ -119,7 +126,7 @@ function Fixture() {
               : awaitingApproval
                 ? [
                     {
-                      ...approval,
+                      ...pendingApproval,
                       sessionId: query.has('legacy-approval')
                         ? undefined
                         : query.has('other-session')

@@ -56,6 +56,44 @@ export const approval = {
   ],
 } satisfies EventPayload<'approval.required'>
 
+export const shellApproval = {
+  ...approval,
+  operation: 'shell.execute',
+  summary: '执行命令',
+  risk: 'warning',
+  subject: {
+    kind: 'shell-command',
+    operation: 'shell.execute',
+    commandDigest: 'synthetic-command',
+    displayCommand: 'echo "approval demo: hello from workspace"',
+    prefixCandidate: ['echo'],
+    escalation: false,
+    network: false,
+  },
+  context: {
+    ...approval.context,
+    displayCwd: '…/game',
+    sandbox: 'read-only',
+    agent: {
+      instanceId: null,
+      displayName: 'Primary Agent',
+      depth: 0,
+      rootRunId: 'r',
+      rootTask: '验证审批界面',
+    },
+  },
+  choices: [
+    approval.choices[0],
+    {
+      id: 'allow-workspace-write',
+      decision: 'approved',
+      presentation: 'primary',
+      label: '允许一次（工作区可写）',
+    },
+    approval.choices[1],
+  ],
+} satisfies EventPayload<'approval.required'>
+
 export const interaction = {
   runId: 'r',
   toolCallId: 'question-tool',

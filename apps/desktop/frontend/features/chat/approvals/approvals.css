@@ -1,5 +1,5 @@
 /* 权限模型 V2 审批 UI（features/chat/approvals/）。
-   风险视觉四级：normal 中性、warning 黄、elevated 橙、danger-confirm 红（对话框）。
+   风险以图标和文字分级，普通审批保持中性卡面，Danger 仍使用独立危险对话框。
    颜色只是辅助，文案与图标始终在场（无障碍红线）。 */
 
 .approval-queue {
@@ -11,37 +11,46 @@
 .approval-card {
   --elevated-text: #fb923c;
   position: relative;
-  margin: 0 12px 8px;
-  padding: 9px 12px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
+  width: 100%;
+  max-width: var(--chat-col);
+  margin: 0 auto 10px;
+  padding: 14px 16px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 18px;
   background: var(--bg-elevated);
   color: var(--text);
   outline: none;
 }
 .approval-card:focus-visible {
-  box-shadow: 0 0 0 2px var(--bg-active);
+  box-shadow: inset 0 0 0 1px var(--focus-ring);
 }
-.approval-card.risk-warning {
-  border-color: rgba(251, 191, 36, 0.5);
-  background:
-    linear-gradient(var(--warning-bg), var(--warning-bg)), var(--bg-elevated);
+.approval-card.risk-warning .approval-risk-label {
+  color: var(--warning-text);
 }
 .approval-card.risk-elevated {
-  border-color: rgba(251, 146, 60, 0.55);
+  border-color: color-mix(
+    in srgb,
+    var(--elevated-text) 40%,
+    var(--border-subtle)
+  );
+}
+.approval-card.risk-elevated .approval-risk-label {
+  color: var(--elevated-text);
 }
 
 .approval-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 10px;
 }
 .approval-risk-icon {
-  font-size: 14px;
-  line-height: 1;
+  display: inline-flex;
+  flex: none;
 }
-.approval-risk-icon.risk-warning,
+.approval-risk-icon.risk-warning {
+  color: var(--warning-text);
+}
 .approval-risk-icon.risk-elevated {
   color: var(--elevated-text);
 }
@@ -49,31 +58,39 @@
   color: var(--text-muted);
 }
 .approval-title {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   font-size: 13px;
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 .approval-title > .agent-source {
   flex-basis: 100%;
   margin-bottom: 2px;
 }
 .approval-risk-label {
+  flex: none;
+  font-size: 11px;
   font-weight: 400;
-  color: var(--text-secondary);
+  color: var(--text-muted);
 }
 
 .approval-body {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 8px;
 }
 .approval-subject {
   display: flex;
   align-items: flex-start;
   gap: 8px;
   min-width: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-inset);
 }
 .approval-command,
 .approval-path {
@@ -83,23 +100,26 @@
   font-family: var(--mono, ui-monospace, monospace);
   font-size: 12px;
   line-height: 1.5;
-  padding: 5px 8px;
-  border-radius: 8px;
-  background: var(--bg-inset);
-  border: 1px solid var(--border-subtle);
+  padding: 9px 11px;
+  border-radius: inherit;
   white-space: pre-wrap;
-  word-break: break-all;
-  max-height: 72px;
+  overflow-wrap: anywhere;
+  max-height: 96px;
   overflow: auto;
 }
 .approval-copy {
   flex: none;
-  font-size: 11px;
-  padding: 4px 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 4px;
+  padding: 0;
   border-radius: 6px;
-  border: 1px solid var(--border);
+  border: 0;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   cursor: pointer;
 }
 .approval-copy:hover {
@@ -110,22 +130,23 @@
 .approval-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 3px 0;
 }
 .approval-chip {
   font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  background: var(--bg-inset);
+  line-height: 1.7;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.approval-chip:not(:last-child)::after {
+  content: '·';
+  padding: 0 7px;
+  color: var(--text-muted);
 }
 .approval-chip.chip-elevated {
-  border-color: rgba(251, 146, 60, 0.6);
   color: var(--elevated-text);
 }
 .approval-chip.chip-warning {
-  border-color: rgba(251, 191, 36, 0.5);
   color: var(--warning-text);
 }
 
@@ -137,18 +158,38 @@
   padding-left: 8px;
 }
 
-.approval-details-toggle {
-  align-self: flex-start;
+.approval-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+.approval-card .approval-details-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
   color: var(--text-muted);
   background: none;
   border: none;
   cursor: pointer;
-  padding: 2px 0;
+  padding: 4px 0;
+  min-height: 32px;
 }
-.approval-details-toggle:hover {
+.approval-card .approval-details-toggle:hover {
+  background: transparent;
   color: var(--text);
-  text-decoration: underline;
+}
+.approval-details-toggle[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+.approval-expanded-details:not([hidden]) {
+  display: grid;
+  gap: 8px;
 }
 .approval-detail-list {
   margin: 0;
@@ -168,7 +209,7 @@
 .approval-detail-item dd {
   margin: 0;
   color: var(--text-secondary);
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 .approval-actions {
@@ -176,19 +217,23 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   align-items: center;
-  gap: 8px;
-  margin-top: 6px;
+  gap: 6px;
+  margin-left: auto;
 }
-.approval-actions button {
+.approval-card .approval-actions button {
   font-size: 12px;
-  padding: 5px 10px;
+  padding: 6px 10px;
+  min-height: 32px;
+  max-width: 100%;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
   border-radius: 8px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
 }
-.approval-actions button:hover:not(:disabled) {
+.approval-card .approval-actions button:hover:not(:disabled) {
   background: var(--bg-hover);
   color: var(--text);
 }
@@ -196,21 +241,19 @@
   opacity: 0.55;
   cursor: default;
 }
-.approval-actions button.primary {
-  background: var(--bg-active);
-  border-color: var(--text-muted);
-  color: var(--text);
-  font-weight: 600;
+.approval-card .approval-actions button.primary {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--bg);
+  font-weight: 500;
 }
-.approval-actions button.primary:hover:not(:disabled) {
-  background: var(--bg-hover);
+.approval-card .approval-actions button.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 88%, var(--bg));
+  border-color: transparent;
 }
 
 .approval-session-choice {
-  max-width: 240px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .approval-queue-rest {
@@ -259,135 +302,6 @@
   white-space: nowrap;
 }
 
-/* Danger 常驻状态条 */
-.danger-lease-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 12px 8px;
-  padding: 8px 12px;
-  border-radius: 16px;
-  border: 1px solid var(--danger);
-  background: rgba(248, 113, 113, 0.14);
-  color: var(--text);
-  font-size: 12px;
-}
-.danger-lease-banner .danger-icon {
-  color: var(--danger);
-  font-size: 14px;
-}
-.danger-lease-banner .danger-text {
-  flex: 1;
-  min-width: 0;
-}
-.danger-lease-banner .danger-sub {
-  display: block;
-  font-size: 11px;
-  color: var(--text-secondary);
-}
-.danger-disable {
-  flex: none;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 5px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--danger);
-  background: transparent;
-  color: var(--danger);
-  cursor: pointer;
-}
-.danger-disable:hover {
-  background: rgba(248, 113, 113, 0.18);
-}
-
-/* Danger 两段确认对话框 */
-.danger-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgb(0 0 0 / 55%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-.danger-dialog {
-  width: min(520px, calc(100vw - 48px));
-  max-height: calc(100vh - 96px);
-  overflow: auto;
-  border: 1px solid var(--danger);
-  border-radius: 14px;
-  background: var(--bg-elevated);
-  padding: 18px 20px;
-  box-shadow: var(--shadow-lg);
-}
-.danger-dialog-title {
-  margin: 0 0 12px;
-  font-size: 15px;
-  color: var(--danger);
-}
-.danger-dialog-body {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-.danger-list {
-  margin: 0;
-  padding-left: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.danger-warning {
-  margin: 0;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: rgba(248, 113, 113, 0.1);
-  color: var(--text);
-  font-size: 12px;
-}
-.danger-error {
-  margin: 0;
-  color: var(--danger);
-  font-size: 12px;
-}
-.danger-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 4px;
-}
-.danger-actions .ghost {
-  font-size: 12px;
-  padding: 6px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-.danger-continue,
-.danger-enable {
-  font-size: 12px;
-  font-weight: 700;
-  padding: 6px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--danger);
-  background: rgba(248, 113, 113, 0.22);
-  color: var(--danger);
-  cursor: pointer;
-}
-.danger-continue:hover:not(:disabled),
-.danger-enable:hover:not(:disabled) {
-  background: rgba(248, 113, 113, 0.32);
-}
-.danger-continue:disabled,
-.danger-enable:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-
 /* 窄窗口：按钮纵向堆叠，主体保持内部滚动 */
 @media (max-width: 520px) {
   .approval-actions {
@@ -423,24 +337,6 @@
 }
 .approval-write-roots code {
   font-family: var(--mono, ui-monospace, monospace);
-}
-
-.danger-modal {
-  width: 100%;
-  height: 100%;
-  max-width: none;
-  max-height: none;
-  border: none;
-  margin: 0;
-  padding: 0;
-  color: var(--text);
-  background: transparent;
-}
-.danger-modal:not([open]) {
-  display: none;
-}
-.danger-modal::backdrop {
-  background: rgb(0 0 0 / 55%);
 }
 
 .approval-config-review pre {

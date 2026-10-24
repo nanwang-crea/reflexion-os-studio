@@ -83,13 +83,6 @@ function chipsFor(
 ): string[] {
   const chips: string[] = []
   if (context === null) return chips
-  if (context.agent) {
-    chips.push(
-      context.agent.depth === 0
-        ? 'Primary Agent'
-        : `${context.agent.displayName} · 第 ${context.agent.depth} 层`,
-    )
-  }
   if (context.displayCwd !== null) chips.push(`工作目录 ${context.displayCwd}`)
   if (operation.startsWith('file.')) {
     chips.push(context.workspaceScope === 'inside' ? '工作区内' : '无工作区')
@@ -124,7 +117,6 @@ function chipsFor(
         : '不联网',
   )
   if (context.escalation) chips.push('将访问工作区外')
-  if (context.sandboxProvider) chips.push(`沙箱 ${context.sandboxProvider}`)
   return chips
 }
 
@@ -203,6 +195,15 @@ export function presentApproval(approval: PendingApproval): ApprovalDisplay {
   const risk: ApprovalRisk = approval.risk ?? 'normal'
   const details: ApprovalDisplay['details'] = []
   if (approval.context) {
+    if (
+      approval.context.sandboxProvider &&
+      !approval.operation.startsWith('browser.')
+    ) {
+      details.push({
+        label: '沙箱实现',
+        value: approval.context.sandboxProvider,
+      })
+    }
     if (approval.context.approvalReason === 'preset-policy') {
       details.push({
         label: '询问原因',

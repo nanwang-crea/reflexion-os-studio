@@ -3,6 +3,7 @@ import { join } from 'node:path'
 
 export async function verifyPendingApprovals(page, url) {
   const viewport = page.viewportSize()
+  await verifyApprovalPresentation(page, url)
   await verifyArrivingRequests(page, url)
   await page.setViewportSize({ width: 1440, height: 900 })
   const base = '?chat&approval&no-terminal&empty-queue'
@@ -49,6 +50,62 @@ export async function verifyPendingApprovals(page, url) {
   await page.locator('.composer').waitFor()
   assert.equal(await page.getByRole('radio').count(), 0)
   await page.setViewportSize(viewport)
+}
+
+async function verifyApprovalPresentation(page, url) {
+  for (const theme of ['dark', 'light']) {
+    await page.setViewportSize({ width: 1200, height: 800 })
+    await page.goto(
+      url + `?chat&approval&shell&no-terminal&empty-queue&theme=${theme}`,
+    )
+    const card = page.getByRole('alertdialog')
+    await card.waitFor()
+    assert.equal(await card.getByRole('button').count(), 5)
+    await card.getByRole('button', { name: '查看详情', exact: true }).click()
+    await card.getByText('验证审批界面', { exact: true }).waitFor()
+    await page.keyboard.press('Escape')
+    const details = card.getByRole('button', { name: '查看详情', exact: true })
+    assert.equal(await details.getAttribute('aria-expanded'), 'false')
+    assert.equal(
+      await details.evaluate((el) => el === document.activeElement),
+      true,
+    )
+    if (process.env.UI_REVIEW_OUTPUT) {
+      await card.locator('.approval-title').click()
+      await card.screenshot({
+        path: join(process.env.UI_REVIEW_OUTPUT, `approval-card-${theme}.png`),
+      })
+    }
+    await page
+      .getByRole('button', { name: '对话工具菜单', exact: true })
+      .click()
+    await page
+      .getByRole('menuitemcheckbox', { name: '文件与工作区', exact: true })
+      .click()
+    for (const button of await card.getByRole('button').all()) {
+      assert.equal(
+        await button.evaluate((el) => {
+          const r = el.getBoundingClientRect()
+          return el.contains(
+            document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2),
+          )
+        }),
+        true,
+        'all approval choices remain reachable in a narrow chat column',
+      )
+    }
+    if (process.env.UI_REVIEW_OUTPUT)
+      await page.screenshot({
+        path: join(process.env.UI_REVIEW_OUTPUT, `approval-shell-${theme}.png`),
+      })
+    await card
+      .getByRole('button', { name: '允许一次（工作区可写）', exact: true })
+      .click()
+    assert.equal(
+      await page.locator('#resolved').textContent(),
+      'allow-workspace-write',
+    )
+  }
 }
 
 async function verifyArrivingRequests(page, url) {

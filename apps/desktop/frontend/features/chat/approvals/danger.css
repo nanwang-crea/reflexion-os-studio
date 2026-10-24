@@ -1,0 +1,146 @@
+/* Danger 常驻状态条 */
+.danger-lease-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 12px 8px;
+  padding: 8px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--danger);
+  background: rgba(248, 113, 113, 0.14);
+  color: var(--text);
+  font-size: 12px;
+}
+.danger-lease-banner .danger-icon {
+  color: var(--danger);
+  font-size: 14px;
+}
+.danger-lease-banner .danger-text {
+  flex: 1;
+  min-width: 0;
+}
+.danger-lease-banner .danger-sub {
+  display: block;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.danger-disable {
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--danger);
+  background: transparent;
+  color: var(--danger);
+  cursor: pointer;
+}
+.danger-disable:hover {
+  background: rgba(248, 113, 113, 0.18);
+}
+
+/* Danger 两段确认对话框 */
+.danger-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 55%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.danger-dialog {
+  width: min(520px, calc(100vw - 48px));
+  max-height: calc(100vh - 96px);
+  overflow: auto;
+  border: 1px solid var(--danger);
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-lg);
+}
+.danger-dialog-title {
+  margin: 0 0 12px;
+  font-size: 15px;
+  color: var(--danger);
+}
+.danger-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.danger-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.danger-warning {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(248, 113, 113, 0.1);
+  color: var(--text);
+  font-size: 12px;
+}
+.danger-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+.danger-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+.danger-actions .ghost {
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.danger-continue,
+.danger-enable {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--danger);
+  background: rgba(248, 113, 113, 0.22);
+  color: var(--danger);
+  cursor: pointer;
+}
+.danger-continue:hover:not(:disabled),
+.danger-enable:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.32);
+}
+.danger-continue:disabled,
+.danger-enable:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.danger-modal {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  border: none;
+  margin: 0;
+  padding: 0;
+  color: var(--text);
+  background: transparent;
+}
+.danger-modal:not([open]) {
+  display: none;
+}
+.danger-modal::backdrop {
+  background: rgb(0 0 0 / 55%);
+}

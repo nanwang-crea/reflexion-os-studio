@@ -4,6 +4,7 @@ import { presentApproval } from './approval-presenter'
 import { ApprovalHeader } from './ApprovalHeader'
 import { ApprovalDetails } from './ApprovalDetails'
 import { ApprovalActions } from './ApprovalActions'
+import { ChevronIcon } from '../../../ui/icons'
 
 /**
  * 单条普通审批卡（一个明确问题 + Runtime 认可的有限选择）。
@@ -28,9 +29,12 @@ export function ApprovalCard({
 }): React.JSX.Element {
   const display = presentApproval(approval)
   const [submitted, setSubmitted] = useState<string | null>(null)
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const detailsButtonRef = useRef<HTMLButtonElement | null>(null)
   const titleId = `approval-title-${approval.toolCallId}`
   const descId = `approval-desc-${approval.toolCallId}`
+  const detailsId = `approval-details-${approval.toolCallId}`
 
   useEffect(() => {
     if (focusable) containerRef.current?.focus()
@@ -45,18 +49,43 @@ export function ApprovalCard({
       aria-modal="false"
       aria-labelledby={titleId}
       aria-describedby={descId}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && detailsOpen) {
+          event.stopPropagation()
+          setDetailsOpen(false)
+          detailsButtonRef.current?.focus()
+        }
+      }}
     >
       <ApprovalHeader display={display} id={titleId} />
-      <ApprovalDetails display={display} descriptionId={descId} />
-      <ApprovalActions
+      <ApprovalDetails
         display={display}
-        busyLabel={submitted}
-        onChoose={(choiceId) => {
-          if (submitted !== null) return
-          setSubmitted(choiceId)
-          onChoose(approval.toolCallId, choiceId)
-        }}
+        descriptionId={descId}
+        expanded={detailsOpen}
+        detailsId={detailsId}
       />
+      <div className="approval-footer">
+        <button
+          ref={detailsButtonRef}
+          type="button"
+          className="approval-details-toggle"
+          aria-expanded={detailsOpen}
+          aria-controls={detailsId}
+          onClick={() => setDetailsOpen((value) => !value)}
+        >
+          <ChevronIcon />
+          {detailsOpen ? '收起详情' : '查看详情'}
+        </button>
+        <ApprovalActions
+          display={display}
+          busyLabel={submitted}
+          onChoose={(choiceId) => {
+            if (submitted !== null) return
+            setSubmitted(choiceId)
+            onChoose(approval.toolCallId, choiceId)
+          }}
+        />
+      </div>
     </div>
   )
 }

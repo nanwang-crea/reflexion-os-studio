@@ -12,6 +12,7 @@ const result = await build({
   bundle: true,
   format: 'esm',
   write: false,
+  loader: { '.css': 'empty' },
   jsx: 'automatic',
   plugins: [
     {

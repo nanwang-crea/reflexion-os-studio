@@ -1,34 +1,21 @@
-import { useEffect, useRef, useState } from 'react'
 import type { ApprovalDisplay } from './approval-presenter'
+import { CopyIcon } from '../../../ui/icons'
 
 /**
- * 审批主体区：操作主体（路径/命令）+ 关键范围短标签 + 规则说明 +
- * 默认收起的"查看详情"。长命令限高滚动 + 复制；不允许横向撑破卡片。
+ * 审批主体区：操作主体、关键执行范围、规则说明及低频详情。
+ * 详情由卡片底栏控制；长命令限高滚动并可复制，不横向撑破卡片。
  */
 export function ApprovalDetails({
   display,
   descriptionId,
+  expanded = false,
+  detailsId,
 }: {
   display: ApprovalDisplay
   descriptionId: string
+  expanded?: boolean
+  detailsId?: string
 }): React.JSX.Element {
-  const [expanded, setExpanded] = useState(false)
-  const bodyRef = useRef<HTMLDivElement | null>(null)
-  // Esc 只收起详情（拒绝永远绑定显式按钮，不挂在容易误触的全局键上）。
-  useEffect(() => {
-    if (!expanded) return
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (
-        event.key === 'Escape' &&
-        bodyRef.current?.contains(event.target as Node)
-      ) {
-        event.stopPropagation()
-        setExpanded(false)
-      }
-    }
-    document.addEventListener('keydown', onKeyDown, true)
-    return () => document.removeEventListener('keydown', onKeyDown, true)
-  }, [expanded])
   const review = display.context?.review ? (
     <section
       className="approval-config-review"
@@ -43,7 +30,6 @@ export function ApprovalDetails({
   return (
     <div
       className={`approval-body${display.context?.review ? ' has-review' : ''}`}
-      ref={bodyRef}
     >
       {display.subject !== null && (
         <div
@@ -57,13 +43,14 @@ export function ApprovalDetails({
                 type="button"
                 className="approval-copy"
                 aria-label="复制命令"
+                title="复制命令"
                 onClick={() =>
                   void navigator.clipboard.writeText(
                     display.subject?.value ?? '',
                   )
                 }
               >
-                复制
+                <CopyIcon />
               </button>
             </>
           ) : (
@@ -109,27 +96,25 @@ export function ApprovalDetails({
         <p className="approval-rule-note">{display.ruleNote}</p>
       )}
       {display.reviewAlwaysVisible && review}
-      <button
-        type="button"
-        className="approval-details-toggle ghost"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((value) => !value)}
+      <div
+        id={detailsId}
+        className="approval-expanded-details"
+        hidden={!expanded}
       >
-        {expanded ? '收起详情' : '查看详情'}
-      </button>
-      {expanded && (
-        <>
-          {!display.reviewAlwaysVisible && review}
-          <dl className="approval-detail-list">
-            {display.details.map((item) => (
-              <div key={item.label} className="approval-detail-item">
-                <dt>{item.label}</dt>
-                <dd>{item.value}</dd>
-              </div>
-            ))}
-          </dl>
-        </>
-      )}
+        {expanded && (
+          <>
+            {!display.reviewAlwaysVisible && review}
+            <dl className="approval-detail-list">
+              {display.details.map((item) => (
+                <div key={item.label} className="approval-detail-item">
+                  <dt>{item.label}</dt>
+                  <dd>{item.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </>
+        )}
+      </div>
     </div>
   )
 }
