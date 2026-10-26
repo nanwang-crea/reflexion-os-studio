@@ -2,11 +2,14 @@ import type { ViewName } from '../hooks/session/useSessionNavigation'
 import type { Project, Session } from '@reflexion-os-studio/runtime-client'
 import { ChatsPanel } from './session/ChatsPanel'
 import { ProjectFiles } from '../features/workspace/files/ProjectFiles'
+import { DesktopRemoteDialog } from '../features/remote/DesktopRemoteDialog'
+import { useState } from 'react'
 import type { OpenDiffHandler } from '../features/workspace/types'
 import {
   ArchiveIcon,
   BoxIcon,
   GearIcon,
+  GlobeIcon,
   PlusIcon,
   SparkIcon,
 } from '../ui/icons'
@@ -80,6 +83,7 @@ interface SidebarProps {
  * 变为当前项目的文件工作区（文件 / Git 变更 / 资产 + 搜索 + 返回聊天）。
  */
 export function Sidebar(props: SidebarProps): React.JSX.Element {
+  const [remoteOpen, setRemoteOpen] = useState(false)
   const activeProject =
     props.projects.find((project) => project.id === props.activeProjectId) ??
     null
@@ -193,12 +197,21 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
 
       <footer className="sidebar-footer">
         <NavItem
+          label="手机连接"
+          icon={<GlobeIcon size={15} />}
+          active={false}
+          onClick={() => setRemoteOpen(true)}
+        />
+        <NavItem
           label="设置"
           icon={<GearIcon size={15} />}
           active={props.view === 'settings'}
           onClick={() => props.onSelectView('settings')}
         />
       </footer>
+      {remoteOpen && (
+        <DesktopRemoteDialog onClose={() => setRemoteOpen(false)} />
+      )}
     </aside>
   )
 }

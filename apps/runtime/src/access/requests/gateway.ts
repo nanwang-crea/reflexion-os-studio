@@ -7,7 +7,8 @@ import {
 import { CommandError } from '../../agent/errors.js'
 
 export type RequestPrincipal =
-  { kind: 'desktop' } | { kind: 'device'; deviceId: string; sessionId: string }
+  | { kind: 'desktop' }
+  | { kind: 'device'; deviceId: string; accessScope: 'all_sessions' }
 export interface RequestGatewayOptions {
   dispatch: (
     method: string,

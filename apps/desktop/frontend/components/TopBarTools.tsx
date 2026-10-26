@@ -1,5 +1,3 @@
-import { useState } from 'react'
-import { DesktopRemoteDialog } from '../features/remote/DesktopRemoteDialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { FolderIcon, GlobeIcon, TerminalIcon } from '../ui/icons'
 import type { TopBarProps } from './TopBar'
@@ -7,15 +5,8 @@ import './topbar-tools.css'
 
 /** Only expose implemented panel actions; Radix owns focus and keyboard behavior. */
 export function TopBarTools(props: TopBarProps): React.JSX.Element {
-  const [remoteOpen, setRemoteOpen] = useState(false)
   return (
     <>
-      {remoteOpen && props.sessionId && (
-        <DesktopRemoteDialog
-          sessionId={props.sessionId}
-          onClose={() => setRemoteOpen(false)}
-        />
-      )}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
           <button
@@ -58,15 +49,6 @@ export function TopBarTools(props: TopBarProps): React.JSX.Element {
               <span>网页浏览</span>
               <DropdownMenu.ItemIndicator>✓</DropdownMenu.ItemIndicator>
             </DropdownMenu.CheckboxItem>
-            {props.sessionId && (
-              <DropdownMenu.Item
-                className="topbar-tools-item"
-                onSelect={() => setRemoteOpen(true)}
-              >
-                <GlobeIcon />
-                <span>手机连接</span>
-              </DropdownMenu.Item>
-            )}
             {props.showWorkspaceToggle && (
               <DropdownMenu.CheckboxItem
                 className="topbar-tools-item"

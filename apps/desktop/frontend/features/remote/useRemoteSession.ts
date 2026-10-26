@@ -120,6 +120,7 @@ export function useRemoteSession(sessionId: string) {
       schedule()
     }
     const close = getRemoteTransport().stream(
+      sessionId,
       (packet) => {
         if (disposed) return
         if (packet.type === 'snapshot') {

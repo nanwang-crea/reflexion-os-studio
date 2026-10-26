@@ -5,17 +5,22 @@ import { useRemoteActions } from './useRemoteActions'
 
 export function RemoteChat({
   sessionId,
+  onBack,
 }: {
   sessionId: string
+  onBack: () => void
 }): React.JSX.Element {
   const state = useRemoteSession(sessionId)
   const actions = useRemoteActions(sessionId, state)
   return (
     <main className="remote-chat">
       <header className="remote-header">
+        <button className="ghost" onClick={onBack}>
+          所有会话
+        </button>
         <strong>{state.data?.session?.title ?? '电脑会话'}</strong>
         <span role="status">{state.connection}</span>
-        <span>同一会话 · 操作在电脑执行</span>
+        <span>操作在电脑执行</span>
       </header>
       {state.connection.includes('失效') && (
         <button className="ghost" onClick={() => location.reload()}>

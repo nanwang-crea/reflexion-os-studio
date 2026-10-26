@@ -11,7 +11,6 @@ export const remoteCommands = {
   },
   'remote.start': {
     params: request.extend({
-      sessionId: z.string().min(1),
       address: z.string().min(1).max(64),
     }),
     result: RemoteStatusSchema,

@@ -18,8 +18,7 @@ export const remoteCommandHandlers: Record<string, CommandHandler> = {
       ),
   }),
   'remote.status': (_p, ctx) => service(ctx).status(),
-  'remote.start': (p, ctx) =>
-    service(ctx).start(String(p.sessionId), String(p.address)),
+  'remote.start': (p, ctx) => service(ctx).start(String(p.address)),
   'remote.invite': (_p, ctx) => service(ctx).invite(),
   'remote.stop': async (_p, ctx) => {
     await service(ctx).stop()

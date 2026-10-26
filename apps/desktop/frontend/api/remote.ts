@@ -2,11 +2,8 @@ import type { RemoteStatus } from '@reflexion-os-studio/contracts'
 import { request } from './client'
 export const getRemoteStatus = (): Promise<RemoteStatus> =>
   request('remote.status')
-export const startRemote = (
-  sessionId: string,
-  address: string,
-): Promise<RemoteStatus> =>
-  request('remote.start', { sessionId, address }, 60_000)
+export const startRemote = (address: string): Promise<RemoteStatus> =>
+  request('remote.start', { address }, 60_000)
 export const inviteRemote = (): Promise<RemoteStatus> =>
   request('remote.invite')
 export const stopRemote = (): Promise<{ ok: boolean }> => request('remote.stop')

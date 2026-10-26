@@ -75,12 +75,16 @@ test('gateway applies common schema, isolates device operation identities and re
       content: 'hello',
       requestId: 'same',
     }),
-    { kind: 'device', deviceId: 'phone', sessionId: 'session' },
+    {
+      kind: 'device',
+      deviceId: 'phone',
+      accessScope: 'all_sessions',
+    },
   )
   assert.equal(calls[0].params.requestId, 'device:phone:same')
 })
 
-test('HTTPS serving and pairing reject wrong Host/Origin and pending/foreign commands', async (t) => {
+test('HTTPS serving and pairing reject wrong Host/Origin, pending devices, and unsupported commands', async (t) => {
   const h = await harness(t)
   assert.equal((await http(h.status.origin, '')).status, 200)
   assert.equal((await http(h.status.origin, 'assets/app-test.js')).status, 200)
@@ -134,10 +138,21 @@ test('HTTPS serving and pairing reject wrong Host/Origin and pending/foreign com
     body: rpc('session.get', { sessionId: h.session.id }),
   })
   assert.equal(own.json.result.session.id, h.session.id)
+  const otherSession = await http(h.status.origin, 'api/rpc', {
+    cookie,
+    body: rpc('session.get', { sessionId: h.other.id }),
+  })
+  assert.equal(otherSession.json.result.session.id, h.other.id)
+  const allSessions = await http(h.status.origin, 'api/rpc', {
+    cookie,
+    body: rpc('session.list', {}),
+  })
+  assert.ok(
+    allSessions.json.result.sessions.some((item) => item.id === h.other.id),
+  )
   for (const [method, params] of [
-    ['session.get', { sessionId: h.other.id }],
-    ['message.send', { sessionId: h.other.id, content: 'no' }],
     ['provider.list', {}],
+    ['project.list', {}],
     ['remote.stop', {}],
     ['asset.read', { assetId: 'unknown' }],
     ['approval.resolve', { toolCallId: 'foreign', choiceId: 'yes' }],
@@ -186,8 +201,10 @@ test('SSE snapshot restores live deltas and pending approvals then delivers only
     ended = resolve
   })
   const ready = new Promise((resolve, reject) => {
+    const eventsUrl = new URL('api/events', h.status.origin)
+    eventsUrl.searchParams.set('sessionId', h.session.id)
     const req = httpsRequest(
-      new URL('api/events', h.status.origin),
+      eventsUrl,
       { rejectUnauthorized: false, headers: { Cookie: cookie } },
       (res) => {
         let buffer = ''
@@ -336,7 +353,7 @@ test('same device retry is idempotent and cannot collide with another device or 
   const principal = {
     kind: 'device',
     deviceId: 'first-phone',
-    sessionId: h.session.id,
+    accessScope: 'all_sessions',
   }
   const request = rpc('message.send', {
     requestId: 'same',
@@ -463,7 +480,7 @@ test('stop during endpoint startup closes the eventual endpoint instead of reope
   }
   const h = await harness(t, undefined, provider)
   await h.service.stop()
-  const starting = h.service.start(h.session.id, '127.0.0.1')
+  const starting = h.service.start('127.0.0.1')
   while (!release) await new Promise((resolve) => setTimeout(resolve, 1))
   await h.service.stop()
   release()

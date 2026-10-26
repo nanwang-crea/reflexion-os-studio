@@ -32,10 +32,13 @@ export class RemoteRuntimeTransport {
     return RemotePairStateSchema.parse(await this.json('api/pair'))
   }
   stream(
+    sessionId: string,
     onPacket: (packet: RemoteStreamPacket) => void,
     onState: (state: 'connected' | 'reconnecting' | 'closed') => void,
   ): () => void {
-    const events = new EventSource(new URL('api/events', this.baseUrl), {
+    const streamUrl = new URL('api/events', this.baseUrl)
+    streamUrl.searchParams.set('sessionId', sessionId)
+    const events = new EventSource(streamUrl, {
       withCredentials: true,
     })
     events.onmessage = (message) => {

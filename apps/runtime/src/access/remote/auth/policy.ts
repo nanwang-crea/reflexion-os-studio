@@ -36,11 +36,17 @@ export class RemoteAccessPolicy {
     params: Record<string, unknown>,
   ): void => {
     if (principal.kind === 'desktop') return
-    const { sessionId } = principal
-    if (!this.store.sessions.get(sessionId)) return this.deny()
+    if (principal.accessScope !== 'all_sessions') return this.deny()
+    this.authorizeAllSessions(method, params)
+  }
+  private authorizeAllSessions(
+    method: string,
+    params: Record<string, unknown>,
+  ): void {
+    if (method === 'session.list') return
     if (
       method === 'session.get' &&
-      this.sessionBelongs(String(params.sessionId), sessionId)
+      this.store.sessions.get(String(params.sessionId))
     )
       return
     if (
@@ -52,58 +58,48 @@ export class RemoteAccessPolicy {
       params.targetRequestId.length <= 256
     )
       return
-    if (
-      method === 'delegation.tree' &&
-      this.runBelongs(String(params.rootRunId), sessionId)
-    )
-      return
+    if (method === 'delegation.tree') {
+      const run = this.store.runs.get(String(params.rootRunId))
+      if (run) return
+    }
     if (method === 'delegation.cancel') {
-      const delegation = this.store.delegations.get(String(params.delegationId))
-      if (delegation && this.runBelongs(delegation.parentRunId, sessionId))
-        return
-      return this.deny()
+      if (this.store.delegations.get(String(params.delegationId))) return
     }
     if (sessionMethods.has(method)) {
-      if (params.sessionId !== sessionId) return this.deny()
+      const target = String(params.sessionId ?? '')
+      if (!this.store.sessions.get(target)) return this.deny()
       if (
         params.messageId &&
-        this.store.messages.get(String(params.messageId))?.sessionId !==
-          sessionId
+        this.store.messages.get(String(params.messageId))?.sessionId !== target
       )
         return this.deny()
       for (const id of [
         ...((params.attachmentAssetIds ?? []) as string[]),
         ...((params.imageAssetIds ?? []) as string[]),
       ])
-        this.requireAsset(id, sessionId)
+        this.requireAsset(id)
       return
     }
     if (method === 'runtime.get_status' || method === 'remote.catalog') return
-    if (
-      (method === 'skill.list' || method === 'agent_template.list') &&
-      (params.projectId ?? null) ===
-        this.store.sessions.get(sessionId)?.projectId
-    )
-      return
+    if (method === 'skill.list' || method === 'agent_template.list') return
     if (method === 'run.cancel' || method === 'run.retry') {
-      if (!this.runBelongs(String(params.runId), sessionId)) return this.deny()
-      return
+      if (this.store.runs.get(String(params.runId))) return
+      return this.deny()
     }
     if (method === 'approval.resolve') {
       const call = this.store.toolCalls.get(String(params.toolCallId))
-      if (!call || !this.runBelongs(call.runId, sessionId)) return this.deny()
-      return
+      if (call && this.store.runs.get(call.runId)) return
+      return this.deny()
     }
     if (method === 'interaction.respond') {
       const interaction = this.store.interactions.get(
         String(params.interactionId),
       )
-      if (!interaction || !this.runBelongs(interaction.runId, sessionId))
-        return this.deny()
-      return
+      if (interaction && this.store.runs.get(interaction.runId)) return
+      return this.deny()
     }
     if (method === 'asset.read' || method === 'asset.delete') {
-      this.requireAsset(String(params.assetId), sessionId)
+      this.requireAsset(String(params.assetId))
       return
     }
     this.deny()
@@ -114,19 +110,14 @@ export class RemoteAccessPolicy {
     if (event.scope === 'run') return this.runBelongs(event.runId, sessionId)
     return false
   }
-  private sessionBelongs(candidate: string, root: string): boolean {
-    if (candidate === root) return true
-    return this.store.runs
-      .listBySession(candidate)
-      .some((run) => this.runBelongs(run.id, root))
-  }
-  private requireAsset(id: string, sessionId: string): void {
+  private requireAsset(id: string): void {
     const asset = this.store.assetStore.get(id)
     if (
       !asset ||
       !(
-        asset.sessionId === sessionId ||
-        (asset.runId && this.runBelongs(asset.runId, sessionId))
+        (asset.sessionId && this.store.sessions.get(asset.sessionId)) ||
+        (asset.runId && this.store.runs.get(asset.runId)) ||
+        this.store.messages.referencesAsset(id)
       )
     )
       this.deny()

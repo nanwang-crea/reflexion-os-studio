@@ -97,7 +97,7 @@ export async function harness(t, webRoot, provider) {
     store.close()
     await rm(directory, { recursive: true, force: true })
   })
-  const status = await service.start(session.id, '127.0.0.1')
+  const status = await service.start('127.0.0.1')
   const event = (type, fields = {}) => ({
     protocolVersion: '1.0',
     eventId: crypto.randomUUID(),

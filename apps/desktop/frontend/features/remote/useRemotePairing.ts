@@ -4,7 +4,6 @@ import { getRemoteTransport } from '../../lib/transport'
 
 export function useRemotePairing() {
   const [device, setDevice] = useState<RemoteDevice | null>(null)
-  const [sessionId, setSessionId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [invitation] = useState(() => {
@@ -22,7 +21,6 @@ export function useRemotePairing() {
       try {
         const state = await getRemoteTransport().pair(invitation, name)
         setDevice(state.device)
-        setSessionId(state.sessionId)
         setError(null)
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : '配对失败')
@@ -42,7 +40,6 @@ export function useRemotePairing() {
         const state = await getRemoteTransport().pairState()
         if (disposed) return
         setDevice(state.device)
-        setSessionId(state.sessionId)
         setError(null)
         if (!state.device.approved)
           timer = setTimeout(() => void restore(), 1500)
@@ -57,5 +54,5 @@ export function useRemotePairing() {
       if (timer) clearTimeout(timer)
     }
   }, [invitation, deviceId, approved])
-  return { device, sessionId, error, busy, pair }
+  return { device, error, busy, pair }
 }

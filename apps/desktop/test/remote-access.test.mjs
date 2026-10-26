@@ -40,12 +40,21 @@ test('phone browser pairs, restores stream after reload, sends into the same ses
   await page.goto(h.status.invitationUrl)
   await page.getByRole('button', { name: '请求连接', exact: true }).click()
   await page
-    .getByText('等待电脑确认。批准后可查看、发送消息并处理此会话审批。')
+    .getByText(
+      '等待电脑确认。批准后可查看电脑上的所有会话、发送消息并处理审批。',
+    )
     .waitFor()
   assert.equal(new URL(page.url()).hash, '')
   const device = h.service.status().devices[0]
   await page.getByText(device.verificationCode, { exact: true }).waitFor()
   h.service.resolve(device.id, true)
+  await page.getByRole('heading', { name: '所有会话' }).waitFor()
+  await page.getByText('其他会话', { exact: true }).waitFor()
+  await page.screenshot({
+    path: '/tmp/reflexion-mobile-qa/session-list.png',
+    fullPage: true,
+  })
+  await page.getByRole('button', { name: '手机测试会话' }).click()
   await page.getByText('已连接电脑', { exact: true }).waitFor()
   await page.getByText('手机同步中的回复', { exact: true }).waitFor()
   const overflow = await page.evaluate(

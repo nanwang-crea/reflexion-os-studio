@@ -14,10 +14,8 @@ import { useModalDialog } from '../../hooks/ui/useModalDialog'
 import './desktop-remote.css'
 
 export function DesktopRemoteDialog({
-  sessionId,
   onClose,
 }: {
-  sessionId: string
   onClose: () => void
 }): React.JSX.Element {
   const closeRef = useRef<HTMLButtonElement>(null)
@@ -108,7 +106,7 @@ export function DesktopRemoteDialog({
           </button>
         </div>
         <p>
-          手机扫码后复用此会话，模型和工具继续在电脑执行。关闭此窗口不会停止接入。
+          手机扫码后可查看电脑上的所有会话，模型和工具继续在电脑执行。关闭此窗口不会停止接入。
         </p>
         {error && <p role="alert">{error}</p>}
         {!status?.running ? (
@@ -129,20 +127,13 @@ export function DesktopRemoteDialog({
             <button
               className="primary"
               disabled={busy || !status}
-              onClick={() =>
-                void perform(() => startRemote(sessionId, address))
-              }
+              onClick={() => void perform(() => startRemote(address))}
             >
               开启并生成二维码
             </button>
           </>
         ) : (
           <>
-            {status.sessionId !== sessionId && (
-              <p role="status">
-                当前接入绑定另一会话。需先停止，再为本会话开启。
-              </p>
-            )}
             <p>
               手机与电脑需在可互通的同一网络。首次打开会出现自签名证书提示；请确认地址属于这台电脑，并在浏览器核对证书指纹。受管设备可能无法接受此证书。
             </p>
@@ -204,7 +195,7 @@ export function DesktopRemoteDialog({
                   ) : (
                     <>
                       <p>
-                        确认手机显示相同配对码后批准。此设备将能阅读、发送消息及处理本会话与子任务审批。
+                        确认手机显示相同配对码后批准。此设备将能查看电脑上的所有会话、发送消息及处理会话与子任务审批。
                       </p>
                       <button
                         className="primary"

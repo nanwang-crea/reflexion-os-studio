@@ -29,7 +29,7 @@ React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
 - **尚未实现、不得提前实现**：Phase 1B 剩余（Browser Surface 跨平台及剩余真机验收）、Phase 2 剩余（Provider/Tool 插件、Browser 工具后续（登录、上传及跨站/写入交互）、检索式记忆——按演进承诺直引 mem0，不得自研提取/召回管线）、Phase 4 剩余跨平台/真实模型验收、Phase 5 多模态、Phase 6 硬化与激活码许可。
 - 现有页面与占位边界：聊天区、落地页、技能页、指令页（AGENTS.md/MEMORY.md 四类文件管理）、设置页（Provider）均为独立页面；工作区（索引状态+文件树+查看器）是对话区的**右侧可开合面板**（顶栏文件夹按钮切换，局部状态记忆），不是独立页；Agent 页管理角色配置，主对话右侧协作 Surface 展示计划与真实委派；协作方法保存为 Skills。原 Workflow 编排已退役，保留分支为 codex/archive-workflow-2026-10-14；主分支不再开放 Workflow 命令，历史库保持兼容。定时任务仍未开放。macOS 合成 Provider GUI 已验收，Windows/Linux、真实模型质量与长稳仍待验收，不将这些待验收项标为已完成。
 
-手机接入：按需开启的局域网 HTTPS/SSE、一次性二维码、电脑核对配对码、设备撤销与到期；共用 ChatView/Composer/队列/审批/工具轨迹，后端仍在电脑。公网仅预留 EndpointProvider 与路径前缀边界，尚无中继；iOS/Android、Windows/Linux 真机待验收。见 `docs/MOBILE-SESSION-ACCESS.md`。
+手机接入：按需开启的局域网 HTTPS/SSE、一次性二维码、电脑核对配对码、设备撤销与到期；设备授权覆盖电脑上的全部会话，手机可从会话列表进入并复用 ChatView/Composer/队列/审批/工具轨迹，后端仍在电脑。公网仅预留 EndpointProvider 与路径前缀边界，尚无中继；iOS/Android、Windows/Linux 真机待验收。见 `docs/MOBILE-SESSION-ACCESS.md`。
 
 ## 2. 目录结构与职责
 

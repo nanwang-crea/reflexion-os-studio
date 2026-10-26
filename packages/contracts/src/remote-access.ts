@@ -12,7 +12,7 @@ export const RemoteDeviceSchema = z.object({
 })
 export const RemoteStatusSchema = z.object({
   running: z.boolean(),
-  sessionId: z.string().nullable(),
+  accessScope: z.literal('all_sessions'),
   origin: z.string().nullable(),
   addresses: z.array(z.string()),
   fingerprint: z.string().nullable(),
@@ -28,7 +28,7 @@ export const RemotePairRequestSchema = z
   .strict()
 export const RemotePairStateSchema = z.object({
   device: RemoteDeviceSchema,
-  sessionId: z.string(),
+  accessScope: z.literal('all_sessions'),
 })
 export const RemoteStreamPacketSchema = z.discriminatedUnion('type', [
   z.object({

@@ -44,7 +44,7 @@ export class RemoteAccessService {
   private endpoint?: RemoteEndpoint
   private starting = false
   private generation = 0
-  private sessionId: string | null = null
+  private running = false
   private readonly pairing = new RemotePairing()
   private readonly limiter = new RequestLimiter()
   private readonly streams: RemoteStreams
@@ -69,7 +69,7 @@ export class RemoteAccessService {
       Date.parse(this.invitationExpiresAt) > Date.now()
     return {
       running: !!this.endpoint,
-      sessionId: this.sessionId,
+      accessScope: 'all_sessions',
       origin: this.endpoint?.baseUrl ?? null,
       addresses: localAddresses(),
       fingerprint: this.endpoint?.fingerprint ?? null,
@@ -78,11 +78,9 @@ export class RemoteAccessService {
       devices: this.pairing.list(),
     }
   }
-  async start(sessionId: string, address: string): Promise<RemoteStatus> {
+  async start(address: string): Promise<RemoteStatus> {
     if (this.starting || this.endpoint)
       throw new CommandError('invalid_state', '请先停止已开启的手机接入')
-    if (!this.context.store.sessions.get(sessionId))
-      throw new CommandError('invalid_request', '会话不存在')
     const generation = ++this.generation
     this.starting = true
     try {
@@ -110,7 +108,7 @@ export class RemoteAccessService {
         throw new Error('invalid_endpoint')
       }
       this.endpoint = endpoint
-      this.sessionId = sessionId
+      this.running = true
       return this.invite()
     } catch {
       throw new CommandError(
@@ -145,7 +143,7 @@ export class RemoteAccessService {
     this.generation++
     const endpoint = this.endpoint
     this.endpoint = undefined
-    this.sessionId = null
+    this.running = false
     this.invitationUrl = null
     this.invitationExpiresAt = null
     this.pairing.clear()
@@ -180,8 +178,7 @@ export class RemoteAccessService {
     )
     try {
       const endpoint = this.endpoint
-      const sessionId = this.sessionId
-      if (!endpoint || !sessionId) {
+      if (!endpoint || !this.running) {
         json(response, 503, { error: 'unavailable' })
         return
       }
@@ -226,13 +223,16 @@ export class RemoteAccessService {
           'Set-Cookie',
           `__Secure-reflexion-device=${paired.credential}; HttpOnly; Secure; SameSite=Strict; Path=${base.pathname}; Max-Age=28800`,
         )
-        json(response, 200, { device: paired.device, sessionId })
+        json(response, 200, {
+          device: paired.device,
+          accessScope: 'all_sessions',
+        })
         return
       }
       if (request.method === 'GET' && path === '/api/pair') {
         json(response, 200, {
           device: this.pairing.authenticate(this.credential(request), false),
-          sessionId,
+          accessScope: 'all_sessions',
         })
         return
       }
@@ -243,9 +243,12 @@ export class RemoteAccessService {
           json(response, 429, { error: 'rate_limit' })
           return
         }
-        if (!this.context.store.sessions.get(sessionId))
-          throw new Error('session_deleted')
         if (request.method === 'GET' && path === '/api/events') {
+          const sessionId = url.searchParams.get('sessionId')
+          if (!sessionId || !this.context.store.sessions.get(sessionId)) {
+            json(response, 400, { error: 'session_required' })
+            return
+          }
           const dangerLease = this.context.danger.leaseFor(sessionId)
           this.streams.open(response, credential, sessionId, () => ({
             type: 'snapshot',
@@ -264,7 +267,7 @@ export class RemoteAccessService {
           const result = await this.gateway.execute(rpc, {
             kind: 'device',
             deviceId: device.id,
-            sessionId,
+            accessScope: 'all_sessions',
           })
           if (!result.error)
             result.result = remoteCommandResult(rpc.method, result.result)
