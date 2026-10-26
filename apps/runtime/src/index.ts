@@ -1,3 +1,9 @@
+import { RuntimeEventBus } from './access/events.js'
+import { RuntimeRequestGateway } from './access/requests/gateway.js'
+import { RemoteAccessService } from './access/remote/service.js'
+import { RemoteLiveState } from './access/remote/state/live-state.js'
+import { RemoteAccessPolicy } from './access/remote/auth/policy.js'
+import type { CommandContext } from './command-utils.js'
 import { HostBrowserTransport } from './browser/agent/embedded/host.js'
 import { registerDeveloperNotifications } from './diagnostics/events.js'
 import { BrowserAgentService } from './browser/agent/service.js'
@@ -7,14 +13,12 @@ import { createInterface } from 'node:readline'
 import {
   JsonRpcMessageSchema,
   PROTOCOL_VERSION,
-  lookupCommandSchema,
-  summarizeZodIssuesForLog,
   type JsonRpcRequest,
   type JsonRpcResponse,
   type RuntimeEvent,
   type RuntimeStatus,
 } from '@reflexion-os-studio/contracts'
-import { ChatAgent, CommandError } from './agent/index.js'
+import { ChatAgent } from './agent/index.js'
 import { sweepOrphanMemoryDirs } from './agent/instructions/service.js'
 import { ResourceEventEmitter } from './events.js'
 import { dispatchCommand, testProviderConnection } from './handlers.js'
@@ -96,9 +100,15 @@ function sendError(
   })
 }
 
-function notify(event: RuntimeEvent): void {
-  write({ jsonrpc: '2.0', method: event.type, params: event })
-}
+const eventBus = new RuntimeEventBus(() => {
+  process.stderr.write('[runtime] event subscriber failed\n')
+})
+const liveState = new RemoteLiveState()
+eventBus.subscribe(liveState.accept)
+eventBus.subscribe((event) =>
+  write({ jsonrpc: '2.0', method: event.type, params: event }),
+)
+const notify = (event: RuntimeEvent): void => eventBus.publish(event)
 
 // 全局状态事件信封（runtime 作用域，不归属任何 Run）。
 const statusEmitter = new ResourceEventEmitter({ scope: 'runtime' }, notify)
@@ -194,6 +204,7 @@ const terminalService = new TerminalService({
 terminalServiceBox.current = terminalService
 const shutdown = createRuntimeShutdown(
   {
+    remote: () => commandContext.remote?.stop(),
     terminal: () => terminalService.shutdown(),
     system: () => systemRuntime.shutdown(),
     browser: () => browser.shutdown(),
@@ -210,7 +221,7 @@ const shutdown = createRuntimeShutdown(
 )
 process.once('SIGTERM', () => void shutdown.run())
 process.once('SIGINT', () => void shutdown.run())
-const commandContext = {
+const commandContext: CommandContext = {
   browser,
   store,
   agent,
@@ -225,6 +236,24 @@ const commandContext = {
   terminal: terminalService,
   plugins: skillPlugins,
 }
+
+const accessPolicy = new RemoteAccessPolicy(store)
+const requestGateway = new RuntimeRequestGateway({
+  authorize: accessPolicy.authorize,
+  report: (message) => process.stderr.write(`[runtime] ${message}\n`),
+  dispatch: async (method, params) => {
+    if (method === 'runtime.get_status') return getStatus()
+    if (method === 'provider.test') return testProviderConnection(params)
+    return dispatchCommand(method, params, commandContext)
+  },
+})
+commandContext.remote = new RemoteAccessService(
+  commandContext,
+  requestGateway,
+  eventBus,
+  liveState,
+  accessPolicy,
+)
 
 // P1 环境继承：先探测用户 shell 环境快照（不阻塞 Chat 就绪），
 // 但 Rust sidecar 与 MCP server 的 spawn 必须等注入完成，才能继承补齐后的 PATH/env。
@@ -279,79 +308,7 @@ async function handleRequestAsync(request: JsonRpcRequest): Promise<void> {
     return
   }
 
-  const entry = lookupCommandSchema(request.method)
-  if (!entry) {
-    sendError(request.id, -32601, `Method not found: ${request.method}`)
-    return
-  }
-
-  const params = entry.params.safeParse(request.params ?? {})
-  if (!params.success) {
-    // -32602 也要落 stderr：只有响应体带 data 时，从终端看日志会误判成"没原因"。
-    // 这里只写字段路径与契约边界，绝不写 params 值——里面合法地含 API Key。
-    const reasons = summarizeZodIssuesForLog(params.error.issues)
-    process.stderr.write(
-      `[runtime] ${request.method} rejected (-32602 invalid_params): ` +
-        `${reasons.join('; ')}\n`,
-    )
-    sendError(request.id, -32602, 'Invalid params', reasons)
-    return
-  }
-
-  if (request.method === 'runtime.get_status') {
-    sendResponse(request.id, getStatus())
-    return
-  }
-
-  if (request.method === 'provider.test') {
-    // 连接测试涉及网络等待：异步执行，完成后单独回包（JSON-RPC 不要求按序响应）。
-    void testProviderConnection(params.data as Record<string, unknown>).then(
-      (result) => sendResponse(request.id, result),
-      (error: unknown) => {
-        if (error instanceof CommandError) {
-          sendError(request.id, -32000, error.message, {
-            code: error.code,
-            message: error.message,
-          })
-          return
-        }
-        sendError(request.id, -32000, 'internal error', {
-          code: 'internal',
-          message: error instanceof Error ? error.message : String(error),
-        })
-      },
-    )
-    return
-  }
-
-  try {
-    const result = await dispatchCommand(
-      request.method,
-      params.data as Record<string, unknown>,
-      commandContext,
-    )
-    sendResponse(request.id, result)
-  } catch (error) {
-    if (error instanceof CommandError) {
-      // 业务错误同步落 stderr，便于从终端排障；stdout 仍只传协议。
-      process.stderr.write(
-        `[runtime] ${request.method} failed (${error.code}): ${error.message}\n`,
-      )
-      sendError(request.id, -32000, error.message, {
-        code: error.code,
-        message: error.message,
-      })
-      return
-    }
-    const detail = error instanceof Error ? error.message : String(error)
-    process.stderr.write(
-      `[runtime] ${request.method} internal error: ${detail}\n`,
-    )
-    sendError(request.id, -32000, 'internal error', {
-      code: 'internal',
-      message: detail,
-    })
-  }
+  write(await requestGateway.execute(request, { kind: 'desktop' }))
 }
 
 write({

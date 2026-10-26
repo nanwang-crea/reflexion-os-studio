@@ -53,9 +53,11 @@ export interface ReadyAppProps {
   hasEnabledProvider: boolean
   permissionPreset: MainProps['chat']['permissionValue']
   changePermissionPreset: MainProps['chat']['onPermissionChange']
-  approvalOverride: MainProps['chat']['advanced']['approvalOverride']
+  approvalOverride: NonNullable<
+    MainProps['chat']['advanced']
+  >['approvalOverride']
   changeApprovalOverride: (
-    value: MainProps['chat']['advanced']['approvalOverride'],
+    value: NonNullable<MainProps['chat']['advanced']>['approvalOverride'],
   ) => void
   dangerLease: MainProps['chat']['dangerLease']
   disableDanger: () => void

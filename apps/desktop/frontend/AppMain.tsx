@@ -119,6 +119,7 @@ export function AppMain(props: AppMainProps): React.JSX.Element {
       >
         <TopBar
           {...props.topBar}
+          sessionId={activeSessionId}
           collaborationOpen={collaborationOpen}
           onToggleCollaboration={
             view === 'chat'

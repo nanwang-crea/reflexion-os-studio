@@ -1,0 +1,78 @@
+.remote-pairing {
+  max-width: 480px;
+  margin: 8vh auto;
+  padding: 24px;
+  line-height: 1.7;
+}
+.remote-pairing form {
+  display: grid;
+  gap: 16px;
+}
+.remote-code {
+  font-size: 32px;
+  letter-spacing: 0.2em;
+}
+.remote-chat {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  min-width: 0;
+  overflow: hidden;
+}
+.remote-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.remote-header strong {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.remote-header span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.remote-notice {
+  padding: 10px 12px;
+  background: var(--bg-elevated);
+  overflow-wrap: anywhere;
+}
+.remote-chat .chat-view {
+  flex: 1;
+  min-height: 0;
+}
+.remote-chat .composer-toolbar {
+  flex-wrap: wrap;
+}
+.remote-chat input,
+.remote-chat textarea,
+.remote-pairing input {
+  font-size: 16px;
+}
+.remote-chat .composer-wrap {
+  padding-bottom: 8px;
+}
+.remote-chat .chat-composer-context {
+  max-height: 35dvh;
+}
+.remote-chat .transcript {
+  max-width: 960px;
+}
+@media (max-width: 520px) {
+  .remote-header span:last-child {
+    width: 100%;
+  }
+  .remote-chat .composer-toolbar {
+    gap: 4px;
+  }
+  .remote-chat .user-bubble {
+    max-width: 100%;
+  }
+}

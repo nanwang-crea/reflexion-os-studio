@@ -29,6 +29,8 @@ React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
 - **尚未实现、不得提前实现**：Phase 1B 剩余（Browser Surface 跨平台及剩余真机验收）、Phase 2 剩余（Provider/Tool 插件、Browser 工具后续（登录、上传及跨站/写入交互）、检索式记忆——按演进承诺直引 mem0，不得自研提取/召回管线）、Phase 4 剩余跨平台/真实模型验收、Phase 5 多模态、Phase 6 硬化与激活码许可。
 - 现有页面与占位边界：聊天区、落地页、技能页、指令页（AGENTS.md/MEMORY.md 四类文件管理）、设置页（Provider）均为独立页面；工作区（索引状态+文件树+查看器）是对话区的**右侧可开合面板**（顶栏文件夹按钮切换，局部状态记忆），不是独立页；Agent 页管理角色配置，主对话右侧协作 Surface 展示计划与真实委派；协作方法保存为 Skills。原 Workflow 编排已退役，保留分支为 codex/archive-workflow-2026-10-14；主分支不再开放 Workflow 命令，历史库保持兼容。定时任务仍未开放。macOS 合成 Provider GUI 已验收，Windows/Linux、真实模型质量与长稳仍待验收，不将这些待验收项标为已完成。
 
+手机接入：按需开启的局域网 HTTPS/SSE、一次性二维码、电脑核对配对码、设备撤销与到期；共用 ChatView/Composer/队列/审批/工具轨迹，后端仍在电脑。公网仅预留 EndpointProvider 与路径前缀边界，尚无中继；iOS/Android、Windows/Linux 真机待验收。见 `docs/MOBILE-SESSION-ACCESS.md`。
+
 ## 2. 目录结构与职责
 
 | 路径                       | 职责                                                                                                                                                     |
@@ -49,7 +51,7 @@ React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
 ## 3. 架构红线（违反即错误实现）
 
 1. **stdout 只传 JSON-RPC 协议消息，stderr 只写日志**。newline-delimited、单行 JSON。
-2. 前端不得直接访问 Node API、文件系统、Provider、数据库或 sidecar 原始 stdio；只能调用 Tauri 白名单 command（当前：`bootstrap_get_state`、`runtime_request`）。
+2. 前端不得直接访问 Node API、文件系统、Provider、数据库或 sidecar 原始 stdio；桌面只能调用 Tauri 白名单 command（当前：`bootstrap_get_state`、`runtime_request`），手机 Web 仅经 runtime-client 的受控 HTTPS/SSE 接入和会话授权。
 3. Runtime 不依赖 Tauri/桌面宿主/React；宿主不实现业务逻辑。
 4. 不用固定 localhost HTTP 做进程间通信。
 5. Chat 不因 Rust 未 ready 阻塞：`system-degraded` 是降级不是 `error`；`runtime.ready` 才代表 Chat 可用。
@@ -69,7 +71,7 @@ React Renderer → Tauri Host → TypeScript Runtime → Rust System Services
 - **存储**：MVP 用 Node 内置 `node:sqlite`（无原生依赖），数据目录 `REFLEXION_DATA_DIR` ?? `~/.reflexion-os-studio`；外键开启；Run/Message 终态写入用单事务；启动时把未完成 Run/Message 恢复为 `interrupted`。
 - **Secret 纪律**：API Key 等机密只经 `provider.configure` 的只写 `secret` 参数出现一次，落入数据目录 `secrets.json`（0600），其余任何地方只出现 `secretRef`；secret 不得进入响应、事件、日志或错误详情。
 - **插件包纪律**：可移植 Skill 以标准 `SKILL.md` frontmatter（`name` / `description`）为元数据真源；`plugin.json` 是可选的 ReflexionOS 扩展 manifest，无该文件时安装器须生成内部规范化 manifest 并仅存安装记录，不向普通 Skill 目录补写 plugin.json。安装必须先校验后复制，带扩展 manifest 的更新必须使用同 id 的递增版本，并通过 stage/backup/rename 原子替换，失败恢复旧包。包内符号链接、危险隐藏项、凭据类文件、越界入口一律拒绝；manifest 的权限声明只用于展示，绝不能绕过 ToolRegistry、PermissionGate 或审批。第三方 Skill 可包含按需执行的脚本；只能经现有 shell.execute 的权限、沙箱与审批执行，不在 Runtime 主进程 import/eval，安装和加载说明不自动运行脚本。完整技能包保存在全局数据目录 skills/ 或项目 .reflexion-os-studio/skills/，不进入 Asset Store。
-- **前端访问 Runtime 的唯一通道**：`runtime-client` 的 `RuntimeTransport`（Tauri 白名单 command `runtime_request` + `bootstrap:message` 事件按 id 关联）；新增业务命令需同步更新 Rust 侧白名单数组。
+- **前端访问 Runtime 的唯一通道**：`runtime-client` 的 `RuntimeTransport`（Tauri 白名单 command `runtime_request` + `bootstrap:message` 事件按 id 关联）；手机独立入口通过 `RemoteRuntimeTransport` 接入同一请求网关；不得将未开放命令直接透传到网络。新增业务命令需同步更新 Rust 侧白名单数组。
 - **工具结果唯一结构**：工具执行可返回正文与可选结构化字段，Runtime 必须在 `agent/run/toolResults.ts` 统一归一化为版本化 `ToolOutput` 后写入 `tool_calls.result_json`；成功与失败结果都保存完整正文。模型回填、历史上下文、Tool Trace、Changed Files 与 Artifact UI 必须从该结构投影，不得分别解析工具私有 JSON。旧 `result_json` 只在 Store 读取边界兼容包装，禁止以破坏性迁移重写历史行；`ToolCall.result` 仅作旧调用方的 `data` 兼容投影，新代码读取 `ToolCall.output`。
 - **按职责拆分（硬规则，新代码先拆再写）**：不先写大文件再事后补拆。
   - **目录也必须保持单一职责**：禁止把一个领域下不断增长的文件长期平铺在根层。新增文件前先判断其 feature / subdomain；当同一目录已经出现两个以上稳定职责簇（例如读取与写入、消息与 Run、文件与 Git、权限与会话），必须先建立对应子目录再继续实现，不能用文件名前缀代替层次。

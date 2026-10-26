@@ -20,8 +20,11 @@ fn validate(lookup: impl Fn(&str) -> Option<Vec<u8>>) -> Result<(), String> {
         let quote = attribute.chars().last().unwrap();
         for value in html.split(attribute).skip(1) {
             let path = value.split(quote).next().unwrap_or_default();
+            let path = path.strip_prefix("./").unwrap_or(path);
             if path.starts_with("/assets/") {
-                paths.insert(path);
+                paths.insert(path.to_string());
+            } else if path.starts_with("assets/") {
+                paths.insert(format!("/{path}"));
             }
         }
     }
@@ -31,7 +34,7 @@ fn validate(lookup: impl Fn(&str) -> Option<Vec<u8>>) -> Result<(), String> {
         return Err("packaged index.html has no frontend JS/CSS entry points".into());
     }
     for path in paths {
-        if lookup(path).is_none_or(|bytes| bytes.is_empty()) {
+        if lookup(&path).is_none_or(|bytes| bytes.is_empty()) {
             return Err(format!("packaged frontend entry is missing: {path}"));
         }
     }
@@ -57,6 +60,16 @@ mod tests {
     #[test]
     fn accepts_a_complete_embedded_frontend() {
         let files = assets();
+        assert!(validate(|path| files.get(path).cloned()).is_ok());
+    }
+
+    #[test]
+    fn accepts_relative_entries_used_by_multiple_clients() {
+        let mut files = assets();
+        files.insert(
+            "/index.html",
+            b"<script src=\"./assets/app.js\"></script><link href='./assets/app.css'>".to_vec(),
+        );
         assert!(validate(|path| files.get(path).cloned()).is_ok());
     }
 

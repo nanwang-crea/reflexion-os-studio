@@ -1,3 +1,5 @@
+import { readSessionHistory } from './chat/history/snapshot.js'
+import { remoteCommandHandlers } from './access/remote/handlers.js'
 import { chatArchiveCommandHandlers } from './chat/archive/handlers.js'
 import { developerCommandHandlers } from './diagnostics/handlers.js'
 import { SkillSaveParamsSchema } from '@reflexion-os-studio/contracts'
@@ -100,33 +102,11 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
       ),
     }
   },
-  'session.get': (p, { store }) => {
-    const { sessionId, turns, before } =
-      CommandSchemaRegistry['session.get'].params.parse(p)
-    const page = store.messages.listPage(sessionId, turns, before)
-    const runIds = [
-      ...new Set(
-        page.messages.flatMap((message) =>
-          message.runId ? [message.runId] : [],
-        ),
-      ),
-    ]
-    const runs = runIds.flatMap((id) => {
-      const run = store.runs.get(id)
-      return run ? [run] : []
-    })
-    return {
-      session: store.sessions.get(sessionId),
-      ...page,
-      runs,
-      toolCalls: store.toolCalls.listForPage(
-        page.messages.map((message) => message.id),
-        runIds,
-      ),
-      plans: store.plans.listCurrent(sessionId),
-      runEvents: store.runEvents.listByRuns(runIds),
-    }
-  },
+  'session.get': (p, { store }) =>
+    readSessionHistory(
+      store,
+      CommandSchemaRegistry['session.get'].params.parse(p),
+    ),
   'session.rename': (p, { store, agent }) => {
     const sessionId = requireString(p, 'sessionId')
     const title = requireString(p, 'title').trim()
@@ -379,6 +359,7 @@ const chatCommandHandlers: Record<string, CommandHandler> = {
 }
 
 export const commandHandlers: Record<string, CommandHandler> = {
+  ...remoteCommandHandlers,
   'operation.get': (p, { store }) => ({
     operation: operationsFor(store).get(
       String(p.method),

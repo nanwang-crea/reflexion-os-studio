@@ -1,0 +1,53 @@
+.remote-dialog .dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-height: 85dvh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.remote-dialog p {
+  line-height: 1.6;
+  margin: 0;
+}
+.remote-dialog-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.remote-dialog-heading h3 {
+  margin: 0;
+}
+.remote-fingerprint {
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+.remote-qr {
+  align-self: center;
+  max-width: 100%;
+}
+.remote-device-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.remote-devices {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.remote-devices li {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.remote-devices li p {
+  width: 100%;
+}

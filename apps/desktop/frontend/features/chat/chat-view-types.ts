@@ -33,7 +33,7 @@ export interface ChatViewProps {
   hasEnabledProvider: boolean
   permissionValue: PermissionPreset
   onPermissionChange: (value: PermissionPreset) => void
-  advanced: ComposerAdvancedState
+  advanced?: ComposerAdvancedState
   /** Danger 租约（Runtime 真源投影）：激活时 Composer 上方常驻红色状态条。 */
   dangerLease: DangerAccessLease | null
   onDisableDanger: () => void

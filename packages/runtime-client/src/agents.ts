@@ -8,7 +8,7 @@ import type { RuntimeTransport } from './transport.js'
 export type { AgentDefinition, Delegation, DelegationStatus }
 
 export interface AgentClientRequestOptions {
-  transport: RuntimeTransport
+  transport: Pick<RuntimeTransport, 'request'>
   requestId: string
 }
 

@@ -285,3 +285,10 @@ AgentSettings 保留数字/null 的默认语义，通过可选 `unlimitedLimits`
 - TS 与 Host 的崩溃重启预算只在连续运行至少 60 秒后重置，握手本身不重置预算。
 - SQLite schema v53 添加不含参数/结果的操作回执（请求键、参数摘要和状态）。最近 256 个结果保留内存缓存；缓存淘汰或进程重启后的重复请求只查询回执，不重新执行；启动将未终态回执转成 uncertain。磁盘元数据取代启动周期 4096 次操作限制。
 - Context Frame 的工具记录按消息集合批量查询。有效 checkpoint 直接读取水位后的后缀；messages/tool_calls 的前缀变更触发缓存失效，迟到摘要写回前再次验证来源。迁移仅清理可重建 checkpoint，不改写历史消息或工具结果；新增八个稳定 Frame 后继续后台刷新。
+
+## 手机会话接入与多客户端边界
+
+桌面保留 Tauri/stdio 通道，按需启用的手机 HTTPS/SSE 接入复用统一请求入口、
+业务 handler 和可订阅事件流。Runtime 是唯一业务状态与执行所有者；设备配对权限
+与工具执行权限分层，不把整个 Runtime 或本机文件系统开放到网络。
+设计与首版边界见 [手机会话接入](docs/MOBILE-SESSION-ACCESS.md)。

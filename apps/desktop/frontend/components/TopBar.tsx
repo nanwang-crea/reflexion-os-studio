@@ -12,6 +12,7 @@ export const STATUS_LABELS: Record<string, string> = {
 }
 
 export interface TopBarProps {
+  sessionId?: string | null
   collaborationOpen?: boolean
   onToggleCollaboration?: () => void
   browserOpen: boolean

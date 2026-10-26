@@ -4,7 +4,7 @@ import type { RuntimeTransport } from './transport.js'
 export type { Terminal }
 
 export interface TerminalClientRequestOptions {
-  transport: RuntimeTransport
+  transport: Pick<RuntimeTransport, 'request'>
   requestId: string
 }
 

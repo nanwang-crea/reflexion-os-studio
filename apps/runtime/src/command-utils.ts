@@ -17,6 +17,7 @@ import type { InteractionGateway } from './agent/interactions/index.js'
 export type CommandResult = Record<string, unknown>
 
 export interface CommandContext {
+  remote?: import('./access/remote/service.js').RemoteAccessService
   browser?: import('./browser/agent/service.js').BrowserAgentService
   store: Store
   agent: ChatAgent

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { remoteCommands } from './commands/remote.js'
 import { developerCommands } from './commands/developer.js'
 import { operationCommands } from './operations.js'
 import { runtimeCommands } from './commands/runtime.js'
@@ -25,6 +26,7 @@ import { terminalCommands } from './commands/terminal.js'
 export * from './commands/params.js'
 
 export const CommandSchemaRegistry = {
+  ...remoteCommands,
   ...developerCommands,
   ...runtimeCommands,
   ...operationCommands,
@@ -65,6 +67,7 @@ export type CommandSchemaEntry = {
 export function lookupCommandSchema(
   method: string,
 ): CommandSchemaEntry | undefined {
+  if (!Object.hasOwn(CommandSchemaRegistry, method)) return undefined
   const entry = (CommandSchemaRegistry as Record<string, CommandSchemaEntry>)[
     method
   ]
