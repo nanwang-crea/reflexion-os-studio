@@ -7,26 +7,32 @@ import type { Session } from '@reflexion-os-studio/runtime-client'
 export function RemoteApp(): React.JSX.Element {
   const pairing = useRemotePairing()
   const [name, setName] = useState('我的手机')
+  const sessionStorageKey = `reflexion.remote.session:${location.origin}${location.pathname}`
   const [sessions, setSessions] = useState<Session[]>([])
+  const [sessionsLoaded, setSessionsLoaded] = useState(false)
   const [sessionError, setSessionError] = useState<string | null>(null)
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
-    () => sessionStorage.getItem('reflexion.remote.session'),
+    () => sessionStorage.getItem(sessionStorageKey),
   )
-  const selectSession = useCallback((sessionId: string | null): void => {
-    setSelectedSessionId(sessionId)
-    if (sessionId) sessionStorage.setItem('reflexion.remote.session', sessionId)
-    else sessionStorage.removeItem('reflexion.remote.session')
-  }, [])
+  const selectSession = useCallback(
+    (sessionId: string | null): void => {
+      setSelectedSessionId(sessionId)
+      if (sessionId) sessionStorage.setItem(sessionStorageKey, sessionId)
+      else sessionStorage.removeItem(sessionStorageKey)
+    },
+    [sessionStorageKey],
+  )
   const refreshSessions = useCallback(async (): Promise<void> => {
     try {
       const result = await listSessions()
       setSessions(result.sessions)
+      setSessionsLoaded(true)
       setSelectedSessionId((current) => {
         if (
           current &&
           !result.sessions.some((session) => session.id === current)
         ) {
-          sessionStorage.removeItem('reflexion.remote.session')
+          sessionStorage.removeItem(sessionStorageKey)
           return null
         }
         return current
@@ -35,12 +41,17 @@ export function RemoteApp(): React.JSX.Element {
     } catch {
       setSessionError('读取会话失败，请检查电脑连接')
     }
-  }, [])
+  }, [sessionStorageKey])
   useEffect(() => {
     if (!pairing.device?.approved) return
     void refreshSessions()
   }, [pairing.device?.approved, refreshSessions])
-  if (pairing.device?.approved && selectedSessionId)
+  if (
+    pairing.device?.approved &&
+    selectedSessionId &&
+    sessionsLoaded &&
+    sessions.some((session) => session.id === selectedSessionId)
+  )
     return (
       <RemoteChat
         sessionId={selectedSessionId}
@@ -59,6 +70,7 @@ export function RemoteApp(): React.JSX.Element {
           刷新会话
         </button>
         {sessionError && <p role="alert">{sessionError}</p>}
+        {!sessionsLoaded && !sessionError && <p>正在读取会话…</p>}
         <ul className="remote-session-list">
           {sessions.map((session) => (
             <li key={session.id}>
@@ -69,7 +81,7 @@ export function RemoteApp(): React.JSX.Element {
             </li>
           ))}
         </ul>
-        {sessions.length === 0 && <p>暂无会话</p>}
+        {sessionsLoaded && sessions.length === 0 && <p>暂无会话</p>}
       </main>
     )
   return (
