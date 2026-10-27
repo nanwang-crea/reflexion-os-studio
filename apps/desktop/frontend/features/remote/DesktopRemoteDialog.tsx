@@ -91,14 +91,23 @@ export function DesktopRemoteDialog({
   return (
     <dialog
       ref={dialog}
-      className="dialog-overlay remote-dialog"
+      className="dialog-overlay confirm-dialog-modal remote-dialog"
       aria-label="手机连接"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
       onCancel={(event) => {
         event.preventDefault()
         onClose()
       }}
     >
-      <div className="dialog">
+      <div
+        className="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="手机连接"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="remote-dialog-heading">
           <h3>手机连接 · 局域网</h3>
           <button ref={closeRef} className="ghost" onClick={onClose}>
