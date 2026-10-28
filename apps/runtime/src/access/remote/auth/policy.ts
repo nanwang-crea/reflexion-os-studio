@@ -44,6 +44,25 @@ export class RemoteAccessPolicy {
     params: Record<string, unknown>,
   ): void {
     if (method === 'session.list') return
+    if (method === 'session.create') {
+      const projectId = params.projectId
+      if (
+        projectId === undefined ||
+        projectId === null ||
+        (typeof projectId === 'string' && this.store.projects.get(projectId))
+      )
+        return
+      return this.deny()
+    }
+    if (method === 'workspace.list_dir' || method === 'workspace.read_file') {
+      const projectId = params.projectId
+      if (
+        typeof projectId === 'string' &&
+        this.store.projects.get(projectId)?.folderPath
+      )
+        return
+      return this.deny()
+    }
     if (
       method === 'session.get' &&
       this.store.sessions.get(String(params.sessionId))

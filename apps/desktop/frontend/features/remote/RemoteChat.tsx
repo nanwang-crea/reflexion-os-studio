@@ -2,12 +2,15 @@ import { ChatView } from '../chat/ChatView'
 import { OperationHost } from '../../components/operations/OperationHost'
 import { useRemoteSession } from './useRemoteSession'
 import { useRemoteActions } from './useRemoteActions'
+import type { ResourceLink } from '@reflexion-os-studio/runtime-client'
 
 export function RemoteChat({
   sessionId,
+  onOpenFile,
   onBack,
 }: {
   sessionId: string
+  onOpenFile: (projectId: string, path: string) => void
   onBack: () => void
 }): React.JSX.Element {
   const state = useRemoteSession(sessionId)
@@ -66,6 +69,17 @@ export function RemoteChat({
         onResolveApproval={actions.choose}
         pendingInteractions={state.interactions}
         onInteractionSubmit={actions.answer}
+        onResourceClick={(link: ResourceLink) => {
+          if (link.kind === 'workspaceFile') {
+            const projectId = link.projectId || state.data?.session?.projectId
+            if (projectId) onOpenFile(projectId, link.path)
+            else state.setNotice('独立会话没有关联项目，无法打开工作区文件')
+          } else if (link.kind === 'externalUrl') {
+            window.open(link.uri, '_blank', 'noopener,noreferrer')
+          } else {
+            state.setNotice('手机端暂不支持预览此资产')
+          }
+        }}
       />
       <OperationHost />
     </main>

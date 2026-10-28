@@ -7,7 +7,10 @@ import { RemotePairing } from '../../dist/access/remote/auth/pairing.js'
 import { RuntimeEventBus } from '../../dist/access/events.js'
 import { RemoteLiveState } from '../../dist/access/remote/state/live-state.js'
 import { RuntimeRequestGateway } from '../../dist/access/requests/gateway.js'
-import { remoteHistory } from '../../dist/access/remote/state/projection.js'
+import {
+  remoteCommandResult,
+  remoteHistory,
+} from '../../dist/access/remote/state/projection.js'
 
 const rpc = (method, params = {}) => ({
   jsonrpc: '2.0',
@@ -168,6 +171,82 @@ test('HTTPS serving and pairing reject wrong Host/Origin, pending devices, and u
     (await http(h.status.origin, 'api/pair', { cookie })).status,
     403,
   )
+})
+
+test('approved phone can create scoped sessions and read project files without write credentials', async (t) => {
+  const h = await harness(t)
+  const project = h.store.projects.create({
+    name: 'remote project',
+    folderPath: h.directory,
+  })
+  const { cookie } = await paired(h)
+
+  const catalog = await http(h.status.origin, 'api/rpc', {
+    cookie,
+    body: rpc('remote.catalog'),
+  })
+  assert.deepEqual(catalog.json.result.projects, [
+    { id: project.id, name: project.name },
+  ])
+  assert.equal(JSON.stringify(catalog.json.result).includes(h.directory), false)
+
+  const created = await http(h.status.origin, 'api/rpc', {
+    cookie,
+    body: rpc('session.create', { projectId: project.id }),
+  })
+  assert.equal(created.json.result.session.projectId, project.id)
+  const projectSessions = await http(h.status.origin, 'api/rpc', {
+    cookie,
+    body: rpc('session.list', { projectId: project.id }),
+  })
+  assert.deepEqual(
+    projectSessions.json.result.sessions.map((session) => session.id),
+    [created.json.result.session.id],
+  )
+  const invalidProjectSession = await http(h.status.origin, 'api/rpc', {
+    cookie,
+    body: rpc('session.create', { projectId: 'unknown-project' }),
+  })
+  assert.ok(invalidProjectSession.json.error)
+  assert.equal(
+    h.policy.authorize(
+      { kind: 'device', deviceId: 'phone', accessScope: 'all_sessions' },
+      'workspace.read_file',
+      { projectId: project.id, path: 'README.md' },
+    ),
+    undefined,
+  )
+  assert.throws(() =>
+    h.policy.authorize(
+      { kind: 'device', deviceId: 'phone', accessScope: 'all_sessions' },
+      'workspace.read_file',
+      { projectId: 'unknown', path: 'README.md' },
+    ),
+  )
+  assert.throws(() =>
+    h.policy.authorize(
+      { kind: 'device', deviceId: 'phone', accessScope: 'all_sessions' },
+      'workspace.write_file',
+      { projectId: project.id, path: 'README.md' },
+    ),
+  )
+
+  const projected = remoteCommandResult('workspace.read_file', {
+    content: 'safe content',
+    sizeBytes: 12,
+    totalLines: 1,
+    offset: 0,
+    readComplete: true,
+    readToken: 'write-capability',
+    revision: { sha256: 'secret' },
+  })
+  assert.deepEqual(projected, {
+    content: 'safe content',
+    sizeBytes: 12,
+    totalLines: 1,
+    offset: 0,
+    readComplete: true,
+  })
 })
 
 test('SSE snapshot restores live deltas and pending approvals then delivers only authorized events; revoke ends stream', async (t) => {

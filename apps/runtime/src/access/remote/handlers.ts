@@ -6,6 +6,7 @@ function service(ctx: CommandContext) {
 }
 export const remoteCommandHandlers: Record<string, CommandHandler> = {
   'remote.catalog': (_p, { store }) => ({
+    projects: store.projects.list().map(({ id, name }) => ({ id, name })),
     models: store.providers
       .list()
       .filter((provider) => provider.enabled)
