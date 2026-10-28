@@ -29,6 +29,15 @@ export function remoteEvent(event: RuntimeEvent): RuntimeEvent {
 }
 export function remoteCommandResult(method: string, result: unknown): unknown {
   if (method === 'session.get') return remoteHistory(result as SessionHistory)
+  if (
+    method === 'workspace.read_file' &&
+    typeof result === 'object' &&
+    result
+  ) {
+    const { content, sizeBytes, totalLines, offset, readComplete } =
+      result as Record<string, unknown>
+    return { content, sizeBytes, totalLines, offset, readComplete }
+  }
   if (method === 'operation.get') {
     const value = result as { operation: Record<string, unknown> | null }
     return {

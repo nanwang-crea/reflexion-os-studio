@@ -45,6 +45,12 @@ export type RemoteDevice = z.infer<typeof RemoteDeviceSchema>
 export type RemoteStreamPacket = z.infer<typeof RemoteStreamPacketSchema>
 
 export const RemoteCatalogSchema = z.object({
+  projects: z.array(
+    z.object({
+      id: z.string().min(1),
+      name: z.string().min(1),
+    }),
+  ),
   models: z.array(
     z.object({
       providerId: z.string(),

@@ -69,16 +69,6 @@ export async function harness(t, webRoot, provider) {
       calls.push({ method, params })
       if (method === 'skill.list') return { skills: [] }
       if (method === 'agent_template.list') return { templates: [] }
-      if (method === 'remote.catalog')
-        return {
-          models: [
-            {
-              providerId: 'fixture-provider',
-              providerName: '测试模型',
-              model: 'fixture',
-            },
-          ],
-        }
       return dispatchCommand(method, params, context)
     },
   })
@@ -117,6 +107,7 @@ export async function harness(t, webRoot, provider) {
     message,
     service,
     gateway,
+    policy,
     bus,
     calls,
     executions,
