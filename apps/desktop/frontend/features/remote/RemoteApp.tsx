@@ -86,6 +86,7 @@ export function RemoteApp(): React.JSX.Element {
       .then(({ session }) => {
         setSessions((current) => [session, ...current])
         selectSession(session.id)
+        setNavigationOpen(false)
         setView('sessions')
       })
       .catch(() => setSessionError('创建会话失败，请检查电脑连接'))

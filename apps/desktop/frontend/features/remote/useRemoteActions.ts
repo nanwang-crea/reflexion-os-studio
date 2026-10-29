@@ -131,9 +131,21 @@ export function useRemoteActions(sessionId: string, state: SessionState) {
     const run = runs
       ?.filter((candidate) => candidate.supersededByRunId === null)
       .at(-1)
-    if (run) await retryRun({ runId: run.id })
-    await refresh()
-  }, [runs, refresh])
+    if (!run) {
+      setNotice('找不到可重试的运行，请刷新会话后重试')
+      return
+    }
+    try {
+      await retryRun({ runId: run.id })
+      await refresh()
+    } catch (cause) {
+      setNotice(
+        cause instanceof Error
+          ? `重试失败：${cause.message}`
+          : '重试失败，请检查电脑连接',
+      )
+    }
+  }, [runs, refresh, setNotice])
   const choose = useCallback(
     (toolCallId: string, choiceId: string): void => {
       void resolveApproval({ toolCallId, choiceId })

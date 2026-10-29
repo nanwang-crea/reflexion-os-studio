@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { RemoteCatalog } from '@reflexion-os-studio/contracts'
 import type { Session } from '@reflexion-os-studio/runtime-client'
 
@@ -13,6 +13,7 @@ export function RemoteNavigation({
   onBrowseFiles,
   onRefresh,
   onClose,
+  activeStatus,
 }: {
   projects: Project[]
   sessions: Session[]
@@ -22,11 +23,34 @@ export function RemoteNavigation({
   onBrowseFiles: (projectId: string) => void
   onRefresh: () => void
   onClose?: () => void
+  activeStatus?: 'running' | 'approval' | 'failed'
 }): React.JSX.Element {
+  const expansionKey = `reflexion.remote.expanded-projects:${location.origin}${location.pathname}`
   const [query, setQuery] = useState('')
-  const [expanded, setExpanded] = useState<Set<string>>(
-    () => new Set(projects.map((project) => project.id)),
-  )
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    try {
+      const saved = sessionStorage.getItem(expansionKey)
+      return saved
+        ? new Set(JSON.parse(saved) as string[])
+        : new Set(projects.map((project) => project.id))
+    } catch {
+      return new Set(projects.map((project) => project.id))
+    }
+  })
+  useEffect(() => {
+    if (projects.length === 0) return
+    if (!sessionStorage.getItem(expansionKey)) {
+      setExpanded(new Set(projects.map((project) => project.id)))
+    }
+  }, [expansionKey, projects])
+  useEffect(() => {
+    if (projects.length === 0) return
+    try {
+      sessionStorage.setItem(expansionKey, JSON.stringify([...expanded]))
+    } catch {
+      // Keep navigation usable when browser storage is unavailable.
+    }
+  }, [expansionKey, expanded, projects.length])
   const grouped = useMemo(() => {
     const result = new Map<string, Session[]>()
     for (const session of sessions) {
@@ -88,7 +112,13 @@ export function RemoteNavigation({
               ),
           )
           .map((project) => {
-            const open = expanded.has(project.id) || matches(project.name)
+            const searching = query.trim() !== ''
+            const hasMatchingSession = (grouped.get(project.id) ?? []).some(
+              (session) => matches(session.title),
+            )
+            const open = searching
+              ? matches(project.name) || hasMatchingSession
+              : expanded.has(project.id)
             const projectSessions = (grouped.get(project.id) ?? []).filter(
               (session) => matches(session.title),
             )
@@ -96,7 +126,7 @@ export function RemoteNavigation({
               <section className="remote-nav-project" key={project.id}>
                 <div className="remote-nav-project-head">
                   <button
-                    className="remote-nav-project-name"
+                    className={`remote-nav-project-name${grouped.get(project.id)?.some((session) => session.id === activeSessionId) ? ' active' : ''}`}
                     aria-expanded={open}
                     onClick={() =>
                       setExpanded((current) => {
@@ -139,6 +169,18 @@ export function RemoteNavigation({
                             onClose?.()
                           }}
                         >
+                          {session.id === activeSessionId && activeStatus && (
+                            <span
+                              className={`remote-session-indicator ${activeStatus}`}
+                              aria-label={
+                                activeStatus === 'approval'
+                                  ? '等待审批'
+                                  : activeStatus === 'running'
+                                    ? '正在运行'
+                                    : '运行失败'
+                              }
+                            />
+                          )}
                           {session.title || '新会话'}
                         </button>
                       </li>
@@ -162,6 +204,18 @@ export function RemoteNavigation({
                   onClose?.()
                 }}
               >
+                {session.id === activeSessionId && activeStatus && (
+                  <span
+                    className={`remote-session-indicator ${activeStatus}`}
+                    aria-label={
+                      activeStatus === 'approval'
+                        ? '等待审批'
+                        : activeStatus === 'running'
+                          ? '正在运行'
+                          : '运行失败'
+                    }
+                  />
+                )}
                 {session.title || '新会话'}
               </button>
             </li>

@@ -36,6 +36,23 @@ export function RemoteChat({
 }): React.JSX.Element {
   const state = useRemoteSession(sessionId)
   const actions = useRemoteActions(sessionId, state)
+  const latestRun = state.data?.runs
+    .filter((run) => run.supersededByRunId === null)
+    .at(-1)
+  const activeStatus =
+    state.approvals.length > 0
+      ? 'approval'
+      : latestRun &&
+          [
+            'created',
+            'running',
+            'awaiting_approval',
+            'awaiting_user_input',
+          ].includes(latestRun.status)
+        ? 'running'
+        : latestRun?.status === 'failed'
+          ? 'failed'
+          : undefined
   return (
     <main className="remote-chat">
       <header className="remote-header">
@@ -64,6 +81,7 @@ export function RemoteChat({
               onBrowseFiles={onBrowseFiles}
               onRefresh={onRefresh}
               onClose={onCloseNavigation}
+              activeStatus={activeStatus}
             />
           </div>
         </div>

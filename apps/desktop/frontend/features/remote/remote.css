@@ -125,6 +125,10 @@
   gap: 8px;
   align-items: center;
 }
+.remote-nav-project-name.active {
+  color: var(--text);
+  background: var(--sidebar-selected);
+}
 .remote-nav-action {
   width: 38px;
   height: 38px;
@@ -150,6 +154,32 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
+}
+.remote-nav-session {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.remote-session-indicator {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.remote-session-indicator.running {
+  animation: remote-status-pulse 1.4s ease-in-out infinite;
+}
+.remote-session-indicator.approval {
+  background: var(--warning, #e5a83b);
+}
+.remote-session-indicator.failed {
+  background: var(--danger, #e45656);
+}
+@keyframes remote-status-pulse {
+  50% {
+    opacity: 0.35;
+  }
 }
 .remote-nav-session.active {
   background: var(--sidebar-selected);
