@@ -3,13 +3,34 @@ import { OperationHost } from '../../components/operations/OperationHost'
 import { useRemoteSession } from './useRemoteSession'
 import { useRemoteActions } from './useRemoteActions'
 import type { ResourceLink } from '@reflexion-os-studio/runtime-client'
+import type { RemoteCatalog } from '@reflexion-os-studio/contracts'
+import type { Session } from '@reflexion-os-studio/runtime-client'
+import { RemoteNavigation } from './RemoteNavigation'
 
 export function RemoteChat({
   sessionId,
+  projects,
+  sessions,
+  navigationOpen,
+  onToggleNavigation,
+  onSelectSession,
+  onCreateSession,
+  onBrowseFiles,
+  onRefresh,
+  onCloseNavigation,
   onOpenFile,
   onBack,
 }: {
   sessionId: string
+  projects: RemoteCatalog['projects']
+  sessions: Session[]
+  navigationOpen: boolean
+  onToggleNavigation: () => void
+  onSelectSession: (id: string) => void
+  onCreateSession: (projectId: string | null) => void
+  onBrowseFiles: (projectId: string) => void
+  onRefresh: () => void
+  onCloseNavigation: () => void
   onOpenFile: (projectId: string, path: string) => void
   onBack: () => void
 }): React.JSX.Element {
@@ -18,13 +39,35 @@ export function RemoteChat({
   return (
     <main className="remote-chat">
       <header className="remote-header">
-        <button className="ghost" onClick={onBack}>
+        <button
+          className="ghost remote-menu-button"
+          onClick={onToggleNavigation}
+          aria-label="打开会话导航"
+        >
+          ☰
+        </button>
+        <button className="ghost remote-back-button" onClick={onBack}>
           所有会话
         </button>
         <strong>{state.data?.session?.title ?? '电脑会话'}</strong>
         <span role="status">{state.connection}</span>
-        <span>操作在电脑执行</span>
       </header>
+      {navigationOpen && (
+        <div className="remote-nav-scrim" onClick={onCloseNavigation}>
+          <div onClick={(event) => event.stopPropagation()}>
+            <RemoteNavigation
+              projects={projects}
+              sessions={sessions}
+              activeSessionId={sessionId}
+              onSelectSession={onSelectSession}
+              onCreateSession={onCreateSession}
+              onBrowseFiles={onBrowseFiles}
+              onRefresh={onRefresh}
+              onClose={onCloseNavigation}
+            />
+          </div>
+        </div>
+      )}
       {state.connection.includes('失效') && (
         <button className="ghost" onClick={() => location.reload()}>
           重新配对

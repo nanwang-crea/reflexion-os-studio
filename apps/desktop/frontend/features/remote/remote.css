@@ -4,6 +4,195 @@
   padding: 24px;
   line-height: 1.7;
 }
+.remote-home-shell {
+  display: flex;
+  min-height: 100dvh;
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  background: var(--bg);
+  color: var(--text);
+}
+.remote-navigation {
+  display: flex;
+  flex-direction: column;
+  width: min(320px, 86vw);
+  min-height: 100%;
+  padding: 8px 10px;
+  background: var(--sidebar-bg, var(--bg-elevated));
+  border-right: 1px solid var(--border);
+  color: var(--text);
+}
+.remote-home-shell > .remote-navigation {
+  width: 100%;
+  min-height: 100dvh;
+}
+.remote-nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 54px;
+  padding: 4px 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.remote-nav-brand strong {
+  flex: 1;
+  font-size: 14px;
+}
+.remote-nav-brand .brand-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: #ececec;
+  color: #171717;
+  font-weight: 700;
+}
+.remote-nav-links {
+  display: grid;
+  gap: 3px;
+  padding: 10px 2px;
+  border-bottom: 1px solid var(--border);
+}
+.remote-nav-links .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+}
+.remote-nav-links .nav-item.active {
+  background: var(--sidebar-selected);
+}
+.remote-nav-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 3px;
+  padding: 0 10px;
+  height: 38px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.remote-nav-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 16px;
+}
+.remote-nav-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.remote-nav-section-title {
+  padding: 10px 8px 5px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.remote-nav-project-head {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  border-radius: 7px;
+}
+.remote-nav-project-head:hover,
+.remote-nav-session:hover {
+  background: var(--sidebar-hover);
+}
+.remote-nav-project-name,
+.remote-nav-session {
+  min-width: 0;
+  flex: 1;
+  padding: 9px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-size: 14px;
+}
+.remote-nav-project-name {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.remote-nav-action {
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 18px;
+}
+.remote-nav-action:hover {
+  color: var(--text);
+  background: var(--sidebar-hover);
+}
+.remote-nav-session-list {
+  list-style: none;
+  margin: 1px 0 7px 20px;
+  padding: 0;
+}
+.remote-nav-session {
+  width: 100%;
+  min-height: 38px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.remote-nav-session.active {
+  background: var(--sidebar-selected);
+}
+.remote-nav-empty {
+  padding: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.remote-nav-footer {
+  padding: 10px 8px max(10px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.remote-home-content {
+  display: none;
+}
+.remote-nav-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgb(0 0 0 / 45%);
+}
+.remote-nav-scrim > div {
+  width: min(320px, 86vw);
+  height: 100%;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--bg-elevated);
+  box-shadow: 8px 0 30px rgb(0 0 0 / 20%);
+}
+.remote-nav-scrim .remote-navigation {
+  width: 100%;
+  height: 100%;
+}
+.remote-menu-button {
+  min-width: 42px;
+  font-size: 18px;
+}
+.remote-back-button {
+  display: none;
+}
 .remote-home-toolbar {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -185,5 +374,20 @@
   }
   .remote-chat .user-bubble {
     max-width: 100%;
+  }
+}
+@media (min-width: 700px) {
+  .remote-navigation {
+    width: 280px;
+  }
+  .remote-home-shell > .remote-navigation {
+    width: 280px;
+  }
+  .remote-home-content {
+    display: block;
+    max-width: 900px;
+    flex: 1;
+    margin: 0 auto;
+    padding: 48px;
   }
 }
