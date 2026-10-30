@@ -14,6 +14,7 @@ const sessionMethods = new Set([
   'queue.remove',
   'queue.send_now',
   'queue.resume',
+  'queue.pause',
   'asset.upload_image',
   'asset.upload_document',
   'delegation.list',

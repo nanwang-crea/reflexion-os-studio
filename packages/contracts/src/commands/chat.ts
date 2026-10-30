@@ -154,6 +154,14 @@ export const chatCommands = {
     }),
     result: z.object({ resumed: z.boolean() }),
   },
+  'queue.pause': {
+    // 暂停自动出队；通常由编辑队列消息时使用。
+    params: z.object({
+      requestId: RequestIdSchema,
+      sessionId: z.string().min(1),
+    }),
+    result: z.object({ paused: z.boolean() }),
+  },
   'run.cancel': {
     params: RunCancelParamsSchema,
     result: z.object({ accepted: z.boolean() }),

@@ -57,6 +57,9 @@ export function VirtualTranscript({
   const listRef = useRef<HTMLDivElement>(null)
   const [heights, setHeights] = useState(new Map<string, number>())
   const [viewport, setViewport] = useState({ top: 0, height: 600, width: 0 })
+  const pinnedRef = useRef(pinned)
+  const followFrame = useRef(0)
+  pinnedRef.current = pinned
   const keys = useMemo(
     () =>
       blocks.map((block) =>
@@ -93,12 +96,29 @@ export function VirtualTranscript({
       container.scrollTop
     )
   }, [scrollRef])
-  const measure = useCallback((id: string, height: number): void => {
-    setHeights((current) => {
-      if (Math.abs((current.get(id) ?? -1) - height) < 1) return current
-      return new Map(current).set(id, height)
-    })
-  }, [])
+  const measure = useCallback(
+    (id: string, height: number): void => {
+      setHeights((current) => {
+        if (Math.abs((current.get(id) ?? -1) - height) < 1) return current
+        return new Map(current).set(id, height)
+      })
+      if (!pinnedRef.current || followFrame.current) return
+      followFrame.current = requestAnimationFrame(() => {
+        followFrame.current = 0
+        const container = scrollRef.current
+        if (pinnedRef.current && container)
+          container.scrollTop = container.scrollHeight
+      })
+    },
+    [scrollRef],
+  )
+
+  useEffect(
+    () => () => {
+      if (followFrame.current) cancelAnimationFrame(followFrame.current)
+    },
+    [],
+  )
 
   useLayoutEffect(() => {
     const container = scrollRef.current

@@ -175,6 +175,11 @@ export class ChatAgent {
     }
   }
 
+  /** 暂停自动出队；会话空闲时也不会发送，直到显式恢复。 */
+  pauseQueue(sessionId: string): { paused: boolean } {
+    return { paused: this.queues.pause(sessionId) }
+  }
+
   /** 解除停止 Run 后的队列暂停;会话空闲且队列非空则立即出队发送。 */
   resumeQueue(sessionId: string): { resumed: boolean } {
     const resumed = this.queues.resume(sessionId)

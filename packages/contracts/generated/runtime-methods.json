@@ -91,6 +91,7 @@
     "provider.model.list",
     "provider.test",
     "queue.list",
+    "queue.pause",
     "queue.remove",
     "queue.resume",
     "queue.send_now",

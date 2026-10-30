@@ -1,5 +1,5 @@
 import { isComposing } from '../../lib/keyboard'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   AgentTemplate,
   QueueEntry,
@@ -7,6 +7,7 @@ import type {
 import {
   listQueue,
   onQueueChanged,
+  pauseQueue,
   removeQueue,
   resumeQueue,
   sendNow,
@@ -30,8 +31,10 @@ export function QueueBar(props: QueueBarProps): React.JSX.Element {
   const [items, setItems] = useState<QueueEntry[]>([])
   const [paused, setPaused] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingPending, setEditingPending] = useState(false)
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const resumeAfterEdit = useRef(false)
 
   const refresh = useCallback(async (): Promise<void> => {
     try {
@@ -51,6 +54,15 @@ export function QueueBar(props: QueueBarProps): React.JSX.Element {
   }, [props.sessionId, refresh])
 
   useEffect(() => {
+    const sessionId = props.sessionId
+    return () => {
+      if (!resumeAfterEdit.current) return
+      resumeAfterEdit.current = false
+      void resumeQueue(sessionId)
+    }
+  }, [props.sessionId])
+
+  useEffect(() => {
     return onQueueChanged((sessionId, next, nextPaused) => {
       if (sessionId !== props.sessionId) return
       setItems(next)
@@ -64,18 +76,38 @@ export function QueueBar(props: QueueBarProps): React.JSX.Element {
     })
   }, [props.sessionId])
 
-  const startEdit = (entry: QueueEntry): void => {
-    setEditingId(entry.id)
-    setDraft(entry.content)
-    setError(null)
+  const startEdit = async (entry: QueueEntry): Promise<void> => {
+    setEditingPending(true)
+    try {
+      const result = await pauseQueue(props.sessionId)
+      resumeAfterEdit.current = result.paused
+      setEditingId(entry.id)
+      setDraft(entry.content)
+      setError(null)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      setEditingPending(false)
+    }
+  }
+
+  const finishEdit = async (): Promise<void> => {
+    setEditingId(null)
+    if (!resumeAfterEdit.current) return
+    resumeAfterEdit.current = false
+    try {
+      await resumeQueue(props.sessionId)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    }
   }
 
   const saveEdit = async (): Promise<void> => {
     if (editingId === null || draft.trim() === '') return
     try {
       const result = await updateQueue(props.sessionId, editingId, draft.trim())
-      if (result.item === null) setEditingId(null)
-      else setEditingId(null)
+      if (result.item === null) setError('该消息已不在发送队列中')
+      await finishEdit()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
     }
@@ -114,7 +146,11 @@ export function QueueBar(props: QueueBarProps): React.JSX.Element {
       {paused ? (
         <div className="queue-paused">
           <span>队列已暂停发送（{items.length} 条待发）</span>
-          <button className="ghost" onClick={() => void resume()}>
+          <button
+            className="ghost"
+            onClick={() => void resume()}
+            disabled={editingPending || editingId !== null}
+          >
             <SendIcon />
             继续发送
           </button>
@@ -141,7 +177,7 @@ export function QueueBar(props: QueueBarProps): React.JSX.Element {
                     event.preventDefault()
                     void saveEdit()
                   }
-                  if (event.key === 'Escape') setEditingId(null)
+                  if (event.key === 'Escape') void finishEdit()
                 }}
               />
             ) : (
@@ -187,18 +223,23 @@ export function QueueBar(props: QueueBarProps): React.JSX.Element {
                   >
                     保存
                   </button>
-                  <button className="ghost" onClick={() => setEditingId(null)}>
+                  <button className="ghost" onClick={() => void finishEdit()}>
                     取消
                   </button>
                 </>
               ) : (
                 <>
-                  <button className="ghost" onClick={() => startEdit(entry)}>
+                  <button
+                    className="ghost"
+                    onClick={() => void startEdit(entry)}
+                    disabled={editingPending || editingId !== null}
+                  >
                     修改
                   </button>
                   <button
                     className="ghost"
                     onClick={() => void sendNowClick(entry.id)}
+                    disabled={editingPending || editingId !== null}
                   >
                     <SendIcon />
                     立即发送
@@ -210,6 +251,7 @@ export function QueueBar(props: QueueBarProps): React.JSX.Element {
                 title="删除"
                 aria-label="删除"
                 onClick={() => void remove(entry.id)}
+                disabled={editingPending || editingId !== null}
               >
                 <TrashIcon />
               </button>

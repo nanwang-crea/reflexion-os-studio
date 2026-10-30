@@ -48,6 +48,11 @@ export function resumeQueue(sessionId: string): Promise<{ resumed: boolean }> {
   return request<{ resumed: boolean }>('queue.resume', { sessionId })
 }
 
+/** 暂停自动出队，供编辑排队消息期间保护队列内容。 */
+export function pauseQueue(sessionId: string): Promise<{ paused: boolean }> {
+  return request<{ paused: boolean }>('queue.pause', { sessionId })
+}
+
 export function onQueueChanged(
   handler: (sessionId: string, items: QueueEntry[], paused?: boolean) => void,
 ): () => void {
