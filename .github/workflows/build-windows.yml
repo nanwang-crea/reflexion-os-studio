@@ -148,6 +148,8 @@ jobs:
       - name: Verify native browser adapters and release gates
         run: |
           cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --lib browser::
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/.ci-target/desktop-browser-tests
       - name: Verify packaged workspace services
         run: node scripts/smoke-workspace.mjs --packaged
 
