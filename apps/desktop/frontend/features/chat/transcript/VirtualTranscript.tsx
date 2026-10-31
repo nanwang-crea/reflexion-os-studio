@@ -106,11 +106,13 @@ export function VirtualTranscript({
       followFrame.current = requestAnimationFrame(() => {
         followFrame.current = 0
         const container = scrollRef.current
-        if (pinnedRef.current && container)
+        if (pinnedRef.current && container) {
           container.scrollTop = container.scrollHeight
+          onScrollPositioned?.()
+        }
       })
     },
-    [scrollRef],
+    [onScrollPositioned, scrollRef],
   )
 
   useEffect(
