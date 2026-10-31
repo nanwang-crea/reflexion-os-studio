@@ -151,18 +151,7 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
           </div>
         )}
         {contentText !== '' && (
-          <div
-            key={
-              props.streamingText !== undefined
-                ? `stream-${props.message.id}-${contentText.length}`
-                : 'static'
-            }
-            className={`assistant-content${
-              props.streamingText !== undefined
-                ? ' assistant-content-streaming'
-                : ''
-            }`}
-          >
+          <div className="assistant-content">
             <MarkdownCore
               text={structuredParts.length > 0 ? structuredText : contentText}
               caret={answerStreaming}
