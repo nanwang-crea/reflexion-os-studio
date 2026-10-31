@@ -41,6 +41,7 @@ import { createMcpTool } from './mcp.js'
 import { createLegacyUpdatePlanTool, createManagePlanTool } from './plans.js'
 import { createTaskTool } from './task.js'
 import { createTaskInspectTool } from './delegation/inspect.js'
+import { createHistoryQueryTool } from './chat-history/query.js'
 import { createTeamInspectTool } from './team/inspect.js'
 import { createTeamMutationTool } from './team/mutate.js'
 import { createTeamCreateTool } from './team/create.js'
@@ -166,6 +167,7 @@ function alwaysAvailableTools(ctx: ToolContext): ToolDefinition[] {
   const tools = [
     createCurrentTimeTool(),
     createTaskInspectTool(ctx),
+    createHistoryQueryTool(ctx),
     createWebFetchTool(),
     createSkillUseTool(ctx.skills, ctx.projectId),
     createMemoryRememberTool(ctx),

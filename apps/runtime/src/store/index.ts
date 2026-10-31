@@ -14,6 +14,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { ChatArchiveStore } from './chat/archives.js'
 import { MessageStore } from './chat/messages.js'
+import { HistoryQueryStore } from './chat/historyQuery.js'
 import { ProjectStore } from './chat/projects.js'
 import { RunStore } from './chat/runs.js'
 import { SessionStore } from './chat/sessions.js'
@@ -56,6 +57,7 @@ export class Store {
   readonly sessions: SessionStore
   readonly chatArchives: ChatArchiveStore
   readonly messages: MessageStore
+  readonly historyQuery: HistoryQueryStore
   readonly runs: RunStore
   readonly toolCalls: ToolCallStore
   readonly interactions: UserInteractionStore
@@ -105,6 +107,7 @@ export class Store {
     this.sessions = new SessionStore(this.db)
     this.chatArchives = new ChatArchiveStore(this.db)
     this.messages = new MessageStore(this.db)
+    this.historyQuery = new HistoryQueryStore(dir)
     this.runs = new RunStore(this.db)
     this.toolCalls = new ToolCallStore(this.db)
     this.developer = new DeveloperStore(this.db, this.runs, this.toolCalls)
@@ -181,6 +184,7 @@ export class Store {
   }
 
   close(): void {
+    this.historyQuery.close()
     this.db.close()
   }
 }
