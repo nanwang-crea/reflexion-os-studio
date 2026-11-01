@@ -7,6 +7,7 @@ export function useTranscriptFollow(
   sessionId: string | null,
 ) {
   const [pinned, setPinned] = useState(true)
+  const pinnedRef = useRef(true)
   const position = useRef({ top: 0, height: 0, viewport: 0 })
   const recordPosition = useCallback((): void => {
     const el = scrollRef.current
@@ -17,7 +18,10 @@ export function useTranscriptFollow(
         viewport: el.clientHeight,
       }
   }, [scrollRef])
-  const pause = useCallback((): void => setPinned(false), [])
+  const pause = useCallback((): void => {
+    pinnedRef.current = false
+    setPinned(false)
+  }, [])
   const handleWheel = useCallback(
     (event: WheelEvent<HTMLDivElement>): void => {
       if (event.deltaY >= 0 || event.ctrlKey) return
@@ -50,9 +54,10 @@ export function useTranscriptFollow(
       previous.viewport !== el.clientHeight
     if (!layoutChanged && el.scrollTop !== previous.top) {
       const movingUp = el.scrollTop < previous.top
-      setPinned(
-        !movingUp && el.scrollHeight - el.scrollTop - el.clientHeight < 80,
-      )
+      const nextPinned =
+        !movingUp && el.scrollHeight - el.scrollTop - el.clientHeight < 80
+      pinnedRef.current = nextPinned
+      setPinned(nextPinned)
     }
     recordPosition()
   }, [recordPosition, scrollRef])
@@ -60,6 +65,7 @@ export function useTranscriptFollow(
     const el = scrollRef.current
     if (el) el.scrollTop = el.scrollHeight
     recordPosition()
+    pinnedRef.current = true
     setPinned(true)
   }, [recordPosition, scrollRef])
   useLayoutEffect(scrollToBottom, [sessionId, scrollToBottom])

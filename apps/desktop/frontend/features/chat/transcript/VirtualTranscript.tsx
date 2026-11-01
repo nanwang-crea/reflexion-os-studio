@@ -96,21 +96,41 @@ export function VirtualTranscript({
       container.scrollTop
     )
   }, [scrollRef])
+  const followBottom = useCallback((): void => {
+    const container = scrollRef.current
+    if (!pinnedRef.current || !container || followFrame.current) return
+    const scheduledTop = container.scrollTop
+    // Measurement can trigger another render, and Markdown/layout may settle
+    // one frame later. Follow twice so the final row height is included. If
+    // the user moved upward meanwhile, do not take control back from them.
+    const settle = (remaining: number): void => {
+      followFrame.current = requestAnimationFrame(() => {
+        const current = scrollRef.current
+        if (
+          pinnedRef.current &&
+          current &&
+          current.scrollTop >= scheduledTop - 1
+        ) {
+          current.scrollTop = current.scrollHeight
+          if (remaining > 0) settle(remaining - 1)
+          else followFrame.current = 0
+        } else {
+          followFrame.current = 0
+        }
+      })
+    }
+    settle(1)
+  }, [scrollRef])
+
   const measure = useCallback(
     (id: string, height: number): void => {
       setHeights((current) => {
         if (Math.abs((current.get(id) ?? -1) - height) < 1) return current
         return new Map(current).set(id, height)
       })
-      if (!pinnedRef.current || followFrame.current) return
-      followFrame.current = requestAnimationFrame(() => {
-        followFrame.current = 0
-        const container = scrollRef.current
-        if (pinnedRef.current && container)
-          container.scrollTop = container.scrollHeight
-      })
+      followBottom()
     },
-    [scrollRef],
+    [followBottom],
   )
 
   useEffect(
@@ -124,8 +144,10 @@ export function VirtualTranscript({
     const container = scrollRef.current
     if (!container) return
     const old = previous.current
-    if (pinned) container.scrollTop = container.scrollHeight
-    else if (
+    if (pinned) {
+      container.scrollTop = container.scrollHeight
+      followBottom()
+    } else if (
       !old ||
       old.keys !== keys ||
       old.offsets !== offsets ||
@@ -144,7 +166,16 @@ export function VirtualTranscript({
       height: container.clientHeight,
       width: container.clientWidth,
     })
-  }, [keys, offsets, pinned, top, listTop, scrollRef, onScrollPositioned])
+  }, [
+    keys,
+    offsets,
+    pinned,
+    top,
+    listTop,
+    scrollRef,
+    onScrollPositioned,
+    followBottom,
+  ])
 
   useEffect(() => {
     const container = scrollRef.current
