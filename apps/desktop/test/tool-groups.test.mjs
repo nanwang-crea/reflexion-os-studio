@@ -108,6 +108,37 @@ test('invisible message boundaries merge but commentary separates groups', () =>
   assert.match(separated, /调查完成/)
 })
 
+test('reasoning preview keeps the newest thought right after the label', () => {
+  const props = { streaming: {}, streamingReasoning: {}, runActive: false }
+  const renderReasoning = (reasoning) =>
+    render({
+      ...props,
+      items: [{ message: { id: '1', content: '', reasoning }, toolCalls: [] }],
+    })
+  const preview = (html) =>
+    html.match(/class="reasoning-preview">([\s\S]*?)<\/span>/)[1]
+  assert.equal(
+    preview(renderReasoning('先看看\n现有实现。')),
+    '先看看 现有实现。',
+  )
+  const html = renderReasoning('旧内容。'.repeat(200) + '最新结论在这里。')
+  const truncated = preview(html)
+  assert.ok(
+    truncated.startsWith('…'),
+    'omitted head is marked with an ellipsis',
+  )
+  assert.ok(
+    truncated.endsWith('最新结论在这里。'),
+    'preview keeps the newest reasoning tail',
+  )
+  assert.ok(
+    truncated.length <= 161,
+    `preview stays short, got ${truncated.length}`,
+  )
+  // 预览靠 dir=rtl + 撑满整行会把文字推到行末，与标签之间留大段空白。
+  assert.doesNotMatch(html, /dir="rtl"/)
+})
+
 test('consecutive commands, web, directories and skills collapse without inferring outcomes', () => {
   for (const [tool, kind, label] of [
     ['shell.execute', 'command', '执行了 2 条命令'],
