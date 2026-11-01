@@ -123,6 +123,24 @@ function lastListItemOf(
  * 把光标 span 追加到块的文本末尾；容器型标签下潜到内容节点，
  * 避免生成非法子结构（ul/table 直接挂 span 会被浏览器重排）。
  */
+function markStreamingTail(node: HastChild | undefined): void {
+  if (node?.type === 'element') {
+    node.properties = {
+      ...(node.properties ?? {}),
+      'data-streaming-tail': 'true',
+    }
+  }
+}
+
+function markStreamReveal(node: HastChild | undefined): void {
+  if (node?.type === 'element') {
+    node.properties = {
+      ...(node.properties ?? {}),
+      'data-stream-reveal': 'true',
+    }
+  }
+}
+
 function appendCaret(node: HastChild | undefined): void {
   if (node === undefined || node.type !== 'element') return
   switch (node.tagName) {
@@ -159,7 +177,21 @@ function appendCaret(node: HastChild | undefined): void {
 /** rehype 微插件：caret 模式下给最后一个顶层块追加流式光标。 */
 const rehypeStreamCaret = (): ((tree: unknown) => void) => (tree) => {
   const blocks = (tree as HastElement).children ?? []
-  appendCaret(blocks[blocks.length - 1])
+  const tail = blocks[blocks.length - 1]
+  markStreamingTail(tail)
+  appendCaret(tail)
+}
+
+/**
+ * 只给本次新增的、已经完成的顶层块挂一次性浮现标记。
+ * 正在增长的尾块不标记，避免每个 delta 都重新播放动画。
+ */
+const rehypeStreamReveal = (): ((tree: unknown) => void) => (tree) => {
+  const blocks = (tree as HastElement).children ?? []
+  const elementBlocks = blocks.filter((child) => child.type === 'element')
+  for (let index = 0; index < elementBlocks.length - 1; index += 1) {
+    markStreamReveal(elementBlocks[index])
+  }
 }
 
 /** 资源协议放行（defaultUrlTransform 会把 workspace:// 洗成空串）。 */
@@ -287,7 +319,7 @@ export function MarkdownCore(props: MarkdownCoreProps): React.JSX.Element {
     ) : (
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={caret ? [rehypeStreamCaret] : []}
+        rehypePlugins={caret ? [rehypeStreamCaret, rehypeStreamReveal] : []}
         urlTransform={urlTransform}
         components={components}
       >
@@ -295,5 +327,5 @@ export function MarkdownCore(props: MarkdownCoreProps): React.JSX.Element {
       </ReactMarkdown>
     )
   if (props.bare === true) return <>{inner}</>
-  return <div className="md">{inner}</div>
+  return <div className={`md${caret ? ' md-streaming' : ''}`}>{inner}</div>
 }

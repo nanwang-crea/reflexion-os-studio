@@ -19,6 +19,27 @@
   margin-bottom: 0;
 }
 
+.md-streaming [data-stream-reveal='true'] {
+  animation: markdown-block-in 180ms ease-out both;
+}
+
+@keyframes markdown-block-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .md-streaming [data-stream-reveal='true'] {
+    animation: none;
+  }
+}
+
 .md-p {
   margin: 0 0 8px;
 }
