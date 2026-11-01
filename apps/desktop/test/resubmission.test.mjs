@@ -93,14 +93,13 @@ function sendDeps(overrides = {}) {
   }
 }
 
-test('accepted sends resolve despite refresh failure so composer clears its draft', async () => {
+test('accepted sends on an existing session do not trigger a duplicate refresh', async () => {
   globalThis.__chatRequests = []
-  const notices = []
+  let refreshes = 0
   await useSessionActions(
     sendDeps({
-      setNotice: (value) => notices.push(value),
       refreshSessionData: async () => {
-        throw new Error('refresh failed')
+        refreshes += 1
       },
     }),
   ).sendMessage('hello')
@@ -108,7 +107,7 @@ test('accepted sends resolve despite refresh failure so composer clears its draf
     globalThis.__chatRequests.filter((r) => r.method === 'message.send').length,
     1,
   )
-  assert.equal(notices.at(-1), 'refresh failed')
+  assert.equal(refreshes, 0)
 })
 
 test('rejected sends still reject and retain the composer draft', async () => {

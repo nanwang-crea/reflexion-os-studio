@@ -189,6 +189,7 @@ export function useSessionActions(deps: SessionActionsDeps): {
     const permissionPreset = deps.permissionPreset
     let accepted = false
     try {
+      const hadActiveSession = deps.activeSessionId !== null
       let sessionId = deps.activeSessionId
       if (!sessionId) {
         // 落地页直接发言：选中项目则在项目内建会话，否则建独立会话。
@@ -212,15 +213,16 @@ export function useSessionActions(deps: SessionActionsDeps): {
         throw error
       }
       accepted = true
-      // Uploads may finish after the user navigates to another conversation.
+      // 已有会话由 Runtime 事件统一驱动刷新：run.started/session.updated
+      // 会补齐当前会话，终态事件再负责最终一致性。只有落地页首次发送时，
+      // 才需要在切换到新会话后补一次刷新，避免事件早于页面切换而被过滤。
       if (
         deps.activeSessionRef.current === deps.activeSessionId &&
         deps.activeProjectRef.current === deps.activeProjectId
       ) {
         deps.setActiveSessionId(sessionId)
-        await deps.refreshSessionData(sessionId)
+        if (!hadActiveSession) await deps.refreshSessionData(sessionId)
       }
-      await deps.refreshSessions()
     } catch (error) {
       fail(error)
       // An accepted message must clear the draft even if refreshing fails.

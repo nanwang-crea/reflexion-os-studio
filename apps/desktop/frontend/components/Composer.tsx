@@ -147,18 +147,21 @@ export function Composer(props: ComposerProps): React.JSX.Element {
     if (!content || props.disabled || sending) return
     setSending(true)
     setSendError(null)
+    // 先给出即时反馈，不让输入框等待 Runtime、附件上传和会话刷新完成。
+    // 发送在受理前失败时会在 catch 中恢复文本；附件暂不清理，避免丢失。
+    setDraft('')
+    setSlashIndex(0)
+    setSlashDismissed(false)
+    if (textareaRef.current) textareaRef.current.style.height = 'auto'
     try {
       await props.onSend(
         content,
         agentTemplateId || undefined,
         attachments.images.map((image) => image.file),
       )
-      setDraft('')
       attachments.clear()
-      setSlashIndex(0)
-      setSlashDismissed(false)
-      if (textareaRef.current) textareaRef.current.style.height = 'auto'
     } catch (error) {
+      setDraft(content)
       setSendError(error instanceof Error ? error.message : '发送失败，请重试')
     } finally {
       setSending(false)
