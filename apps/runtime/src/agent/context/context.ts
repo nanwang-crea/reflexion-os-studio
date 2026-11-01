@@ -94,6 +94,9 @@ export class ContextBuilder {
    * 带入；摘要缺失或累计到阈值时在后台刷新。当前请求从不等待摘要模型，缺少
    * 可用 Checkpoint 时直接走确定性 Frame 裁剪。
    * 本地数据损坏（FrameError）直接失败为 internal，不降级。
+   * onCompaction：真的发起后台摘要时通知 'start'，完成/失败后通知 'done'。
+   * 调用方把它转成 run 阶段事件，长上下文等待时用户能看到“正在优化对话
+   * 上下文”，而不是无提示的空窗。确定性裁剪不耗时，不触发该通知。
    */
   async build(
     sessionId: string,
@@ -101,6 +104,7 @@ export class ContextBuilder {
     provider: ProviderRuntimeConfig,
     signal: AbortSignal,
     tools: readonly ToolSpec[] = [],
+    onCompaction?: (stage: 'start' | 'done') => void,
   ): Promise<ModelMessage[]> {
     const buildStartedAt = Date.now()
     // 指令/记忆文件注入（文件即记忆 V2）：失败/为空都不影响对话。
@@ -169,6 +173,7 @@ export class ContextBuilder {
     if (shouldRefresh) {
       // 后台更新只写缓存，不参与本轮首字关键路径。摘要失败时保留旧 checkpoint，
       // 让后续请求仍可复用；同 source hash 的失败由服务层在进程内去重。
+      onCompaction?.('start')
       void ensureCheckpoint({
         store: this.store,
         sessionId,
@@ -189,13 +194,16 @@ export class ContextBuilder {
               through: throughMessageId,
             }).frames.slice(1),
           ) === computeSourceHash(stable),
-      }).catch((error) => {
-        if (!(error instanceof Error && error.name === 'AbortError')) {
-          process.stderr.write(
-            `[runtime] background checkpoint refresh failed: ${String(error)}\n`,
-          )
-        }
       })
+        .then(() => onCompaction?.('done'))
+        .catch((error) => {
+          onCompaction?.('done')
+          if (!(error instanceof Error && error.name === 'AbortError')) {
+            process.stderr.write(
+              `[runtime] background checkpoint refresh failed: ${String(error)}\n`,
+            )
+          }
+        })
     }
 
     const assembled: ContextFrame[] = checkpointValid

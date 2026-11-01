@@ -55,6 +55,7 @@ export function runStatusLabel({
   )
     return '等待回答'
   if (retryLabel) return retryLabel
+  if (activity?.phase === 'compacting') return '正在优化对话上下文'
   if (activity?.phase === 'preparing_tool')
     return activity.toolName === 'task'
       ? `正在准备子任务${activity.taskName ? `：${activity.taskName}` : ''}（参数接收中）`

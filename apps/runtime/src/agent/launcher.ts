@@ -228,6 +228,12 @@ export class RunLauncher {
                 provider,
                 signal,
                 registry.specs(),
+                (stage) =>
+                  emitter.next({
+                    type: 'run.model_activity',
+                    messageId: assistantMessage.id,
+                    phase: stage === 'start' ? 'compacting' : 'waiting',
+                  }),
               )
         },
         registry,

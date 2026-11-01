@@ -155,7 +155,8 @@ export const RuntimeEventSchema = z.discriminatedUnion('type', [
   RunEnvelopeSchema.extend({
     type: z.literal('run.model_activity'),
     messageId: z.string().min(1),
-    phase: z.enum(['waiting', 'preparing_tool']),
+    // compacting：Run 启动时上下文超预算，正在做摘要/压缩收敛（后台或裁剪）。
+    phase: z.enum(['waiting', 'preparing_tool', 'compacting']),
     toolName: z.string().min(1).max(200).optional(),
     taskName: z.string().min(1).max(80).optional(),
   }),

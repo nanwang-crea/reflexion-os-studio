@@ -34,7 +34,15 @@ export function RunActivityStatus(props: {
   const content = (
     <>
       <span className="run-process-label" role="status">
-        {label}
+        <span
+          className={
+            props.activity?.phase === 'compacting'
+              ? 'run-process-label shimmer'
+              : undefined
+          }
+        >
+          {label}
+        </span>
       </span>
       {completed > 0 && (
         <span className="run-process-count">已完成 {completed} 项工具调用</span>

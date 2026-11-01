@@ -2,7 +2,12 @@ import { useCallback, useRef, useState } from 'react'
 
 /** Run 级活动阶段：由事件驱动，对齐 Codex——不靠“内容长什么样”猜状态。 */
 export type RunPhase =
-  'thinking' | 'answering' | 'tool' | 'waiting' | 'preparing_tool'
+  | 'thinking'
+  | 'answering'
+  | 'tool'
+  | 'waiting'
+  | 'preparing_tool'
+  | 'compacting'
 export interface RunActivity {
   phase: RunPhase
   /** phase === 'tool' 时正在执行的工具名。 */
@@ -21,6 +26,27 @@ export interface RunActivity {
 }
 
 /**
+ * waiting 是最低优先级的占位阶段（含上下文压缩结束的回退信号）：真实进展
+ * （思考/作答/工具/准备工具）已经上屏时不得被它覆盖，否则压缩完成会把
+ * 正在作答的状态行打回“等待模型响应”。其余阶段一律按最新事件锁存。
+ */
+const PROGRESS_PHASES: ReadonlySet<RunPhase> = new Set<RunPhase>([
+  'thinking',
+  'answering',
+  'tool',
+  'preparing_tool',
+])
+
+export function shouldDropPhaseTransition(
+  current: RunPhase | undefined,
+  next: RunPhase,
+): boolean {
+  return (
+    next === 'waiting' && current !== undefined && PROGRESS_PHASES.has(current)
+  )
+}
+
+/**
  * Run 级活动阶段（对齐 Codex）：由事件驱动，终态才清除（锁存）。
  * 用 ref 承载当前值，避免事件回调里的闭包读到过期 state。
  */
@@ -36,6 +62,7 @@ export function useRunActivity(): {
   const runActivitiesRef = useRef<Record<string, RunActivity>>({})
   const setRunActivity = useCallback((runId: string, activity: RunActivity) => {
     const current = runActivitiesRef.current[runId]
+    if (shouldDropPhaseTransition(current?.phase, activity.phase)) return
     if (
       current?.phase === activity.phase &&
       current.toolName === activity.toolName &&
