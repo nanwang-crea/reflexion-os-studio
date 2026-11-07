@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { Store } from '../dist/store/index.js'
 import { CHECKPOINT_SCHEMA_VERSION } from '../dist/agent/context/context-checkpoint.js'
 import { ContextBuilder } from '../dist/agent/context/context.js'
+import { estimateMessageTokens } from '@reflexion-os-studio/agent-core'
 
 test('ContextBuilder.build trims immediately without waiting for checkpoint refresh', async () => {
   const store = new Store(
@@ -214,3 +215,36 @@ for (const field of ['constraints', 'knownErrors']) {
     assert.equal(requests, 0)
   })
 }
+
+test('buildIsolated bounds child history when a provider budget is supplied', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'reflexion-ctx-isolated-budget-'))
+  const workspace = mkdtempSync(join(tmpdir(), 'reflexion-ctx-isolated-bw-'))
+  const store = new Store(dataDir)
+  const project = store.projects.create({ name: 'p', folderPath: workspace })
+  const session = store.sessions.create(project.id)
+  for (let i = 0; i < 30; i += 1) {
+    store.messages.create({
+      sessionId: session.id,
+      runId: null,
+      role: i % 2 === 0 ? 'user' : 'assistant',
+      content: `第${i}轮：${'内容'.repeat(300)}`,
+      status: 'completed',
+    })
+  }
+  const messages = new ContextBuilder(store).buildIsolated(
+    session.id,
+    'child-system',
+    { baseUrl: 'http://x', apiKey: 'k', model: 'm', contextBudget: 1200 },
+  )
+  assert.equal(messages[0].content, 'child-system')
+  assert.ok(messages.length < 31, 'child history must be bounded')
+  assert.ok(
+    messages.some(
+      (message) =>
+        message.role === 'user' && message.content.includes('第28轮'),
+    ),
+    'latest child task must survive trimming',
+  )
+  assert.ok(estimateMessageTokens(messages) <= 1200)
+  store.close()
+})

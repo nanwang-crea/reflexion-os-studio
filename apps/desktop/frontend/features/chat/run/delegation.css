@@ -62,7 +62,7 @@
 
 .delegation-open {
   display: grid;
-  grid-template-columns: auto minmax(0, 2fr) minmax(0, 3fr) auto;
+  grid-template-columns: auto minmax(0, 2fr) minmax(0, 3fr) auto auto;
   align-items: center;
   gap: 8px;
   flex: 1;
@@ -72,6 +72,32 @@
   background: transparent;
   color: inherit;
   text-align: left;
+}
+
+.delegation-open .trace-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.delegation-open .trace-preset {
+  flex: none;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.delegation-open .trace-preset.preset-workspace-full {
+  color: var(--warning-text);
+  border-color: color-mix(in srgb, var(--warning-text) 45%, transparent);
 }
 
 .delegation-open .trace-name {

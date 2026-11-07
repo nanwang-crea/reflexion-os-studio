@@ -12,6 +12,7 @@ import { redactBrowserCalls } from './browser-admission.js'
 import { resolveOutputBudget } from '../../provider/output-budget.js'
 import { resolveModelImages } from '../context/model-images.js'
 import {
+  estimateTokens,
   ModelProtocolError,
   requireModelTurnDisposition,
   type ModelMessage,
@@ -235,10 +236,19 @@ export async function executeModelTurn(
     ? await state.metrics.measure('modelMs', observedRequest)
     : await observedRequest()
   await input.streaming?.finish(result.toolCalls, result.finishReason)
+  // Provider 未返回 usage 时用本地估算兜底：否则 runs.usage 永远为空，
+  // Run/子 Agent 的 token 预算会静默失效（UI 用量也显示不出来）。
+  const estimatedCompletionTokens =
+    estimateTokens(result.content) +
+    estimateTokens(result.reasoning ?? '') +
+    result.toolCalls.reduce(
+      (total, call) => total + estimateTokens(call.arguments),
+      0,
+    )
   input.onModelResult?.(
     result.usage ?? {
-      promptTokens: new TextEncoder().encode(JSON.stringify(messages)).length,
-      completionTokens: new TextEncoder().encode(JSON.stringify(result)).length,
+      promptTokens: estimateRequestInputTokens(messages, tools),
+      completionTokens: estimatedCompletionTokens,
     },
     result.usage === undefined,
   )

@@ -1,6 +1,7 @@
 import type {
   ContentPart,
   MessageEditResendParams,
+  PermissionPreset,
   RunRetryParams,
 } from '@reflexion-os-studio/contracts'
 import { RunEventEmitter, type EventNotifier } from '../../events.js'
@@ -29,6 +30,9 @@ export class RunResubmissionService {
     private readonly launch: (
       input: Omit<Parameters<RunLauncher['launch']>[0], 'childRunStarter'>,
     ) => void,
+    /** 读取该 Run 记录的档位（同一进程内一直有效），供重试延续。 */
+    private readonly presetOf: (runId: string) => PermissionPreset = () =>
+      DEFAULT_PRESET,
   ) {}
 
   startRetry(params: RunRetryParams): {
@@ -92,9 +96,9 @@ export class RunResubmissionService {
       apiKey,
       model,
       sampling: resolveSampling(profile),
-      // 重试不继承高权限档：回落默认预设（workspace-read）重跑；
-      // 会话级 ask-everything 覆盖项仍生效（只会更严，不构成提权）。
-      permissionPreset: DEFAULT_PRESET,
+      // 重试不改变用户选择的档位：优先本次命令带来的档位快照，
+      // 其次沿用原 Run 记下的档位，最后才兜底最窄日常档。
+      permissionPreset: params.permissionPreset ?? this.presetOf(original.id),
       defaultChildTemplateId: original.agentTemplateId ?? undefined,
       skill:
         original.skillId === null

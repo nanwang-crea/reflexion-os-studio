@@ -12,6 +12,7 @@ import type {
   ToolCall,
   Delegation,
   RunEvent,
+  PermissionPreset,
 } from '@reflexion-os-studio/runtime-client'
 import { Composer } from '../../components/Composer'
 import { ArrowDownIcon, SparkIcon } from '../../ui/icons'
@@ -21,6 +22,7 @@ import { buildChatBlocks } from './chat-blocks'
 import type { DraftAttachment } from '../../components/composer/useComposerAttachments'
 import { MAX_MESSAGE_ATTACHMENTS } from '@reflexion-os-studio/runtime-client'
 import { validateAttachmentFile } from './attachments/upload-message-files'
+import { PERMISSION_PRESET_BADGES } from '../../hooks/permissions/usePermissionPreset'
 
 export function ChatView(props: ChatViewProps): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -155,6 +157,38 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
         run.status === 'awaiting_approval' ||
         run.status === 'awaiting_user_input',
     )
+  // 档位切换只影响下一条消息：Run 运行中切换时给一次短提示，4s 后自动淡出，
+  // 并在下一条消息发出（真正生效）时立刻收起。绝不按 Run 时长常驻。
+  const runActiveRef = useRef(runActive)
+  runActiveRef.current = runActive
+  const [presetNotice, setPresetNotice] = useState<PermissionPreset | null>(
+    null,
+  )
+  const previousPresetRef = useRef<PermissionPreset | null>(null)
+  useEffect(() => {
+    const previous = previousPresetRef.current
+    previousPresetRef.current = props.permissionValue
+    if (previous === null || previous === props.permissionValue) return
+    if (!runActiveRef.current) {
+      setPresetNotice(null)
+      return
+    }
+    setPresetNotice(props.permissionValue)
+  }, [props.permissionValue])
+  useEffect(() => {
+    if (presetNotice === null) return
+    const timer = window.setTimeout(() => setPresetNotice(null), 4000)
+    return () => window.clearTimeout(timer)
+  }, [presetNotice])
+  // 新消息发出即代表新档位生效：提示立刻撤下，同时保持 onSend 引用稳定以便 Composer memo。
+  const onSendProp = props.onSend
+  const handleSend = useCallback<ChatViewProps['onSend']>(
+    async (content, agentTemplateId, images) => {
+      setPresetNotice(null)
+      await onSendProp(content, agentTemplateId, images)
+    },
+    [onSendProp],
+  )
   const activeRunIds = useMemo(() => {
     const ids = new Set(
       visibleRuns
@@ -388,9 +422,9 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
           approvals={sessionApprovals}
           interactions={sessionInteractions}
         />{' '}
-        {runActive && (
+        {presetNotice !== null && (
           <div className="permission-next-message-hint" role="status">
-            权限档位已更新，下一条消息生效
+            已切换为「{PERMISSION_PRESET_BADGES[presetNotice]}」，下一条消息生效
           </div>
         )}
         {!pinned && messages.length > 0 && (
@@ -423,7 +457,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
           skills={props.skills}
           agentTemplates={props.agentTemplates}
           prefill={props.composerPrefill ?? null}
-          onSend={props.onSend}
+          onSend={handleSend}
           onStop={props.onStop}
         />
       </div>

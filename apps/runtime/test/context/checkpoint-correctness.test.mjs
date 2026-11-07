@@ -6,6 +6,7 @@ import {
   computeSourceHash,
   CHECKPOINT_SCHEMA_VERSION,
   CHECKPOINT_FAILURE_COOLDOWN_MS,
+  CHECKPOINT_SESSION_BACKOFF_BASE_MS,
 } from '../../dist/agent/context/context-checkpoint.js'
 import { SUMMARY, memoryCheckpoint } from './checkpoint-fixtures.mjs'
 
@@ -49,7 +50,11 @@ test('invalid refresh preserves a usable earlier summary and retries after a bou
   assert.equal(fixture.row, saved)
   assert.equal((await ensureCheckpoint(refresh)).failed, true)
   assert.equal(calls, 1)
-  now += CHECKPOINT_FAILURE_COOLDOWN_MS + 1
+  now +=
+    Math.max(
+      CHECKPOINT_FAILURE_COOLDOWN_MS,
+      CHECKPOINT_SESSION_BACKOFF_BASE_MS,
+    ) + 1
   assert.equal((await ensureCheckpoint(refresh)).failed, false)
   assert.equal(calls, 2)
   assert.equal(fixture.row.summary.goal, 'recovered')

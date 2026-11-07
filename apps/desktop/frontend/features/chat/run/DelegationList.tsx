@@ -1,6 +1,10 @@
 import { useState } from 'react'
 import type { Delegation } from '@reflexion-os-studio/runtime-client'
 import { cancelDelegation } from '../../../api/agents'
+import {
+  PERMISSION_PRESET_BADGES,
+  PERMISSION_PRESET_HINTS,
+} from '../../../hooks/permissions/usePermissionPreset'
 import { ChevronIcon } from '../../../ui/icons'
 import { ChildAgentTrace } from './ChildAgentTrace'
 
@@ -60,6 +64,8 @@ export function DelegationList({
             const attention = delegation.agentInstance
               ? attentionByAgentId?.get(delegation.agentInstance.id)
               : undefined
+            // 子 Agent 的实际执行档位（可与父档位不同：模板只能收窄）。
+            const preset = delegation.execution?.permissionPreset
             return (
               <div
                 key={delegation.id}
@@ -88,6 +94,14 @@ export function DelegationList({
                   <span className="trace-summary">
                     {delegation.task.replace(/\s+/g, ' ').trim()}
                   </span>
+                  {preset !== undefined && (
+                    <span
+                      className={`trace-preset preset-${preset}`}
+                      title={`子 Agent 实际档位：${PERMISSION_PRESET_HINTS[preset]}`}
+                    >
+                      {PERMISSION_PRESET_BADGES[preset]}
+                    </span>
+                  )}
                   <span
                     className={`trace-status${attention ? ' attention' : ''}`}
                   >

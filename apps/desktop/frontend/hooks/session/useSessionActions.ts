@@ -314,6 +314,7 @@ export function useSessionActions(deps: SessionActionsDeps): {
       const separator = modelKey ? modelKey.indexOf('::') : -1
       await chatApi.retryRun({
         runId: lastFinishedBadly.id,
+        permissionPreset: deps.permissionPreset,
         providerId:
           modelKey && separator > 0 ? modelKey.slice(0, separator) : undefined,
         reasoningEffort: deps.requestedReasoningEffort,

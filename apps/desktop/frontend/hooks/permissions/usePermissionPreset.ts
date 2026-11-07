@@ -40,6 +40,14 @@ export const PERMISSION_PRESET_LABELS: Record<PermissionPreset, string> = {
   'workspace-write': '工作区读写',
   'workspace-full': '工作区完全允许',
 }
+
+/** 徽标用短名：不带“推荐”等引导词，用于子 Agent 实际档位标注。 */
+export const PERMISSION_PRESET_BADGES: Record<PermissionPreset, string> = {
+  'workspace-read': '谨慎模式',
+  'workspace-write': '工作区读写',
+  'workspace-full': '完全允许',
+}
+
 export const PERMISSION_PRESET_HINTS: Record<PermissionPreset, string> = {
   'workspace-read':
     '读取自动放行；写入、删除与命令执行逐次询问。工作区外访问需显式提权。',

@@ -8,22 +8,29 @@ import type { ReadyAppProps } from './ready-app-props'
 /** 运行时就绪后的界面装配；状态仍由 App 持有。 */
 export function ReadyApp(props: ReadyAppProps): React.JSX.Element {
   const archive = useChatArchiveActions(props)
+  // Composer 是 memo 组件：这里下沉到稳定字段，保证对象 props 身份稳定。
+  const {
+    approvalOverride,
+    changeApprovalOverride,
+    dangerLease,
+    setDangerDialogOpen,
+  } = props
   const composerAdvanced = useMemo(
     () => ({
-      approvalOverride: props.approvalOverride,
+      approvalOverride,
       onApprovalOverrideChange: (
         value: NonNullable<ReadyAppProps['approvalOverride']>,
       ) => {
-        void props.changeApprovalOverride(value)
+        void changeApprovalOverride(value)
       },
-      dangerActive: props.dangerLease !== null,
-      onOpenDanger: () => props.setDangerDialogOpen(true),
+      dangerActive: dangerLease !== null,
+      onOpenDanger: () => setDangerDialogOpen(true),
     }),
     [
-      props.approvalOverride,
-      props.changeApprovalOverride,
-      props.dangerLease,
-      props.setDangerDialogOpen,
+      approvalOverride,
+      changeApprovalOverride,
+      dangerLease,
+      setDangerDialogOpen,
     ],
   )
   return (

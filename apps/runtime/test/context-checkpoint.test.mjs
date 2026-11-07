@@ -9,6 +9,8 @@ import {
   ensureCheckpoint,
   sanitizeSummary,
   filterSecretLine,
+  resetCheckpointState,
+  classifyCheckpointError,
 } from '../dist/agent/context/context-checkpoint.js'
 
 function freshStore() {
@@ -234,4 +236,88 @@ test('computeSourceHash differs when tool result content changes', () => {
   ]
   assert.notEqual(computeSourceHash(framesA), computeSourceHash(framesB))
   assert.equal(computeSourceHash(framesA), computeSourceHash(framesA))
+})
+
+test('refresh failure reports stage/code and backs off per session', async () => {
+  resetCheckpointState()
+  const fixture = freshStore()
+  const failures = []
+  let calls = 0
+  const fail = async () => {
+    calls += 1
+    throw new Error('checkpoint summary: no JSON object in response')
+  }
+  const runWith = (suffix) =>
+    ensureCheckpoint(
+      options(fixture, {
+        summarize: fail,
+        onFailure: (failure) => failures.push(failure),
+        stableFrames: [
+          ...stableFrames(),
+          { kind: 'assistant_text', content: suffix },
+        ],
+      }),
+    )
+  const first = await runWith('a')
+  assert.equal(first.failed, true)
+  assert.equal(first.skipped, false)
+  assert.deepEqual(failures[0], {
+    stage: 'summarize',
+    reason: 'summary_no_json',
+  })
+  assert.equal(calls, 1)
+  // 不同 source hash 会绕过同 hash 冷却，但会话级退避仍应拦住重复摘要。
+  const second = await runWith('b')
+  assert.equal(second.failed, true)
+  assert.equal(second.skipped, true)
+  assert.equal(second.failure.reason, 'backoff')
+  assert.equal(calls, 1, 'session backoff must stop repeated summaries')
+})
+
+test('validateSource failure is reported as source_changed and never commits', async () => {
+  resetCheckpointState()
+  const fixture = freshStore()
+  const failures = []
+  const result = await ensureCheckpoint(
+    options(fixture, {
+      summarize: async () => SUMMARY,
+      validateSource: () => false,
+      onFailure: (failure) => failures.push(failure),
+    }),
+  )
+  assert.equal(result.failed, true)
+  assert.equal(result.skipped, false)
+  assert.deepEqual(failures[0], {
+    stage: 'validate',
+    reason: 'source_changed',
+  })
+  assert.equal(fixture.store.contextCheckpoints.get(fixture.session.id), null)
+})
+
+test('classifyCheckpointError maps provider codes and summary failures', () => {
+  assert.equal(
+    classifyCheckpointError(
+      Object.assign(new Error('transport down'), { code: 'network' }),
+    ),
+    'provider_network',
+  )
+  assert.equal(
+    classifyCheckpointError(
+      new Error('checkpoint summary: output truncated (length)'),
+    ),
+    'summary_truncated',
+  )
+  assert.equal(
+    classifyCheckpointError(
+      new Error('checkpoint summary: no JSON object in response'),
+    ),
+    'summary_no_json',
+  )
+  assert.equal(
+    classifyCheckpointError(
+      new Error('checkpoint source changed during summarization'),
+    ),
+    'source_changed',
+  )
+  assert.equal(classifyCheckpointError(new Error('boom')), 'internal')
 })

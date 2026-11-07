@@ -8,6 +8,7 @@ import {
   summarizeCheckpointFrames,
   ensureCheckpoint,
   transcriptOf,
+  SUMMARY_MAX_OUTPUT_TOKENS,
 } from '../../dist/agent/context/context-checkpoint.js'
 import { transcriptChunks } from '../../dist/agent/context/checkpoint/transcript.js'
 import {
@@ -32,7 +33,7 @@ for (const [apiFormat, path] of [
         apiFormat === 'openai-responses'
           ? body.max_output_tokens
           : (body.max_tokens ?? body.max_completion_tokens),
-        4096,
+        SUMMARY_MAX_OUTPUT_TOKENS,
       )
       if (apiFormat === 'anthropic')
         assert.equal(request.headers['x-api-key'], provider.apiKey)

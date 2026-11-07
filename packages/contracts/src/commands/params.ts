@@ -117,5 +117,8 @@ export const RunRetryParamsSchema = z.object({
   providerId: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
   reasoningEffort: ReasoningEffortSchema.nullable().optional(),
+  // 重试沿用用户当前档位（选择即生效）；缺省沿用原 Run 记录过的档位，
+  // 仅在同进程无记录时才回落最窄日常档（旧调用/跨进程兜底）。
+  permissionPreset: PermissionPresetSchema.optional(),
 })
 export type RunRetryParams = z.infer<typeof RunRetryParamsSchema>

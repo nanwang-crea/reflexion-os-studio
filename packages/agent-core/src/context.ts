@@ -9,8 +9,14 @@ import type { ModelMessage } from './types.js'
 export function estimateTokens(text: string): number {
   let cjk = 0
   let other = 0
+  // 按码点判区间，避免每个字符跑一次正则（长工具结果上是热点路径）。
   for (const char of text) {
-    if (/[\u3000-\u9fff\uff00-\uffef]/.test(char)) cjk += 1
+    const code = char.codePointAt(0) ?? 0
+    if (
+      (code >= 0x3000 && code <= 0x9fff) ||
+      (code >= 0xff00 && code <= 0xffef)
+    )
+      cjk += 1
     else other += 1
   }
   return cjk + Math.ceil(other / 4)

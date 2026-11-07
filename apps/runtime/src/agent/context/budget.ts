@@ -70,6 +70,22 @@ export function estimateToolTokens(tools: readonly ToolSpec[]): number {
     : estimateTokens(JSON.stringify(tools)) + tools.length * 12
 }
 
+/** 最大几个工具 schema 的占比：工具 schema 常年占预算大头，排障需要定位来源。 */
+export function toolSchemaBreakdown(
+  tools: readonly ToolSpec[],
+  limit = 3,
+): string {
+  return tools
+    .map((tool) => ({
+      name: tool.name,
+      tokens: estimateTokens(JSON.stringify(tool)),
+    }))
+    .sort((a, b) => b.tokens - a.tokens)
+    .slice(0, limit)
+    .map((entry) => `${entry.name}:${entry.tokens}`)
+    .join(',')
+}
+
 export function estimateRequestInputTokens(
   messages: ModelMessage[],
   tools: readonly ToolSpec[],
@@ -91,15 +107,24 @@ export function checkRequestBudget(
   const estimated = estimateRequestInputTokens(messages, tools)
   if (provider.contextWindow != null && provider.contextWindow > 0) {
     const { outputReserve } = resolveOutputBudget(provider)
-    if (estimated + outputReserve > provider.contextWindow)
+    if (estimated + outputReserve > provider.contextWindow) {
+      // 失败时指出固定开销来源：只报“输入过长”会让用户误以为历史可以再删。
+      const toolTokens = estimateToolTokens(tools)
+      const systemTokens =
+        messages[0]?.role === 'system' ? estimateTokens(messages[0].content) : 0
+      const composition =
+        systemTokens > 0 || toolTokens > 0
+          ? `（其中 system 提示约 ${systemTokens} token，工具 schema 约 ${toolTokens} token）`
+          : ''
       throw new ProviderError(
         'configuration',
-        `模型上下文窗口不足：估算输入 ${estimated} token，输出预留 ${outputReserve} token，窗口 ${provider.contextWindow} token。请缩短本次输入或检查模型窗口与输出参数。`,
+        `模型上下文窗口不足：估算输入 ${estimated} token${composition}，输出预留 ${outputReserve} token，窗口 ${provider.contextWindow} token。请缩短本次输入、减少工具，或检查模型窗口与输出参数。`,
       )
+    }
   }
   const softLimit = contextBudgetFor(provider) // already includes output reserve, but not tools
   if (estimated > softLimit)
     process.stderr.write(
-      `[metrics] contextSoftBudgetExceeded:true estimatedInputTokens:${estimated} softBudget:${softLimit} toolSchemaTokens:${estimateToolTokens(tools)}\n`,
+      `[metrics] contextSoftBudgetExceeded:true estimatedInputTokens:${estimated} softBudget:${softLimit} toolSchemaTokens:${estimateToolTokens(tools)} toolSchemaTop:${toolSchemaBreakdown(tools)}\n`,
     )
 }

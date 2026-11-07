@@ -55,6 +55,8 @@ export function retryRun(input: {
   providerId?: string
   model?: string
   reasoningEffort?: ReasoningEffort | null
+  /** 重试沿用当前档位：选了什么就重试什么，不静默回落。 */
+  permissionPreset?: 'workspace-read' | 'workspace-write' | 'workspace-full'
 }): Promise<{
   messageId: string
   runId: string

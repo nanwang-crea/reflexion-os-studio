@@ -49,13 +49,16 @@ export function boundFramesForModel(
   budgetTokens: number,
   keepRecentFrames = 8,
 ): ContextFrame[] {
-  let current = [...frames]
-  if (estimateFrameTokens(current) <= budgetTokens) return current
-  let folded = foldOldestToolRoundFrame(current, keepRecentFrames)
-  while (folded !== null) {
-    current = folded
-    if (estimateFrameTokens(current) <= budgetTokens) return current
-    folded = foldOldestToolRoundFrame(current, keepRecentFrames)
+  // 就地折叠自有副本，并增量维护 token 总数：逐帧重扫全量历史会退化为
+  // O(n²)（大会话实测 10s+），这里每折一帧只重算被替换的那一帧。
+  const current = [...frames]
+  let total = estimateFrameTokens(current)
+  if (total <= budgetTokens) return current
+  for (;;) {
+    const delta = foldOldestToolRoundFrameInPlace(current, keepRecentFrames)
+    if (delta === null) break
+    total += delta
+    if (total <= budgetTokens) return current
   }
   // 截断兜底：保留 system + 最近 Frame 窗口。
   const head = current[0]?.kind === 'system' ? 1 : 0
@@ -109,10 +112,10 @@ export function boundFramesForModel(
 }
 
 /** 折叠最老的工具轮 Frame 为说明性 assistant 文本；无可折叠返回 null。 */
-function foldOldestToolRoundFrame(
+function foldOldestToolRoundFrameInPlace(
   frames: ContextFrame[],
   keepRecentFrames: number,
-): ContextFrame[] | null {
+): number | null {
   const head = frames[0]?.kind === 'system' ? 1 : 0
   const protectedStart = Math.max(head, frames.length - keepRecentFrames)
   for (let i = head; i < protectedStart; i += 1) {
@@ -124,9 +127,10 @@ function foldOldestToolRoundFrame(
       kind: 'assistant_text',
       content: `${prefix}[此前的 ${frame.assistant.toolCalls.length} 个工具调用及其结果已因上下文过长省略]`,
     }
-    const kept = [...frames]
-    kept.splice(i, 1, folded)
-    return kept
+    const before = estimateFrameTokens([frame])
+    frames[i] = folded
+    // 返回本次折叠的 token 增量（负数=净减少），供调用方增量维护总数。
+    return estimateFrameTokens([folded]) - before
   }
   return null
 }

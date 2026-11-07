@@ -237,3 +237,59 @@ test('tool budget rejects the whole batch and fails the run immediately', async 
 })
 
 import './output-recovery-runner.test.mjs'
+
+test('missing provider usage still charges the estimated run token budget', async () => {
+  const store = freshStore()
+  const project = store.projects.create({ name: 'p', folderPath: '/tmp/p' })
+  const session = store.sessions.create(project.id)
+  const run = store.runs.create({
+    sessionId: session.id,
+    providerId: 'provider',
+    model: 'model',
+  })
+  const firstAssistantMessage = store.messages.create({
+    sessionId: session.id,
+    runId: run.id,
+    role: 'assistant',
+    content: '',
+    status: 'pending',
+  })
+  const server = await startServer((_request, response) => {
+    response.writeHead(200, { 'content-type': 'text/event-stream' })
+    sendSse(response, 'answer without usage')
+  })
+  try {
+    await new RunRunner(store).execute({
+      run,
+      provider: {
+        baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
+        apiKey: 'key',
+        model: 'model',
+        maxRetries: 0,
+      },
+      buildHistory: async () => [{ role: 'user', content: 'hello' }],
+      registry: new ToolRegistry(),
+      workspaceRoot: null,
+      gate: new PermissionGate({
+        preset: 'workspace-write',
+        hasWorkspace: false,
+        approvalOverride: 'default',
+        dangerActive: () => false,
+      }),
+      approvals: new ApprovalGateway(),
+      settings: { maxTurns: 2, maxRunTotalTokens: 1 },
+      controller: new AbortController(),
+      emitter: new RunEventEmitter(run.id, () => {}),
+      firstAssistantMessage,
+    })
+  } finally {
+    await new Promise((resolve) => server.close(resolve))
+  }
+  const stored = store.runs.get(run.id)
+  assert.equal(stored.status, 'failed')
+  assert.equal(stored.errorCode, 'run_token_budget')
+  assert.ok(
+    (stored.usage?.promptTokens ?? 0) > 0,
+    'estimated usage must be recorded when provider omits usage',
+  )
+})

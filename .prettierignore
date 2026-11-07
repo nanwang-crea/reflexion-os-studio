@@ -13,6 +13,11 @@ src-tauri/gen
 .cache/
 .worktrees/
 **/.worktrees/**
+# 环境变量模板/本地覆盖文件：属敏感路径禁读名单，且不是 Prettier 目标格式
+**/.env*
+
+# 测试运行留下的临时数据目录（内含 secrets.json，禁止格式化扫描）
+**/.tmp-test-data/
 pnpm-lock.yaml
 
 # 独立 Skill 子仓库，不属于主项目格式化范围

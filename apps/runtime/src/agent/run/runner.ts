@@ -265,7 +265,14 @@ export class RunRunner {
                 firstAssistantMessage: input.firstAssistantMessage,
                 childTokenBudget: input.childTokenBudget,
                 runTotalTokenBudget: budgets.maxRunTotalTokens,
-                onModelResult: input.onModelResult,
+                // Provider 缺 usage 时把本地估算写回 runs.usage，保证
+                // Run/子 Agent token 预算与 UI 用量仍然生效；调用方显式
+                // 提供回调时由调用方负责（避免重复累计）。
+                onModelResult:
+                  input.onModelResult ??
+                  ((usage, estimated) => {
+                    if (estimated) this.store.runs.addUsage(run.id, usage)
+                  }),
                 streaming,
               },
               messages,

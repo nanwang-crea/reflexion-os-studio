@@ -16,9 +16,28 @@ import { transcriptChunks } from './transcript.js'
 import { observeModelInvocation } from '../../../diagnostics/model-invocation.js'
 import type { Store } from '../../../store/index.js'
 
-const SUMMARY_MAX_OUTPUT_TOKENS = 4096
+export const SUMMARY_MAX_OUTPUT_TOKENS = 8192
 const SUMMARY_MAX_INPUT_TOKENS = 32_000
 const MAX_SUMMARY_CHUNKS = 32
+
+/** 模型输出可能包在代码块/前后说明中；只取其中的 JSON 对象。 */
+function extractJsonObject(text: string): unknown | null {
+  const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(text)
+  const candidate = fenced?.[1]?.trim() ?? text
+  try {
+    return JSON.parse(candidate) as unknown
+  } catch {
+    // 模型可能输出说明文字包裹 JSON；退化为首尾花括号范围。
+  }
+  const start = candidate.indexOf('{')
+  const end = candidate.lastIndexOf('}')
+  if (start === -1 || end <= start) return null
+  try {
+    return JSON.parse(candidate.slice(start, end + 1)) as unknown
+  } catch {
+    return null
+  }
+}
 
 function requestMessages(
   summary: ContextCheckpointSummary | null,
@@ -115,14 +134,16 @@ export async function summarizeCheckpointFrames(
         )
       : await request()
     signal.throwIfAborted()
+    // 输出被截断时 JSON 必然不完整；用稳定错误码让上层退避，而不是把
+    // 半截 JSON 当摘要提交。
+    if (result.finishReason === 'length')
+      throw new Error('checkpoint summary: output truncated (length)')
     if (result.finishReason !== 'stop' || result.toolCalls.length > 0)
       throw new Error('checkpoint summary: response did not complete as text')
-    const text = result.content.trim()
-    const start = text.indexOf('{')
-    const end = text.lastIndexOf('}')
-    if (start === -1 || end <= start)
+    const parsed = extractJsonObject(result.content.trim())
+    if (parsed === null)
       throw new Error('checkpoint summary: no JSON object in response')
-    summary = sanitizeSummary(JSON.parse(text.slice(start, end + 1)))
+    summary = sanitizeSummary(parsed)
   }
   if (count === 0) throw new Error('checkpoint summary: no source content')
   return summary

@@ -1,4 +1,5 @@
 import { readCheckpointTail } from './checkpoint/fast-path.js'
+import { refreshCheckpoint } from './checkpoint/refresh.js'
 import { checkpointSummaryHasContent } from './checkpoint/summary.js'
 import { formatCheckpointBlock } from './checkpoint/format.js'
 import { contextBudgetFor, type ProviderRuntimeConfig } from './budget.js'
@@ -14,7 +15,10 @@ import {
 } from '@reflexion-os-studio/agent-core'
 import type { Store } from '../../store/index.js'
 import type { ToolSpec } from '@reflexion-os-studio/contracts'
-import { buildInstructionBlock } from '../instructions/render.js'
+import {
+  buildInstructionBlock,
+  INSTRUCTION_TOTAL_TOKEN_BUDGET,
+} from '../instructions/render.js'
 import {
   framesToValidatedMessages,
   reconstructSessionFramesWithIds,
@@ -22,8 +26,6 @@ import {
 import {
   CHECKPOINT_SCHEMA_VERSION,
   computeSourceHash,
-  ensureCheckpoint,
-  summarizeCheckpointFrames,
 } from './context-checkpoint.js'
 
 /** Recent tools remain atomic; background refresh cadence is unchanged. */
@@ -79,13 +81,27 @@ export class ContextBuilder {
   constructor(private readonly store: Store) {}
 
   /** Phase 3A 子 Agent 上下文：不读取父历史、AGENTS.md、MEMORY.md 或 checkpoint。 */
-  buildIsolated(sessionId: string, systemPrompt: string): ModelMessage[] {
+  buildIsolated(
+    sessionId: string,
+    systemPrompt: string,
+    provider?: ProviderRuntimeConfig,
+    tools: readonly ToolSpec[] = [],
+  ): ModelMessage[] {
     const { frames } = reconstructSessionFramesWithIds(
       this.store,
       sessionId,
       systemPrompt,
     )
-    return framesToValidatedMessages(frames)
+    // 子 Run 的首个请求同样受模型窗口约束；没有 provider 预算时保持旧行为
+    //（测试与模板预览只需要原始历史）。
+    if (provider === undefined) return framesToValidatedMessages(frames)
+    return framesToValidatedMessages(
+      boundFramesForModel(
+        frames,
+        contextBudgetFor(provider, tools),
+        KEEP_RECENT_FRAMES,
+      ),
+    )
   }
 
   /**
@@ -107,16 +123,23 @@ export class ContextBuilder {
     onCompaction?: (stage: 'start' | 'done') => void,
   ): Promise<ModelMessage[]> {
     const buildStartedAt = Date.now()
+    // 先算请求预算，再按预算比例收敛指令/记忆块：system 帧不会被 Frame
+    // 裁剪收缩，必须在注入前保证它不会单独挤爆上下文。
+    const budget = contextBudgetFor(provider, tools)
+    const instructionBudget = Math.max(
+      1024,
+      Math.min(INSTRUCTION_TOTAL_TOKEN_BUDGET, Math.floor(budget * 0.5)),
+    )
     // 指令/记忆文件注入（文件即记忆 V2）：失败/为空都不影响对话。
     const instructionBlock = await buildInstructionBlock(
       this.store,
       sessionId,
+      instructionBudget,
     ).catch(() => '')
     const effectiveSystem =
       instructionBlock === ''
         ? systemPrompt
         : `${systemPrompt}\n\n${instructionBlock}`
-    const budget = contextBudgetFor(provider, tools)
     const cached = readCheckpointTail(
       this.store,
       sessionId,
@@ -125,12 +148,36 @@ export class ContextBuilder {
       KEEP_RECENT_FRAMES,
     )
     if (cached) {
+      // 水位之后新增了至少一个最近窗口的稳定帧：后台把水位继续前移，
+      // 当前请求先用“旧摘要 + 水位后缀”完成，不等待摘要模型。
+      if (cached.refreshDue) {
+        refreshCheckpoint({
+          store: this.store,
+          sessionId,
+          provider,
+          signal,
+          stableFrames: cached.stableFrames,
+          stableIds: cached.stableIds,
+          throughMessageId: cached.throughMessageId,
+          previousSummaryOverride: cached.previousSummary,
+          ...(onCompaction !== undefined ? { onStage: onCompaction } : {}),
+          validateSource: () =>
+            cached.throughMessageId !== null &&
+            computeSourceHash(
+              reconstructSessionFramesWithIds(this.store, sessionId, '', {
+                after: cached.baseThroughMessageId,
+                through: cached.throughMessageId,
+              }).frames.slice(1),
+            ) === computeSourceHash(cached.stableFrames),
+        })
+      }
       emitContextMetrics(sessionId, {
         contextBuildMs: Date.now() - buildStartedAt,
         checkpointHit: true,
         compactionCalls: 0,
+        checkpointRefreshScheduled: cached.refreshDue,
       })
-      return cached
+      return cached.messages
     }
     const { frames, messageIds } = reconstructSessionFramesWithIds(
       this.store,
@@ -171,22 +218,15 @@ export class ContextBuilder {
       stable.length - (watermarkIndex + 1) >= CHECKPOINT_REFRESH_FRAME_THRESHOLD
 
     if (shouldRefresh) {
-      // 后台更新只写缓存，不参与本轮首字关键路径。摘要失败时保留旧 checkpoint，
-      // 让后续请求仍可复用；同 source hash 的失败由服务层在进程内去重。
-      onCompaction?.('start')
-      void ensureCheckpoint({
+      refreshCheckpoint({
         store: this.store,
         sessionId,
         provider,
-        summarize: (input) =>
-          summarizeCheckpointFrames(provider, {
-            ...input,
-            diagnostics: { store: this.store, sessionId },
-          }),
+        signal,
         stableFrames: stable,
         stableIds,
         throughMessageId,
-        signal,
+        ...(onCompaction !== undefined ? { onStage: onCompaction } : {}),
         validateSource: () =>
           throughMessageId !== null &&
           computeSourceHash(
@@ -195,15 +235,6 @@ export class ContextBuilder {
             }).frames.slice(1),
           ) === computeSourceHash(stable),
       })
-        .then(() => onCompaction?.('done'))
-        .catch((error) => {
-          onCompaction?.('done')
-          if (!(error instanceof Error && error.name === 'AbortError')) {
-            process.stderr.write(
-              `[runtime] background checkpoint refresh failed: ${String(error)}\n`,
-            )
-          }
-        })
     }
 
     const assembled: ContextFrame[] = checkpointValid

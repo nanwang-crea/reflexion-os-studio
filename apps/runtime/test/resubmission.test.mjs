@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { Store } from '../dist/store/index.js'
 import { saveSecret } from '../dist/secrets.js'
 import { ChatAgent } from '../dist/agent/index.js'
+import { RunResubmissionService } from '../dist/agent/run/resubmission.js'
 import { dispatchCommand } from '../dist/handlers.js'
 import { CommandSchemaRegistry } from '@reflexion-os-studio/contracts'
 
@@ -49,18 +50,25 @@ for (const mode of [
   'different-provider',
   'legacy',
   'provider-only',
+  'preset-carried',
 ]) {
   test(`retry selects model and persists it: ${mode}`, async (t) => {
     const f = fixture(t)
     const overrides =
-      mode === 'legacy'
-        ? {}
-        : mode === 'same-provider'
-          ? { providerId: f.providers[0].id, model: 'switched-model' }
-          : {
-              providerId: f.providers[1].id,
-              ...(mode === 'provider-only' ? {} : { model: 'new-model' }),
-            }
+      mode === 'preset-carried'
+        ? {
+            providerId: f.providers[0].id,
+            model: 'old-model',
+            permissionPreset: 'workspace-write',
+          }
+        : mode === 'legacy'
+          ? {}
+          : mode === 'same-provider'
+            ? { providerId: f.providers[0].id, model: 'switched-model' }
+            : {
+                providerId: f.providers[1].id,
+                ...(mode === 'provider-only' ? {} : { model: 'new-model' }),
+              }
     const params = CommandSchemaRegistry['run.retry'].params.parse({
       requestId: 'retry-test',
       runId: f.original.id,
@@ -71,11 +79,11 @@ for (const mode of [
       store: f.store,
     })
     const expectedProvider =
-      mode === 'legacy' || mode === 'same-provider'
+      mode === 'legacy' || mode === 'same-provider' || mode === 'preset-carried'
         ? f.providers[0].id
         : f.providers[1].id
     const expectedModel =
-      mode === 'legacy'
+      mode === 'legacy' || mode === 'preset-carried'
         ? 'old-model'
         : mode === 'same-provider'
           ? 'switched-model'
@@ -85,13 +93,36 @@ for (const mode of [
     assert.equal(run.model, expectedModel)
     assert.equal(f.launches[0].profile.id, expectedProvider)
     assert.equal(f.launches[0].model, expectedModel)
-    assert.equal(f.launches[0].permissionPreset, 'workspace-read')
+    // 重试不静默降低档位：命令带来的快照直接生效，缺省沿用原 Run 档位。
+    assert.equal(
+      f.launches[0].permissionPreset,
+      mode === 'preset-carried' ? 'workspace-write' : 'workspace-read',
+    )
     assert.equal(run.retryOfRunId, f.original.id)
     assert.equal(f.store.runs.get(f.original.id).model, 'old-model')
   })
 }
 
 test('edit resend uses current provider and model', async (t) => {
+  test('retry falls back to the preset recorded for the original run', (t) => {
+    const f = fixture(t)
+    const launches = []
+    const service = new RunResubmissionService(
+      f.store,
+      () => {},
+      { get: () => null },
+      (input) => launches.push(input),
+      (runId) =>
+        runId === f.original.id ? 'workspace-write' : 'workspace-read',
+    )
+    const result = service.startRetry({
+      requestId: 'retry-preset',
+      runId: f.original.id,
+    })
+    assert.equal(launches[0].permissionPreset, 'workspace-write')
+    assert.equal(f.store.runs.get(result.runId).retryOfRunId, f.original.id)
+  })
+
   const f = fixture(t)
   const params = CommandSchemaRegistry['message.edit_resend'].params.parse({
     requestId: 'edit-test',

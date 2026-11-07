@@ -39,6 +39,50 @@
   background: rgba(248, 113, 113, 0.18);
 }
 
+/* 档位切换提示：仅 Run 运行中切换档位时短暂出现，4s 后淡出并卸载。
+   浮动胶囊形状，绝对定位于输入区顶部、不占网格行，避免出现/消失时把审批区顶动。 */
+.permission-next-message-hint {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  pointer-events: none;
+  margin: 0;
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-border);
+  background: var(--accent-soft);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(6px);
+  animation:
+    permission-hint-in 0.22s ease-out,
+    permission-hint-out 4s ease forwards;
+}
+@keyframes permission-hint-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 4px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+@keyframes permission-hint-out {
+  0%,
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 /* Danger 两段确认对话框 */
 .danger-overlay {
   position: fixed;

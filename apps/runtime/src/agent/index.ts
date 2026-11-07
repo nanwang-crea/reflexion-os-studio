@@ -79,6 +79,7 @@ export class ChatAgent {
       notifier,
       skills,
       (input) => this.launch(input),
+      (runId) => this.launcher.permissionPresetOf(runId),
     )
     this.interactions = new InteractionGateway(store)
     this.danger = new DangerLeaseService(notifier, () =>

@@ -12,6 +12,41 @@ export { estimateTokens as estimateTextTokens }
 
 /** 单个指令文件的注入预算（token）；超限保头截断并显式标注。仅模块内使用。 */
 const INSTRUCTION_FILE_TOKEN_BUDGET = 20000
+/**
+ * 四层指令/记忆的默认总量上限。单文件 20k × 4 层可达 80k，已超过默认
+ * 64k 上下文预算；system 帧又不会被 Frame 裁剪收缩，所以必须在注入前
+ * 收敛总量，否则请求会带着超大 system prompt 发出或在窗口检查处失败。
+ */
+export const INSTRUCTION_TOTAL_TOKEN_BUDGET = 24_000
+const INSTRUCTION_HEADER = '[指令与记忆文件 · 自动注入]\n'
+const MIN_SECTION_TOKENS = 64
+
+/**
+ * 总量超限时按各段占比分配预算，保头截断并逐段/整体标注。
+ * 不直接截断拼接后的整串：那样会整段丢掉靠后的记忆层。
+ */
+function clipSectionsToTotal(
+  sections: string[],
+  totalBudget: number,
+): { sections: string[]; truncated: boolean } {
+  const headerTokens = estimateTokens(INSTRUCTION_HEADER)
+  const available = Math.max(0, totalBudget - headerTokens - 96)
+  const weights = sections.map((section) => estimateTokens(section))
+  const sum = weights.reduce((total, value) => total + value, 0)
+  if (sum <= available) return { sections, truncated: false }
+  let truncated = false
+  const next = sections.map((section, index) => {
+    const share = Math.max(
+      MIN_SECTION_TOKENS,
+      Math.floor((available * weights[index]) / Math.max(1, sum)),
+    )
+    const clipped = clipToTokenBudget(section, share)
+    if (!clipped.truncated) return section
+    truncated = true
+    return `${clipped.text}\n⚠️ 本段因指令/记忆总量超限被截断。`
+  })
+  return { sections: next, truncated }
+}
 
 /** 按 token 预算保头截断；先按比例收缩再逐步收敛。 */
 export function clipToTokenBudget(
@@ -53,6 +88,7 @@ const LAYERS: {
 export async function buildInstructionBlock(
   store: Store,
   sessionId: string,
+  totalBudget: number = INSTRUCTION_TOTAL_TOKEN_BUDGET,
 ): Promise<string> {
   const session = store.sessions.get(sessionId)
   const projectId = session?.projectId ?? null
@@ -69,5 +105,9 @@ export async function buildInstructionBlock(
     )
   }
   if (sections.length === 0) return ''
-  return `[指令与记忆文件 · 自动注入]\n${sections.join('\n\n')}`
+  const limited = clipSectionsToTotal(sections, totalBudget)
+  const suffix = limited.truncated
+    ? `\n\n⚠️ 指令/记忆总量超过 ${totalBudget} token，已按各层占比截断。`
+    : ''
+  return `${INSTRUCTION_HEADER}${limited.sections.join('\n\n')}${suffix}`
 }

@@ -390,3 +390,23 @@ test('sweepOrphanMemoryDirs: 无项目行的孤儿目录删除、在者保留', 
   assert.equal(existsSync(dirOf(dead.id)), false)
   assert.ok(existsSync(dirOf(live.id)))
 })
+
+test('buildInstructionBlock: total budget caps all four layers proportionally', async () => {
+  const store = freshStore()
+  const { project, projectDir, session } = sessionInProject(store)
+  const dataDir = process.env.REFLEXION_DATA_DIR
+  writeFileSync(join(dataDir, 'AGENTS.md'), '全'.repeat(8000))
+  writeFileSync(join(dataDir, 'MEMORY.md'), '记'.repeat(8000))
+  mkdirSync(join(dataDir, 'memories', project.id), { recursive: true })
+  writeFileSync(
+    join(dataDir, 'memories', project.id, 'MEMORY.md'),
+    '忆'.repeat(8000),
+  )
+  writeFileSync(join(projectDir, 'AGENTS.md'), '项'.repeat(8000))
+  const block = await buildInstructionBlock(store, session.id, 5000)
+  assert.ok(estimateTextTokens(block) <= 5600, 'total block stays near the cap')
+  assert.ok(block.includes('指令/记忆总量超过 5000 token'))
+  // 按占比截断：四层都还在，不会整段丢弃靠后的记忆层。
+  for (const marker of ['全', '项', '记', '忆'])
+    assert.ok(block.includes(marker))
+})

@@ -110,6 +110,14 @@ export class RunLauncher {
     string,
     () => PermissionPreset
   >()
+  /**
+   * 已结束 Run 的档位快照（有界保留）：重试/重新提问都发生在 Run 结束之后，
+   * 若快照随 Run 一起删除，重试就必然回落到最窄档，违背“选了什么就是什么”。
+   */
+  private readonly settledPermissionPresets = new Map<
+    string,
+    PermissionPreset
+  >()
 
   constructor(
     private readonly deps: LaunchDeps,
@@ -121,9 +129,13 @@ export class RunLauncher {
     return this.runDepth.get(runId) ?? 0
   }
 
-  /** 委派边界读取：父 Run 的权限预设（缺省最窄日常档）。 */
+  /** 运行中读实时值，已结束 Run 读快照；两者都无记录才回落最窄日常档。 */
   permissionPresetOf(runId: string): PermissionPreset {
-    return this.runPermissionPresets.get(runId)?.() ?? DEFAULT_PRESET
+    return (
+      this.runPermissionPresets.get(runId)?.() ??
+      this.settledPermissionPresets.get(runId) ??
+      DEFAULT_PRESET
+    )
   }
 
   /** 只有确实在运行中（含等待审批）的 Run 才受理；终态或不存在返回 false。 */
@@ -220,7 +232,12 @@ export class RunLauncher {
             )
           return input.isolatedContext
             ? Promise.resolve(
-                this.deps.contextBuilder.buildIsolated(sessionId, systemPrompt),
+                this.deps.contextBuilder.buildIsolated(
+                  sessionId,
+                  systemPrompt,
+                  provider,
+                  registry.specs(),
+                ),
               )
             : this.deps.contextBuilder.build(
                 sessionId,
@@ -299,7 +316,17 @@ export class RunLauncher {
         parentSignal?.removeEventListener('abort', abortChild)
         this.streams.delete(run.id)
         this.runDepth.delete(run.id)
+        // 档位不随 Run 结束一起丢弃：重试发生在此之后，需按原档位继续。
+        const settledPreset = this.runPermissionPresets.get(run.id)?.()
         this.runPermissionPresets.delete(run.id)
+        if (settledPreset !== undefined) {
+          if (this.settledPermissionPresets.size >= 500) {
+            const oldest = this.settledPermissionPresets.keys().next().value
+            if (oldest !== undefined)
+              this.settledPermissionPresets.delete(oldest)
+          }
+          this.settledPermissionPresets.set(run.id, settledPreset)
+        }
         // Run 结束(完成/失败/取消):自动出队发送排队中的下一条。
         try {
           this.deps.skillTools?.releaseRun(run.id)
