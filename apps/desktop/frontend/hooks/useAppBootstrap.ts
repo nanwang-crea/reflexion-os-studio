@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import type { RefObject } from 'react'
-import type { RuntimeEvent } from '@reflexion-os-studio/runtime-client'
+import type {
+  Message,
+  Run,
+  RuntimeEvent,
+  Session,
+} from '@reflexion-os-studio/runtime-client'
 import { transport } from '../lib/transport'
 import { useInitialDataLoad } from './useInitialDataLoad'
 import type { RunActivity } from './session/useRunActivity'
@@ -48,6 +53,10 @@ interface AppBootstrapDeps {
   refreshSessionData: (sessionId: string) => Promise<void>
   refreshSessions: () => Promise<void>
   refreshDelegations: (sessionId: string) => Promise<void>
+  /** 事件载荷即时合并：不等整页 session.get，发送后立刻上屏。 */
+  applyLiveMessage: (message: Message) => void
+  applyLiveRun: (run: Run) => void
+  applyLiveSession: (session: Session) => void
   setNotice: (notice: string | null) => void
   /** danger.changed 事件转发（Danger 租约 UI 投影；App 持有状态）。 */
   onDangerChanged: (
@@ -251,12 +260,11 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
           return
         }
         if (event.type === 'message.created') {
-          // 消息骨架即时入列：流式增量的渲染载体是 sessionData 里的消息行，
-          // 缺了这一步，纯文本轮次要等 message.completed 才整体上屏，
-          // 期间所有 delta 不可见（仅点击/其他事件触发的刷新会偶然带出）。
-          // 仅当前查看会话触发，后台会话事件不打扰当前页（同 run.started 守卫）。
+          // 消息骨架即时入列：事件已携带完整 Message，直接合并即可上屏，
+          // 不必再等整页 session.get。发送后运行时可能长时间同步重建上下文
+          //（大会话可达数秒），整页刷新只能排在它后面，表现为「点了发送没反应」。
           if (event.message.sessionId === deps.activeSessionRef.current) {
-            scheduleToolRefresh()
+            deps.applyLiveMessage(event.message)
           }
           return
         }
@@ -268,13 +276,13 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
         if (event.type === 'run.started') {
           activity.setRunActivity(event.runId, { phase: 'waiting' })
           sessionTracking.onRunStarted(event.runId, event.run.sessionId)
-          // Runtime 侧自动出队（队列 pump / sendNow）产生的新消息不经前端
-          // 发送路径，补一次刷新让消息列表即时跟上；仅限当前查看的会话，
-          // 避免后台会话的 run 覆盖当前页数据。
+          // Run 事件携带完整 Run 行：直接合并，让 busy/停止按钮与 Run 块
+          // 不必等待整页刷新；工具轨迹仍由 tool.* 事件防抖刷新补齐。
           if (event.run.sessionId === deps.activeSessionRef.current) {
-            void deps
-              .refreshSessionData(event.run.sessionId)
-              .catch(() => undefined)
+            deps.applyLiveRun(event.run)
+            // 重试/输出恢复会用新 Run 替代旧 assistant 消息（旧行进
+            // superseded）；这是结构性变更，补一次防抖刷新做对账。
+            if (event.run.retryOfRunId !== null) scheduleToolRefresh()
           }
           return
         }
@@ -347,8 +355,10 @@ export function useAppBootstrap(deps: AppBootstrapDeps): {
         }
         if (event.type === 'session.updated') {
           void deps.refreshSessions()
+          // 目前该事件只承载标题变化：就地更新，避免为改名/自动命名
+          // 重新拉取整页历史（大会话可达数 MB）。
           if (event.sessionId === deps.activeSessionRef.current) {
-            void deps.refreshSessionData(event.sessionId)
+            deps.applyLiveSession(event.session)
           }
           return
         }

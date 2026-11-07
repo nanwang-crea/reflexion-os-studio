@@ -18,6 +18,7 @@ export class ChatStreamDiagnostics {
     nonzeroChoiceEvents: 0,
     finishFields: 0,
     nullFinishFields: 0,
+    emptyFinishFields: 0,
     unsupportedFinishFields: 0,
     contentChars: 0,
     reasoningChars: 0,
@@ -39,14 +40,24 @@ export class ChatStreamDiagnostics {
     if (!choice || !Object.hasOwn(choice, 'finish_reason')) return
     this.counts.finishFields += 1
     const raw = choice.finish_reason
-    if (raw === null) {
+    if (raw === null || raw === undefined) {
       this.counts.nullFinishFields += 1
       return
     }
+    // 许多 OpenAI 兼容网关/自建服务在每个非终止 chunk 里都会带
+    // finish_reason: ""（Go/Python 零值）。它与 null 同义 = "本轮还没结束"，
+    // 不是未知终止值；当成 unsupported 会把一个正常收全的流判成协议错误。
+    if (typeof raw === 'string' && raw.trim() === '') {
+      this.counts.emptyFinishFields += 1
+      return
+    }
     const mapped = typeof raw === 'string' ? mapFinishReason(raw) : null
-    // usage 空块、null 以及后续合法终止值不能覆盖首次不支持的值。
+    // usage 空块、null/空串占位以及后续合法终止值不能覆盖首次不支持的值。
     if (mapped) {
-      if (this.counts.unsupportedFinishFields === 0) {
+      if (
+        this.finishReason === null &&
+        this.counts.unsupportedFinishFields === 0
+      ) {
         this.finishReason = mapped
         this.rawFinishReason = raw
       }
@@ -66,7 +77,10 @@ export class ChatStreamDiagnostics {
             ? 'valid'
             : this.counts.finishFields === 0
               ? 'absent'
-              : 'null_only',
+              : this.counts.emptyFinishFields > 0 &&
+                  this.counts.nullFinishFields === 0
+                ? 'empty_only'
+                : 'null_only',
       finishReason: this.finishReason,
     }
   }
@@ -91,9 +105,16 @@ export class ChatStreamDiagnostics {
       )
     }
     if (this.finishReason !== null) return null
+    const raw =
+      this.counts.finishFields === 0
+        ? 'undefined'
+        : this.counts.emptyFinishFields > 0 &&
+            this.counts.nullFinishFields === 0
+          ? 'empty'
+          : 'null'
     return new ProviderError(
       'provider_protocol',
-      `stream ended without a valid finish_reason (raw: ${this.counts.finishFields === 0 ? 'undefined' : 'null'})`,
+      `stream ended without a valid finish_reason (raw: ${raw})`,
       true,
     )
   }

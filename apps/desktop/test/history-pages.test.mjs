@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 const compiled = await build({
   stdin: {
-    contents: `export * from './frontend/hooks/session/history-pages.ts'; export * from './frontend/features/chat/transcript/virtual-layout.ts'`,
+    contents: `export * from './frontend/hooks/session/history-pages.ts'; export * from './frontend/hooks/session/live-merge.ts'; export * from './frontend/features/chat/transcript/virtual-layout.ts'`,
     resolveDir: fileURLToPath(new URL('..', import.meta.url)),
   },
   bundle: true,
@@ -15,6 +15,9 @@ const compiled = await build({
 const {
   mergeLatestHistory,
   prependHistory,
+  mergeLiveMessage,
+  mergeLiveRun,
+  mergeLiveSession,
   buildOffsets,
   visibleRange,
   indexAt,
@@ -28,6 +31,7 @@ function page(start, end, more = true) {
   const messages = Array.from({ length: end - start + 1 }, (_, index) => ({
     id: String(index + start),
     runId: `r${index + start}`,
+    createdAt: `2026-10-09T00:00:${String(index + start).padStart(2, '0')}.000Z`,
   }))
   return {
     session: { id: 's' },
@@ -87,6 +91,58 @@ test('a missing overlap or another session resets to latest instead of leaving g
     mergeLatestHistory(page(1, 40), page(31, 40, false)).messages.length,
     10,
   )
+})
+
+test('a stale in-flight snapshot keeps the locally appended tail', () => {
+  const current = page(1, 20, false)
+  current.messages.push({
+    id: '21',
+    runId: 'r21',
+    createdAt: '2026-10-09T00:00:21.000Z',
+  })
+  current.runs.push({ id: 'r21' })
+  // Snapshot was taken before message 21 / run r21 were persisted.
+  const stale = page(1, 20, false)
+  const combined = mergeLatestHistory(current, stale)
+  assert.equal(combined.messages.at(-1).id, '21')
+  assert.ok(combined.runs.some((run) => run.id === 'r21'))
+})
+
+test('a stale snapshot does not resurrect a superseded tail', () => {
+  const current = page(1, 20, false)
+  const latest = page(11, 21, false)
+  latest.messages = latest.messages.filter((message) => message.id !== '20')
+  delete latest.positions['20']
+  const combined = mergeLatestHistory(current, latest)
+  assert.ok(!combined.messages.some((message) => message.id === '20'))
+})
+
+test('live event payloads merge without a full page fetch', () => {
+  const current = page(1, 20, false)
+  const message = {
+    id: '21',
+    sessionId: 's',
+    runId: 'r21',
+    createdAt: '2026-10-09T00:00:21.000Z',
+    content: '',
+  }
+  const withMessage = mergeLiveMessage(current, message)
+  assert.equal(withMessage.messages.at(-1).id, '21')
+  // Repeated event delivery is idempotent (upsert by id, not append).
+  assert.equal(mergeLiveMessage(withMessage, message).messages.length, 21)
+  const run = { id: 'r21', sessionId: 's', status: 'running' }
+  const withRun = mergeLiveRun(withMessage, run)
+  assert.equal(withRun.runs.at(-1).id, 'r21')
+  assert.equal(mergeLiveRun(withRun, run).runs.length, 21)
+  // Events for another session are ignored.
+  assert.equal(
+    mergeLiveMessage(current, { ...message, sessionId: 'other' }),
+    current,
+  )
+  assert.equal(mergeLiveRun(current, { ...run, sessionId: 'other' }), current)
+  const renamed = mergeLiveSession(withRun, { id: 's', title: '新标题' })
+  assert.equal(renamed.session.title, '新标题')
+  assert.equal(mergeLiveSession(withRun, { id: 'other' }), withRun)
 })
 
 test('a long transcript mounts a bounded window and uses measured dynamic heights', () => {

@@ -107,13 +107,7 @@ for (const [state, events] of [
   })
 }
 
-for (const raw of [
-  '',
-  42,
-  false,
-  { secret: 'untrusted-object-secret' },
-  ['x'],
-]) {
+for (const raw of [42, false, { secret: 'untrusted-object-secret' }, ['x']]) {
   test(`invalid terminal type ${typeof raw} never retries`, async (t) => {
     const mock = setup(t, [sse([choice(raw), usage])])
     await assert.rejects(mock.run(), (error) => {
@@ -124,6 +118,42 @@ for (const raw of [
     assert.equal(mock.calls, 1)
   })
 }
+
+// 回归：OpenAI 兼容网关常在每个非终止 chunk 带 finish_reason: ""，
+// 末尾再给合法终止值。空串是"本轮未结束"占位，不能毒化整个流。
+test('empty finish_reason placeholders do not hide a valid terminal', async (t) => {
+  const mock = setup(t, [
+    sse([
+      choice(''),
+      choice(''),
+      choice('', { delta: { content: 'answer' } }),
+      choice('tool_calls'),
+      usage,
+    ]),
+  ])
+  const result = await mock.run()
+  assert.equal(result.finishReason, 'tool_calls')
+  assert.equal(mock.calls, 1)
+  const live = mock.logs[0]
+  assert.equal(live.terminalState, 'valid')
+  assert.equal(live.finishFields, 4)
+  assert.equal(live.emptyFinishFields, 3)
+  assert.equal(live.unsupportedFinishFields, 0)
+  assert.equal(live.nullFinishFields, 0)
+  assert.equal(live.finishReason, 'tool_calls')
+})
+
+test('empty finish_reason alone is a placeholder, not a protocol violation', async (t) => {
+  const mock = setup(t, [sse([choice('')]), sse([choice('stop'), usage])])
+  const result = await mock.run()
+  assert.equal(result.finishReason, 'stop')
+  assert.equal(mock.calls, 2)
+  assert.match(mock.retries[0].reason, /raw: empty/)
+  assert.equal(
+    stats({ message: mock.retries[0].reason }).terminalState,
+    'empty_only',
+  )
+})
 
 test('valid terminal survives usage, null, and missing finish fields', async (t) => {
   const mock = setup(t, [

@@ -23,9 +23,9 @@ import {usePendingApprovals} from './frontend/hooks/permissions/usePendingApprov
 import {usePendingInteractions} from './frontend/hooks/interactions/usePendingInteractions';
 import {useApprovalResolution} from './frontend/hooks/permissions/useApprovalResolution';
 import {ApprovalQueue} from './frontend/features/chat/approvals/ApprovalQueue';
-window.notices=[];window.initialLoads=0;window.commits=0;
+window.notices=[];window.initialLoads=0;window.commits=0;window.sessionRefreshes=0;window.liveMessages=[];window.liveRuns=[];
 const noop=async()=>{};
-const deps={activeSessionRef:{current:'session'},activeProjectRef:{current:null},refreshProfiles:async()=>{window.initialLoads++},refreshProjects:noop,refreshSessions:noop,refreshDelegations:noop,setNotice:notice=>window.notices.push(notice),onDangerChanged:()=>{},refreshSessionData:noop};
+const deps={activeSessionRef:{current:'session'},activeProjectRef:{current:null},refreshProfiles:async()=>{window.initialLoads++},refreshProjects:noop,refreshSessions:noop,refreshDelegations:noop,applyLiveMessage:message=>window.liveMessages.push(message.id),applyLiveRun:run=>window.liveRuns.push(run.id),applyLiveSession:()=>{},setNotice:notice=>window.notices.push(notice),onDangerChanged:()=>{},refreshSessionData:async()=>{window.sessionRefreshes++}};
 function App(){const approvals=usePendingApprovals();window.approvals=approvals;window.interactions=usePendingInteractions();window.app=useAppBootstrap(deps);const choose=useApprovalResolution({pendingApprovals:approvals.pendingApprovals,clearPendingApproval:approvals.removePending,restorePendingApproval:approvals.restorePending,setNotice:deps.setNotice});return <ApprovalQueue approvals={approvals.pendingApprovals} onChoose={(id,choice)=>void choose(id,choice)}/>}
 const root=createRoot(document.getElementById('root'));window.unmount=()=>root.unmount();root.render(<StrictMode><React.Profiler id="pending" onRender={()=>window.commits++}><App/></React.Profiler></StrictMode>);
 `,
@@ -155,6 +155,49 @@ test('message and plan updates retain pending cards; only Run terminal events cl
     )
     await page.evaluate(() => window.unmount())
     assert.equal(await page.evaluate(() => listenerCount()), 0)
+  })
+})
+
+test('message.created and run.started apply event payloads without a session refresh', async () => {
+  await withPage(async (page) => {
+    await page.evaluate(() => window.resolvePending([]))
+    await page.waitForFunction(() => window.initialLoads > 0)
+    await page.evaluate(() => {
+      emitEvent({
+        type: 'run.started',
+        scope: 'run',
+        runId: 'run-1',
+        run: {
+          id: 'run-1',
+          sessionId: 'session',
+          status: 'running',
+          retryOfRunId: null,
+        },
+      })
+      emitEvent({
+        type: 'message.created',
+        scope: 'run',
+        runId: 'run-1',
+        message: {
+          id: 'message-1',
+          sessionId: 'session',
+          runId: 'run-1',
+          role: 'user',
+          status: 'completed',
+          content: 'hello',
+          parts: [],
+        },
+      })
+    })
+    await page.waitForFunction(
+      () => liveMessages.length === 1 && liveRuns.length === 1,
+    )
+    await page.waitForTimeout(250)
+    assert.equal(
+      await page.evaluate(() => window.sessionRefreshes),
+      0,
+      'send echo must not wait for a full session.get',
+    )
   })
 })
 
