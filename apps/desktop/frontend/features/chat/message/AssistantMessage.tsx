@@ -162,6 +162,7 @@ function AssistantMessageView(props: AssistantMessageProps): React.JSX.Element {
         {retryLabel !== null && props.runActive && (
           <div className="assistant-retrying shimmer" role="status">
             {retryLabel}
+            {props.runActivity?.retry !== undefined && ' · 已回落谨慎模式'}
           </div>
         )}
         {statusLabel && (

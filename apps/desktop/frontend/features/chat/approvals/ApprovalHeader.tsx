@@ -22,6 +22,15 @@ export function ApprovalHeader({
           </span>
         )}
         {display.actionLabel}
+        {agent !== undefined && agent.depth > 0 && display.context !== null && (
+          <span className="agent-permission-badge">
+            {display.context.permissionPreset === 'workspace-full'
+              ? '完全允许'
+              : display.context.permissionPreset === 'workspace-write'
+                ? '工作区可写'
+                : '工作区只读'}
+          </span>
+        )}
       </span>
       <span className="approval-risk-label">{display.riskTitle}</span>
     </div>

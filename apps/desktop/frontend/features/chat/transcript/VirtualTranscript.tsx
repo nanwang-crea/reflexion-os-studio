@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { memo } from 'react'
 import type { RefObject, ReactNode } from 'react'
 import type { ChatBlock } from '../chat-blocks'
 import { buildOffsets, anchoredTop, visibleRange } from './virtual-layout'
@@ -47,7 +48,7 @@ function MeasuredRow({
 }
 
 /** Only visible blocks are mounted; spacers retain measured offscreen heights. */
-export function VirtualTranscript({
+function VirtualTranscriptComponent({
   blocks,
   scrollRef,
   pinned,
@@ -235,3 +236,5 @@ export function VirtualTranscript({
     </div>
   )
 }
+
+export const VirtualTranscript = memo(VirtualTranscriptComponent)

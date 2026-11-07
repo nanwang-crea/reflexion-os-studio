@@ -1,4 +1,5 @@
 import type { ChatViewProps } from '../chat-view-types'
+import { memo } from 'react'
 import type { DraftAttachment } from '../../../components/composer/useComposerAttachments'
 import type { ChatBlock } from '../chat-blocks'
 import { computeRunDurationMs, isLastEditableUserMessage } from '../chat-blocks'
@@ -42,7 +43,7 @@ interface Props {
   handleRetry: () => void
 }
 
-export function ChatBlockView({
+function ChatBlockViewComponent({
   block,
   view,
   runById,
@@ -173,3 +174,5 @@ export function ChatBlockView({
     </div>
   )
 }
+
+export const ChatBlockView = memo(ChatBlockViewComponent)

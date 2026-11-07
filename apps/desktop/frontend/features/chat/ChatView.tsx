@@ -387,7 +387,12 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
           runActive={runActive}
           approvals={sessionApprovals}
           interactions={sessionInteractions}
-        />
+        />{' '}
+        {runActive && (
+          <div className="permission-next-message-hint" role="status">
+            权限档位已更新，下一条消息生效
+          </div>
+        )}
         {!pinned && messages.length > 0 && (
           <button
             className="scroll-bottom"

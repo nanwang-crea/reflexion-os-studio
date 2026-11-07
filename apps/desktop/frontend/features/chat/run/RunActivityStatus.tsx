@@ -42,6 +42,7 @@ export function RunActivityStatus(props: {
           }
         >
           {label}
+          {retry !== undefined && ' · 已回落谨慎模式'}
         </span>
       </span>
       {completed > 0 && (

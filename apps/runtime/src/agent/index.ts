@@ -393,6 +393,7 @@ export class ChatAgent {
         interactions: this.interactions,
         system: this.system,
         skills: this.skills,
+        launcher: this.launcher,
         launch: (input) => this.launch(input),
       },
       interactionId,

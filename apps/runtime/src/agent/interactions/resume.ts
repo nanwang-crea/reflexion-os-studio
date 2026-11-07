@@ -3,7 +3,6 @@ import { RunEventEmitter, type EventNotifier } from '../../events.js'
 import type { SkillRegistry } from '../../skills/index.js'
 import type { InteractionGateway } from './index.js'
 import { createPendingAssistantMessage, type RunLauncher } from '../launcher.js'
-import { DEFAULT_PRESET } from '../permissions/index.js'
 import { resolveProvider, resolveSampling } from '../provider-resolver.js'
 import { normalizeToolOutput } from '../run/toolResults.js'
 import { formatAnswers } from '../tools/ask-user.js'
@@ -17,6 +16,7 @@ export async function resumeInteraction(
     notifier: EventNotifier
     interactions: InteractionGateway
     skills: SkillRegistry
+    launcher: RunLauncher
     launch: (
       input: Omit<Parameters<RunLauncher['launch']>[0], 'childRunStarter'>,
     ) => void
@@ -107,7 +107,7 @@ export async function resumeInteraction(
     apiKey,
     model,
     sampling: resolveSampling(profile),
-    permissionPreset: DEFAULT_PRESET,
+    permissionPreset: deps.launcher.permissionPresetOf(run.id),
     defaultChildTemplateId: run.agentTemplateId ?? undefined,
     skill:
       run.skillId === null

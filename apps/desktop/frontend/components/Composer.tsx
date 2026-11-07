@@ -6,7 +6,7 @@ import { useComposerAttachments } from './composer/useComposerAttachments'
 import { useComposerFileDrop } from './composer/useComposerFileDrop'
 import { FileAttachments } from './composer/FileAttachments'
 import { isComposing } from '../lib/keyboard'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   AgentTemplate,
   SkillManifest,
@@ -69,7 +69,7 @@ export interface ComposerProps {
 /** 输入停留在技能名上（/xxx 且未加空格/参数）时才弹浮层。 */
 const SLASH_QUERY_RE = /^\/([a-z0-9-]*)$/
 
-export function Composer(props: ComposerProps): React.JSX.Element {
+function ComposerComponent(props: ComposerProps): React.JSX.Element {
   const [draft, setDraft] = useState('')
   const attachments = useComposerAttachments()
   const [sendError, setSendError] = useState<string | null>(null)
@@ -325,3 +325,5 @@ export function Composer(props: ComposerProps): React.JSX.Element {
     </div>
   )
 }
+
+export const Composer = memo(ComposerComponent)

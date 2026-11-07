@@ -1,12 +1,31 @@
 import { useChatArchiveActions } from '../features/chat/archive/useChatArchiveActions'
 import { ChatImportDialog } from '../features/chat/archive/ChatImportDialog'
 import { setSessionExecutionMode } from '../api/sessions'
+import { useMemo } from 'react'
 import { AppShell } from './AppShell'
 import type { ReadyAppProps } from './ready-app-props'
 
 /** 运行时就绪后的界面装配；状态仍由 App 持有。 */
 export function ReadyApp(props: ReadyAppProps): React.JSX.Element {
   const archive = useChatArchiveActions(props)
+  const composerAdvanced = useMemo(
+    () => ({
+      approvalOverride: props.approvalOverride,
+      onApprovalOverrideChange: (
+        value: NonNullable<ReadyAppProps['approvalOverride']>,
+      ) => {
+        void props.changeApprovalOverride(value)
+      },
+      dangerActive: props.dangerLease !== null,
+      onOpenDanger: () => props.setDangerDialogOpen(true),
+    }),
+    [
+      props.approvalOverride,
+      props.changeApprovalOverride,
+      props.dangerLease,
+      props.setDangerDialogOpen,
+    ],
+  )
   return (
     <AppShell
       sidebarWidth={props.sidebarWidth}
@@ -72,14 +91,7 @@ export function ReadyApp(props: ReadyAppProps): React.JSX.Element {
           hasEnabledProvider: props.hasEnabledProvider,
           permissionValue: props.permissionPreset,
           onPermissionChange: props.changePermissionPreset,
-          advanced: {
-            approvalOverride: props.approvalOverride,
-            onApprovalOverrideChange: (value) => {
-              void props.changeApprovalOverride(value)
-            },
-            dangerActive: props.dangerLease !== null,
-            onOpenDanger: () => props.setDangerDialogOpen(true),
-          },
+          advanced: composerAdvanced,
           dangerLease: props.dangerLease,
           onDisableDanger: () => {
             void props.disableDanger()
