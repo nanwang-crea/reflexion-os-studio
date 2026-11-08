@@ -182,3 +182,29 @@ test('prepending and measuring history keep the same long message mounted', () =
   )
   assert.equal(anchoredTop([], [0], keys, measured, 0), 0)
 })
+
+test('live message without a position does not crash the page merge', () => {
+  const current = page(1, 20, false)
+  // 发送后即时上屏的消息：还没有 positions 记录。
+  current.messages.push({
+    id: '21',
+    runId: 'r21',
+    createdAt: '2026-10-09T00:00:21.000Z',
+  })
+  current.runs.push({ id: 'r21' })
+  const latest = page(11, 21, false)
+  const combined = mergeLatestHistory(current, latest)
+  assert.equal(combined.messages.filter((m) => m.id === '21').length, 1)
+})
+
+test('stale snapshot keeps a live message that has no position yet', () => {
+  const current = page(1, 20, false)
+  current.messages.push({
+    id: '21',
+    runId: 'r21',
+    createdAt: '2026-10-09T00:00:21.000Z',
+  })
+  current.runs.push({ id: 'r21' })
+  const combined = mergeLatestHistory(current, page(11, 20, false))
+  assert.equal(combined.messages.at(-1).id, '21')
+})

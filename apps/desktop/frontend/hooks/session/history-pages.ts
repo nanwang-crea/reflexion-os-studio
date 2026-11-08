@@ -65,11 +65,15 @@ function mergeSnapshot(
     (message) => current.positions[message.id],
   )
   if (!overlap) return latest
-  const start = latest.positions[latest.messages[0].id]
-  const older = current.messages.filter(
-    (message) =>
-      compareHistoryPosition(current.positions[message.id], start) < 0,
-  )
+  const start = latest.positions[latest.messages[0]?.id]
+  if (start === undefined) return latest
+  // 即时上屏（message.created/live merge）的消息还没有 positions 记录：
+  // 它们不是“更老的历史”，交给 appendLocalTail 按 createdAt 处理；
+  // 直接比较 undefined.createdAt 会在发送后的首次刷新时抛错白屏。
+  const older = current.messages.filter((message) => {
+    const position = current.positions[message.id]
+    return position !== undefined && compareHistoryPosition(position, start) < 0
+  })
   const retainedRunIds = new Set(
     older.flatMap((message) => (message.runId ? [message.runId] : [])),
   )
