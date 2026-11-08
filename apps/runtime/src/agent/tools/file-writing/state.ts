@@ -12,9 +12,10 @@ export function restoreFileWrites(
   workspaceRoot?: string,
 ): Map<string, FileWriteCheckpoint> {
   const states = new Map<string, FileWriteCheckpoint>()
-  for (const call of store.toolCalls.listBySession(sessionId)) {
-    if (call.toolName !== 'file.write_stream' || call.status !== 'completed')
-      continue
+  for (const call of store.toolCalls.listCompletedByToolName(
+    sessionId,
+    'file.write_stream',
+  )) {
     const data = call.output?.data
     if (typeof data !== 'object' || data === null || Array.isArray(data))
       continue

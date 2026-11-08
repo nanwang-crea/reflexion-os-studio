@@ -2,7 +2,10 @@ import { StreamingReadCoordinator } from './streaming/reads.js'
 import { executeFileEditBatch, toolCallCost } from './editing/batch.js'
 import { RunMetrics } from './performance/metrics.js'
 import { runLimit, limitSettingsHint } from './budgets.js'
-import { withTaskContext } from '../context/task-context.js'
+import {
+  createTaskContextCache,
+  withTaskContext,
+} from '../context/task-context.js'
 import { resolveOutputBudget } from '../../provider/output-budget.js'
 import type { SystemRuntimeClient } from '../../system.js'
 import {
@@ -114,6 +117,8 @@ export class RunRunner {
     const { run, controller, emitter, registry } = input
     const maxTurns = runLimit(input.settings, 'maxTurns', DEFAULT_MAX_TURNS)
     const state = createRunExecutionState()
+    // 单 Run 内复用会话/项目/用户指令；仅文件写入进度每轮刷新。
+    const taskContextCache = createTaskContextCache()
     const metrics = new RunMetrics(
       this.store.runs.get(run.id)?.performance,
       (value) => this.store.runs.setPerformance(run.id, value),
@@ -209,12 +214,23 @@ export class RunRunner {
         const outcome = await runAgentLoop({
           history,
           signal: controller.signal,
-          prepareMessages: (messages) =>
-            compactInRun(
-              withTaskContext(this.store, run.sessionId, messages),
+          prepareMessages: (messages) => {
+            // 每轮上下文准备（任务上下文 + Frame 收敛）耗时落到 Run 指标，
+            // 避免长会话的隐性 O(history) 开销不可见。
+            const startedAt = performance.now()
+            const prepared = compactInRun(
+              withTaskContext(
+                this.store,
+                run.sessionId,
+                messages,
+                taskContextCache,
+              ),
               input.provider,
               registry.specs(),
-            ),
+            )
+            metrics.add('contextPrepMs', performance.now() - startedAt)
+            return prepared
+          },
           maxTurns,
           maxContinuationTurns: budgets.maxContinuationTurns,
           onRecovery: (recovery) => {

@@ -108,6 +108,22 @@ export class ToolCallStore {
       .map((row) => this.toToolCall(row as Row))
   }
 
+  /**
+   * 按会话 + 工具名 + 终态筛选：只解析命中行，避免为恢复少量
+   * file.write_stream 检查点而反序列化整个会话的工具结果。
+   */
+  listCompletedByToolName(sessionId: string, toolName: string): ToolCall[] {
+    return this.db
+      .prepare(
+        `SELECT tc.* FROM tool_calls tc
+         JOIN runs r ON tc.run_id = r.id
+         WHERE r.session_id = ? AND tc.tool_name = ? AND tc.status = 'completed'
+         ORDER BY tc.created_at ASC, tc.rowid ASC`,
+      )
+      .all(sessionId, toolName)
+      .map((row) => this.toToolCall(row as Row))
+  }
+
   listForPage(messageIds: string[], runIds: string[]): ToolCall[] {
     if (messageIds.length === 0) return []
     return this.db

@@ -17,7 +17,7 @@ export class RunMetrics {
     initialElapsedMs = 0,
   ) {
     this.values = previous
-      ? { ...previous }
+      ? { ...previous, contextPrepMs: previous.contextPrepMs ?? 0 }
       : RunPerformanceSchema.parse({
           version: 1,
           elapsedMs: 0,
@@ -36,6 +36,7 @@ export class RunMetrics {
           toolFailures: 0,
           editFailures: 0,
           streamedReads: 0,
+          contextPrepMs: 0,
         })
     this.baseline = Math.max(this.values.elapsedMs, initialElapsedMs)
   }

@@ -8,8 +8,14 @@ export function RunPerformanceDetails({
 }) {
   if (!metrics) return null
   const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} 秒`
-  const entries = [
+  const entries: Array<[string, string]> = [
     ['总耗时', seconds(metrics.elapsedMs)],
+    ...(metrics.contextPrepMs === undefined
+      ? []
+      : ([['上下文准备（累计）', seconds(metrics.contextPrepMs)]] as Array<
+          [string, string]
+        >)),
+
     ['模型调用', `${metrics.modelCalls} 轮 · ${seconds(metrics.modelMs)}`],
     [
       '请求重试',

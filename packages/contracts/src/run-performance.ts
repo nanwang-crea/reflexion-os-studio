@@ -22,5 +22,7 @@ export const RunPerformanceSchema = z.object({
   toolFailures: count,
   editFailures: count,
   streamedReads: count,
+  /** 每轮 withTaskContext + compactInRun 的累计耗时（旧记录缺省）。 */
+  contextPrepMs: milliseconds.optional(),
 })
 export type RunPerformance = z.infer<typeof RunPerformanceSchema>
