@@ -1,13 +1,10 @@
 import { EmptyState } from '../../components/feedback/EmptyState'
-import { Select } from '../../components/forms/Select'
 import { useEffect, useMemo, useState } from 'react'
-import type {
-  ApiFormat,
-  ProviderProfile,
-} from '@reflexion-os-studio/runtime-client'
+import type { ProviderProfile } from '@reflexion-os-studio/runtime-client'
 import { configureProvider, deleteProvider } from '../../api/providers'
 import type { ConfirmDialogState } from '../../components/ConfirmDialog'
-import { EyeIcon, PlusIcon } from '../../ui/icons'
+import { ProviderBasicFields } from './providers/ProviderBasicFields'
+import { ProviderAdvancedFields } from './providers/ProviderAdvancedFields'
 import {
   draftFromProfile,
   EMPTY_DRAFT,
@@ -15,10 +12,6 @@ import {
   preflightProviderToggle,
   type Draft,
 } from './provider-form'
-import { ProviderHeadersEditor } from './ProviderHeadersEditor'
-import { ProviderParametersFields } from './providers/ProviderParametersFields'
-import { ProviderModelsPanel } from './providers/ProviderModelsPanel'
-import { ProviderConnectionTest } from './ProviderConnectionTest'
 
 interface ProviderEditorProps {
   /** 当前选中供应商；isNew 时必为 null。 */
@@ -41,11 +34,24 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
     props.profile ? draftFromProfile(props.profile) : EMPTY_DRAFT,
   )
   const [showSecret, setShowSecret] = useState(false)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [savedAt, setSavedAt] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const { profile, isNew } = props
+  const advancedCount =
+    draft === null
+      ? 0
+      : [
+          draft.apiFormat !== 'openai-chat',
+          draft.headers.length > 0,
+          draft.reasoningEffort !== '',
+          draft.temperature !== '',
+          draft.maxTokens !== '',
+          draft.contextWindow !== '',
+          draft.contextBudget !== '',
+        ].filter(Boolean).length
 
   // 草稿模板只跟随"选中哪个"变化:profile 对象引用变化(保存后外部刷新)
   // 不重建,避免把用户的未保存编辑冲掉。
@@ -202,126 +208,38 @@ export function ProviderEditor(props: ProviderEditorProps): React.JSX.Element {
         )}
       </div>
 
-      <label className="field">
-        Base URL
-        <input
-          value={draft.baseUrl}
-          placeholder="https://open.bigmodel.cn/api/paas/v4"
-          onChange={(event) => updateDraft({ baseUrl: event.target.value })}
-        />
-      </label>
-      <p className="field-hint">
-        需与模型服务商匹配：GLM 用 https://open.bigmodel.cn/api/paas/v4 ·
-        DeepSeek 用 https://api.deepseek.com · OpenAI 用
-        https://api.openai.com/v1
-      </p>
-
-      <label className="field">
-        API 格式
-        <Select
-          value={draft.apiFormat}
-          onValueChange={(value) =>
-            updateDraft({ apiFormat: value as ApiFormat })
-          }
-        >
-          <option value="openai-chat">
-            OpenAI Chat Completions (/chat/completions)
-          </option>
-          <option value="openai-responses">
-            OpenAI Responses API (/v1/responses)
-          </option>
-          <option value="anthropic">
-            Anthropic Messages API (/v1/messages)
-          </option>
-        </Select>
-      </label>
-
-      <label className="field">
-        API Key
-        <div className="secret-row">
-          <input
-            type={showSecret ? 'text' : 'password'}
-            placeholder={profile ? '已配置（输入可覆盖）' : 'sk-…'}
-            value={draft.secret}
-            onChange={(event) => updateDraft({ secret: event.target.value })}
-          />
-          <button
-            className="icon-btn"
-            title={showSecret ? '隐藏' : '显示'}
-            onClick={() => setShowSecret(!showSecret)}
-          >
-            <EyeIcon />
-          </button>
-        </div>
-      </label>
-      <p className="field-hint">
-        {profile
-          ? '留空表示沿用已保存的密钥；修改其他配置无需重新输入。'
-          : 'Key 仅在保存时传输一次并落盘到本地密钥文件（0600）。'}
-      </p>
-
-      <ProviderHeadersEditor
-        headers={draft.headers}
-        onChange={(headers) => updateDraft({ headers })}
-      />
-
-      <div className="field-label">模型列表</div>
-      <div className="model-rows">
-        {draft.models.map((model, index) => (
-          <div className="model-row" key={index}>
-            <input
-              value={model}
-              placeholder="模型 ID，例如 glm-4.7"
-              onChange={(event) => {
-                const next = [...draft.models]
-                next[index] = event.target.value
-                updateDraft({ models: next })
-              }}
-            />
-            {draft.models.length > 1 && (
-              <button
-                className="icon-btn"
-                title="移除模型"
-                onClick={() =>
-                  updateDraft({
-                    models: draft.models.filter((_, inner) => inner !== index),
-                  })
-                }
-              >
-                ×
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-      <button
-        className="ghost add-model"
-        onClick={() => updateDraft({ models: [...draft.models, ''] })}
-      >
-        <PlusIcon />
-        添加模型
-      </button>
-
-      <p className="field-hint">Provider 默认参数：对未单独配置的模型生效。</p>
-      <ProviderParametersFields
+      <ProviderBasicFields
         draft={draft}
-        apiFormat={draft.apiFormat}
+        profile={profile}
+        showSecret={showSecret}
+        onToggleSecret={() => setShowSecret((current) => !current)}
         onChange={updateDraft}
-        reasoningDisabled={draft.apiFormat === 'anthropic'}
       />
-      {profile && (
-        <ProviderModelsPanel
-          key={profile.id}
-          profile={profile}
-          onSaved={props.onSaved}
-        />
-      )}
 
-      <ProviderConnectionTest
-        key={profile?.id ?? 'new'}
-        draft={draft}
-        busy={busy}
-      />
+      <details
+        className="provider-advanced"
+        open={advancedOpen}
+        onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
+      >
+        <summary>
+          <span className="provider-advanced-title">高级设置</span>
+          <span className="field-hint">
+            API 格式、请求头、默认参数、模型单独配置与连接测试
+          </span>
+          {advancedCount > 0 && (
+            <span className="provider-advanced-count">
+              {advancedCount} 项已自定义
+            </span>
+          )}
+        </summary>
+        <ProviderAdvancedFields
+          draft={draft}
+          profile={profile}
+          busy={busy}
+          onSaved={props.onSaved}
+          onChange={updateDraft}
+        />
+      </details>
 
       <div className="form-actions">
         <button

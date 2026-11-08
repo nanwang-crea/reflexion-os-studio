@@ -1,5 +1,10 @@
 import { setThemePreference, type ThemePreference } from '../../../lib/theme'
 import { useTheme } from '../../../lib/theme/useTheme'
+import {
+  setRunDisplayMode,
+  useRunDisplayMode,
+  type RunDisplayMode,
+} from '../../../hooks/ui/runDisplayMode'
 import './appearance.css'
 
 const options: {
@@ -16,8 +21,26 @@ const options: {
   },
 ]
 
+const runDisplayOptions: {
+  value: RunDisplayMode
+  label: string
+  description: string
+}[] = [
+  {
+    value: 'detailed',
+    label: '详细',
+    description: '展开思考过程、工具轨迹与过程正文。',
+  },
+  {
+    value: 'standard',
+    label: '标准',
+    description: '单行活动状态 + 思考摘要 + 最终回答，接近 DeepSeek Harness。',
+  },
+]
+
 export function AppearancePanel(): React.JSX.Element {
   const { preference } = useTheme()
+  const runDisplayMode = useRunDisplayMode()
   return (
     <section className="settings-panel">
       <div className="settings-panel-head settings-page-heading">
@@ -46,6 +69,27 @@ export function AppearancePanel(): React.JSX.Element {
                 value={value}
                 checked={preference === value}
                 onChange={() => setThemePreference(value)}
+              />
+              <strong>{label}</strong>
+            </span>
+            <span className="hint">{description}</span>
+          </label>
+        ))}
+      </fieldset>
+      <fieldset className="appearance-options">
+        <legend>工作步骤显示</legend>
+        {runDisplayOptions.map(({ value, label, description }) => (
+          <label
+            className="appearance-option appearance-option-plain"
+            key={value}
+          >
+            <span className="appearance-label">
+              <input
+                type="radio"
+                name="run-display-mode"
+                value={value}
+                checked={runDisplayMode === value}
+                onChange={() => setRunDisplayMode(value)}
               />
               <strong>{label}</strong>
             </span>

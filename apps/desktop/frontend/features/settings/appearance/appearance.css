@@ -92,3 +92,9 @@
 .appearance-preview-dark i:last-child {
   background: #316ce5;
 }
+
+/* 工作步骤显示：文本选项不需要主题缩略图，用更紧凑的卡片。 */
+.appearance-option-plain {
+  padding: 14px 16px;
+  gap: 8px;
+}

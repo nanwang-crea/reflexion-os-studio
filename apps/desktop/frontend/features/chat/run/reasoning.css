@@ -215,3 +215,52 @@ button.run-process-toggle:hover:not(:disabled) {
   padding-top: 12px;
   border-top: 1px solid var(--border-subtle);
 }
+
+/* ---------- 工作步骤显示模式：标准视图（紧凑）/ 详细视图切换 ---------- */
+.run-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.run-status-row .run-process-toggle {
+  min-width: 0;
+}
+
+.run-mode-toggle {
+  flex: none;
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.run-mode-toggle:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.run-process-detail {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-process-detail::before {
+  content: ' · ';
+}
+
+.reasoning-block.compact .reasoning-toggle {
+  padding: 2px 0;
+}
+
+.reasoning-block.compact .reasoning-label {
+  color: var(--text-secondary);
+}

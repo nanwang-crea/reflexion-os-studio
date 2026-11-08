@@ -7,10 +7,46 @@ interface ReasoningBlockProps {
   text: string
   /** 思考仍在流式输出中：预览行显示呼吸/脉冲反馈，让用户知道还在实时更新。 */
   active?: boolean
+  /** 紧凑视图：一行“深度求索中，用时 X”+ 最新预览，点击展开全文。 */
+  compact?: boolean
+  /** 紧凑视图下显示已用时长（从 Run 开始计）；缺省不显示。 */
+  elapsedMs?: number | null
+}
+
+function formatElapsed(ms: number): string {
+  const seconds = Math.max(0, Math.round(ms / 1000))
+  const minutes = Math.floor(seconds / 60)
+  if (minutes > 0)
+    return `${minutes} 分 ${String(seconds % 60).padStart(2, '0')} 秒`
+  return `${seconds} 秒`
 }
 
 export function ReasoningBlock(props: ReasoningBlockProps): React.JSX.Element {
   const [open, setOpen] = useState(false)
+  if (props.compact) {
+    const elapsed =
+      props.elapsedMs !== null && props.elapsedMs !== undefined
+        ? formatElapsed(props.elapsedMs)
+        : null
+    return (
+      <div className="reasoning-block compact">
+        <button
+          type="button"
+          className={`reasoning-toggle${props.active ? ' active' : ''}`}
+          aria-label={open ? '收起思考过程' : '展开思考过程'}
+          aria-expanded={open}
+          onClick={() => setOpen((current) => !current)}
+        >
+          <span className="reasoning-label">
+            {props.active ? '深度求索中' : '深度思考'}
+            {elapsed !== null ? `，用时 ${elapsed}` : ''}
+          </span>
+          <span className="reasoning-preview">{previewOf(props.text)}</span>
+        </button>
+        {open && <div className="reasoning-full">{props.text}</div>}
+      </div>
+    )
+  }
   return (
     <div className={`reasoning-block${open ? ' open' : ''}`}>
       <button

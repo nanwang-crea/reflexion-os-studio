@@ -1,6 +1,6 @@
 import { RunPerformanceDetails } from './RunPerformanceDetails'
 import { RunActivityStatus } from './RunActivityStatus'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type {
   Delegation,
   ResourceLink,
@@ -10,7 +10,14 @@ import type {
 } from '@reflexion-os-studio/runtime-client'
 import type { RunActivity } from '../../../hooks/session/useRunActivity'
 import { AssistantMessage } from '../message/AssistantMessage'
+import { ReasoningBlock } from '../message/ReasoningBlock'
 import { RunProcess, type ProcessItem } from './RunProcess'
+import { toolLabel } from '../tools/labels'
+import { summarizeToolArgs } from '../tools/summaries'
+import {
+  toggleRunDisplayMode,
+  useRunDisplayMode,
+} from '../../../hooks/ui/runDisplayMode'
 import { ChangedFiles, aggregateChangedFiles } from './ChangedFiles'
 import { DelegationList, type DelegationAttention } from './DelegationList'
 
@@ -27,6 +34,8 @@ interface RunBlockProps {
   runUsage: Usage | null
   runPerformance?: RunPerformance | null
   runStatus?: Run['status']
+  /** Run 开始时间（ISO）：紧凑视图的“用时”从这一刻起算。 */
+  runStartedAt?: string | null
   /** 该 Run 的失败事件（含错误码与完整错误信息）；无失败或无记录时为 null。 */
   failureDetail?: string | null
   canRetry: boolean
@@ -52,7 +61,10 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
   )
   // 用户操作后保留展开偏好；仅未操作的过程跟随运行状态自动展开/收起。
   const [openOverride, setOpenOverride] = useState<boolean | null>(null)
-  const open = openOverride ?? props.runActive
+  // 进入作答阶段后默认收起过程正文：否则长过程会把正在流式的最终回答
+  // 推出视口，看起来像“回答完才出现”。用户手动展开仍优先。
+  const answering = props.runActivity?.phase === 'answering'
+  const open = openOverride ?? (props.runActive && !answering)
   const calls = useMemo(
     () => [
       ...props.processItems.flatMap((item) => item.toolCalls),
@@ -86,6 +98,62 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
     return reasoning !== '' ? new Set([props.finalItem.message.id]) : undefined
   }, [props.finalItem, props.streamingReasoning])
   const hasProcess = processItems.length > 0
+  const displayMode = useRunDisplayMode()
+  const compact = displayMode === 'standard'
+  // 紧凑视图：主状态行只带当前工具/动作摘要；思考另起一行（同 DeepSeek
+  // Harness 的标准视图）。详细视图保持原有的逐条过程时间线。
+  const runningCall = calls.find((call) => call.status === 'running')
+  const detailCall = runningCall ?? [...calls].reverse()[0]
+  const detail =
+    compact && detailCall !== undefined
+      ? [toolLabel(detailCall), summarizeToolArgs(detailCall)]
+          .filter((part) => part !== '')
+          .join(' · ')
+      : ''
+  const compactReasoning = useMemo(() => {
+    if (!compact) return null
+    const items = [
+      ...processItems,
+      ...(props.finalItem !== null ? [props.finalItem] : []),
+    ]
+    for (let index = items.length - 1; index >= 0; index -= 1) {
+      const item = items[index]
+      const text =
+        props.streamingReasoning[item.message.id] ?? item.message.reasoning
+      if (text === '') continue
+      return {
+        id: item.message.id,
+        text,
+        active:
+          props.runActive &&
+          props.streamingReasoning[item.message.id] !== undefined,
+      }
+    }
+    return null
+  }, [
+    compact,
+    processItems,
+    props.finalItem,
+    props.streamingReasoning,
+    props.runActive,
+  ])
+  const runStartedMs =
+    props.runStartedAt !== null && props.runStartedAt !== undefined
+      ? Date.parse(props.runStartedAt)
+      : Number.NaN
+  const elapsedMs = Number.isNaN(runStartedMs)
+    ? null
+    : Math.max(0, Date.now() - runStartedMs)
+  // 紧凑视图的“用时”每秒刷新一次；只在运行中启用，结束即清理。
+  const [, setElapsedTick] = useState(0)
+  useEffect(() => {
+    if (!compact || !props.runActive) return
+    const timer = window.setInterval(
+      () => setElapsedTick((current) => current + 1),
+      1000,
+    )
+    return () => window.clearInterval(timer)
+  }, [compact, props.runActive])
 
   return (
     <div className="run-block">
@@ -100,10 +168,22 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
             attention={props.delegationAttention}
             durationMs={props.runDurationMs}
             hasProcess={hasProcess}
+            collapsible={hasProcess && !compact}
             open={open}
             onToggle={() => setOpenOverride(!open)}
+            detail={detail === '' ? undefined : detail}
+            mode={displayMode}
+            onToggleMode={toggleRunDisplayMode}
           />
-          {hasProcess && open && (
+          {compact && compactReasoning !== null && (
+            <ReasoningBlock
+              compact
+              text={compactReasoning.text}
+              active={compactReasoning.active}
+              elapsedMs={elapsedMs}
+            />
+          )}
+          {!compact && hasProcess && open && (
             <div
               className="run-process-body"
               onClickCapture={() => setOpenOverride(true)}

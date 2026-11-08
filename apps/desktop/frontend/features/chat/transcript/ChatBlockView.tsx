@@ -96,6 +96,7 @@ function ChatBlockViewComponent({
           runUsage={run?.usage ?? null}
           runPerformance={run?.performance}
           runStatus={run?.status}
+          runStartedAt={run?.startedAt ?? null}
           failureDetail={failureDetail?.errorMessage ?? null}
           canRetry={
             lastRetryableRun !== undefined &&
