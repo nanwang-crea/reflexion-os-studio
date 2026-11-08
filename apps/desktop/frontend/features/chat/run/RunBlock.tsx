@@ -1,6 +1,6 @@
 import { RunPerformanceDetails } from './RunPerformanceDetails'
-import { RunActivityStatus } from './RunActivityStatus'
-import { useEffect, useMemo, useState } from 'react'
+import { RunActivityStatus, RunModeToggle } from './RunActivityStatus'
+import { useMemo, useState } from 'react'
 import type {
   Delegation,
   ResourceLink,
@@ -14,6 +14,7 @@ import { ReasoningBlock } from '../message/ReasoningBlock'
 import { RunProcess, type ProcessItem } from './RunProcess'
 import { toolLabel } from '../tools/labels'
 import { summarizeToolArgs } from '../tools/summaries'
+import { RunRunningStatus } from './RunClock'
 import {
   toggleRunDisplayMode,
   useRunDisplayMode,
@@ -141,47 +142,57 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
     props.runStartedAt !== null && props.runStartedAt !== undefined
       ? Date.parse(props.runStartedAt)
       : Number.NaN
-  const elapsedMs = Number.isNaN(runStartedMs)
-    ? null
-    : Math.max(0, Date.now() - runStartedMs)
-  // 紧凑视图的“用时”每秒刷新一次；只在运行中启用，结束即清理。
-  const [, setElapsedTick] = useState(0)
-  useEffect(() => {
-    if (!compact || !props.runActive) return
-    const timer = window.setInterval(
-      () => setElapsedTick((current) => current + 1),
-      1000,
+  const startedAtMs = Number.isNaN(runStartedMs) ? null : runStartedMs
+
+  // 标准视图下，运行中只保留“思考行 + 运行时钟”两行（与 DSH 一致）；
+  // 需要用户动作或等待重试时，状态行必须出现，否则会丢掉可操作的提示。
+  const needsStatusRow =
+    !compact ||
+    !props.runActive ||
+    props.runActivity?.retry !== undefined ||
+    props.runStatus === 'awaiting_approval' ||
+    props.runStatus === 'awaiting_user_input' ||
+    props.delegations.some(
+      (item) => item.status === 'pending' || item.status === 'running',
     )
-    return () => window.clearInterval(timer)
-  }, [compact, props.runActive])
 
   return (
     <div className="run-block">
       {(hasProcess || props.runActive) && (
         <div className="run-process">
-          <RunActivityStatus
-            active={props.runActive}
-            status={props.runStatus}
-            activity={props.runActivity}
-            calls={calls}
-            delegations={props.delegations}
-            attention={props.delegationAttention}
-            durationMs={props.runDurationMs}
-            hasProcess={hasProcess}
-            collapsible={hasProcess && !compact}
-            open={open}
-            onToggle={() => setOpenOverride(!open)}
-            detail={detail === '' ? undefined : detail}
-            mode={displayMode}
-            onToggleMode={toggleRunDisplayMode}
-          />
+          {needsStatusRow && (
+            <RunActivityStatus
+              active={props.runActive}
+              status={props.runStatus}
+              activity={props.runActivity}
+              calls={calls}
+              delegations={props.delegations}
+              attention={props.delegationAttention}
+              durationMs={props.runDurationMs}
+              hasProcess={hasProcess}
+              collapsible={hasProcess && !compact}
+              open={open}
+              onToggle={() => setOpenOverride(!open)}
+              detail={detail === '' ? undefined : detail}
+              mode={displayMode}
+              onToggleMode={toggleRunDisplayMode}
+            />
+          )}
           {compact && compactReasoning !== null && (
             <ReasoningBlock
               compact
               text={compactReasoning.text}
               active={compactReasoning.active}
-              elapsedMs={elapsedMs}
             />
+          )}
+          {compact && props.runActive && (
+            <div className="run-status-row run-clock-row">
+              <RunRunningStatus startedAtMs={startedAtMs} />
+              <RunModeToggle
+                mode={displayMode}
+                onToggle={toggleRunDisplayMode}
+              />
+            </div>
           )}
           {!compact && hasProcess && open && (
             <div

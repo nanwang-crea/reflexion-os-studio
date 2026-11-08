@@ -82,19 +82,31 @@ export function RunActivityStatus(props: {
           <div className="run-process-toggle">{content}</div>
         )}
         {props.onToggleMode !== undefined && (
-          <button
-            type="button"
-            className="run-mode-toggle"
-            title={`工作步骤：${
-              props.mode === 'standard' ? '标准' : '详细'
-            }视图（点击切换）`}
-            aria-label={`切换工作步骤显示（当前${props.mode === 'standard' ? '标准' : '详细'}）`}
-            onClick={props.onToggleMode}
-          >
-            {props.mode === 'standard' ? '标准' : '详细'}
-          </button>
+          <RunModeToggle
+            mode={props.mode ?? 'detailed'}
+            onToggle={props.onToggleMode}
+          />
         )}
       </div>
     </div>
+  )
+}
+
+/** 工作步骤显示切换：标准（紧凑）/ 详细（逐条过程）。 */
+export function RunModeToggle(props: {
+  mode: 'standard' | 'detailed'
+  onToggle: () => void
+}): React.JSX.Element {
+  const label = props.mode === 'standard' ? '标准' : '详细'
+  return (
+    <button
+      type="button"
+      className="run-mode-toggle"
+      title={`工作步骤：${label}视图（点击切换）`}
+      aria-label={`切换工作步骤显示（当前${label}）`}
+      onClick={props.onToggle}
+    >
+      {label}
+    </button>
   )
 }

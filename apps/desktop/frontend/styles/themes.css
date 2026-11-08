@@ -35,6 +35,9 @@
   --warning-bg: rgba(180, 83, 9, 0.08);
   --warning-text: #96510b;
   --info: #2563b8;
+  /* 运行状态（深度求索中）：DSH 用 deepseek-500/blue-950 混合的蓝色层级。 */
+  --deep-diving: color-mix(in srgb, #4176e6 70%, #172554);
+  --deep-diving-shimmer: color-mix(in srgb, #4176e6 30%, #172554);
   --ok: #167545;
   --selection-bg: #dce6fc;
   --selection-text: #242426;

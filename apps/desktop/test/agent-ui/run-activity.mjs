@@ -145,7 +145,7 @@ async function verifyTimeline(page) {
   }
   await page.screenshot({ path: '/tmp/reflexion-chat-timeline.png' })
   await page.evaluate(() => window.updateRunActivity({ active: false }))
-  await page.getByText('工作了 12 秒', { exact: true }).waitFor()
+  await page.getByText('已完成，用时 12 秒', { exact: true }).waitFor()
   assert.equal(await page.locator('.run-process-body').count(), 1)
   assert.equal(
     await page.locator('.tool-trace-group-body pre:visible').count(),
@@ -163,7 +163,7 @@ async function verifyTimeline(page) {
   await toggle.focus()
   await page.keyboard.press('Enter')
   await page.evaluate(() => window.updateRunActivity({ active: false }))
-  await page.getByText('工作了 12 秒', { exact: true }).waitFor()
+  await page.getByText('已完成，用时 12 秒', { exact: true }).waitFor()
   assert.equal(await page.locator('.run-process-body').count(), 1)
 
   // 未操作的过程完成后仍默认收起，历史记录保持紧凑。
@@ -173,10 +173,10 @@ async function verifyTimeline(page) {
   )
   await page.locator('.run-process-body').waitFor()
   await page.evaluate(() => window.updateRunActivity({ active: false }))
-  await page.getByText('工作了 12 秒', { exact: true }).waitFor()
+  await page.getByText('已完成，用时 12 秒', { exact: true }).waitFor()
   assert.equal(await page.locator('.run-process-body').count(), 0)
 
-  // 非完成终态不能显示为“处理完成”。
+  // 非完成终态不能显示成已完成。
   for (const [status, label] of [
     ['cancelled', '已取消'],
     ['interrupted', '已中断'],

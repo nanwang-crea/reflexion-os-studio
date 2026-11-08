@@ -30,9 +30,10 @@ export function runStatusLabel({
     if (status === 'failed') return '运行失败'
     if (status === 'cancelled') return '已取消'
     if (status === 'interrupted') return '已中断'
+    // 与 DSH TurnProcessNodeView 一致：已完成 / 已完成，用时 X（不含“处理完成”）。
     return durationMs === null
-      ? '处理完成'
-      : `工作了 ${formatDuration(durationMs)}`
+      ? '已完成'
+      : `已完成，用时 ${formatDuration(durationMs)}`
   }
   const children = delegations.filter(
     (item) => item.status === 'pending' || item.status === 'running',

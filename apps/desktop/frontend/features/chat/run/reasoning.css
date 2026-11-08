@@ -96,28 +96,40 @@ button.run-process-toggle:hover:not(:disabled) {
 
 .reasoning-toggle {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
   width: 100%;
   min-width: 0;
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   text-align: left;
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 24px;
   cursor: pointer;
+  transition: color 100ms ease;
+}
+
+.reasoning-toggle:hover {
+  color: var(--text);
 }
 
 .reasoning-label {
   flex: none;
-  font-size: 12px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  font-weight: 400;
 }
 
-/* 活动指示点：思考流式输出中显示为脉动圆点，平时透明占位不引起布局位移。 */
+/* 标准视图沿用 DSH：思考行前是思考图标，不再是脉动圆点。 */
+.reasoning-block.compact .reasoning-label svg {
+  flex: none;
+  color: var(--text-muted);
+}
+
+/* 活动指示点：详细视图保留原有脉动圆点，平时透明占位不引起布局位移。 */
 .reasoning-label::before {
   content: '';
   width: 6px;
@@ -130,6 +142,21 @@ button.run-process-toggle:hover:not(:disabled) {
 .reasoning-toggle.active .reasoning-label::before {
   background: var(--info);
   animation: reasoning-pulse 1.4s ease-in-out infinite;
+}
+
+.reasoning-block.compact .reasoning-label::before {
+  display: none;
+}
+
+/* DSH：标题与摘要之间用 2×2 的小方点分隔。 */
+.reasoning-block.compact .reasoning-label::after {
+  content: '';
+  width: 2px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--text-muted);
+  opacity: 0.7;
+  margin-left: 2px;
 }
 
 /* 思考进行中：预览文字缓慢呼吸，与静止的历史消息形成区分。 */
@@ -176,6 +203,11 @@ button.run-process-toggle:hover:not(:disabled) {
   white-space: nowrap;
 }
 
+/* DSH：流式预览在右端做 48px 淡出，暗示内容仍在增长。 */
+.reasoning-preview[data-streaming] {
+  mask-image: linear-gradient(to right, black calc(100% - 48px), transparent);
+}
+
 .reasoning-full {
   margin: 4px 0 0 28px;
   color: var(--text-muted);
@@ -216,7 +248,7 @@ button.run-process-toggle:hover:not(:disabled) {
   border-top: 1px solid var(--border-subtle);
 }
 
-/* ---------- 工作步骤显示模式：标准视图（紧凑）/ 详细视图切换 ---------- */
+/* ---------- 工作步骤显示模式：标准 / 详细 ---------- */
 .run-status-row {
   display: flex;
   align-items: center;
@@ -228,20 +260,30 @@ button.run-process-toggle:hover:not(:disabled) {
   min-width: 0;
 }
 
+/* 切换按钮沿用 DSH 的“三级文字”克制风格：不抢运行状态的注意力。 */
 .run-mode-toggle {
   flex: none;
   margin-left: auto;
   background: transparent;
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  padding: 1px 8px;
+  border: 0;
+  border-radius: 6px;
+  padding: 2px 6px;
   font-size: 11px;
-  line-height: 1.6;
+  line-height: 16px;
   color: var(--text-muted);
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    color 100ms ease;
 }
 
-.run-mode-toggle:hover:not(:disabled) {
-  color: var(--text);
+.run-status-row:hover .run-mode-toggle,
+.run-mode-toggle:focus-visible {
+  opacity: 1;
+}
+
+.run-mode-toggle:hover {
+  color: var(--text-secondary);
   background: var(--bg-hover);
 }
 
@@ -257,10 +299,56 @@ button.run-process-toggle:hover:not(:disabled) {
   content: ' · ';
 }
 
-.reasoning-block.compact .reasoning-toggle {
-  padding: 2px 0;
+/* ---------- 运行中状态（标准视图，参考 DSH RunningStatus） ---------- */
+.run-clock {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  margin-top: 6px;
+  flex: 1 1 auto;
 }
 
-.reasoning-block.compact .reasoning-label {
-  color: var(--text-secondary);
+/* 标准视图运行中状态行不含展开按钮，切换按钮自己撑开右侧。 */
+.run-clock-row {
+  margin-top: 6px;
+}
+
+.run-clock-row .run-clock {
+  margin-top: 0;
+}
+
+.run-clock-text {
+  min-width: 0;
+  /* DSH：比正文小 2px，等宽数字保证秒数不抖动。 */
+  font-size: 12px;
+  line-height: 22px;
+  font-variant-numeric: tabular-nums;
+  color: var(--deep-diving);
+  background: linear-gradient(
+    100deg,
+    var(--deep-diving) 20%,
+    var(--deep-diving-shimmer) 45%,
+    var(--deep-diving) 70%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: run-clock-sweep 2.2s linear infinite;
+}
+
+@keyframes run-clock-sweep {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .run-clock-text {
+    animation: none;
+    background: none;
+    color: var(--deep-diving);
+  }
 }

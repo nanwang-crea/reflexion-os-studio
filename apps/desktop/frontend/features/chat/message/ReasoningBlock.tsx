@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ThinkIcon } from '../../../ui/icons'
 
 /** 折叠行预览保留的最新思考字符数；超出部分截去开头。 */
 const PREVIEW_MAX_CHARS = 160
@@ -7,48 +8,54 @@ interface ReasoningBlockProps {
   text: string
   /** 思考仍在流式输出中：预览行显示呼吸/脉冲反馈，让用户知道还在实时更新。 */
   active?: boolean
-  /** 紧凑视图：一行“深度求索中，用时 X”+ 最新预览，点击展开全文。 */
+  /** 标准视图：带思考图标，折叠时显示“最近一段首行”预览（参考 DSH）。 */
   compact?: boolean
-  /** 紧凑视图下显示已用时长（从 Run 开始计）；缺省不显示。 */
-  elapsedMs?: number | null
 }
 
-function formatElapsed(ms: number): string {
-  const seconds = Math.max(0, Math.round(ms / 1000))
-  const minutes = Math.floor(seconds / 60)
-  if (minutes > 0)
-    return `${minutes} 分 ${String(seconds % 60).padStart(2, '0')} 秒`
-  return `${seconds} 秒`
+/**
+ * 标准视图的折叠摘要：运行中取“最近一个已完成段落”的首行（随流式推进而
+ * 前进），结束后取全文首行。与 DSH ReasoningRow 口径一致，避免一行里塞进
+ * 整段结尾的噪声。
+ */
+export function reasoningSummary(text: string, running: boolean): string {
+  if (!running) return firstLine(text)
+  let summary = ''
+  let paragraphStart = 0
+  const separator = /\r?\n(?:[\t ]*\r?\n)+/g
+  for (;;) {
+    const nextParagraph = separator.exec(text)
+    const paragraphEnd =
+      nextParagraph === null
+        ? text.length
+        : nextParagraph.index + nextParagraph[0].indexOf('\n')
+    const newline = text.indexOf('\n', paragraphStart)
+    if (newline !== -1 && newline <= paragraphEnd) {
+      const candidate = text.slice(paragraphStart, newline).trim()
+      if (candidate !== '') summary = candidate
+    }
+    if (nextParagraph === null) return summary
+    paragraphStart = nextParagraph.index + nextParagraph[0].length
+  }
+}
+
+function firstLine(text: string): string {
+  const newline = text.indexOf('\n')
+  return (newline === -1 ? text : text.slice(0, newline)).trim()
 }
 
 export function ReasoningBlock(props: ReasoningBlockProps): React.JSX.Element {
   const [open, setOpen] = useState(false)
-  if (props.compact) {
-    const elapsed =
-      props.elapsedMs !== null && props.elapsedMs !== undefined
-        ? formatElapsed(props.elapsedMs)
-        : null
-    return (
-      <div className="reasoning-block compact">
-        <button
-          type="button"
-          className={`reasoning-toggle${props.active ? ' active' : ''}`}
-          aria-label={open ? '收起思考过程' : '展开思考过程'}
-          aria-expanded={open}
-          onClick={() => setOpen((current) => !current)}
-        >
-          <span className="reasoning-label">
-            {props.active ? '思考中' : '思考'}
-            {elapsed !== null ? ` · ${elapsed}` : ''}
-          </span>
-          <span className="reasoning-preview">{previewOf(props.text)}</span>
-        </button>
-        {open && <div className="reasoning-full">{props.text}</div>}
-      </div>
-    )
-  }
+  // 详细视图保留“压平后取最新尾部”的预览语义；标准视图按 DSH 只取段落首行。
+  const compactSummary = reasoningSummary(
+    props.text,
+    props.active === true,
+  ).replaceAll('**', '')
+  const detailPreview = previewOf(props.text)
   return (
-    <div className={`reasoning-block${open ? ' open' : ''}`}>
+    <div
+      className={`reasoning-block${open ? ' open' : ''}${props.compact ? ' compact' : ''}`}
+      data-expanded={open || undefined}
+    >
       <button
         type="button"
         className={`reasoning-toggle${props.active ? ' active' : ''}`}
@@ -56,16 +63,41 @@ export function ReasoningBlock(props: ReasoningBlockProps): React.JSX.Element {
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
       >
-        <span className="reasoning-label">思考</span>
-        <span className="reasoning-preview">{previewOf(props.text)}</span>
+        {props.compact ? (
+          <>
+            <span className="reasoning-label">
+              <ThinkIcon size={14} />
+              思考
+            </span>
+            {!open && compactSummary !== '' && (
+              <span
+                className="reasoning-preview"
+                data-streaming={props.active || undefined}
+              >
+                {truncatePreview(compactSummary)}
+              </span>
+            )}
+          </>
+        ) : (
+          <>
+            <span className="reasoning-label">思考</span>
+            <span className="reasoning-preview">{detailPreview}</span>
+          </>
+        )}
       </button>
       {open && <div className="reasoning-full">{props.text}</div>}
     </div>
   )
 }
 
+function truncatePreview(text: string): string {
+  return text.length > PREVIEW_MAX_CHARS
+    ? `…${text.slice(-PREVIEW_MAX_CHARS)}`
+    : text
+}
+
 /**
- * 预览文本：压平换行，过长时只留结尾（最新思考）并加前导省略号。
+ * 详细视图预览：压平换行，过长时只留结尾（最新思考）并加前导省略号。
  * 靠 CSS 的 dir=rtl 起头省略会把文字推到行末、与标签之间留大段空白，
  * 因此改为在 JS 里截断，预览按自身内容宽度紧跟在标签后。
  */
