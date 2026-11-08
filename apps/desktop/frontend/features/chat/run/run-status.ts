@@ -61,8 +61,8 @@ export function runStatusLabel({
     return activity.toolName === 'task'
       ? `正在准备子任务${activity.taskName ? `：${activity.taskName}` : ''}（参数接收中）`
       : '正在准备工具调用（参数接收中）'
-  if (activity?.phase === 'thinking') return '思考中…'
-  if (activity?.phase === 'answering') return '正在作答…'
+  if (activity?.phase === 'thinking') return '正在分析请求'
+  if (activity?.phase === 'answering') return '正在作答'
   if (children.length > 0) return `等待 ${children.length} 个子 Agent 完成`
   const running = calls.find((call) => call.status === 'running')
   if (running) return `正在执行：${toolLabel(running)}`

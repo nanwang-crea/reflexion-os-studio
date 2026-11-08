@@ -57,15 +57,15 @@ export function RunRunningStatus(props: {
     startedAtMs === null
       ? null
       : formatRunDuration(Math.max(1000, now - startedAtMs))
+  const text =
+    parts === null
+      ? '深度求索中'
+      : `深度求索中，用时 ${parts.map((part) => part.text).join('')} ···`
   return (
     <div className="run-clock" data-chat-running>
-      <span className="visually-hidden" role="status" aria-live="polite">
-        深度求索中
-      </span>
-      <span className="run-clock-text shimmer">
-        {parts === null
-          ? '深度求索中'
-          : `深度求索中，用时 ${parts.map((part) => part.text).join('')} ···`}
+      {/* 视觉文本本身就是完整名称：不再额外放一份隐藏副本，否则读屏会念两遍。 */}
+      <span className="run-clock-text shimmer" role="status" aria-live="off">
+        {text}
       </span>
     </div>
   )

@@ -1,5 +1,5 @@
 import { RunPerformanceDetails } from './RunPerformanceDetails'
-import { RunActivityStatus, RunModeToggle } from './RunActivityStatus'
+import { RunActivityStatus } from './RunActivityStatus'
 import { useMemo, useState } from 'react'
 import type {
   Delegation,
@@ -10,7 +10,6 @@ import type {
 } from '@reflexion-os-studio/runtime-client'
 import type { RunActivity } from '../../../hooks/session/useRunActivity'
 import { AssistantMessage } from '../message/AssistantMessage'
-import { ReasoningBlock } from '../message/ReasoningBlock'
 import { RunProcess, type ProcessItem } from './RunProcess'
 import { toolLabel } from '../tools/labels'
 import { summarizeToolArgs } from '../tools/summaries'
@@ -101,97 +100,63 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
   const hasProcess = processItems.length > 0
   const displayMode = useRunDisplayMode()
   const compact = displayMode === 'standard'
-  // 标准视图：主状态行只带当前工具/动作摘要，思考另起一行；
+  // 标准视图：活动行实时显示“正在分析请求 · <思考最近段落>”，
   // 详细视图保持原有的逐条过程时间线。
   const runningCall = calls.find((call) => call.status === 'running')
-  const detailCall = runningCall ?? [...calls].reverse()[0]
-  const detail =
-    compact && detailCall !== undefined
-      ? [toolLabel(detailCall), summarizeToolArgs(detailCall)]
+  // 标准视图的活动详情（参考 DSH runningDetail）：正在跑工具时显示工具摘要，
+  // 否则显示思考的最近段落——这就是截图里“正在分析请求 · 第二段…”的那一段。
+  const toolDetail =
+    runningCall === undefined
+      ? ''
+      : [toolLabel(runningCall), summarizeToolArgs(runningCall)]
           .filter((part) => part !== '')
           .join(' · ')
-      : ''
-  const compactReasoning = useMemo(() => {
-    if (!compact) return null
-    const items = [
-      ...processItems,
-      ...(props.finalItem !== null ? [props.finalItem] : []),
-    ]
-    for (let index = items.length - 1; index >= 0; index -= 1) {
-      const item = items[index]
-      const text =
-        props.streamingReasoning?.[item.message.id] ?? item.message.reasoning
-      if (text === '') continue
-      return {
-        id: item.message.id,
-        text,
-        active:
-          props.runActive &&
-          props.streamingReasoning?.[item.message.id] !== undefined,
-      }
-    }
-    return null
-  }, [
-    compact,
-    processItems,
-    props.finalItem,
-    props.streamingReasoning,
-    props.runActive,
-  ])
+  // 详情只在“思考/工具”阶段显示：作答阶段的正文自己会流式出现，
+  // 完成后的状态行变成“已完成，用时 X”，都不应残留最后一段思考。
+  const showLiveDetail =
+    compact && props.runActive && props.runActivity?.phase !== 'answering'
+  const detail = showLiveDetail
+    ? toolDetail !== ''
+      ? toolDetail
+      : latestReasoningDetail(
+          [
+            ...processItems,
+            ...(props.finalItem !== null ? [props.finalItem] : []),
+          ],
+          props.streamingReasoning,
+        )
+    : ''
   const runStartedMs =
     props.runStartedAt !== null && props.runStartedAt !== undefined
       ? Date.parse(props.runStartedAt)
       : Number.NaN
   const startedAtMs = Number.isNaN(runStartedMs) ? null : runStartedMs
 
-  // 标准视图下，运行中只保留“思考行 + 运行时钟”两行（与 DSH 一致）；
-  // 需要用户动作或等待重试时，状态行必须出现，否则会丢掉可操作的提示。
-  const needsStatusRow =
-    !compact ||
-    !props.runActive ||
-    props.runActivity?.retry !== undefined ||
-    props.runStatus === 'awaiting_approval' ||
-    props.runStatus === 'awaiting_user_input' ||
-    props.delegations.some(
-      (item) => item.status === 'pending' || item.status === 'running',
-    )
-
   return (
     <div className="run-block">
       {(hasProcess || props.runActive) && (
-        <div className="run-process">
-          {needsStatusRow && (
-            <RunActivityStatus
-              active={props.runActive}
-              status={props.runStatus}
-              activity={props.runActivity}
-              calls={calls}
-              delegations={props.delegations}
-              attention={props.delegationAttention}
-              durationMs={props.runDurationMs}
-              hasProcess={hasProcess}
-              collapsible={hasProcess && !compact}
-              open={open}
-              onToggle={() => setOpenOverride(!open)}
-              detail={detail === '' ? undefined : detail}
-              mode={displayMode}
-              onToggleMode={toggleRunDisplayMode}
-            />
-          )}
-          {compact && compactReasoning !== null && (
-            <ReasoningBlock
-              compact
-              text={compactReasoning.text}
-              active={compactReasoning.active}
-            />
-          )}
+        <div
+          className={`run-process${compact && props.runActive ? ' standard-live' : ''}`}
+        >
+          <RunActivityStatus
+            active={props.runActive}
+            status={props.runStatus}
+            activity={props.runActivity}
+            calls={calls}
+            delegations={props.delegations}
+            attention={props.delegationAttention}
+            durationMs={props.runDurationMs}
+            hasProcess={hasProcess}
+            collapsible={hasProcess && !compact}
+            open={open}
+            onToggle={() => setOpenOverride(!open)}
+            detail={detail === '' ? undefined : detail}
+            mode={displayMode}
+            onToggleMode={toggleRunDisplayMode}
+          />
           {compact && props.runActive && (
             <div className="run-status-row run-clock-row">
               <RunRunningStatus startedAtMs={startedAtMs} />
-              <RunModeToggle
-                mode={displayMode}
-                onToggle={toggleRunDisplayMode}
-              />
             </div>
           )}
           {!compact && hasProcess && open && (
@@ -248,4 +213,37 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
       />
     </div>
   )
+}
+
+/**
+ * 标准视图活动详情（参考 DSH liveReasoningDetail）：取最后一条仍在流式的
+ * 思考，按其最后一个非空段落压平后前截断；这就是截图里“·”之后实时推进
+ * 的那段文字。
+ */
+function latestReasoningDetail(
+  items: ProcessItem[],
+  streamingReasoning: Record<string, string> | undefined,
+): string {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const message = items[index].message
+    const text = streamingReasoning?.[message.id] ?? message.reasoning ?? ''
+    if (text === '') continue
+    const paragraphs = text.split(/\r?\n[\t ]*\r?\n/)
+    for (let p = paragraphs.length - 1; p >= 0; p -= 1) {
+      const detail = paragraphs[p]
+        .replaceAll('**', '')
+        .replace(/\s+/g, ' ')
+        .trim()
+      if (detail !== '') return truncateLiveDetail(detail)
+    }
+  }
+  return ''
+}
+
+const LIVE_DETAIL_MAX = 120
+
+function truncateLiveDetail(text: string): string {
+  return text.length > LIVE_DETAIL_MAX
+    ? `${text.slice(0, LIVE_DETAIL_MAX)}…`
+    : text
 }

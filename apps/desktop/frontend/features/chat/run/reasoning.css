@@ -130,6 +130,7 @@ button.run-process-toggle:hover:not(:disabled) {
 }
 
 /* 活动指示点：详细视图保留原有脉动圆点，平时透明占位不引起布局位移。 */
+
 .reasoning-label::before {
   content: '';
   width: 6px;
@@ -238,6 +239,60 @@ button.run-process-toggle:hover:not(:disabled) {
   background: var(--info);
 }
 
+/* 标准视图运行中：活动行用蓝色 shimmer（DSH 的 TextShimmer），不显示圆点。 */
+.run-process.standard-live
+  .run-activity-status.active
+  .run-process-label::before {
+  display: none;
+}
+
+.standard-live .run-process-toggle {
+  gap: 6px;
+  padding: 0;
+  font-size: 13px;
+  line-height: 24px;
+}
+
+/* 标准视图活动行的前置图标与文字同色（DSH 图标继承行色）。 */
+.standard-live .run-process-toggle > svg {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.standard-live .run-process-label {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 24px;
+}
+
+/* 活动行文字与 DSH 一致：三级灰为主，扫光时提亮到二级灰（不是蓝色）。 */
+.standard-live .run-process-label.shimmer-text {
+  background: linear-gradient(
+    100deg,
+    var(--text-muted) 25%,
+    var(--text-secondary) 45%,
+    var(--text-muted) 65%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: run-clock-sweep 2.2s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .standard-live .run-process-label.shimmer-text {
+    animation: none;
+    background: none;
+    color: var(--text-muted);
+  }
+}
+
+.standard-live .run-process-detail {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
 .run-process-toggle:focus-visible {
   outline: 2px solid var(--accent-solid);
   outline-offset: 3px;
@@ -297,6 +352,7 @@ button.run-process-toggle:hover:not(:disabled) {
 
 .run-process-detail::before {
   content: ' · ';
+  color: var(--text-muted);
 }
 
 /* ---------- 运行中状态（标准视图，参考 DSH RunningStatus） ---------- */
@@ -306,6 +362,12 @@ button.run-process-toggle:hover:not(:disabled) {
   min-width: 0;
   margin-top: 6px;
   flex: 1 1 auto;
+}
+
+/* DSH：活动行下方一条 0.5px 分隔线，运行时钟落在分隔线之后。 */
+.run-process:has(.run-clock-row) .run-activity-status {
+  padding-bottom: 8px;
+  border-bottom: 0.5px solid var(--border-subtle);
 }
 
 /* 标准视图运行中状态行不含展开按钮，切换按钮自己撑开右侧。 */

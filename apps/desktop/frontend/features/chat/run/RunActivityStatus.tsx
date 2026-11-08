@@ -5,7 +5,7 @@ import type {
 } from '@reflexion-os-studio/runtime-client'
 import type { RunActivity } from '../../../hooks/session/useRunActivity'
 import type { DelegationAttention } from './DelegationList'
-import { ChevronIcon } from '../../../ui/icons'
+import { ChevronIcon, ThinkIcon } from '../../../ui/icons'
 import type { RunDisplayMode } from '../../../hooks/ui/runDisplayMode'
 import { runStatusLabel } from './run-status'
 import { formatRetryLabel, useRetryCountdown } from './useRetryCountdown'
@@ -38,14 +38,20 @@ export function RunActivityStatus(props: {
     (call) => call.status === 'completed' && call.errorCode === null,
   ).length
   if (!props.active && !props.hasProcess) return null
+  // 标准视图的活行带前置图标（DSH 的 process icon），详细视图保留原有展开行。
+  const leadingIcon =
+    props.collapsible === false && props.active ? <ThinkIcon size={14} /> : null
   const content = (
     <>
+      {leadingIcon}
       <span className="run-process-label" role="status">
         <span
           className={
             props.activity?.phase === 'compacting'
               ? 'run-process-label shimmer'
-              : undefined
+              : props.active
+                ? 'run-process-label shimmer-text'
+                : undefined
           }
         >
           {label}
