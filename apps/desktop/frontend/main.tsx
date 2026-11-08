@@ -3,6 +3,8 @@ import './features/workspace/editor/monaco-worker'
 import { createRoot } from 'react-dom/client'
 import { lazy, Suspense } from 'react'
 import { initializeTheme } from './lib/theme'
+import { ErrorBoundary } from './components/feedback/ErrorBoundary'
+import { installGlobalErrorOverlay } from './lib/global-error-overlay'
 import './styles/style.css'
 import './styles/sidebar.css'
 import './features/chat/chat.css'
@@ -20,11 +22,14 @@ import './styles/themes.css'
 const App = lazy(() => import('./App'))
 initializeTheme()
 initializeOperations()
+installGlobalErrorOverlay()
 
 const rootElement = document.getElementById('root')
 if (!rootElement) throw new Error('#root not found')
 createRoot(rootElement).render(
-  <Suspense fallback={<p>正在打开…</p>}>
-    <App />
-  </Suspense>,
+  <ErrorBoundary>
+    <Suspense fallback={<p>正在打开…</p>}>
+      <App />
+    </Suspense>
+  </ErrorBoundary>,
 )

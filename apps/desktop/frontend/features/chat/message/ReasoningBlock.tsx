@@ -38,8 +38,8 @@ export function ReasoningBlock(props: ReasoningBlockProps): React.JSX.Element {
           onClick={() => setOpen((current) => !current)}
         >
           <span className="reasoning-label">
-            {props.active ? '深度求索中' : '深度思考'}
-            {elapsed !== null ? `，用时 ${elapsed}` : ''}
+            {props.active ? '思考中' : '思考'}
+            {elapsed !== null ? ` · ${elapsed}` : ''}
           </span>
           <span className="reasoning-preview">{previewOf(props.text)}</span>
         </button>

@@ -1,10 +1,9 @@
-import { useSyncExternalStore } from 'react'
+import { useEffect, useState } from 'react'
 
 /**
  * 工作步骤显示模式（全局、持久化）：
  * - detailed：现有逐条过程时间线（思考、工具轨迹、过程正文）；
- * - standard：仅保留一行活动 + 一行思考摘要 + 最终回答，接近 DeepSeek Harness
- *   的紧凑视图。
+ * - standard：仅保留一行活动 + 一行思考摘要 + 最终回答的紧凑视图。
  * 用模块级 store + useSyncExternalStore：任一 Run 的切换按钮都会同步所有 Run，
  * 并写入 localStorage 供下次启动沿用。
  */
@@ -28,13 +27,6 @@ function readMode(): RunDisplayMode {
   return cached
 }
 
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener)
-  return () => {
-    listeners.delete(listener)
-  }
-}
-
 export function setRunDisplayMode(mode: RunDisplayMode): void {
   if (cached === mode) return
   cached = mode
@@ -51,5 +43,13 @@ export function toggleRunDisplayMode(): void {
 }
 
 export function useRunDisplayMode(): RunDisplayMode {
-  return useSyncExternalStore(subscribe, readMode, readMode)
+  const [mode, setMode] = useState(readMode)
+  useEffect(() => {
+    const listener = (): void => setMode(readMode())
+    listeners.add(listener)
+    return () => {
+      listeners.delete(listener)
+    }
+  }, [])
+  return mode
 }

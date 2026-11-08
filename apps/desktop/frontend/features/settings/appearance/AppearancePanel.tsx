@@ -29,12 +29,12 @@ const runDisplayOptions: {
   {
     value: 'detailed',
     label: '详细',
-    description: '展开思考过程、工具轨迹与过程正文。',
+    description: '展开思考、工具轨迹与过程正文。',
   },
   {
     value: 'standard',
     label: '标准',
-    description: '单行活动状态 + 思考摘要 + 最终回答，接近 DeepSeek Harness。',
+    description: '只显示当前活动与思考摘要，回答始终可见。',
   },
 ]
 

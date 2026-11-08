@@ -75,7 +75,7 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
   const processItems = useMemo(() => {
     if (props.finalItem === null) return props.processItems
     const reasoning =
-      props.streamingReasoning[props.finalItem.message.id] ??
+      props.streamingReasoning?.[props.finalItem.message.id] ??
       props.finalItem.message.reasoning
     return reasoning !== ''
       ? [
@@ -93,15 +93,15 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
   const reasoningOnlyIds = useMemo(() => {
     if (props.finalItem === null) return undefined
     const reasoning =
-      props.streamingReasoning[props.finalItem.message.id] ??
+      props.streamingReasoning?.[props.finalItem.message.id] ??
       props.finalItem.message.reasoning
     return reasoning !== '' ? new Set([props.finalItem.message.id]) : undefined
   }, [props.finalItem, props.streamingReasoning])
   const hasProcess = processItems.length > 0
   const displayMode = useRunDisplayMode()
   const compact = displayMode === 'standard'
-  // 紧凑视图：主状态行只带当前工具/动作摘要；思考另起一行（同 DeepSeek
-  // Harness 的标准视图）。详细视图保持原有的逐条过程时间线。
+  // 标准视图：主状态行只带当前工具/动作摘要，思考另起一行；
+  // 详细视图保持原有的逐条过程时间线。
   const runningCall = calls.find((call) => call.status === 'running')
   const detailCall = runningCall ?? [...calls].reverse()[0]
   const detail =
@@ -119,14 +119,14 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
     for (let index = items.length - 1; index >= 0; index -= 1) {
       const item = items[index]
       const text =
-        props.streamingReasoning[item.message.id] ?? item.message.reasoning
+        props.streamingReasoning?.[item.message.id] ?? item.message.reasoning
       if (text === '') continue
       return {
         id: item.message.id,
         text,
         active:
           props.runActive &&
-          props.streamingReasoning[item.message.id] !== undefined,
+          props.streamingReasoning?.[item.message.id] !== undefined,
       }
     }
     return null
@@ -214,9 +214,9 @@ export function RunBlock(props: RunBlockProps): React.JSX.Element {
           hideActivity={true}
           runActive={props.runActive}
           runActivity={props.runActivity}
-          streamingText={props.streaming[props.finalItem.message.id]}
+          streamingText={props.streaming?.[props.finalItem.message.id]}
           streamingReasoning={
-            props.streamingReasoning[props.finalItem.message.id]
+            props.streamingReasoning?.[props.finalItem.message.id]
           }
           runDurationMs={props.runDurationMs}
           runUsage={props.runUsage}

@@ -355,7 +355,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
         <div className="transcript">
           {sessionId && props.sessionData?.nextBefore && (
             <HistoryLoader
-              key={sessionId}
+              key={`history-${sessionId}`}
               sessionId={sessionId}
               before={props.sessionData.nextBefore}
               onLoad={props.onLoadOlder}
@@ -372,7 +372,7 @@ export function ChatView(props: ChatViewProps): React.JSX.Element {
             </div>
           )}
           <VirtualTranscript
-            key={sessionId}
+            key={`transcript-${sessionId}`}
             blocks={chatBlocks}
             scrollRef={scrollRef}
             pinned={pinned}
